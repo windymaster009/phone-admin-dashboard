@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   AlertTriangle,
   ArrowDownRight,
@@ -35,6 +35,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
+import { api, type SessionUser } from './api'
 
 type NavKey =
   | 'dashboard'
@@ -51,6 +52,65 @@ type NavItem = {
   label: string
   icon: LucideIcon
   badge?: string
+}
+
+type Customer = {
+  _id: string
+  name: string
+  phone: string
+  nationalIdNumber?: string
+}
+
+type InventoryItem = {
+  _id: string
+  sku: string
+  category: 'PHONE' | 'ACCESSORY' | 'SPARE_PART'
+  name: string
+  brand?: string
+  model?: string
+  imei1?: string
+  quantity: number
+  reorderLevel: number
+  buyPrice: number
+  sellPrice: number
+  status: string
+}
+
+type Pawn = {
+  _id: string
+  pawnNo: string
+  customer?: Customer
+  itemSnapshot: { name: string; imei?: string }
+  estimatedValue: number
+  principal: number
+  dueDate: string
+  status: string
+  identificationVerified: boolean
+}
+
+type Trade = {
+  _id: string
+  tradeNo: string
+  type: 'BUY' | 'SELL'
+  customer?: Customer
+  items: { name: string; quantity: number }[]
+  total: number
+  createdAt: string
+}
+
+type DashboardData = {
+  metrics: {
+    salesToday: number
+    purchasesToday: number
+    activePawnValue: number
+    phonesInStock: number
+    overdueContracts: number
+    lowStock: number
+    customerCount: number
+  }
+  recentPawns: Pawn[]
+  recentTrades: Trade[]
+  inventoryMix: { _id: string; count: number; value: number }[]
 }
 
 const navGroups: { label: string; items: NavItem[] }[] = [
@@ -77,7 +137,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
   },
 ]
 
-const metrics = [
+const demoMetrics = [
   {
     label: "Today's sales",
     value: '$8,420',
@@ -207,9 +267,15 @@ const currency = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 0,
 })
 
+const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+const dateText = (value: string) => new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(new Date(value))
+const titleStatus = (status: string) => status.replaceAll('_', ' ').toLowerCase().replace(/(^|\s)\S/g, (letter) => letter.toUpperCase())
+const comingNext = (label: string) => window.alert(`${label} form is next. The tables and dashboard are connected to MongoDB now.`)
+
 function StatusBadge({ status }: { status: string }) {
-  const slug = status.toLowerCase().replaceAll(' ', '-')
-  return <span className={`status-badge status-${slug}`}>{status}</span>
+  const label = titleStatus(status)
+  const slug = label.toLowerCase().replaceAll(' ', '-')
+  return <span className={`status-badge status-${slug}`}>{label}</span>
 }
 
 function MetricCard({
@@ -219,7 +285,7 @@ function MetricCard({
   trend,
   icon: Icon,
   tone,
-}: (typeof metrics)[number]) {
+}: (typeof demoMetrics)[number]) {
   return (
     <article className="metric-card surface-card">
       <div className={`metric-icon tone-${tone}`}>
@@ -260,15 +326,29 @@ function SectionHeader({
   )
 }
 
-function DashboardView() {
+function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: SessionUser }) {
+  const [data, setData] = useState<DashboardData | null>(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api<DashboardData>('/dashboard').then(setData).catch((reason: Error) => setError(reason.message))
+  }, [])
+
+  const metrics = data ? [
+    { label: "Today's sales", value: money.format(data.metrics.salesToday), change: `${money.format(data.metrics.purchasesToday)} purchases`, trend: 'up' as const, icon: CircleDollarSign, tone: 'violet' },
+    { label: 'Active pawn value', value: money.format(data.metrics.activePawnValue), change: `${data.metrics.overdueContracts} overdue`, trend: data.metrics.overdueContracts > 0 ? 'down' as const : 'up' as const, icon: HandCoins, tone: 'blue' },
+    { label: 'Phones in stock', value: String(data.metrics.phonesInStock), change: `${data.metrics.lowStock} low stock`, trend: data.metrics.lowStock > 0 ? 'down' as const : 'up' as const, icon: Smartphone, tone: 'orange' },
+    { label: 'Customers', value: String(data.metrics.customerCount), change: 'live database', trend: 'up' as const, icon: Users, tone: 'rose' },
+  ] : demoMetrics
+
   return (
     <>
       <SectionHeader
-        eyebrow="Wednesday, 15 July"
-        title="Good afternoon, Windy"
-        description="Here is what is happening in the shop today."
+        eyebrow="Live MongoDB dashboard"
+        title={`Good afternoon, ${user.name.split(' ')[0]}`}
+        description={error || 'Here is what is happening in the shop today.'}
         action={
-          <button className="primary-button">
+          <button className="primary-button" onClick={() => goTo('trade')}>
             <Plus size={17} /> New transaction
           </button>
         }
@@ -293,8 +373,8 @@ function DashboardView() {
           </div>
 
           <div className="revenue-total">
-            <strong>$38,940</strong>
-            <span><ArrowUpRight size={15} /> 9.2% vs last month</span>
+            <strong>{money.format((data?.metrics.salesToday || 0) - (data?.metrics.purchasesToday || 0))}</strong>
+            <span><ArrowUpRight size={15} /> net cash movement today</span>
           </div>
 
           <div className="chart-shell" aria-label="Monthly revenue bar chart">
@@ -316,12 +396,12 @@ function DashboardView() {
             <button className="icon-button" aria-label="More options"><MoreHorizontal size={19} /></button>
           </div>
           <div className="donut-wrap">
-            <div className="donut-chart"><span>$61.4K<small>Total value</small></span></div>
+            <div className="donut-chart"><span>{money.format(data?.inventoryMix.reduce((sum, item) => sum + item.value, 0) || 0)}<small>Total value</small></span></div>
           </div>
           <div className="legend-list">
-            <div><span className="legend-dot dot-violet" /><p>Phones<small>184 units</small></p><strong>62%</strong></div>
-            <div><span className="legend-dot dot-blue" /><p>Accessories<small>642 units</small></p><strong>24%</strong></div>
-            <div><span className="legend-dot dot-orange" /><p>Spare parts<small>301 units</small></p><strong>14%</strong></div>
+            {(data?.inventoryMix.length ? data.inventoryMix : [{ _id: 'PHONE', count: 0, value: 0 }, { _id: 'ACCESSORY', count: 0, value: 0 }, { _id: 'SPARE_PART', count: 0, value: 0 }]).map((item, index) => (
+              <div key={item._id}><span className={`legend-dot ${['dot-violet', 'dot-blue', 'dot-orange'][index] || 'dot-violet'}`} /><p>{titleStatus(item._id)}<small>{item.count} units</small></p><strong>{money.format(item.value)}</strong></div>
+            ))}
           </div>
         </article>
       </section>
@@ -333,7 +413,7 @@ function DashboardView() {
               <span className="eyebrow">Pawn desk</span>
               <h3>Recent contracts</h3>
             </div>
-            <button className="text-button">View all <ArrowUpRight size={15} /></button>
+            <button className="text-button" onClick={() => goTo('pawn')}>View all <ArrowUpRight size={15} /></button>
           </div>
           <div className="table-scroll">
             <table>
@@ -348,21 +428,22 @@ function DashboardView() {
                 </tr>
               </thead>
               <tbody>
-                {pawnRows.map((row) => (
-                  <tr key={row.id}>
-                    <td><strong className="mono">{row.id}</strong></td>
+                {(data?.recentPawns || []).map((row) => (
+                  <tr key={row._id}>
+                    <td><strong className="mono">{row.pawnNo}</strong></td>
                     <td>
                       <div className="customer-cell">
-                        <span className="avatar">{row.customer.slice(0, 2).toUpperCase()}</span>
-                        <p>{row.customer}<small>{row.phone}</small></p>
+                        <span className="avatar">{(row.customer?.name || 'NA').slice(0, 2).toUpperCase()}</span>
+                        <p>{row.customer?.name || 'Unknown'}<small>{row.itemSnapshot.name}</small></p>
                       </div>
                     </td>
-                    <td><strong>{row.loan}</strong><small className="table-subtext">of {row.value}</small></td>
-                    <td>{row.due}</td>
+                    <td><strong>{money.format(row.principal)}</strong><small className="table-subtext">of {money.format(row.estimatedValue)}</small></td>
+                    <td>{dateText(row.dueDate)}</td>
                     <td><StatusBadge status={row.status} /></td>
                     <td><button className="icon-button"><MoreHorizontal size={18} /></button></td>
                   </tr>
                 ))}
+                {data?.recentPawns.length === 0 && <tr><td colSpan={6}>No pawn contracts in the database yet.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -376,10 +457,10 @@ function DashboardView() {
             </div>
           </div>
           <div className="quick-actions-list">
-            <button><span className="quick-icon violet"><HandCoins size={19} /></span><p>New pawn contract<small>Register ID and collateral</small></p><ArrowUpRight size={17} /></button>
-            <button><span className="quick-icon blue"><ShoppingCart size={19} /></span><p>New sale<small>Phone or accessories</small></p><ArrowUpRight size={17} /></button>
-            <button><span className="quick-icon orange"><Package size={19} /></span><p>Add stock<small>Phone, part or accessory</small></p><ArrowUpRight size={17} /></button>
-            <button><span className="quick-icon rose"><Calculator size={19} /></span><p>Value a phone<small>Calculate depreciation</small></p><ArrowUpRight size={17} /></button>
+            <button onClick={() => goTo('pawn')}><span className="quick-icon violet"><HandCoins size={19} /></span><p>New pawn contract<small>Register ID and collateral</small></p><ArrowUpRight size={17} /></button>
+            <button onClick={() => goTo('trade')}><span className="quick-icon blue"><ShoppingCart size={19} /></span><p>New sale<small>Phone or accessories</small></p><ArrowUpRight size={17} /></button>
+            <button onClick={() => goTo('inventory')}><span className="quick-icon orange"><Package size={19} /></span><p>Add stock<small>Phone, part or accessory</small></p><ArrowUpRight size={17} /></button>
+            <button onClick={() => goTo('depreciation')}><span className="quick-icon rose"><Calculator size={19} /></span><p>Value a phone<small>Calculate depreciation</small></p><ArrowUpRight size={17} /></button>
           </div>
         </article>
       </section>
@@ -388,19 +469,28 @@ function DashboardView() {
 }
 
 function PawnView() {
+  const [pawns, setPawns] = useState<Pawn[]>([])
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api<{ pawns: Pawn[] }>('/pawns')
+      .then((result) => setPawns(result.pawns))
+      .catch((reason: Error) => setError(reason.message))
+  }, [])
+
   return (
     <>
       <SectionHeader
         eyebrow="Operations"
         title="Pawn management"
-        description="Track collateral, National ID verification, repayments, renewals, and overdue contracts."
-        action={<button className="primary-button"><Plus size={17} /> New pawn</button>}
+        description={error || 'Track collateral, National ID verification, repayments, renewals, and overdue contracts.'}
+        action={<button className="primary-button" onClick={() => comingNext('New pawn')}><Plus size={17} /> New pawn</button>}
       />
       <section className="mini-stats-grid">
-        <div className="surface-card mini-stat"><HandCoins /><p>Active contracts<strong>96</strong><small>$32,680 principal</small></p></div>
-        <div className="surface-card mini-stat"><Clock3 /><p>Due this week<strong>18</strong><small>6 need follow-up</small></p></div>
-        <div className="surface-card mini-stat"><AlertTriangle /><p>Overdue<strong>12</strong><small>$3,840 outstanding</small></p></div>
-        <div className="surface-card mini-stat"><RefreshCcw /><p>Renewed this month<strong>27</strong><small>$1,620 interest</small></p></div>
+        <div className="surface-card mini-stat"><HandCoins /><p>Active contracts<strong>{pawns.filter((pawn) => ['ACTIVE', 'DUE_SOON', 'RENEWED'].includes(pawn.status)).length}</strong><small>{money.format(pawns.reduce((sum, pawn) => sum + pawn.principal, 0))} principal</small></p></div>
+        <div className="surface-card mini-stat"><Clock3 /><p>Due soon<strong>{pawns.filter((pawn) => pawn.status === 'DUE_SOON').length}</strong><small>needs follow-up</small></p></div>
+        <div className="surface-card mini-stat"><AlertTriangle /><p>Overdue<strong>{pawns.filter((pawn) => pawn.status === 'OVERDUE').length}</strong><small>past due contracts</small></p></div>
+        <div className="surface-card mini-stat"><RefreshCcw /><p>Renewed<strong>{pawns.filter((pawn) => pawn.status === 'RENEWED').length}</strong><small>active renewals</small></p></div>
       </section>
       <article className="surface-card table-card page-table">
         <div className="filter-row">
@@ -412,19 +502,20 @@ function PawnView() {
           <table>
             <thead><tr><th>Contract</th><th>Customer</th><th>Collateral</th><th>Estimated value</th><th>Loan</th><th>ID card</th><th>Due date</th><th>Status</th><th /></tr></thead>
             <tbody>
-              {pawnRows.map((row) => (
-                <tr key={row.id}>
-                  <td><strong className="mono">{row.id}</strong></td>
-                  <td>{row.customer}</td>
-                  <td>{row.phone}<small className="table-subtext">IMEI ending 8421</small></td>
-                  <td>{row.value}</td>
-                  <td><strong>{row.loan}</strong></td>
-                  <td>{row.idVerified ? <span className="verified"><BadgeCheck size={15} /> Verified</span> : <span className="unverified"><AlertTriangle size={15} /> Missing</span>}</td>
-                  <td>{row.due}</td>
+              {pawns.map((row) => (
+                <tr key={row._id}>
+                  <td><strong className="mono">{row.pawnNo}</strong></td>
+                  <td>{row.customer?.name || 'Unknown'}</td>
+                  <td>{row.itemSnapshot.name}<small className="table-subtext">{row.itemSnapshot.imei || 'No IMEI'}</small></td>
+                  <td>{money.format(row.estimatedValue)}</td>
+                  <td><strong>{money.format(row.principal)}</strong></td>
+                  <td>{row.identificationVerified ? <span className="verified"><BadgeCheck size={15} /> Verified</span> : <span className="unverified"><AlertTriangle size={15} /> Missing</span>}</td>
+                  <td>{dateText(row.dueDate)}</td>
                   <td><StatusBadge status={row.status} /></td>
                   <td><button className="icon-button"><MoreHorizontal size={18} /></button></td>
                 </tr>
               ))}
+              {pawns.length === 0 && <tr><td colSpan={9}>No pawn contracts in the database yet.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -434,40 +525,50 @@ function PawnView() {
 }
 
 function TradeView() {
+  const [trades, setTrades] = useState<Trade[]>([])
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api<{ trades: Trade[] }>('/trades')
+      .then((result) => setTrades(result.trades))
+      .catch((reason: Error) => setError(reason.message))
+  }, [])
+
   return (
     <>
       <SectionHeader
         eyebrow="Operations"
         title="Buy & sell"
-        description="Purchase phones from customers and process shop sales with complete transaction history."
+        description={error || 'Purchase phones from customers and process shop sales with complete transaction history.'}
       />
       <section className="trade-action-grid">
         <article className="surface-card trade-action buy-action">
           <span className="trade-icon"><Banknote size={28} /></span>
           <div><span className="eyebrow">Purchase from customer</span><h3>Buy a phone</h3><p>Capture seller ID, IMEI, condition, purchase cost, and expected selling price.</p></div>
-          <button className="primary-button"><Plus size={17} /> New purchase</button>
+          <button className="primary-button" onClick={() => comingNext('New purchase')}><Plus size={17} /> New purchase</button>
         </article>
         <article className="surface-card trade-action sell-action">
           <span className="trade-icon"><WalletCards size={28} /></span>
           <div><span className="eyebrow">Point of sale</span><h3>Sell an item</h3><p>Select available stock, customer, discount, payment method, warranty, and print a receipt.</p></div>
-          <button className="secondary-button"><ShoppingCart size={17} /> New sale</button>
+          <button className="secondary-button" onClick={() => comingNext('New sale')}><ShoppingCart size={17} /> New sale</button>
         </article>
       </section>
       <article className="surface-card table-card page-table">
         <div className="card-heading table-heading">
           <div><span className="eyebrow">Activity</span><h3>Recent transactions</h3></div>
-          <button className="ghost-button">Export <FileText size={16} /></button>
+          <button className="ghost-button" onClick={() => comingNext('Export')}>Export <FileText size={16} /></button>
         </div>
         <div className="transaction-list">
-          {transactions.map((transaction) => (
-            <div className="transaction-row" key={transaction.id}>
-              <span className={`transaction-icon ${transaction.type === 'Sale' ? 'sale' : 'purchase'}`}>{transaction.type === 'Sale' ? <ArrowUpRight /> : <ArrowDownRight />}</span>
-              <p><strong>{transaction.title}</strong><small>{transaction.id} · {transaction.person}</small></p>
-              <StatusBadge status={transaction.type} />
-              <strong className={transaction.type === 'Sale' ? 'money-in' : 'money-out'}>{transaction.amount}</strong>
+          {trades.map((transaction) => (
+            <div className="transaction-row" key={transaction._id}>
+              <span className={`transaction-icon ${transaction.type === 'SELL' ? 'sale' : 'purchase'}`}>{transaction.type === 'SELL' ? <ArrowUpRight /> : <ArrowDownRight />}</span>
+              <p><strong>{transaction.items.map((item) => `${item.name} x${item.quantity}`).join(', ')}</strong><small>{transaction.tradeNo} - {transaction.customer?.name || 'Walk-in'} - {dateText(transaction.createdAt)}</small></p>
+              <StatusBadge status={transaction.type === 'SELL' ? 'Sale' : 'Purchase'} />
+              <strong className={transaction.type === 'SELL' ? 'money-in' : 'money-out'}>{transaction.type === 'SELL' ? '+' : '-'}{money.format(transaction.total)}</strong>
               <button className="icon-button"><MoreHorizontal size={18} /></button>
             </div>
           ))}
+          {trades.length === 0 && <div className="transaction-row"><p><strong>No transactions yet</strong><small>Create a buy or sell transaction to see it here.</small></p></div>}
         </div>
       </article>
     </>
@@ -475,18 +576,32 @@ function TradeView() {
 }
 
 function InventoryView() {
+  const [items, setItems] = useState<InventoryItem[]>([])
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api<{ items: InventoryItem[] }>('/inventory')
+      .then((result) => setItems(result.items))
+      .catch((reason: Error) => setError(reason.message))
+  }, [])
+
+  const phoneCount = items.filter((item) => item.category === 'PHONE').reduce((sum, item) => sum + item.quantity, 0)
+  const accessoryCount = items.filter((item) => item.category === 'ACCESSORY').reduce((sum, item) => sum + item.quantity, 0)
+  const sparePartCount = items.filter((item) => item.category === 'SPARE_PART').reduce((sum, item) => sum + item.quantity, 0)
+
   return (
     <>
       <SectionHeader
         eyebrow="Stock control"
         title="Stock information"
-        description="Manage individually tracked phones, quantity-based accessories, and compatible spare parts."
-        action={<button className="primary-button"><Plus size={17} /> Add stock</button>}
+        description={error || 'Manage individually tracked phones, quantity-based accessories, and compatible spare parts.'}
+        action={<button className="primary-button" onClick={() => comingNext('Add stock')}><Plus size={17} /> Add stock</button>}
       />
       <section className="stock-category-grid">
         <article className="surface-card stock-category"><span className="stock-icon violet"><Smartphone /></span><p>Phones<strong>184</strong><small>112 new · 72 second-hand</small></p><ArrowUpRight /></article>
-        <article className="surface-card stock-category"><span className="stock-icon blue"><Package /></span><p>Accessories<strong>642</strong><small>4 categories low</small></p><ArrowUpRight /></article>
-        <article className="surface-card stock-category"><span className="stock-icon orange"><Wrench /></span><p>Spare parts<strong>301</strong><small>3 parts low</small></p><ArrowUpRight /></article>
+        <article className="surface-card stock-category"><span className="stock-icon violet"><Smartphone /></span><p>Phones<strong>{phoneCount}</strong><small>live stock units</small></p><ArrowUpRight /></article>
+        <article className="surface-card stock-category"><span className="stock-icon blue"><Package /></span><p>Accessories<strong>{accessoryCount}</strong><small>live stock units</small></p><ArrowUpRight /></article>
+        <article className="surface-card stock-category"><span className="stock-icon orange"><Wrench /></span><p>Spare parts<strong>{sparePartCount}</strong><small>live stock units</small></p><ArrowUpRight /></article>
       </section>
       <article className="surface-card table-card page-table">
         <div className="filter-row">
@@ -498,18 +613,19 @@ function InventoryView() {
           <table>
             <thead><tr><th>SKU</th><th>Item</th><th>Category</th><th>Stock</th><th>Buy price</th><th>Sell price</th><th>Status</th><th /></tr></thead>
             <tbody>
-              {inventoryRows.map((row) => (
-                <tr key={row.sku}>
+              {items.map((row) => (
+                <tr key={row._id}>
                   <td><strong className="mono">{row.sku}</strong></td>
-                  <td><strong>{row.item}</strong></td>
-                  <td>{row.type}</td>
-                  <td><strong>{row.stock}</strong></td>
-                  <td>{row.buy}</td>
-                  <td>{row.sell}</td>
+                  <td><strong>{row.name}</strong></td>
+                  <td>{titleStatus(row.category)}</td>
+                  <td><strong>{row.quantity}</strong></td>
+                  <td>{money.format(row.buyPrice)}</td>
+                  <td>{money.format(row.sellPrice)}</td>
                   <td><StatusBadge status={row.status} /></td>
                   <td><button className="icon-button"><MoreHorizontal size={18} /></button></td>
                 </tr>
               ))}
+              {items.length === 0 && <tr><td colSpan={8}>No inventory in the database yet.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -595,7 +711,7 @@ function PlaceholderView({ active }: { active: NavKey }) {
   )
 }
 
-function App() {
+function App({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
   const [active, setActive] = useState<NavKey>('dashboard')
   const [mobileOpen, setMobileOpen] = useState(false)
   const [darkMode, setDarkMode] = useState(true)
@@ -607,7 +723,7 @@ function App() {
 
   const renderView = () => {
     switch (active) {
-      case 'dashboard': return <DashboardView />
+      case 'dashboard': return <DashboardView goTo={changePage} user={user} />
       case 'pawn': return <PawnView />
       case 'trade': return <TradeView />
       case 'inventory': return <InventoryView />
@@ -651,8 +767,8 @@ function App() {
           </div>
           <div className="user-card">
             <span className="avatar large">WN</span>
-            <p><strong>Windy Nhim</strong><small>Owner</small></p>
-            <MoreHorizontal size={18} />
+            <p><strong>{user.name}</strong><small>{titleStatus(user.role)}</small></p>
+            <button className="icon-button" onClick={onLogout} aria-label="Log out"><X size={16} /></button>
           </div>
         </div>
       </aside>
@@ -664,7 +780,7 @@ function App() {
           <div className="topbar-actions">
             <button className="icon-button theme-toggle" onClick={() => setDarkMode((current) => !current)} aria-label="Toggle theme">{darkMode ? <Sun size={18} /> : <Moon size={18} />}</button>
             <button className="icon-button notification-button" aria-label="Notifications"><Bell size={18} /><span /></button>
-            <div className="topbar-user"><span className="avatar">WN</span><p><strong>Windy</strong><small>Owner</small></p><ChevronDown size={15} /></div>
+            <div className="topbar-user"><span className="avatar">{user.name.slice(0, 2).toUpperCase()}</span><p><strong>{user.name.split(' ')[0]}</strong><small>{titleStatus(user.role)}</small></p><ChevronDown size={15} /></div>
           </div>
         </header>
         <main className="main-content">{renderView()}</main>

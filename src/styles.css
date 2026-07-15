@@ -224,6 +224,7 @@ td strong { color: var(--text); }
 .money-in { color: var(--green); font-size: 11px; } .money-out { color: var(--orange); font-size: 11px; }
 
 .stock-category-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 16px; }
+.stock-category-grid .stock-category:first-child { display: none; }
 .stock-category { padding: 20px; display: flex; align-items: center; gap: 14px; color: var(--muted); }
 .stock-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px; }
 .stock-category p { flex: 1; display: flex; flex-direction: column; margin: 0; color: var(--muted); font-size: 10px; }

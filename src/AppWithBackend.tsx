@@ -28,6 +28,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { api, getToken, setToken, type SessionUser } from './api'
+import App from './App'
 
  type ViewKey = 'dashboard' | 'pawn' | 'trade' | 'inventory' | 'customers' | 'depreciation' | 'reports' | 'settings'
 
@@ -234,7 +235,9 @@ function DashboardView({ goTo }: { goTo: (view: ViewKey) => void }) {
     setError('')
     api<DashboardData>('/dashboard').then(setData).catch((reason: Error) => setError(reason.message))
   }
-  useEffect(load, [])
+  useEffect(() => {
+    load()
+  }, [])
 
   const metrics = data ? [
     { label: "Today's sales", value: money.format(data.metrics.salesToday), icon: CircleDollarSign, tone: 'violet' },
@@ -303,7 +306,9 @@ function CustomersView() {
   const [error, setError] = useState('')
 
   const load = () => api<{ customers: Customer[] }>('/customers').then((result) => setCustomers(result.customers)).catch((reason: Error) => setError(reason.message))
-  useEffect(load, [])
+  useEffect(() => {
+    load()
+  }, [])
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -340,7 +345,9 @@ function InventoryView() {
   const [showForm, setShowForm] = useState(false)
   const [error, setError] = useState('')
   const load = () => api<{ items: InventoryItem[] }>('/inventory').then((result) => setItems(result.items)).catch((reason: Error) => setError(reason.message))
-  useEffect(load, [])
+  useEffect(() => {
+    load()
+  }, [])
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -389,7 +396,9 @@ function PawnView({ user }: { user: SessionUser }) {
   const load = () => Promise.all([api<{ pawns: Pawn[] }>('/pawns'), api<{ customers: Customer[] }>('/customers')])
     .then(([pawnResult, customerResult]) => { setPawns(pawnResult.pawns); setCustomers(customerResult.customers) })
     .catch((reason: Error) => setError(reason.message))
-  useEffect(load, [])
+  useEffect(() => {
+    load()
+  }, [])
 
   const maxPawn = estimatedValue * percentage / 100
 
@@ -457,7 +466,9 @@ function TradeView() {
   const [error, setError] = useState('')
   const load = () => Promise.all([api<{ trades: Trade[] }>('/trades'), api<{ customers: Customer[] }>('/customers'), api<{ items: InventoryItem[] }>('/inventory?status=IN_STOCK')])
     .then(([a, b, c]) => { setTrades(a.trades); setCustomers(b.customers); setInventory(c.items) }).catch((reason: Error) => setError(reason.message))
-  useEffect(load, [])
+  useEffect(() => {
+    load()
+  }, [])
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -557,5 +568,5 @@ export default function AppWithBackend() {
 
   if (checking) return <div className="startup-screen"><Smartphone size={35} /><strong>PhoneFlow</strong><span>Connecting to the shop...</span></div>
   if (!user) return <AuthScreen onAuthenticated={setUser} />
-  return <Workspace user={user} onLogout={() => { setToken(null); setUser(null) }} />
+  return <App user={user} onLogout={() => { setToken(null); setUser(null) }} />
 }
