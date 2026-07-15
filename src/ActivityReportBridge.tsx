@@ -322,7 +322,8 @@ export default function ActivityReportBridge() {
   const todayCount = useMemo(() => {
     const start = new Date()
     start.setHours(0, 0, 0, 0)
-    return logs.filter((log) => new Date(log.createdAt) >= start).length
+    const startTime = start.getTime()
+    return logs.filter((log) => new Date(log.createdAt).getTime() >= startTime).length
   }, [logs])
 
   if (!open || !portalRoot) return null
