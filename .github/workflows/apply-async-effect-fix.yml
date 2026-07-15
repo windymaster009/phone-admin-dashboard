@@ -1,0 +1,40 @@
+name: Apply async effect fix
+
+on:
+  push:
+    branches: [feature/fullstack-backend]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feature/fullstack-backend
+          fetch-depth: 0
+
+      - name: Patch React effects
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/AppWithBackend.tsx')
+          text = path.read_text()
+          old = '  useEffect(load, [])'
+          count = text.count(old)
+          if count != 4:
+              raise SystemExit(f'Expected 4 async effect calls, found {count}')
+          path.write_text(text.replace(old, '  useEffect(() => { load() }, [])'))
+          PY
+
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/AppWithBackend.tsx
+          git commit -m "fix: avoid returning promises from React effects"
+          git push origin HEAD:feature/fullstack-backend
