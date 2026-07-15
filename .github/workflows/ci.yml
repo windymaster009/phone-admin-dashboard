@@ -25,4 +25,11 @@ jobs:
         run: npm run lint
 
       - name: Build frontend
-        run: npm run build
+        run: npm run build > build.log 2>&1
+
+      - name: Upload failed build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log
+          path: build.log
