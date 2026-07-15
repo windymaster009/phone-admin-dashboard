@@ -87,8 +87,8 @@ The first time the application opens, it shows **Create the owner account**. Thi
 npm run dev          # frontend + API
 npm run dev:client   # frontend only
 npm run dev:server   # API only
-npm run lint         # TypeScript and Node syntax checks
-npm run build        # production frontend build
+npm run lint         # optional local TypeScript and Node checks
+npm run build        # optional production frontend build
 npm start            # run API and serve dist in production
 ```
 
