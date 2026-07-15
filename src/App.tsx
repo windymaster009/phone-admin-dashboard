@@ -59,6 +59,9 @@ type Customer = {
   name: string
   phone: string
   nationalIdNumber?: string
+  address?: string
+  notes?: string
+  createdAt?: string
 }
 
 type InventoryItem = {
@@ -69,10 +72,20 @@ type InventoryItem = {
   brand?: string
   model?: string
   imei1?: string
+  imei2?: string
+  serialNumber?: string
+  condition?: string
+  storage?: string
+  color?: string
+  batteryHealth?: number
+  source?: string
+  notes?: string
+  createdAt?: string
   quantity: number
   reorderLevel: number
   buyPrice: number
   sellPrice: number
+  minimumSellPrice?: number
   status: string
 }
 
@@ -80,12 +93,16 @@ type Pawn = {
   _id: string
   pawnNo: string
   customer?: Customer
-  itemSnapshot: { name: string; imei?: string }
+  itemSnapshot: { name: string; brand?: string; model?: string; imei?: string; condition?: string; color?: string; storage?: string }
   estimatedValue: number
+  pawnPercentage: number
   principal: number
+  interestRate: number
   dueDate: string
   status: string
   identificationVerified: boolean
+  notes?: string
+  createdAt: string
 }
 
 type Trade = {
@@ -93,8 +110,15 @@ type Trade = {
   tradeNo: string
   type: 'BUY' | 'SELL'
   customer?: Customer
-  items: { name: string; quantity: number }[]
+  items: { name: string; quantity: number; unitPrice: number; costPrice?: number }[]
+  subtotal: number
+  discount: number
   total: number
+  amountPaid: number
+  balance: number
+  paymentMethod: string
+  status: string
+  notes?: string
   createdAt: string
 }
 
@@ -112,6 +136,15 @@ type DashboardData = {
   recentTrades: Trade[]
   inventoryMix: { _id: string; count: number; value: number }[]
   monthlyPerformance: { _id: { month: number; type: 'BUY' | 'SELL' }; total: number }[]
+}
+
+type ActivityLog = {
+  _id: string
+  action: string
+  entity: string
+  entityId?: string
+  createdAt: string
+  user?: { name: string; email: string; role: string }
 }
 
 const navGroups: { label: string; items: NavItem[] }[] = [
@@ -490,6 +523,7 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
 
 function PawnView() {
   const [pawns, setPawns] = useState<Pawn[]>([])
+  const [selectedPawn, setSelectedPawn] = useState<Pawn | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -532,7 +566,7 @@ function PawnView() {
                   <td>{row.identificationVerified ? <span className="verified"><BadgeCheck size={15} /> Verified</span> : <span className="unverified"><AlertTriangle size={15} /> Missing</span>}</td>
                   <td>{dateText(row.dueDate)}</td>
                   <td><StatusBadge status={row.status} /></td>
-                  <td><button className="icon-button"><MoreHorizontal size={18} /></button></td>
+                  <td><button className="icon-button" onClick={() => setSelectedPawn(row)} aria-label={`View ${row.pawnNo}`}><MoreHorizontal size={18} /></button></td>
                 </tr>
               ))}
               {pawns.length === 0 && <tr><td colSpan={9}>No pawn contracts in the database yet.</td></tr>}
@@ -540,12 +574,64 @@ function PawnView() {
           </table>
         </div>
       </article>
+      {selectedPawn && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setSelectedPawn(null)}>
+          <section className="detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="pawn-detail-title" onClick={(event) => event.stopPropagation()}>
+            <header className="detail-modal-header">
+              <div>
+                <span className="eyebrow">Pawn contract</span>
+                <h3 id="pawn-detail-title">{selectedPawn.pawnNo}</h3>
+                <p>{selectedPawn.customer?.name || 'Unknown customer'} - {selectedPawn.itemSnapshot.name}</p>
+              </div>
+              <button className="icon-button" onClick={() => setSelectedPawn(null)} aria-label="Close details"><X size={18} /></button>
+            </header>
+
+            <div className="detail-grid">
+              <div><span>Status</span><strong><StatusBadge status={selectedPawn.status} /></strong></div>
+              <div><span>ID card</span><strong>{selectedPawn.identificationVerified ? 'Verified' : 'Missing'}</strong></div>
+              <div><span>Estimated value</span><strong>{money.format(selectedPawn.estimatedValue)}</strong></div>
+              <div><span>Loan principal</span><strong>{money.format(selectedPawn.principal)}</strong></div>
+              <div><span>Pawn percent</span><strong>{selectedPawn.pawnPercentage}%</strong></div>
+              <div><span>Interest rate</span><strong>{selectedPawn.interestRate}%</strong></div>
+              <div><span>Due date</span><strong>{dateText(selectedPawn.dueDate)}</strong></div>
+              <div><span>Created</span><strong>{dateText(selectedPawn.createdAt)}</strong></div>
+            </div>
+
+            <div className="detail-sections">
+              <article>
+                <span className="eyebrow">Customer</span>
+                <p><strong>{selectedPawn.customer?.name || 'Unknown'}</strong></p>
+                <p>{selectedPawn.customer?.phone || 'No phone recorded'}</p>
+                <p>{selectedPawn.customer?.nationalIdNumber || 'No National ID recorded'}</p>
+              </article>
+              <article>
+                <span className="eyebrow">Collateral</span>
+                <p><strong>{selectedPawn.itemSnapshot.name}</strong></p>
+                <p>{[selectedPawn.itemSnapshot.brand, selectedPawn.itemSnapshot.model, selectedPawn.itemSnapshot.storage, selectedPawn.itemSnapshot.color].filter(Boolean).join(' ') || 'No extra device details'}</p>
+                <p>{selectedPawn.itemSnapshot.imei || 'No IMEI recorded'}</p>
+              </article>
+            </div>
+
+            {selectedPawn.notes && (
+              <div className="detail-note">
+                <span className="eyebrow">Notes</span>
+                <p>{selectedPawn.notes}</p>
+              </div>
+            )}
+
+            <footer className="detail-modal-footer">
+              <button className="ghost-button" onClick={() => setSelectedPawn(null)}>Close</button>
+            </footer>
+          </section>
+        </div>
+      )}
     </>
   )
 }
 
 function TradeView() {
   const [trades, setTrades] = useState<Trade[]>([])
+  const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -553,6 +639,34 @@ function TradeView() {
       .then((result) => setTrades(result.trades))
       .catch((reason: Error) => setError(reason.message))
   }, [])
+
+  function exportTrades() {
+    const headers = ['Reference', 'Type', 'Customer', 'Items', 'Subtotal', 'Discount', 'Total', 'Paid', 'Balance', 'Payment', 'Status', 'Date']
+    const rows = trades.map((trade) => [
+      trade.tradeNo,
+      trade.type,
+      trade.customer?.name || 'Walk-in',
+      trade.items.map((item) => `${item.name} x${item.quantity}`).join('; '),
+      trade.subtotal,
+      trade.discount,
+      trade.total,
+      trade.amountPaid,
+      trade.balance,
+      trade.paymentMethod,
+      trade.status,
+      new Date(trade.createdAt).toISOString(),
+    ])
+    const csv = [headers, ...rows]
+      .map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(','))
+      .join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `phoneflow-transactions-${new Date().toISOString().slice(0, 10)}.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <>
@@ -576,7 +690,7 @@ function TradeView() {
       <article className="surface-card table-card page-table">
         <div className="card-heading table-heading">
           <div><span className="eyebrow">Activity</span><h3>Recent transactions</h3></div>
-          <button className="ghost-button" onClick={() => comingNext('Export')}>Export <FileText size={16} /></button>
+          <button className="ghost-button" onClick={exportTrades} disabled={trades.length === 0}>Export <FileText size={16} /></button>
         </div>
         <div className="transaction-list">
           {trades.map((transaction) => (
@@ -585,18 +699,78 @@ function TradeView() {
               <p><strong>{transaction.items.map((item) => `${item.name} x${item.quantity}`).join(', ')}</strong><small>{transaction.tradeNo} - {transaction.customer?.name || 'Walk-in'} - {dateText(transaction.createdAt)}</small></p>
               <StatusBadge status={transaction.type === 'SELL' ? 'Sale' : 'Purchase'} />
               <strong className={transaction.type === 'SELL' ? 'money-in' : 'money-out'}>{transaction.type === 'SELL' ? '+' : '-'}{money.format(transaction.total)}</strong>
-              <button className="icon-button"><MoreHorizontal size={18} /></button>
+              <button className="icon-button" onClick={() => setSelectedTrade(transaction)} aria-label={`View ${transaction.tradeNo}`}><MoreHorizontal size={18} /></button>
             </div>
           ))}
           {trades.length === 0 && <div className="transaction-row"><p><strong>No transactions yet</strong><small>Create a buy or sell transaction to see it here.</small></p></div>}
         </div>
       </article>
+      {selectedTrade && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setSelectedTrade(null)}>
+          <section className="detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="trade-detail-title" onClick={(event) => event.stopPropagation()}>
+            <header className="detail-modal-header">
+              <div>
+                <span className="eyebrow">{selectedTrade.type === 'SELL' ? 'Sale transaction' : 'Purchase transaction'}</span>
+                <h3 id="trade-detail-title">{selectedTrade.tradeNo}</h3>
+                <p>{selectedTrade.customer?.name || 'Walk-in'} - {dateText(selectedTrade.createdAt)}</p>
+              </div>
+              <button className="icon-button" onClick={() => setSelectedTrade(null)} aria-label="Close details"><X size={18} /></button>
+            </header>
+
+            <div className="detail-grid">
+              <div><span>Type</span><strong>{selectedTrade.type === 'SELL' ? 'Sale' : 'Purchase'}</strong></div>
+              <div><span>Status</span><strong><StatusBadge status={selectedTrade.status} /></strong></div>
+              <div><span>Payment</span><strong>{titleStatus(selectedTrade.paymentMethod)}</strong></div>
+              <div><span>Date</span><strong>{dateText(selectedTrade.createdAt)}</strong></div>
+              <div><span>Subtotal</span><strong>{money.format(selectedTrade.subtotal)}</strong></div>
+              <div><span>Discount</span><strong>{money.format(selectedTrade.discount)}</strong></div>
+              <div><span>Amount paid</span><strong>{money.format(selectedTrade.amountPaid)}</strong></div>
+              <div><span>Balance</span><strong>{money.format(selectedTrade.balance)}</strong></div>
+            </div>
+
+            <div className="detail-sections">
+              <article>
+                <span className="eyebrow">Customer</span>
+                <p><strong>{selectedTrade.customer?.name || 'Walk-in customer'}</strong></p>
+                <p>{selectedTrade.customer?.phone || 'No phone recorded'}</p>
+              </article>
+              <article>
+                <span className="eyebrow">Total</span>
+                <p><strong>{selectedTrade.type === 'SELL' ? '+' : '-'}{money.format(selectedTrade.total)}</strong></p>
+                <p>{selectedTrade.items.length} line item{selectedTrade.items.length === 1 ? '' : 's'}</p>
+              </article>
+            </div>
+
+            <div className="detail-lines">
+              <span className="eyebrow">Items</span>
+              {selectedTrade.items.map((item, index) => (
+                <div className="detail-line" key={`${item.name}-${index}`}>
+                  <p><strong>{item.name}</strong><small>Quantity {item.quantity}</small></p>
+                  <strong>{money.format(item.unitPrice * item.quantity)}</strong>
+                </div>
+              ))}
+            </div>
+
+            {selectedTrade.notes && (
+              <div className="detail-note">
+                <span className="eyebrow">Notes</span>
+                <p>{selectedTrade.notes}</p>
+              </div>
+            )}
+
+            <footer className="detail-modal-footer">
+              <button className="ghost-button" onClick={() => setSelectedTrade(null)}>Close</button>
+            </footer>
+          </section>
+        </div>
+      )}
     </>
   )
 }
 
 function InventoryView() {
   const [items, setItems] = useState<InventoryItem[]>([])
+  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -642,7 +816,7 @@ function InventoryView() {
                   <td>{money.format(row.buyPrice)}</td>
                   <td>{money.format(row.sellPrice)}</td>
                   <td><StatusBadge status={row.status} /></td>
-                  <td><button className="icon-button"><MoreHorizontal size={18} /></button></td>
+                  <td><button className="icon-button" onClick={() => setSelectedItem(row)} aria-label={`View ${row.sku}`}><MoreHorizontal size={18} /></button></td>
                 </tr>
               ))}
               {items.length === 0 && <tr><td colSpan={8}>No inventory in the database yet.</td></tr>}
@@ -650,11 +824,62 @@ function InventoryView() {
           </table>
         </div>
       </article>
+      {selectedItem && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setSelectedItem(null)}>
+          <section className="detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="stock-detail-title" onClick={(event) => event.stopPropagation()}>
+            <header className="detail-modal-header">
+              <div>
+                <span className="eyebrow">Stock record</span>
+                <h3 id="stock-detail-title">{selectedItem.name}</h3>
+                <p>{selectedItem.sku} - {titleStatus(selectedItem.category)}</p>
+              </div>
+              <button className="icon-button" onClick={() => setSelectedItem(null)} aria-label="Close details"><X size={18} /></button>
+            </header>
+
+            <div className="detail-grid">
+              <div><span>Status</span><strong><StatusBadge status={selectedItem.status} /></strong></div>
+              <div><span>Quantity</span><strong>{selectedItem.quantity}</strong></div>
+              <div><span>Buy price</span><strong>{money.format(selectedItem.buyPrice)}</strong></div>
+              <div><span>Sell price</span><strong>{money.format(selectedItem.sellPrice)}</strong></div>
+              <div><span>Low stock level</span><strong>{selectedItem.reorderLevel}</strong></div>
+              <div><span>Minimum sell</span><strong>{money.format(selectedItem.minimumSellPrice || 0)}</strong></div>
+              <div><span>Source</span><strong>{selectedItem.source ? titleStatus(selectedItem.source) : 'Not recorded'}</strong></div>
+              <div><span>Created</span><strong>{selectedItem.createdAt ? dateText(selectedItem.createdAt) : 'Not recorded'}</strong></div>
+            </div>
+
+            <div className="detail-sections">
+              <article>
+                <span className="eyebrow">Device</span>
+                <p><strong>{[selectedItem.brand, selectedItem.model].filter(Boolean).join(' ') || selectedItem.name}</strong></p>
+                <p>{[selectedItem.storage, selectedItem.color, selectedItem.condition && titleStatus(selectedItem.condition)].filter(Boolean).join(' ') || 'No extra device details'}</p>
+                <p>{selectedItem.batteryHealth !== undefined ? `Battery ${selectedItem.batteryHealth}%` : 'Battery not recorded'}</p>
+              </article>
+              <article>
+                <span className="eyebrow">Identifiers</span>
+                <p><strong>{selectedItem.imei1 || 'No IMEI 1'}</strong></p>
+                <p>{selectedItem.imei2 || 'No IMEI 2'}</p>
+                <p>{selectedItem.serialNumber || 'No serial number'}</p>
+              </article>
+            </div>
+
+            {selectedItem.notes && (
+              <div className="detail-note">
+                <span className="eyebrow">Notes</span>
+                <p>{selectedItem.notes}</p>
+              </div>
+            )}
+
+            <footer className="detail-modal-footer">
+              <button className="ghost-button" onClick={() => setSelectedItem(null)}>Close</button>
+            </footer>
+          </section>
+        </div>
+      )}
     </>
   )
 }
 
-function DepreciationView() {
+function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
   const [marketPrice, setMarketPrice] = useState(500)
   const [ageMonths, setAgeMonths] = useState(12)
   const [condition, setCondition] = useState('good')
@@ -673,6 +898,35 @@ function DepreciationView() {
     const maximumPawn = estimatedValue * (pawnRate / 100)
     return { ageDepreciation, conditionDepreciation, estimatedValue, maximumPawn }
   }, [ageMonths, condition, marketPrice, pawnRate])
+
+  function saveValuation() {
+    const record = {
+      id: `VAL-${Date.now()}`,
+      createdAt: new Date().toISOString(),
+      marketPrice,
+      ageMonths,
+      condition,
+      pawnRate,
+      estimatedValue: result.estimatedValue,
+      maximumPawn: result.maximumPawn,
+    }
+    const previous = JSON.parse(localStorage.getItem('phoneflow_valuations') || '[]') as unknown[]
+    localStorage.setItem('phoneflow_valuations', JSON.stringify([record, ...previous].slice(0, 50)))
+    window.alert('Valuation saved on this device.')
+  }
+
+  function useForPawn() {
+    sessionStorage.setItem('phoneflow_last_valuation', JSON.stringify({
+      marketPrice,
+      ageMonths,
+      condition,
+      pawnRate,
+      estimatedValue: result.estimatedValue,
+      maximumPawn: result.maximumPawn,
+    }))
+    window.alert(`Valuation ready: estimated value ${currency.format(result.estimatedValue)}, max pawn ${currency.format(result.maximumPawn)}. Use these numbers in the new pawn form.`)
+    goTo('pawn')
+  }
 
   return (
     <>
@@ -702,8 +956,8 @@ function DepreciationView() {
             <div><span>Condition deduction</span><strong>-{Math.round(result.conditionDepreciation * 100)}%</strong></div>
             <div className="estimated-row"><span>Estimated resale value</span><strong>{currency.format(result.estimatedValue)}</strong></div>
           </div>
-          <button className="primary-button full-width"><HandCoins size={17} /> Use for new pawn</button>
-          <button className="ghost-button full-width"><FileText size={16} /> Save valuation record</button>
+          <button className="primary-button full-width" onClick={useForPawn}><HandCoins size={17} /> Use for new pawn</button>
+          <button className="ghost-button full-width" onClick={saveValuation}><FileText size={16} /> Save valuation record</button>
         </article>
       </section>
       <section className="surface-card workflow-note">
@@ -715,18 +969,138 @@ function DepreciationView() {
   )
 }
 
-function PlaceholderView({ active }: { active: NavKey }) {
-  const content: Partial<Record<NavKey, { icon: LucideIcon; title: string; text: string }>> = {
-    customers: { icon: UserRound, title: 'Customer management', text: 'Customer profiles, National ID documents, purchase history, pawn history, balances, and notes will live here.' },
-    reports: { icon: BarChart3, title: 'Reports and analytics', text: 'Daily sales, pawn principal, interest income, stock value, gross profit, expenses, and staff performance reports will live here.' },
-    settings: { icon: Settings, title: 'System settings', text: 'Shop profile, depreciation rules, pawn percentages, receipt settings, user roles, permissions, and audit controls will live here.' },
-  }
-  const current = content[active] ?? content.customers!
-  const Icon = current.icon
+function CustomersView() {
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api<{ customers: Customer[] }>('/customers')
+      .then((result) => setCustomers(result.customers))
+      .catch((reason: Error) => setError(reason.message))
+  }, [])
+
   return (
     <>
-      <SectionHeader eyebrow="Coming next" title={current.title} description={current.text} />
-      <article className="surface-card empty-state"><span><Icon size={34} /></span><h3>Module scaffolded</h3><p>The navigation and page space are ready. This module will be connected after the core pawn, stock, and transaction data model is approved.</p><button className="primary-button">Review module plan</button></article>
+      <SectionHeader
+        eyebrow="Customer records"
+        title="Customer management"
+        description={error || 'Customer profiles, National ID records, addresses, notes, and contact details from MongoDB.'}
+        action={<button className="primary-button" onClick={() => comingNext('Add customer')}><Plus size={17} /> Add customer</button>}
+      />
+      <article className="surface-card table-card page-table">
+        <div className="filter-row">
+          <div className="search-field"><Search size={17} /><input placeholder="Search customer, phone or National ID" /></div>
+        </div>
+        <div className="table-scroll">
+          <table>
+            <thead><tr><th>Customer</th><th>Phone</th><th>National ID</th><th>Address</th><th>Created</th><th /></tr></thead>
+            <tbody>
+              {customers.map((customer) => (
+                <tr key={customer._id}>
+                  <td><strong>{customer.name}</strong></td>
+                  <td>{customer.phone}</td>
+                  <td>{customer.nationalIdNumber || 'Not recorded'}</td>
+                  <td>{customer.address || 'Not recorded'}</td>
+                  <td>{customer.createdAt ? dateText(customer.createdAt) : 'Not recorded'}</td>
+                  <td><button className="icon-button" onClick={() => setSelectedCustomer(customer)} aria-label={`View ${customer.name}`}><MoreHorizontal size={18} /></button></td>
+                </tr>
+              ))}
+              {customers.length === 0 && <tr><td colSpan={6}>No customers in the database yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      {selectedCustomer && (
+        <div className="modal-backdrop" role="presentation" onClick={() => setSelectedCustomer(null)}>
+          <section className="detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="customer-detail-title" onClick={(event) => event.stopPropagation()}>
+            <header className="detail-modal-header">
+              <div>
+                <span className="eyebrow">Customer record</span>
+                <h3 id="customer-detail-title">{selectedCustomer.name}</h3>
+                <p>{selectedCustomer.phone}</p>
+              </div>
+              <button className="icon-button" onClick={() => setSelectedCustomer(null)} aria-label="Close details"><X size={18} /></button>
+            </header>
+            <div className="detail-grid">
+              <div><span>Phone</span><strong>{selectedCustomer.phone}</strong></div>
+              <div><span>National ID</span><strong>{selectedCustomer.nationalIdNumber || 'Not recorded'}</strong></div>
+              <div><span>Created</span><strong>{selectedCustomer.createdAt ? dateText(selectedCustomer.createdAt) : 'Not recorded'}</strong></div>
+              <div><span>Customer ID</span><strong className="mono">{selectedCustomer._id.slice(-8)}</strong></div>
+            </div>
+            <div className="detail-sections">
+              <article>
+                <span className="eyebrow">Address</span>
+                <p>{selectedCustomer.address || 'No address recorded'}</p>
+              </article>
+              <article>
+                <span className="eyebrow">Notes</span>
+                <p>{selectedCustomer.notes || 'No notes recorded'}</p>
+              </article>
+            </div>
+            <footer className="detail-modal-footer">
+              <button className="ghost-button" onClick={() => setSelectedCustomer(null)}>Close</button>
+            </footer>
+          </section>
+        </div>
+      )}
+    </>
+  )
+}
+
+function ReportsView() {
+  const [data, setData] = useState<DashboardData | null>(null)
+  const [logs, setLogs] = useState<ActivityLog[]>([])
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    api<DashboardData>('/dashboard').then(setData).catch((reason: Error) => setError(reason.message))
+    api<{ logs: ActivityLog[] }>('/activity-logs').then((result) => setLogs(result.logs)).catch(() => setLogs([]))
+  }, [])
+
+  const inventoryValue = data?.inventoryMix.reduce((sum, item) => sum + item.value, 0) || 0
+
+  return (
+    <>
+      <SectionHeader eyebrow="Analytics" title="Reports and analytics" description={error || 'Live sales, pawn, customer, stock, and audit snapshots.'} />
+      <section className="metrics-grid">
+        <MetricCard label="Sales today" value={money.format(data?.metrics.salesToday || 0)} change="completed sales" trend="up" icon={CircleDollarSign} tone="violet" />
+        <MetricCard label="Purchases today" value={money.format(data?.metrics.purchasesToday || 0)} change="cash out" trend="down" icon={Banknote} tone="orange" />
+        <MetricCard label="Pawn principal" value={money.format(data?.metrics.activePawnValue || 0)} change={`${data?.metrics.overdueContracts || 0} overdue`} trend={(data?.metrics.overdueContracts || 0) > 0 ? 'down' : 'up'} icon={HandCoins} tone="blue" />
+        <MetricCard label="Stock value" value={money.format(inventoryValue)} change={`${data?.metrics.lowStock || 0} low stock`} trend={(data?.metrics.lowStock || 0) > 0 ? 'down' : 'up'} icon={Boxes} tone="rose" />
+      </section>
+      <section className="dashboard-lower-grid">
+        <article className="surface-card table-card">
+          <div className="card-heading table-heading"><div><span className="eyebrow">Recent trades</span><h3>Transaction report</h3></div></div>
+          <div className="table-scroll"><table><thead><tr><th>Reference</th><th>Type</th><th>Customer</th><th>Total</th><th>Date</th></tr></thead><tbody>
+            {(data?.recentTrades || []).map((trade) => <tr key={trade._id}><td><strong className="mono">{trade.tradeNo}</strong></td><td><StatusBadge status={trade.type === 'SELL' ? 'Sale' : 'Purchase'} /></td><td>{trade.customer?.name || 'Walk-in'}</td><td>{money.format(trade.total)}</td><td>{dateText(trade.createdAt)}</td></tr>)}
+            {data?.recentTrades.length === 0 && <tr><td colSpan={5}>No transactions yet.</td></tr>}
+          </tbody></table></div>
+        </article>
+        <article className="surface-card table-card">
+          <div className="card-heading table-heading"><div><span className="eyebrow">Audit</span><h3>Recent activity</h3></div></div>
+          <div className="transaction-list">
+            {logs.slice(0, 8).map((log) => <div className="transaction-row" key={log._id}><span className="transaction-icon sale"><FileText /></span><p><strong>{titleStatus(log.action)} {titleStatus(log.entity)}</strong><small>{log.user?.name || 'System'} - {dateText(log.createdAt)}</small></p></div>)}
+            {logs.length === 0 && <div className="transaction-row"><p><strong>No audit logs available</strong><small>Owner or manager access may be required.</small></p></div>}
+          </div>
+        </article>
+      </section>
+    </>
+  )
+}
+
+function SettingsView({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
+  const savedValuations = JSON.parse(localStorage.getItem('phoneflow_valuations') || '[]') as unknown[]
+
+  return (
+    <>
+      <SectionHeader eyebrow="System" title="System settings" description="Current account, environment, security, and local app preferences." />
+      <section className="placeholder-grid">
+        <article className="surface-card module-card"><UserRound /><h3>{user.name}</h3><p>{user.email}<br />Role: {titleStatus(user.role)}<br />Status: {user.active ? 'Active' : 'Disabled'}</p><button className="ghost-button" onClick={onLogout}>Log out</button></article>
+        <article className="surface-card module-card"><Settings /><h3>App environment</h3><p>Frontend: Vite local app<br />API: proxied through /api<br />Database: MongoDB Atlas from backend .env</p></article>
+        <article className="surface-card module-card"><Calculator /><h3>Saved valuations</h3><p>{savedValuations.length} valuation record{savedValuations.length === 1 ? '' : 's'} saved on this device.</p><button className="ghost-button" onClick={() => { localStorage.removeItem('phoneflow_valuations'); window.location.reload() }}>Clear saved valuations</button></article>
+      </section>
     </>
   )
 }
@@ -747,8 +1121,11 @@ function App({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
       case 'pawn': return <PawnView />
       case 'trade': return <TradeView />
       case 'inventory': return <InventoryView />
-      case 'depreciation': return <DepreciationView />
-      default: return <PlaceholderView active={active} />
+      case 'customers': return <CustomersView />
+      case 'depreciation': return <DepreciationView goTo={changePage} />
+      case 'reports': return <ReportsView />
+      case 'settings': return <SettingsView user={user} onLogout={onLogout} />
+      default: return <DashboardView goTo={changePage} user={user} />
     }
   }
 
