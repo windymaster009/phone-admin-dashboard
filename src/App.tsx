@@ -111,6 +111,7 @@ type DashboardData = {
   recentPawns: Pawn[]
   recentTrades: Trade[]
   inventoryMix: { _id: string; count: number; value: number }[]
+  monthlyPerformance: { _id: { month: number; type: 'BUY' | 'SELL' }; total: number }[]
 }
 
 const navGroups: { label: string; items: NavItem[] }[] = [
@@ -340,6 +341,25 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
     { label: 'Phones in stock', value: String(data.metrics.phonesInStock), change: `${data.metrics.lowStock} low stock`, trend: data.metrics.lowStock > 0 ? 'down' as const : 'up' as const, icon: Smartphone, tone: 'orange' },
     { label: 'Customers', value: String(data.metrics.customerCount), change: 'live database', trend: 'up' as const, icon: Users, tone: 'rose' },
   ] : demoMetrics
+  const monthLabels = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']
+  const monthlyNet = monthLabels.map((_, index) => {
+    const month = index + 1
+    const sales = data?.monthlyPerformance.find((item) => item._id.month === month && item._id.type === 'SELL')?.total || 0
+    const purchases = data?.monthlyPerformance.find((item) => item._id.month === month && item._id.type === 'BUY')?.total || 0
+    return Math.max(0, sales - purchases)
+  })
+  const maxMonthlyNet = Math.max(...monthlyNet, 1)
+  const inventoryMix = data?.inventoryMix.length ? data.inventoryMix : [{ _id: 'PHONE', count: 0, value: 0 }, { _id: 'ACCESSORY', count: 0, value: 0 }, { _id: 'SPARE_PART', count: 0, value: 0 }]
+  const totalInventoryValue = inventoryMix.reduce((sum, item) => sum + item.value, 0)
+  const phoneValue = inventoryMix.find((item) => item._id === 'PHONE')?.value || 0
+  const accessoryValue = inventoryMix.find((item) => item._id === 'ACCESSORY')?.value || 0
+  const phoneStop = totalInventoryValue ? (phoneValue / totalInventoryValue) * 100 : 0
+  const accessoryStop = totalInventoryValue ? phoneStop + (accessoryValue / totalInventoryValue) * 100 : 0
+  const donutStyle = {
+    background: totalInventoryValue
+      ? `conic-gradient(#8b5cf6 0 ${phoneStop}%, #38bdf8 ${phoneStop}% ${accessoryStop}%, #fb923c ${accessoryStop}% 100%)`
+      : 'conic-gradient(rgba(139, 92, 246, 0.18) 0 100%)',
+  }
 
   return (
     <>
@@ -378,10 +398,10 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
           </div>
 
           <div className="chart-shell" aria-label="Monthly revenue bar chart">
-            {[42, 55, 48, 72, 66, 83, 75, 91, 70, 86, 78, 96].map((height, index) => (
+            {monthlyNet.map((total, index) => (
               <div className="chart-column" key={index}>
-                <span style={{ height: `${height}%` }} />
-                <small>{['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'][index]}</small>
+                <span style={{ height: `${Math.max(total > 0 ? (total / maxMonthlyNet) * 100 : 0, total > 0 ? 12 : 3)}%` }} title={money.format(total)} />
+                <small>{monthLabels[index]}</small>
               </div>
             ))}
           </div>
@@ -396,10 +416,10 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
             <button className="icon-button" aria-label="More options"><MoreHorizontal size={19} /></button>
           </div>
           <div className="donut-wrap">
-            <div className="donut-chart"><span>{money.format(data?.inventoryMix.reduce((sum, item) => sum + item.value, 0) || 0)}<small>Total value</small></span></div>
+            <div className="donut-chart" style={donutStyle}><span>{money.format(totalInventoryValue)}<small>Total value</small></span></div>
           </div>
           <div className="legend-list">
-            {(data?.inventoryMix.length ? data.inventoryMix : [{ _id: 'PHONE', count: 0, value: 0 }, { _id: 'ACCESSORY', count: 0, value: 0 }, { _id: 'SPARE_PART', count: 0, value: 0 }]).map((item, index) => (
+            {inventoryMix.map((item, index) => (
               <div key={item._id}><span className={`legend-dot ${['dot-violet', 'dot-blue', 'dot-orange'][index] || 'dot-violet'}`} /><p>{titleStatus(item._id)}<small>{item.count} units</small></p><strong>{money.format(item.value)}</strong></div>
             ))}
           </div>

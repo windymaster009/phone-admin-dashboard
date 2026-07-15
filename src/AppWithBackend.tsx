@@ -312,10 +312,11 @@ function CustomersView() {
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
+    const formElement = event.currentTarget
+    const form = new FormData(formElement)
     try {
       await api('/customers', { method: 'POST', body: JSON.stringify(Object.fromEntries(form)) })
-      event.currentTarget.reset()
+      formElement.reset()
       setShowForm(false)
       load()
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to create customer') }
@@ -351,7 +352,8 @@ function InventoryView() {
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
+    const formElement = event.currentTarget
+    const form = new FormData(formElement)
     const payload = Object.fromEntries(form)
     Object.assign(payload, {
       quantity: Number(form.get('quantity') || 1), reorderLevel: Number(form.get('reorderLevel') || 2),
@@ -359,7 +361,7 @@ function InventoryView() {
     })
     try {
       await api('/inventory', { method: 'POST', body: JSON.stringify(payload) })
-      event.currentTarget.reset(); setShowForm(false); load()
+      formElement.reset(); setShowForm(false); load()
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to add stock') }
   }
 
@@ -404,7 +406,8 @@ function PawnView({ user }: { user: SessionUser }) {
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
+    const formElement = event.currentTarget
+    const form = new FormData(formElement)
     const payload = {
       customer: form.get('customer'),
       itemSnapshot: {
@@ -421,7 +424,7 @@ function PawnView({ user }: { user: SessionUser }) {
     }
     try {
       await api('/pawns', { method: 'POST', body: JSON.stringify(payload) })
-      event.currentTarget.reset(); setShowForm(false); load()
+      formElement.reset(); setShowForm(false); load()
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to create pawn') }
   }
 
@@ -472,14 +475,15 @@ function TradeView() {
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const form = new FormData(event.currentTarget)
+    const formElement = event.currentTarget
+    const form = new FormData(formElement)
     const selected = inventory.find((item) => item._id === form.get('inventoryItem'))
     const line = tradeType === 'SELL'
       ? { inventoryItem: form.get('inventoryItem'), name: selected?.name, quantity: Number(form.get('quantity') || 1), unitPrice: Number(form.get('unitPrice') || selected?.sellPrice || 0) }
       : { name: form.get('itemName'), category: form.get('category'), brand: form.get('brand'), model: form.get('model'), imei1: form.get('imei1'), condition: form.get('condition'), quantity: Number(form.get('quantity') || 1), unitPrice: Number(form.get('unitPrice') || 0), sellPrice: Number(form.get('sellPrice') || 0) }
     try {
       await api('/trades', { method: 'POST', body: JSON.stringify({ type: tradeType, customer: form.get('customer') || undefined, items: [line], discount: Number(form.get('discount') || 0), amountPaid: Number(form.get('amountPaid') || 0), paymentMethod: form.get('paymentMethod') }) })
-      event.currentTarget.reset(); setShowForm(false); load()
+      formElement.reset(); setShowForm(false); load()
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to save transaction') }
   }
 

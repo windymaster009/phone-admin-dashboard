@@ -105,6 +105,7 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const month = new Date(now.getFullYear(), now.getMonth(), 1)
+  const year = new Date(now.getFullYear(), 0, 1)
 
   const [salesToday, purchasesToday, activePawnValue, phonesInStock, overdueContracts, lowStock, customerCount] = await Promise.all([
     Trade.aggregate([{ $match: { type: 'SELL', status: 'COMPLETED', createdAt: { $gte: today } } }, { $group: { _id: null, total: { $sum: '$total' } } }]),
@@ -116,7 +117,7 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
     Customer.estimatedDocumentCount(),
   ])
 
-  const [recentPawns, recentTrades, inventoryMix, monthPerformance] = await Promise.all([
+  const [recentPawns, recentTrades, inventoryMix, monthPerformance, monthlyPerformance] = await Promise.all([
     Pawn.find().populate('customer', 'name phone nationalIdNumber').sort({ createdAt: -1 }).limit(6),
     Trade.find().populate('customer', 'name phone').sort({ createdAt: -1 }).limit(6),
     InventoryItem.aggregate([
@@ -126,6 +127,16 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
     Trade.aggregate([
       { $match: { status: 'COMPLETED', createdAt: { $gte: month } } },
       { $group: { _id: '$type', total: { $sum: '$total' } } },
+    ]),
+    Trade.aggregate([
+      { $match: { status: 'COMPLETED', createdAt: { $gte: year } } },
+      {
+        $group: {
+          _id: { month: { $month: '$createdAt' }, type: '$type' },
+          total: { $sum: '$total' },
+        },
+      },
+      { $sort: { '_id.month': 1 } },
     ]),
   ])
 
@@ -143,6 +154,7 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
     recentTrades,
     inventoryMix,
     monthPerformance,
+    monthlyPerformance,
   })
 }))
 
