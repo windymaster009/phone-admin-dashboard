@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   AlertTriangle,
   ArrowDownRight,
@@ -12,9 +12,11 @@ import {
   ChevronDown,
   CircleDollarSign,
   Clock3,
+  Database,
   FileText,
   HandCoins,
   LayoutDashboard,
+  LogOut,
   Menu,
   Moon,
   MoreHorizontal,
@@ -26,7 +28,9 @@ import {
   Settings,
   ShoppingCart,
   Smartphone,
+  Server,
   Sun,
+  Trash2,
   TrendingDown,
   UserRound,
   Users,
@@ -52,6 +56,26 @@ type NavItem = {
   label: string
   icon: LucideIcon
   badge?: string
+}
+
+const viewPaths: Record<NavKey, string> = {
+  dashboard: '/dashboard',
+  pawn: '/pawn-management',
+  trade: '/buy-sell',
+  inventory: '/stock',
+  customers: '/customers',
+  depreciation: '/depreciation',
+  reports: '/reports',
+  settings: '/settings',
+}
+
+function viewFromPath(pathname: string): NavKey {
+  const normalizedPath = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname
+  const match = (Object.entries(viewPaths) as [NavKey, string][]).find(([, path]) => path === normalizedPath)
+
+  // Both the site root and /admin open the main dashboard.
+  if (normalizedPath === '/' || normalizedPath === '/admin') return 'dashboard'
+  return match?.[0] || 'dashboard'
 }
 
 type Customer = {
@@ -312,6 +336,60 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`status-badge status-${slug}`}>{label}</span>
 }
 
+function PawnDetailModal({ pawn, onClose, onOpenAll }: { pawn: Pawn; onClose: () => void; onOpenAll?: () => void }) {
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [onClose])
+
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <section className="detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="pawn-detail-title" onClick={(event) => event.stopPropagation()}>
+        <header className="detail-modal-header">
+          <div>
+            <span className="eyebrow">Pawn contract</span>
+            <h3 id="pawn-detail-title">{pawn.pawnNo}</h3>
+            <p>{pawn.customer?.name || 'Unknown customer'} - {pawn.itemSnapshot.name}</p>
+          </div>
+          <button className="icon-button" onClick={onClose} aria-label="Close details"><X size={18} /></button>
+        </header>
+        <div className="detail-grid">
+          <div><span>Status</span><strong><StatusBadge status={pawn.status} /></strong></div>
+          <div><span>ID card</span><strong>{pawn.identificationVerified ? 'Verified' : 'Missing'}</strong></div>
+          <div><span>Estimated value</span><strong>{money.format(pawn.estimatedValue)}</strong></div>
+          <div><span>Loan principal</span><strong>{money.format(pawn.principal)}</strong></div>
+          <div><span>Pawn percent</span><strong>{pawn.pawnPercentage}%</strong></div>
+          <div><span>Interest rate</span><strong>{pawn.interestRate}%</strong></div>
+          <div><span>Due date</span><strong>{dateText(pawn.dueDate)}</strong></div>
+          <div><span>Created</span><strong>{dateText(pawn.createdAt)}</strong></div>
+        </div>
+        <div className="detail-sections">
+          <article>
+            <span className="eyebrow">Customer</span>
+            <p><strong>{pawn.customer?.name || 'Unknown'}</strong></p>
+            <p>{pawn.customer?.phone || 'No phone recorded'}</p>
+            <p>{pawn.customer?.nationalIdNumber || 'No National ID recorded'}</p>
+          </article>
+          <article>
+            <span className="eyebrow">Collateral</span>
+            <p><strong>{pawn.itemSnapshot.name}</strong></p>
+            <p>{[pawn.itemSnapshot.brand, pawn.itemSnapshot.model, pawn.itemSnapshot.storage, pawn.itemSnapshot.color].filter(Boolean).join(' ') || 'No extra device details'}</p>
+            <p>{pawn.itemSnapshot.imei || 'No IMEI recorded'}</p>
+          </article>
+        </div>
+        {pawn.notes && <div className="detail-note"><span className="eyebrow">Notes</span><p>{pawn.notes}</p></div>}
+        <footer className="detail-modal-footer">
+          {onOpenAll && <button className="secondary-button" onClick={onOpenAll}>Open pawn management <ArrowUpRight size={15} /></button>}
+          <button className="ghost-button" onClick={onClose}>Close</button>
+        </footer>
+      </section>
+    </div>
+  )
+}
+
 function MetricCard({
   label,
   value,
@@ -362,6 +440,7 @@ function SectionHeader({
 
 function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: SessionUser }) {
   const [data, setData] = useState<DashboardData | null>(null)
+  const [selectedPawn, setSelectedPawn] = useState<Pawn | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -493,7 +572,7 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
                     <td><strong>{money.format(row.principal)}</strong><small className="table-subtext">of {money.format(row.estimatedValue)}</small></td>
                     <td>{dateText(row.dueDate)}</td>
                     <td><StatusBadge status={row.status} /></td>
-                    <td><button className="icon-button"><MoreHorizontal size={18} /></button></td>
+                    <td><button className="icon-button" onClick={() => setSelectedPawn(row)} aria-label={`View contract ${row.pawnNo}`}><MoreHorizontal size={18} /></button></td>
                   </tr>
                 ))}
                 {data?.recentPawns.length === 0 && <tr><td colSpan={6}>No pawn contracts in the database yet.</td></tr>}
@@ -517,6 +596,16 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
           </div>
         </article>
       </section>
+      {selectedPawn && (
+        <PawnDetailModal
+          pawn={selectedPawn}
+          onClose={() => setSelectedPawn(null)}
+          onOpenAll={() => {
+            setSelectedPawn(null)
+            goTo('pawn')
+          }}
+        />
+      )}
     </>
   )
 }
@@ -1096,24 +1185,148 @@ function SettingsView({ user, onLogout }: { user: SessionUser; onLogout: () => v
   return (
     <>
       <SectionHeader eyebrow="System" title="System settings" description="Current account, environment, security, and local app preferences." />
-      <section className="placeholder-grid">
-        <article className="surface-card module-card"><UserRound /><h3>{user.name}</h3><p>{user.email}<br />Role: {titleStatus(user.role)}<br />Status: {user.active ? 'Active' : 'Disabled'}</p><button className="ghost-button" onClick={onLogout}>Log out</button></article>
-        <article className="surface-card module-card"><Settings /><h3>App environment</h3><p>Frontend: Vite local app<br />API: proxied through /api<br />Database: MongoDB Atlas from backend .env</p></article>
-        <article className="surface-card module-card"><Calculator /><h3>Saved valuations</h3><p>{savedValuations.length} valuation record{savedValuations.length === 1 ? '' : 's'} saved on this device.</p><button className="ghost-button" onClick={() => { localStorage.removeItem('phoneflow_valuations'); window.location.reload() }}>Clear saved valuations</button></article>
+      <section className="settings-grid">
+        <article className="surface-card settings-card account-settings-card">
+          <div className="settings-card-heading">
+            <span className="settings-icon violet"><UserRound size={20} /></span>
+            <div>
+              <h3>Account profile</h3>
+              <p>Your signed-in account and access details.</p>
+            </div>
+            <span className={`account-status ${user.active ? 'active' : 'disabled'}`}>
+              <i />{user.active ? 'Active' : 'Disabled'}
+            </span>
+          </div>
+
+          <div className="account-profile">
+            <div className="settings-avatar">{user.name.slice(0, 2).toUpperCase()}</div>
+            <div className="account-identity">
+              <h4>{user.name}</h4>
+              <span>{user.email}</span>
+            </div>
+          </div>
+
+          <div className="account-details">
+            <div><span>Role</span><strong>{titleStatus(user.role)}</strong></div>
+            <div><span>Access level</span><strong>{user.role === 'OWNER' ? 'Full access' : 'Role based'}</strong></div>
+            <div><span>Authentication</span><strong>Password protected</strong></div>
+          </div>
+
+          <div className="settings-card-footer">
+            <p>Signing out will end your current session on this device.</p>
+            <button className="ghost-button danger-button" onClick={onLogout}><LogOut size={15} />Log out</button>
+          </div>
+        </article>
+
+        <article className="surface-card settings-card environment-settings-card">
+          <div className="settings-card-heading">
+            <span className="settings-icon blue"><Settings size={20} /></span>
+            <div>
+              <h3>App environment</h3>
+              <p>Services currently powering PhoneFlow.</p>
+            </div>
+          </div>
+          <div className="environment-list">
+            <div>
+              <span className="environment-icon"><Smartphone size={17} /></span>
+              <p><strong>Frontend</strong><small>Vite local application</small></p>
+              <span className="service-state"><i />Online</span>
+            </div>
+            <div>
+              <span className="environment-icon"><Server size={17} /></span>
+              <p><strong>API service</strong><small>Proxied securely through /api</small></p>
+              <span className="service-state"><i />Connected</span>
+            </div>
+            <div>
+              <span className="environment-icon"><Database size={17} /></span>
+              <p><strong>Database</strong><small>MongoDB Atlas</small></p>
+              <span className="service-state"><i />Connected</span>
+            </div>
+          </div>
+        </article>
+
+        <article className="surface-card settings-card valuation-settings-card">
+          <div className="settings-card-heading">
+            <span className="settings-icon orange"><Calculator size={20} /></span>
+            <div>
+              <h3>Saved valuations</h3>
+              <p>Calculator records stored on this device.</p>
+            </div>
+          </div>
+          <div className="saved-valuation-summary">
+            <strong>{savedValuations.length}</strong>
+            <p>Saved record{savedValuations.length === 1 ? '' : 's'}<small>Local browser storage</small></p>
+          </div>
+          <div className="settings-card-footer">
+            <p>Clearing local records cannot be undone.</p>
+            <button
+              className="ghost-button danger-button"
+              disabled={savedValuations.length === 0}
+              onClick={() => { localStorage.removeItem('phoneflow_valuations'); window.location.reload() }}
+            >
+              <Trash2 size={15} />Clear records
+            </button>
+          </div>
+        </article>
       </section>
     </>
   )
 }
 
 function App({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
-  const [active, setActive] = useState<NavKey>('dashboard')
+  const [active, setActive] = useState<NavKey>(() => viewFromPath(window.location.pathname))
   const [mobileOpen, setMobileOpen] = useState(false)
   const [darkMode, setDarkMode] = useState(true)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const profileMenuRef = useRef<HTMLDivElement>(null)
 
   const changePage = (key: NavKey) => {
     setActive(key)
     setMobileOpen(false)
+    setProfileOpen(false)
+    const nextPath = viewPaths[key]
+    if (window.location.pathname !== nextPath) window.history.pushState({ view: key }, '', nextPath)
   }
+
+  useEffect(() => {
+    const currentView = viewFromPath(window.location.pathname)
+    const canonicalPath = viewPaths[currentView]
+
+    if (window.location.pathname !== canonicalPath) {
+      window.history.replaceState({ view: currentView }, '', canonicalPath)
+    }
+
+    const handlePopState = () => {
+      setActive(viewFromPath(window.location.pathname))
+      setMobileOpen(false)
+      setProfileOpen(false)
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+
+  useEffect(() => {
+    document.title = `${navGroups.flatMap((group) => group.items).find((item) => item.key === active)?.label || 'Dashboard'} · PhoneFlow`
+  }, [active])
+
+  useEffect(() => {
+    if (!profileOpen) return
+
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!profileMenuRef.current?.contains(event.target as Node)) setProfileOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setProfileOpen(false)
+    }
+
+    document.addEventListener('mousedown', closeOnOutsideClick)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutsideClick)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [profileOpen])
 
   const renderView = () => {
     switch (active) {
@@ -1177,7 +1390,35 @@ function App({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
           <div className="topbar-actions">
             <button className="icon-button theme-toggle" onClick={() => setDarkMode((current) => !current)} aria-label="Toggle theme">{darkMode ? <Sun size={18} /> : <Moon size={18} />}</button>
             <button className="icon-button notification-button" aria-label="Notifications"><Bell size={18} /><span /></button>
-            <div className="topbar-user"><span className="avatar">{user.name.slice(0, 2).toUpperCase()}</span><p><strong>{user.name.split(' ')[0]}</strong><small>{titleStatus(user.role)}</small></p><ChevronDown size={15} /></div>
+            <div className="profile-menu" ref={profileMenuRef}>
+              <button
+                className={`topbar-user ${profileOpen ? 'open' : ''}`}
+                onClick={() => setProfileOpen((current) => !current)}
+                aria-expanded={profileOpen}
+                aria-haspopup="menu"
+              >
+                <span className="avatar">{user.name.slice(0, 2).toUpperCase()}</span>
+                <p><strong>{user.name.split(' ')[0]}</strong><small>{titleStatus(user.role)}</small></p>
+                <ChevronDown className="profile-chevron" size={15} />
+              </button>
+
+              {profileOpen && (
+                <div className="profile-dropdown surface-card" role="menu">
+                  <div className="profile-dropdown-header">
+                    <span className="avatar large">{user.name.slice(0, 2).toUpperCase()}</span>
+                    <p><strong>{user.name}</strong><small>{user.email}</small></p>
+                  </div>
+                  <div className="profile-dropdown-role">
+                    <span>Signed in as</span>
+                    <strong>{titleStatus(user.role)}</strong>
+                  </div>
+                  <div className="profile-dropdown-actions">
+                    <button role="menuitem" onClick={() => changePage('settings')}><Settings size={16} /><span>Account settings</span></button>
+                    <button className="logout-action" role="menuitem" onClick={onLogout}><LogOut size={16} /><span>Log out</span></button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </header>
         <main className="main-content">{renderView()}</main>
