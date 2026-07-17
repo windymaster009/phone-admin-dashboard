@@ -160,7 +160,9 @@ type DashboardData = {
   recentPawns: Pawn[]
   recentTrades: Trade[]
   inventoryMix: { _id: string; count: number; value: number }[]
+  monthPerformance: { _id: 'BUY' | 'SELL'; total: number }[]
   monthlyPerformance: { _id: { month: number; type: 'BUY' | 'SELL' }; total: number }[]
+  dailyPerformance: { _id: { day: number; type: 'BUY' | 'SELL' }; total: number }[]
 }
 
 type ExchangeRateData = {
@@ -481,11 +483,26 @@ function SectionHeader({
 function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: SessionUser }) {
   const [data, setData] = useState<DashboardData | null>(null)
   const [selectedPawn, setSelectedPawn] = useState<Pawn | null>(null)
+  const [performancePeriod, setPerformancePeriod] = useState<'month' | 'year'>('month')
+  const [inventoryMenuOpen, setInventoryMenuOpen] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
   const exchangeRate = useExchangeRate()
 
+  const loadDashboard = async (showRefresh = false) => {
+    if (showRefresh) setRefreshing(true)
+    try {
+      setData(await api<DashboardData>('/dashboard'))
+      setError('')
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not load dashboard data')
+    } finally {
+      if (showRefresh) setRefreshing(false)
+    }
+  }
+
   useEffect(() => {
-    api<DashboardData>('/dashboard').then(setData).catch((reason: Error) => setError(reason.message))
+    void loadDashboard()
   }, [])
 
   const metrics = data ? [
@@ -494,15 +511,32 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
     { label: 'Phones in stock', value: String(data.metrics.phonesInStock), change: `${data.metrics.lowStock} low stock`, trend: data.metrics.lowStock > 0 ? 'down' as const : 'up' as const, icon: Smartphone, tone: 'orange' },
     { label: 'Customers', value: String(data.metrics.customerCount), change: 'live database', trend: 'up' as const, icon: Users, tone: 'rose' },
   ] : demoMetrics
-  const netCashMovement = (data?.metrics.salesToday || 0) - (data?.metrics.purchasesToday || 0)
   const monthLabels = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']
   const monthlyNet = monthLabels.map((_, index) => {
     const month = index + 1
     const sales = data?.monthlyPerformance.find((item) => item._id.month === month && item._id.type === 'SELL')?.total || 0
     const purchases = data?.monthlyPerformance.find((item) => item._id.month === month && item._id.type === 'BUY')?.total || 0
-    return Math.max(0, sales - purchases)
+    return sales - purchases
   })
-  const maxMonthlyNet = Math.max(...monthlyNet, 1)
+  const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()
+  const dayLabels = Array.from({ length: daysInMonth }, (_, index) => String(index + 1))
+  const dailyNet = dayLabels.map((_, index) => {
+    const day = index + 1
+    const sales = data?.dailyPerformance?.find((item) => item._id.day === day && item._id.type === 'SELL')?.total || 0
+    const purchases = data?.dailyPerformance?.find((item) => item._id.day === day && item._id.type === 'BUY')?.total || 0
+    return sales - purchases
+  })
+  const performanceValues = performancePeriod === 'month' ? dailyNet : monthlyNet
+  const performanceLabels = performancePeriod === 'month' ? dayLabels : monthLabels
+  const performanceSales = performancePeriod === 'month'
+    ? data?.monthPerformance?.find((item) => item._id === 'SELL')?.total || 0
+    : data?.monthlyPerformance.filter((item) => item._id.type === 'SELL').reduce((sum, item) => sum + item.total, 0) || 0
+  const performancePurchases = performancePeriod === 'month'
+    ? data?.monthPerformance?.find((item) => item._id === 'BUY')?.total || 0
+    : data?.monthlyPerformance.filter((item) => item._id.type === 'BUY').reduce((sum, item) => sum + item.total, 0) || 0
+  const performanceNet = performanceSales - performancePurchases
+  const maxPerformanceValue = Math.max(...performanceValues.map((value) => Math.abs(value)), 1)
+  const hasPerformanceData = performanceValues.some((value) => value !== 0)
   const inventoryMix = data?.inventoryMix.length ? data.inventoryMix : [{ _id: 'PHONE', count: 0, value: 0 }, { _id: 'ACCESSORY', count: 0, value: 0 }, { _id: 'SPARE_PART', count: 0, value: 0 }]
   const totalInventoryValue = inventoryMix.reduce((sum, item) => sum + item.value, 0)
   const phoneValue = inventoryMix.find((item) => item._id === 'PHONE')?.value || 0
@@ -541,21 +575,23 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
               <span className="eyebrow">Revenue overview</span>
               <h3>Shop performance</h3>
             </div>
-            <button className="ghost-button">
-              This month <ChevronDown size={15} />
-            </button>
+            <select className="ghost-button performance-period-select" value={performancePeriod} onChange={(event) => setPerformancePeriod(event.target.value as 'month' | 'year')} aria-label="Performance period">
+              <option value="month">This month</option>
+              <option value="year">This year</option>
+            </select>
           </div>
 
           <div className="revenue-total">
-            <div className="revenue-amount"><strong>{money.format(netCashMovement)}</strong>{exchangeRate && <small>{khrText(netCashMovement, exchangeRate)}</small>}</div>
-            <span><ArrowUpRight size={15} /> net cash movement today</span>
+            <div className="revenue-amount"><strong>{money.format(performanceNet)}</strong>{exchangeRate && <small>{khrText(performanceNet, exchangeRate)}</small>}</div>
+            <span className={performanceNet < 0 ? 'negative' : ''}>{performanceNet < 0 ? <ArrowDownRight size={15} /> : <ArrowUpRight size={15} />} net cash movement this {performancePeriod}</span>
           </div>
 
-          <div className="chart-shell" aria-label="Monthly revenue bar chart">
-            {monthlyNet.map((total, index) => (
+          <div className={`chart-shell ${performancePeriod === 'month' ? 'daily-chart' : ''}`} aria-label={`${performancePeriod === 'month' ? 'Daily' : 'Monthly'} net cash movement chart`}>
+            {!hasPerformanceData && <div className="chart-empty"><BarChart3 size={22} /><strong>No completed transactions</strong><span>Sales and purchases will appear here when they are completed.</span></div>}
+            {performanceValues.map((total, index) => (
               <div className="chart-column" key={index}>
-                <span style={{ height: `${Math.max(total > 0 ? (total / maxMonthlyNet) * 100 : 0, total > 0 ? 12 : 3)}%` }} title={`${money.format(total)}${exchangeRate ? ` / ${khrText(total, exchangeRate)}` : ''}`} />
-                <small>{monthLabels[index]}</small>
+                <span className={total < 0 ? 'negative' : ''} style={{ height: `${total === 0 ? 3 : Math.max((Math.abs(total) / maxPerformanceValue) * 100, 12)}%` }} title={`${money.format(total)}${exchangeRate ? ` / ${khrText(total, exchangeRate)}` : ''}`} />
+                <small>{performancePeriod === 'month' && index % 5 !== 0 && index !== performanceValues.length - 1 ? '' : performanceLabels[index]}</small>
               </div>
             ))}
           </div>
@@ -567,7 +603,14 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
               <span className="eyebrow">Stock value</span>
               <h3>Inventory mix</h3>
             </div>
-            <button className="icon-button" aria-label="More options"><MoreHorizontal size={19} /></button>
+            <div className="card-options" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setInventoryMenuOpen(false) }}>
+              <button className={`icon-button ${inventoryMenuOpen ? 'open' : ''}`} onClick={() => setInventoryMenuOpen((current) => !current)} aria-label="Inventory options" aria-expanded={inventoryMenuOpen}><MoreHorizontal size={19} /></button>
+              {inventoryMenuOpen && <div className="card-options-menu surface-card" role="menu">
+                <button onClick={() => goTo('inventory')} role="menuitem"><Boxes size={16} />Open inventory</button>
+                <button onClick={() => { setInventoryMenuOpen(false); comingNext('Add stock') }} role="menuitem"><Plus size={16} />Add stock</button>
+                <button onClick={() => { setInventoryMenuOpen(false); void loadDashboard(true) }} role="menuitem" disabled={refreshing}><RefreshCcw size={16} />{refreshing ? 'Refreshing…' : 'Refresh values'}</button>
+              </div>}
+            </div>
           </div>
           <div className="donut-wrap">
             <div className="donut-chart" style={donutStyle}><span>{money.format(totalInventoryValue)}{exchangeRate && <small className="donut-khr">{khrText(totalInventoryValue, exchangeRate)}</small>}<small>Total value</small></span></div>
@@ -631,9 +674,9 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
             </div>
           </div>
           <div className="quick-actions-list">
-            <button onClick={() => goTo('pawn')}><span className="quick-icon violet"><HandCoins size={19} /></span><p>New pawn contract<small>Register ID and collateral</small></p><ArrowUpRight size={17} /></button>
-            <button onClick={() => goTo('trade')}><span className="quick-icon blue"><ShoppingCart size={19} /></span><p>New sale<small>Phone or accessories</small></p><ArrowUpRight size={17} /></button>
-            <button onClick={() => goTo('inventory')}><span className="quick-icon orange"><Package size={19} /></span><p>Add stock<small>Phone, part or accessory</small></p><ArrowUpRight size={17} /></button>
+            <button onClick={() => comingNext('New pawn')}><span className="quick-icon violet"><HandCoins size={19} /></span><p>New pawn contract<small>Register ID and collateral</small></p><ArrowUpRight size={17} /></button>
+            <button onClick={() => comingNext('New sale')}><span className="quick-icon blue"><ShoppingCart size={19} /></span><p>New sale<small>Phone or accessories</small></p><ArrowUpRight size={17} /></button>
+            <button onClick={() => comingNext('Add stock')}><span className="quick-icon orange"><Package size={19} /></span><p>Add stock<small>Phone, part or accessory</small></p><ArrowUpRight size={17} /></button>
             <button onClick={() => goTo('depreciation')}><span className="quick-icon rose"><Calculator size={19} /></span><p>Value a phone<small>Calculate depreciation</small></p><ArrowUpRight size={17} /></button>
           </div>
         </article>
@@ -838,7 +881,7 @@ function TradeView() {
       </article>
       {selectedTrade && (
         <div className="modal-backdrop" role="presentation" onClick={() => setSelectedTrade(null)}>
-          <section className="detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="trade-detail-title" onClick={(event) => event.stopPropagation()}>
+          <section className="detail-modal trade-detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="trade-detail-title" onClick={(event) => event.stopPropagation()}>
             <header className="detail-modal-header">
               <div>
                 <span className="eyebrow">{selectedTrade.type === 'SELL' ? 'Sale transaction' : 'Purchase transaction'}</span>

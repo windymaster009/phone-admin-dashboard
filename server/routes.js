@@ -126,7 +126,7 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
     Pawn.estimatedDocumentCount(),
   ])
 
-  const [recentPawns, recentTrades, inventoryMix, monthPerformance, monthlyPerformance] = await Promise.all([
+  const [recentPawns, recentTrades, inventoryMix, monthPerformance, monthlyPerformance, dailyPerformance] = await Promise.all([
     Pawn.find().populate('customer', 'name phone nationalIdNumber').sort({ createdAt: -1 }).limit(6),
     Trade.find().populate('customer', 'name phone').sort({ createdAt: -1 }).limit(6),
     InventoryItem.aggregate([
@@ -147,6 +147,16 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
       },
       { $sort: { '_id.month': 1 } },
     ]),
+    Trade.aggregate([
+      { $match: { status: 'COMPLETED', createdAt: { $gte: month } } },
+      {
+        $group: {
+          _id: { day: { $dayOfMonth: '$createdAt' }, type: '$type' },
+          total: { $sum: '$total' },
+        },
+      },
+      { $sort: { '_id.day': 1 } },
+    ]),
   ])
 
   res.json({
@@ -165,6 +175,7 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
     inventoryMix,
     monthPerformance,
     monthlyPerformance,
+    dailyPerformance,
   })
 }))
 
