@@ -27,26 +27,81 @@ An internal full-stack phone shop system for pawn contracts, buying and selling,
 - Dark and light themes
 
 ## ScreenShot previews
-# mobile
-<img width="400" height="853" alt="image" src="https://github.com/user-attachments/assets/a81b1fff-897a-488e-829e-0c8744d28c3b" />
-<img width="398" height="848" alt="image" src="https://github.com/user-attachments/assets/a3595c8f-8ce5-442e-9f7a-8e286800e6dd" />
-<img width="401" height="846" alt="image" src="https://github.com/user-attachments/assets/fb3d7f8d-1349-4cbe-a63e-1b63992c6726" />
-<img width="403" height="854" alt="image" src="https://github.com/user-attachments/assets/bcc3efe4-ff5a-40a6-a91a-f45669009efa" />
-<img width="403" height="852" alt="image" src="https://github.com/user-attachments/assets/c7ba1a8d-c47e-4a7d-a064-ca1932e35ec2" />
-<img width="396" height="846" alt="image" src="https://github.com/user-attachments/assets/6b84dad2-7bd1-4fca-b6b1-5ee966704631" />
-<img width="400" height="850" alt="image" src="https://github.com/user-attachments/assets/7f263293-268c-4cab-8183-08205d2a5b21" />
-<img width="399" height="855" alt="image" src="https://github.com/user-attachments/assets/4f0cb7bf-0307-4dca-81b0-b5468eb7ffd8" />
+# 📱 Mobile
 
-# DESKTOP
-<img width="1898" height="935" alt="image" src="https://github.com/user-attachments/assets/e7e98841-0351-4a0c-a3af-d018d711c9eb" />
-<img width="1915" height="942" alt="image" src="https://github.com/user-attachments/assets/5377af3b-cbbe-4f3b-866b-425915d78975" />
-<img width="1913" height="940" alt="image" src="https://github.com/user-attachments/assets/4ba5dc84-aa09-4339-8219-381bfdddfc08" />
-<img width="1914" height="941" alt="image" src="https://github.com/user-attachments/assets/efb084f8-69bb-4ad5-adc9-9d185e660a5c" />
-<img width="1913" height="939" alt="image" src="https://github.com/user-attachments/assets/f40a456d-3eff-4914-9e48-2305a4cf7cd6" />
-<img width="1914" height="941" alt="image" src="https://github.com/user-attachments/assets/058b76f8-d58b-4bdb-9e24-6f61135894f9" />
-<img width="1899" height="936" alt="image" src="https://github.com/user-attachments/assets/5821d8a8-a638-4669-a48b-89d1a19b2bc5" />
-<img width="1911" height="938" alt="image" src="https://github.com/user-attachments/assets/87144a95-74c5-4300-b223-b44acd8c14b1" />
+<table align="center">
+<tr>
+<td align="center">
+<img src="https://github.com/user-attachments/assets/a81b1fff-897a-488e-829e-0c8744d28c3b" width="180">
+</td>
+<td align="center">
+<img src="https://github.com/user-attachments/assets/a3595c8f-8ce5-442e-9f7a-8e286800e6dd" width="180">
+</td>
+<td align="center">
+<img src="https://github.com/user-attachments/assets/fb3d7f8d-1349-4cbe-a63e-1b63992c6726" width="180">
+</td>
+<td align="center">
+<img src="https://github.com/user-attachments/assets/bcc3efe4-ff5a-40a6-a91a-f45669009efa" width="180">
+</td>
+</tr>
 
+<tr>
+<td align="center">
+<img src="https://github.com/user-attachments/assets/c7ba1a8d-c47e-4a7d-a064-ca1932e35ec2" width="180">
+</td>
+<td align="center">
+<img src="https://github.com/user-attachments/assets/6b84dad2-7bd1-4fca-b6b1-5ee966704631" width="180">
+</td>
+<td align="center">
+<img src="https://github.com/user-attachments/assets/7f263293-268c-4cab-8183-08205d2a5b21" width="180">
+</td>
+<td align="center">
+<img src="https://github.com/user-attachments/assets/4f0cb7bf-0307-4dca-81b0-b5468eb7ffd8" width="180">
+</td>
+</tr>
+</table>
+
+---
+
+# 🖥️ Desktop
+
+<table align="center">
+<tr>
+<td align="center">
+<img src="https://github.com/user-attachments/assets/e7e98841-0351-4a0c-a3af-d018d711c9eb" width="420">
+</td>
+<td align="center">
+<img src="https://github.com/user-attachments/assets/5377af3b-cbbe-4f3b-866b-425915d78975" width="420">
+</td>
+</tr>
+
+<tr>
+<td align="center">
+<img src="https://github.com/user-attachments/assets/4ba5dc84-aa09-4339-8219-381bfdddfc08" width="420">
+</td>
+<td align="center">
+<img src="https://github.com/user-attachments/assets/efb084f8-69bb-4ad5-adc9-9d185e660a5c" width="420">
+</td>
+</tr>
+
+<tr>
+<td align="center">
+<img src="https://github.com/user-attachments/assets/f40a456d-3eff-4914-9e48-2305a4cf7cd6" width="420">
+</td>
+<td align="center">
+<img src="https://github.com/user-attachments/assets/058b76f8-d58b-4bdb-9e24-6f61135894f9" width="420">
+</td>
+</tr>
+
+<tr>
+<td align="center">
+<img src="https://github.com/user-attachments/assets/5821d8a8-a638-4669-a48b-89d1a19b2bc5" width="420">
+</td>
+<td align="center">
+<img src="https://github.com/user-attachments/assets/87144a95-74c5-4300-b223-b44acd8c14b1" width="420">
+</td>
+</tr>
+</table>
 
 
 ## Local setup
