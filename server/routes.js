@@ -8,6 +8,14 @@ const router = Router()
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
 const clean = (value) => (typeof value === 'string' ? value.trim() : value)
 
+let exchangeRateCache = null
+const EXCHANGE_RATE_CACHE_MS = 30 * 60 * 1000
+
+function fallbackExchangeRate() {
+  const configuredRate = Number(process.env.USD_KHR_FALLBACK_RATE || 4100)
+  return Number.isFinite(configuredRate) && configuredRate > 0 ? configuredRate : 4100
+}
+
 function makeCode(prefix) {
   const date = new Date().toISOString().slice(0, 10).replaceAll('-', '')
   const random = Math.random().toString(36).slice(2, 7).toUpperCase()
@@ -107,7 +115,7 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
   const month = new Date(now.getFullYear(), now.getMonth(), 1)
   const year = new Date(now.getFullYear(), 0, 1)
 
-  const [salesToday, purchasesToday, activePawnValue, phonesInStock, overdueContracts, lowStock, customerCount] = await Promise.all([
+  const [salesToday, purchasesToday, activePawnValue, phonesInStock, overdueContracts, lowStock, customerCount, pawnCount] = await Promise.all([
     Trade.aggregate([{ $match: { type: 'SELL', status: 'COMPLETED', createdAt: { $gte: today } } }, { $group: { _id: null, total: { $sum: '$total' } } }]),
     Trade.aggregate([{ $match: { type: 'BUY', status: 'COMPLETED', createdAt: { $gte: today } } }, { $group: { _id: null, total: { $sum: '$total' } } }]),
     Pawn.aggregate([{ $match: { status: { $in: ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED'] } } }, { $group: { _id: null, total: { $sum: '$principal' } } }]),
@@ -115,6 +123,7 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
     Pawn.countDocuments({ status: 'OVERDUE' }),
     InventoryItem.countDocuments({ status: 'IN_STOCK', $expr: { $lte: ['$quantity', '$reorderLevel'] } }),
     Customer.estimatedDocumentCount(),
+    Pawn.estimatedDocumentCount(),
   ])
 
   const [recentPawns, recentTrades, inventoryMix, monthPerformance, monthlyPerformance] = await Promise.all([
@@ -149,6 +158,7 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
       overdueContracts,
       lowStock,
       customerCount,
+      pawnCount,
     },
     recentPawns,
     recentTrades,
@@ -240,6 +250,44 @@ router.post('/valuation/calculate', requireAuth, (req, res) => {
     maximumPawn: Math.round(maximumPawn * 100) / 100,
   })
 })
+
+router.get('/exchange-rates', requireAuth, asyncRoute(async (_req, res) => {
+  if (exchangeRateCache && Date.now() - exchangeRateCache.cachedAt < EXCHANGE_RATE_CACHE_MS) {
+    return res.json(exchangeRateCache.payload)
+  }
+
+  const fallbackRate = fallbackExchangeRate()
+  const apiUrl = process.env.EXCHANGE_RATE_API_URL || 'https://open.er-api.com/v6/latest/USD'
+
+  try {
+    const response = await fetch(apiUrl, { signal: AbortSignal.timeout(8000) })
+    const payload = await response.json()
+    if (!response.ok || payload?.result !== 'success') throw new Error(payload?.['error-type'] || `Rate provider returned ${response.status}`)
+
+    const usdKhr = Number(payload?.rates?.KHR)
+    if (!Number.isFinite(usdKhr) || usdKhr <= 0) throw new Error('Rate response did not include USD/KHR')
+
+    const result = {
+      usdKhr,
+      source: 'ExchangeRate-API',
+      rateType: 'reference',
+      configured: true,
+      updatedAt: payload.time_last_update_utc || new Date().toISOString(),
+    }
+    exchangeRateCache = { payload: result, cachedAt: Date.now() }
+    return res.json(result)
+  } catch (error) {
+    console.error('Exchange-rate request failed:', error.message)
+    return res.json({
+      usdKhr: fallbackRate,
+      source: 'configured-fallback',
+      rateType: 'fallback',
+      configured: false,
+      updatedAt: new Date().toISOString(),
+      warning: 'Live exchange rate is temporarily unavailable',
+    })
+  }
+}))
 
 router.get('/pawns', requireAuth, asyncRoute(async (req, res) => {
   await refreshPawnStatuses()

@@ -155,11 +155,21 @@ type DashboardData = {
     overdueContracts: number
     lowStock: number
     customerCount: number
+    pawnCount: number
   }
   recentPawns: Pawn[]
   recentTrades: Trade[]
   inventoryMix: { _id: string; count: number; value: number }[]
   monthlyPerformance: { _id: { month: number; type: 'BUY' | 'SELL' }; total: number }[]
+}
+
+type ExchangeRateData = {
+  usdKhr: number
+  source: 'ExchangeRate-API' | 'configured-fallback'
+  rateType: 'reference' | 'fallback'
+  configured: boolean
+  updatedAt: string
+  warning?: string
 }
 
 type ActivityLog = {
@@ -179,9 +189,9 @@ const navGroups: { label: string; items: NavItem[] }[] = [
   {
     label: 'Operations',
     items: [
-      { key: 'pawn', label: 'Pawn Management', icon: HandCoins, badge: '12' },
+      { key: 'pawn', label: 'Pawn Management', icon: HandCoins },
       { key: 'trade', label: 'Buy & Sell', icon: ShoppingCart },
-      { key: 'inventory', label: 'Stock Information', icon: Boxes, badge: 'Low 7' },
+      { key: 'inventory', label: 'Stock Information', icon: Boxes },
       { key: 'customers', label: 'Customers', icon: Users },
     ],
   },
@@ -322,10 +332,38 @@ const transactions = [
 const currency = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
-  maximumFractionDigits: 0,
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
 })
 
-const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+const money = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+})
+const riel = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
+
+function useExchangeRate() {
+  const [exchangeRate, setExchangeRate] = useState<ExchangeRateData | null>(null)
+
+  useEffect(() => {
+    api<ExchangeRateData>('/exchange-rates')
+      .then(setExchangeRate)
+      .catch(() => setExchangeRate(null))
+  }, [])
+
+  return exchangeRate
+}
+
+function convertedKhr(amount: number, exchangeRate: ExchangeRateData | null) {
+  if (!exchangeRate) return 0
+  return Math.round((amount * exchangeRate.usdKhr) / 100) * 100
+}
+
+function khrText(amount: number, exchangeRate: ExchangeRateData | null) {
+  return exchangeRate ? `≈ ${riel.format(convertedKhr(amount, exchangeRate))} ៛` : ''
+}
 const dateText = (value: string) => new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(new Date(value))
 const titleStatus = (status: string) => status.replaceAll('_', ' ').toLowerCase().replace(/(^|\s)\S/g, (letter) => letter.toUpperCase())
 const comingNext = (label: string) => window.alert(`${label} form is next. The tables and dashboard are connected to MongoDB now.`)
@@ -397,7 +435,8 @@ function MetricCard({
   trend,
   icon: Icon,
   tone,
-}: (typeof demoMetrics)[number]) {
+  secondaryValue,
+}: (typeof demoMetrics)[number] & { secondaryValue?: string }) {
   return (
     <article className="metric-card surface-card">
       <div className={`metric-icon tone-${tone}`}>
@@ -406,6 +445,7 @@ function MetricCard({
       <div className="metric-copy">
         <p>{label}</p>
         <h3>{value}</h3>
+        {secondaryValue && <small className="khr-value">{secondaryValue}</small>}
       </div>
       <span className={`metric-change ${trend}`}>
         {trend === 'up' ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
@@ -442,17 +482,19 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
   const [data, setData] = useState<DashboardData | null>(null)
   const [selectedPawn, setSelectedPawn] = useState<Pawn | null>(null)
   const [error, setError] = useState('')
+  const exchangeRate = useExchangeRate()
 
   useEffect(() => {
     api<DashboardData>('/dashboard').then(setData).catch((reason: Error) => setError(reason.message))
   }, [])
 
   const metrics = data ? [
-    { label: "Today's sales", value: money.format(data.metrics.salesToday), change: `${money.format(data.metrics.purchasesToday)} purchases`, trend: 'up' as const, icon: CircleDollarSign, tone: 'violet' },
-    { label: 'Active pawn value', value: money.format(data.metrics.activePawnValue), change: `${data.metrics.overdueContracts} overdue`, trend: data.metrics.overdueContracts > 0 ? 'down' as const : 'up' as const, icon: HandCoins, tone: 'blue' },
+    { label: "Today's sales", value: money.format(data.metrics.salesToday), secondaryValue: khrText(data.metrics.salesToday, exchangeRate), change: `${money.format(data.metrics.purchasesToday)} purchases${exchangeRate ? ` · ${khrText(data.metrics.purchasesToday, exchangeRate)}` : ''}`, trend: 'up' as const, icon: CircleDollarSign, tone: 'violet' },
+    { label: 'Active pawn value', value: money.format(data.metrics.activePawnValue), secondaryValue: khrText(data.metrics.activePawnValue, exchangeRate), change: `${data.metrics.overdueContracts} overdue`, trend: data.metrics.overdueContracts > 0 ? 'down' as const : 'up' as const, icon: HandCoins, tone: 'blue' },
     { label: 'Phones in stock', value: String(data.metrics.phonesInStock), change: `${data.metrics.lowStock} low stock`, trend: data.metrics.lowStock > 0 ? 'down' as const : 'up' as const, icon: Smartphone, tone: 'orange' },
     { label: 'Customers', value: String(data.metrics.customerCount), change: 'live database', trend: 'up' as const, icon: Users, tone: 'rose' },
   ] : demoMetrics
+  const netCashMovement = (data?.metrics.salesToday || 0) - (data?.metrics.purchasesToday || 0)
   const monthLabels = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']
   const monthlyNet = monthLabels.map((_, index) => {
     const month = index + 1
@@ -505,14 +547,14 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
           </div>
 
           <div className="revenue-total">
-            <strong>{money.format((data?.metrics.salesToday || 0) - (data?.metrics.purchasesToday || 0))}</strong>
+            <div className="revenue-amount"><strong>{money.format(netCashMovement)}</strong>{exchangeRate && <small>{khrText(netCashMovement, exchangeRate)}</small>}</div>
             <span><ArrowUpRight size={15} /> net cash movement today</span>
           </div>
 
           <div className="chart-shell" aria-label="Monthly revenue bar chart">
             {monthlyNet.map((total, index) => (
               <div className="chart-column" key={index}>
-                <span style={{ height: `${Math.max(total > 0 ? (total / maxMonthlyNet) * 100 : 0, total > 0 ? 12 : 3)}%` }} title={money.format(total)} />
+                <span style={{ height: `${Math.max(total > 0 ? (total / maxMonthlyNet) * 100 : 0, total > 0 ? 12 : 3)}%` }} title={`${money.format(total)}${exchangeRate ? ` / ${khrText(total, exchangeRate)}` : ''}`} />
                 <small>{monthLabels[index]}</small>
               </div>
             ))}
@@ -528,11 +570,11 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
             <button className="icon-button" aria-label="More options"><MoreHorizontal size={19} /></button>
           </div>
           <div className="donut-wrap">
-            <div className="donut-chart" style={donutStyle}><span>{money.format(totalInventoryValue)}<small>Total value</small></span></div>
+            <div className="donut-chart" style={donutStyle}><span>{money.format(totalInventoryValue)}{exchangeRate && <small className="donut-khr">{khrText(totalInventoryValue, exchangeRate)}</small>}<small>Total value</small></span></div>
           </div>
           <div className="legend-list">
             {inventoryMix.map((item, index) => (
-              <div key={item._id}><span className={`legend-dot ${['dot-violet', 'dot-blue', 'dot-orange'][index] || 'dot-violet'}`} /><p>{titleStatus(item._id)}<small>{item.count} units</small></p><strong>{money.format(item.value)}</strong></div>
+              <div key={item._id}><span className={`legend-dot ${['dot-violet', 'dot-blue', 'dot-orange'][index] || 'dot-violet'}`} /><p>{titleStatus(item._id)}<small>{item.count} units</small></p><span className="legend-money"><strong>{money.format(item.value)}</strong>{exchangeRate && <small>{khrText(item.value, exchangeRate)}</small>}</span></div>
             ))}
           </div>
         </article>
@@ -569,7 +611,7 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
                         <p>{row.customer?.name || 'Unknown'}<small>{row.itemSnapshot.name}</small></p>
                       </div>
                     </td>
-                    <td><strong>{money.format(row.principal)}</strong><small className="table-subtext">of {money.format(row.estimatedValue)}</small></td>
+                    <td><strong>{money.format(row.principal)}</strong>{exchangeRate && <small className="table-subtext khr-table-value">{khrText(row.principal, exchangeRate)}</small>}<small className="table-subtext">of {money.format(row.estimatedValue)}{exchangeRate ? ` / ${khrText(row.estimatedValue, exchangeRate)}` : ''}</small></td>
                     <td>{dateText(row.dueDate)}</td>
                     <td><StatusBadge status={row.status} /></td>
                     <td><button className="icon-button" onClick={() => setSelectedPawn(row)} aria-label={`View contract ${row.pawnNo}`}><MoreHorizontal size={18} /></button></td>
@@ -973,6 +1015,7 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
   const [ageMonths, setAgeMonths] = useState(12)
   const [condition, setCondition] = useState('good')
   const [pawnRate, setPawnRate] = useState(45)
+  const exchangeRate = useExchangeRate()
 
   const result = useMemo(() => {
     const conditionRates: Record<string, number> = {
@@ -998,6 +1041,8 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
       pawnRate,
       estimatedValue: result.estimatedValue,
       maximumPawn: result.maximumPawn,
+      usdKhrRate: exchangeRate?.usdKhr,
+      maximumPawnKhr: exchangeRate ? convertedKhr(result.maximumPawn, exchangeRate) : undefined,
     }
     const previous = JSON.parse(localStorage.getItem('phoneflow_valuations') || '[]') as unknown[]
     localStorage.setItem('phoneflow_valuations', JSON.stringify([record, ...previous].slice(0, 50)))
@@ -1012,6 +1057,8 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
       pawnRate,
       estimatedValue: result.estimatedValue,
       maximumPawn: result.maximumPawn,
+      usdKhrRate: exchangeRate?.usdKhr,
+      maximumPawnKhr: exchangeRate ? convertedKhr(result.maximumPawn, exchangeRate) : undefined,
     }))
     window.alert(`Valuation ready: estimated value ${currency.format(result.estimatedValue)}, max pawn ${currency.format(result.maximumPawn)}. Use these numbers in the new pawn form.`)
     goTo('pawn')
@@ -1038,7 +1085,19 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
 
         <article className="surface-card valuation-result-card">
           <span className="eyebrow">Calculated offer</span>
-          <div className="valuation-hero"><small>Maximum pawn amount</small><strong>{currency.format(result.maximumPawn)}</strong><span>{pawnRate}% of estimated resale value</span></div>
+          <div className="valuation-hero">
+            <small>Maximum pawn amount</small>
+            <strong>{currency.format(result.maximumPawn)}</strong>
+            <div className="khr-equivalent">
+              {exchangeRate ? khrText(result.maximumPawn, exchangeRate) : 'Loading KHR rate…'}
+            </div>
+            <span>{pawnRate}% of estimated resale value</span>
+            {exchangeRate && (
+              <span className="exchange-rate-source">
+                1 USD = {riel.format(exchangeRate.usdKhr)} KHR · {exchangeRate.source === 'ExchangeRate-API' ? 'ExchangeRate-API reference' : 'Configured fallback rate'}
+              </span>
+            )}
+          </div>
           <div className="calculation-breakdown">
             <div><span>Market price</span><strong>{currency.format(marketPrice)}</strong></div>
             <div><span>Age deduction</span><strong>-{Math.round(result.ageDepreciation * 100)}%</strong></div>
@@ -1278,6 +1337,7 @@ function App({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [darkMode, setDarkMode] = useState(true)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [sidebarCounts, setSidebarCounts] = useState({ pawns: 0, lowStock: 0 })
   const profileMenuRef = useRef<HTMLDivElement>(null)
 
   const changePage = (key: NavKey) => {
@@ -1287,6 +1347,12 @@ function App({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
     const nextPath = viewPaths[key]
     if (window.location.pathname !== nextPath) window.history.pushState({ view: key }, '', nextPath)
   }
+
+  useEffect(() => {
+    api<DashboardData>('/dashboard')
+      .then((result) => setSidebarCounts({ pawns: result.metrics.pawnCount, lowStock: result.metrics.lowStock }))
+      .catch(() => undefined)
+  }, [])
 
   useEffect(() => {
     const currentView = viewFromPath(window.location.pathname)
@@ -1358,11 +1424,16 @@ function App({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
               <span className="nav-group-label">{group.label}</span>
               {group.items.map((item) => {
                 const Icon = item.icon
+                const badge = item.key === 'pawn'
+                  ? String(sidebarCounts.pawns)
+                  : item.key === 'inventory'
+                    ? `Low ${sidebarCounts.lowStock}`
+                    : item.badge
                 return (
                   <button className={active === item.key ? 'active' : ''} key={item.key} onClick={() => changePage(item.key)}>
                     <Icon size={19} />
                     <span>{item.label}</span>
-                    {item.badge && <small>{item.badge}</small>}
+                    {badge && <small>{badge}</small>}
                   </button>
                 )
               })}

@@ -59,6 +59,15 @@ CLIENT_ORIGIN=http://localhost:5173
 NODE_ENV=development
 ```
 
+The USD/KHR display uses a public reference-rate endpoint with no account or API key. Configure it in the backend `.env` file:
+
+```env
+EXCHANGE_RATE_API_URL=https://open.er-api.com/v6/latest/USD
+USD_KHR_FALLBACK_RATE=4100
+```
+
+The server caches the live rate and falls back to `USD_KHR_FALLBACK_RATE` when the public service is unavailable. An exact ABA counter buy/sell rate would require separate ABA PayWay merchant credentials.
+
 Never commit `.env`. If a password or secret has been pasted into chat or another public location, rotate it before using the system.
 
 ### 3. Start frontend and backend together
@@ -101,6 +110,7 @@ npm start            # run API and serve dist in production
 /api/customers
 /api/inventory
 /api/valuation
+/api/exchange-rates
 /api/pawns
 /api/trades
 /api/activity-logs

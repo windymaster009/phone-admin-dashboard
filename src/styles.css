@@ -169,6 +169,7 @@ kbd { border: 1px solid var(--border-strong); border-radius: 6px; padding: 3px 7
 .tone-rose, .quick-icon.rose { color: var(--rose); background: rgba(251, 113, 133, 0.13); }
 .metric-copy p { margin: 1px 0 8px; color: var(--muted); font-size: 11px; font-weight: 600; }
 .metric-copy h3 { margin: 0; font-family: Manrope, sans-serif; font-size: 24px; }
+.metric-copy .khr-value { display: block; margin-top: 4px; color: var(--muted); font-size: 9px; font-weight: 600; }
 .metric-change { grid-column: 2; margin-top: -5px; display: inline-flex; align-items: center; gap: 3px; font-size: 10px; font-weight: 700; color: var(--muted); }
 .metric-change.up { color: var(--green); }
 .metric-change.down { color: var(--orange); }
@@ -179,6 +180,8 @@ kbd { border: 1px solid var(--border-strong); border-radius: 6px; padding: 3px 7
 .card-heading h3 { margin: 5px 0 0; font-family: Manrope, sans-serif; font-size: 17px; }
 .revenue-total { display: flex; align-items: baseline; gap: 12px; margin: 24px 0 16px; }
 .revenue-total strong { font-family: Manrope, sans-serif; font-size: 30px; }
+.revenue-amount { display: flex; flex-direction: column; }
+.revenue-amount small { margin-top: 3px; color: var(--muted); font-size: 9px; }
 .revenue-total span { display: inline-flex; align-items: center; color: var(--green); font-size: 10px; font-weight: 700; }
 .chart-shell { height: 180px; display: flex; align-items: flex-end; gap: 11px; padding: 16px 6px 0; border-top: 1px solid var(--border); background-image: linear-gradient(var(--border) 1px, transparent 1px); background-size: 100% 45px; }
 .chart-column { height: 100%; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 8px; }
@@ -189,6 +192,7 @@ kbd { border: 1px solid var(--border-strong); border-radius: 6px; padding: 3px 7
 .donut-chart::before { content: ''; position: absolute; width: 98px; height: 98px; border-radius: 50%; background: var(--surface-solid); }
 .donut-chart span { position: relative; z-index: 1; text-align: center; font-family: Manrope, sans-serif; font-size: 19px; font-weight: 800; }
 .donut-chart small { display: block; margin-top: 4px; color: var(--muted); font-family: Inter, sans-serif; font-size: 9px; font-weight: 500; }
+.donut-chart .donut-khr { color: #c4b5fd; font-weight: 700; }
 .legend-list { display: grid; gap: 13px; }
 .legend-list > div { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; }
 .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
@@ -196,6 +200,9 @@ kbd { border: 1px solid var(--border-strong); border-radius: 6px; padding: 3px 7
 .legend-list p { margin: 0; display: flex; flex-direction: column; font-size: 11px; }
 .legend-list p small { color: var(--muted); margin-top: 2px; font-size: 9px; }
 .legend-list strong { font-size: 11px; }
+.legend-money { display: flex; flex-direction: column; align-items: flex-end; }
+.legend-money small { margin-top: 3px; color: var(--muted-2); font-size: 8px; }
+.khr-table-value { color: #a78bfa; }
 
 .dashboard-lower-grid { display: grid; grid-template-columns: minmax(0, 2fr) minmax(290px, 0.72fr); gap: 16px; }
 .table-card { overflow: hidden; }
@@ -281,6 +288,8 @@ td strong { color: var(--text); }
 .valuation-hero { margin: 18px 0; padding: 23px 16px; text-align: center; border: 1px solid rgba(139, 92, 246, 0.18); border-radius: 14px; background: rgba(139, 92, 246, 0.08); }
 .valuation-hero small, .valuation-hero span { display: block; color: var(--muted); font-size: 9px; }
 .valuation-hero strong { display: block; margin: 7px 0; color: #a78bfa; font: 800 36px Manrope, sans-serif; }
+.valuation-hero .khr-equivalent { margin: -2px 0 9px; color: var(--text); font: 700 16px Manrope, sans-serif; }
+.valuation-hero .exchange-rate-source { margin-top: 10px; color: var(--muted-2); font-size: 8px; }
 .calculation-breakdown { display: grid; gap: 10px; margin-bottom: 18px; }
 .calculation-breakdown div { display: flex; justify-content: space-between; color: var(--muted); font-size: 10px; }
 .calculation-breakdown strong { color: var(--text); }
