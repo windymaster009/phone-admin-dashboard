@@ -207,6 +207,24 @@ function CustomerPage() {
             </tbody>
           </table>
         </div>
+        <div className="customer-mobile-list">
+          {filtered.map((customer) => (
+            <article className="customer-mobile-card" key={customer._id}>
+              <div className="customer-mobile-heading">
+                <span className="avatar">{customer.name.slice(0, 2).toUpperCase()}</span>
+                <p><strong>{customer.name}</strong><small>{customer.phone}</small></p>
+                {customer.nationalIdNumber ? <span className="verified"><BadgeCheck size={14} /> ID ready</span> : <span className="unverified"><AlertTriangle size={14} /> Basic</span>}
+              </div>
+              <div className="customer-mobile-details">
+                <div><span>National ID</span><strong>{customer.nationalIdNumber || 'Not recorded'}</strong></div>
+                <div><span>Added</span><strong>{formatDate(customer.createdAt)}</strong></div>
+              </div>
+              {customer.address && <p className="customer-mobile-address"><MapPin size={13} /> {customer.address}</p>}
+            </article>
+          ))}
+          {!loading && filtered.length === 0 && <div className="customer-mobile-empty">{customers.length === 0 ? 'No customers yet.' : 'No matching customers.'}</div>}
+          {loading && <div className="customer-mobile-empty">Loading customers...</div>}
+        </div>
       </article>
 
       {showModal && <CustomerModal busy={busy} error={modalError} onClose={() => !busy && setShowModal(false)} onSubmit={createCustomer} />}

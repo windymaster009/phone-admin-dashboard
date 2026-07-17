@@ -28,6 +28,10 @@
   min-height: 400px;
 }
 
+.customer-mobile-list {
+  display: none;
+}
+
 .customer-filter-row {
   justify-content: space-between;
 }
@@ -106,5 +110,112 @@
 
   .customer-filter-row .search-field {
     width: 100%;
+  }
+
+  .customer-table-card {
+    min-height: 0;
+  }
+
+  .customer-table-card .table-scroll {
+    display: none;
+  }
+
+  .customer-mobile-list {
+    display: grid;
+    border-top: 1px solid var(--border);
+  }
+
+  .customer-mobile-card {
+    min-width: 0;
+    padding: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .customer-mobile-card:last-child {
+    border-bottom: 0;
+  }
+
+  .customer-mobile-heading {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .customer-mobile-heading p {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+  }
+
+  .customer-mobile-heading p strong,
+  .customer-mobile-heading p small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .customer-mobile-heading p strong {
+    color: var(--text);
+    font-size: 11px;
+  }
+
+  .customer-mobile-heading p small {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 9px;
+  }
+
+  .customer-mobile-details {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, .75fr);
+    gap: 9px;
+    margin-top: 11px;
+    padding: 11px;
+    border-radius: 11px;
+    background: var(--bg-soft);
+  }
+
+  .customer-mobile-details > div {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .customer-mobile-details span {
+    color: var(--muted-2);
+    font-size: 7px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+
+  .customer-mobile-details strong {
+    margin-top: 5px;
+    overflow: hidden;
+    color: var(--text);
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .customer-mobile-address {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 10px 2px 0;
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .customer-mobile-empty {
+    padding: 24px 14px;
+    color: var(--muted);
+    font-size: 10px;
+    text-align: center;
   }
 }

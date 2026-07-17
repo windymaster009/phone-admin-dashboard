@@ -387,7 +387,7 @@ function PawnDetailModal({ pawn, onClose, onOpenAll }: { pawn: Pawn; onClose: ()
 
   return (
     <div className="modal-backdrop" role="presentation" onClick={onClose}>
-      <section className="detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="pawn-detail-title" onClick={(event) => event.stopPropagation()}>
+      <section className="detail-modal pawn-detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="pawn-detail-title" onClick={(event) => event.stopPropagation()}>
         <header className="detail-modal-header">
           <div>
             <span className="eyebrow">Pawn contract</span>
@@ -632,7 +632,7 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
             </div>
             <button className="text-button" onClick={() => goTo('pawn')}>View all <ArrowUpRight size={15} /></button>
           </div>
-          <div className="table-scroll">
+          <div className="table-scroll recent-contract-table">
             <table>
               <thead>
                 <tr>
@@ -663,6 +663,23 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
                 {data?.recentPawns.length === 0 && <tr><td colSpan={6}>No pawn contracts in the database yet.</td></tr>}
               </tbody>
             </table>
+          </div>
+          <div className="mobile-contract-list">
+            {(data?.recentPawns || []).map((row) => (
+              <article className="mobile-contract-card" key={row._id}>
+                <div className="mobile-contract-heading">
+                  <span className="avatar">{(row.customer?.name || 'NA').slice(0, 2).toUpperCase()}</span>
+                  <p><strong>{row.customer?.name || 'Unknown'}</strong><small>{row.itemSnapshot.name}</small></p>
+                  <StatusBadge status={row.status} />
+                </div>
+                <div className="mobile-contract-details">
+                  <div><span>Loan</span><strong>{money.format(row.principal)}</strong><small>{exchangeRate && khrText(row.principal, exchangeRate)}</small></div>
+                  <div><span>Due date</span><strong>{dateText(row.dueDate)}</strong><small className="mono">{row.pawnNo}</small></div>
+                  <button className="icon-button" onClick={() => setSelectedPawn(row)} aria-label={`View contract ${row.pawnNo}`}><MoreHorizontal size={18} /></button>
+                </div>
+              </article>
+            ))}
+            {data?.recentPawns.length === 0 && <p className="mobile-contract-empty">No pawn contracts in the database yet.</p>}
           </div>
         </article>
 
@@ -698,13 +715,29 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
 function PawnView() {
   const [pawns, setPawns] = useState<Pawn[]>([])
   const [selectedPawn, setSelectedPawn] = useState<Pawn | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState('ALL')
+  const [dueSort, setDueSort] = useState<'soonest' | 'latest'>('soonest')
   const [error, setError] = useState('')
+  const exchangeRate = useExchangeRate()
 
   useEffect(() => {
     api<{ pawns: Pawn[] }>('/pawns')
       .then((result) => setPawns(result.pawns))
       .catch((reason: Error) => setError(reason.message))
   }, [])
+
+  const visiblePawns = pawns
+    .filter((pawn) => {
+      if (statusFilter !== 'ALL' && pawn.status !== statusFilter) return false
+      const query = searchTerm.trim().toLowerCase()
+      if (!query) return true
+      return [pawn.pawnNo, pawn.customer?.name, pawn.itemSnapshot.name, pawn.itemSnapshot.imei]
+        .some((value) => value?.toLowerCase().includes(query))
+    })
+    .sort((a, b) => dueSort === 'soonest'
+      ? new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+      : new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime())
 
   return (
     <>
@@ -722,15 +755,19 @@ function PawnView() {
       </section>
       <article className="surface-card table-card page-table">
         <div className="filter-row">
-          <div className="search-field"><Search size={17} /><input placeholder="Search contract, customer, phone or IMEI" /></div>
-          <button className="ghost-button">All statuses <ChevronDown size={15} /></button>
-          <button className="ghost-button">Due date <ChevronDown size={15} /></button>
+          <div className="search-field"><Search size={17} /><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search contract, customer, phone or IMEI" /></div>
+          <select className="ghost-button filter-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter pawn status">
+            <option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="DUE_SOON">Due soon</option><option value="OVERDUE">Overdue</option><option value="RENEWED">Renewed</option><option value="REDEEMED">Redeemed</option><option value="FORFEITED">Forfeited</option>
+          </select>
+          <select className="ghost-button filter-select" value={dueSort} onChange={(event) => setDueSort(event.target.value as 'soonest' | 'latest')} aria-label="Sort by due date">
+            <option value="soonest">Due soonest</option><option value="latest">Due latest</option>
+          </select>
         </div>
-        <div className="table-scroll">
+        <div className="table-scroll pawn-management-table">
           <table>
             <thead><tr><th>Contract</th><th>Customer</th><th>Collateral</th><th>Estimated value</th><th>Loan</th><th>ID card</th><th>Due date</th><th>Status</th><th /></tr></thead>
             <tbody>
-              {pawns.map((row) => (
+              {visiblePawns.map((row) => (
                 <tr key={row._id}>
                   <td><strong className="mono">{row.pawnNo}</strong></td>
                   <td>{row.customer?.name || 'Unknown'}</td>
@@ -743,62 +780,33 @@ function PawnView() {
                   <td><button className="icon-button" onClick={() => setSelectedPawn(row)} aria-label={`View ${row.pawnNo}`}><MoreHorizontal size={18} /></button></td>
                 </tr>
               ))}
-              {pawns.length === 0 && <tr><td colSpan={9}>No pawn contracts in the database yet.</td></tr>}
+              {visiblePawns.length === 0 && <tr><td colSpan={9}>No pawn contracts match these filters.</td></tr>}
             </tbody>
           </table>
         </div>
-      </article>
-      {selectedPawn && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setSelectedPawn(null)}>
-          <section className="detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="pawn-detail-title" onClick={(event) => event.stopPropagation()}>
-            <header className="detail-modal-header">
-              <div>
-                <span className="eyebrow">Pawn contract</span>
-                <h3 id="pawn-detail-title">{selectedPawn.pawnNo}</h3>
-                <p>{selectedPawn.customer?.name || 'Unknown customer'} - {selectedPawn.itemSnapshot.name}</p>
+        <div className="mobile-contract-list pawn-management-mobile-list">
+          {visiblePawns.map((row) => (
+            <article className="mobile-contract-card" key={row._id}>
+              <div className="mobile-contract-heading">
+                <span className="avatar">{(row.customer?.name || 'NA').slice(0, 2).toUpperCase()}</span>
+                <p><strong>{row.customer?.name || 'Unknown'}</strong><small>{row.itemSnapshot.name}</small></p>
+                <StatusBadge status={row.status} />
               </div>
-              <button className="icon-button" onClick={() => setSelectedPawn(null)} aria-label="Close details"><X size={18} /></button>
-            </header>
-
-            <div className="detail-grid">
-              <div><span>Status</span><strong><StatusBadge status={selectedPawn.status} /></strong></div>
-              <div><span>ID card</span><strong>{selectedPawn.identificationVerified ? 'Verified' : 'Missing'}</strong></div>
-              <div><span>Estimated value</span><strong>{money.format(selectedPawn.estimatedValue)}</strong></div>
-              <div><span>Loan principal</span><strong>{money.format(selectedPawn.principal)}</strong></div>
-              <div><span>Pawn percent</span><strong>{selectedPawn.pawnPercentage}%</strong></div>
-              <div><span>Interest rate</span><strong>{selectedPawn.interestRate}%</strong></div>
-              <div><span>Due date</span><strong>{dateText(selectedPawn.dueDate)}</strong></div>
-              <div><span>Created</span><strong>{dateText(selectedPawn.createdAt)}</strong></div>
-            </div>
-
-            <div className="detail-sections">
-              <article>
-                <span className="eyebrow">Customer</span>
-                <p><strong>{selectedPawn.customer?.name || 'Unknown'}</strong></p>
-                <p>{selectedPawn.customer?.phone || 'No phone recorded'}</p>
-                <p>{selectedPawn.customer?.nationalIdNumber || 'No National ID recorded'}</p>
-              </article>
-              <article>
-                <span className="eyebrow">Collateral</span>
-                <p><strong>{selectedPawn.itemSnapshot.name}</strong></p>
-                <p>{[selectedPawn.itemSnapshot.brand, selectedPawn.itemSnapshot.model, selectedPawn.itemSnapshot.storage, selectedPawn.itemSnapshot.color].filter(Boolean).join(' ') || 'No extra device details'}</p>
-                <p>{selectedPawn.itemSnapshot.imei || 'No IMEI recorded'}</p>
-              </article>
-            </div>
-
-            {selectedPawn.notes && (
-              <div className="detail-note">
-                <span className="eyebrow">Notes</span>
-                <p>{selectedPawn.notes}</p>
+              <div className="mobile-pawn-verification">
+                {row.identificationVerified ? <span className="verified"><BadgeCheck size={13} /> ID verified</span> : <span className="unverified"><AlertTriangle size={13} /> ID missing</span>}
+                <small className="mono">{row.pawnNo}</small>
               </div>
-            )}
-
-            <footer className="detail-modal-footer">
-              <button className="ghost-button" onClick={() => setSelectedPawn(null)}>Close</button>
-            </footer>
-          </section>
+              <div className="mobile-contract-details">
+                <div><span>Loan</span><strong>{money.format(row.principal)}</strong><small>{exchangeRate && khrText(row.principal, exchangeRate)}</small></div>
+                <div><span>Due date</span><strong>{dateText(row.dueDate)}</strong><small>Value {money.format(row.estimatedValue)}</small></div>
+                <button className="icon-button" onClick={() => setSelectedPawn(row)} aria-label={`View ${row.pawnNo}`}><MoreHorizontal size={18} /></button>
+              </div>
+            </article>
+          ))}
+          {visiblePawns.length === 0 && <p className="mobile-contract-empty">No pawn contracts match these filters.</p>}
         </div>
-      )}
+      </article>
+      {selectedPawn && <PawnDetailModal pawn={selectedPawn} onClose={() => setSelectedPawn(null)} />}
     </>
   )
 }
@@ -945,6 +953,9 @@ function TradeView() {
 function InventoryView() {
   const [items, setItems] = useState<InventoryItem[]>([])
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
+  const [search, setSearch] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('ALL')
+  const [statusFilter, setStatusFilter] = useState('ALL')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -956,6 +967,14 @@ function InventoryView() {
   const phoneCount = items.filter((item) => item.category === 'PHONE').reduce((sum, item) => sum + item.quantity, 0)
   const accessoryCount = items.filter((item) => item.category === 'ACCESSORY').reduce((sum, item) => sum + item.quantity, 0)
   const sparePartCount = items.filter((item) => item.category === 'SPARE_PART').reduce((sum, item) => sum + item.quantity, 0)
+  const filteredItems = items.filter((item) => {
+    const term = search.trim().toLowerCase()
+    const matchesSearch = !term || [item.sku, item.name, item.brand, item.model, item.imei1, item.serialNumber]
+      .some((value) => String(value || '').toLowerCase().includes(term))
+    return matchesSearch
+      && (categoryFilter === 'ALL' || item.category === categoryFilter)
+      && (statusFilter === 'ALL' || item.status === statusFilter)
+  })
 
   return (
     <>
@@ -973,15 +992,19 @@ function InventoryView() {
       </section>
       <article className="surface-card table-card page-table">
         <div className="filter-row">
-          <div className="search-field"><Search size={17} /><input placeholder="Search SKU, product, IMEI or serial number" /></div>
-          <button className="ghost-button">All categories <ChevronDown size={15} /></button>
-          <button className="ghost-button">Stock status <ChevronDown size={15} /></button>
+          <div className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search SKU, product, IMEI or serial number" /></div>
+          <select className="ghost-button filter-select" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} aria-label="Filter inventory category">
+            <option value="ALL">All categories</option><option value="PHONE">Phones</option><option value="ACCESSORY">Accessories</option><option value="SPARE_PART">Spare parts</option>
+          </select>
+          <select className="ghost-button filter-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter stock status">
+            <option value="ALL">All stock statuses</option><option value="IN_STOCK">In stock</option><option value="LOW_STOCK">Low stock</option><option value="OUT_OF_STOCK">Out of stock</option>
+          </select>
         </div>
-        <div className="table-scroll">
+        <div className="table-scroll stock-desktop-table">
           <table>
             <thead><tr><th>SKU</th><th>Item</th><th>Category</th><th>Stock</th><th>Buy price</th><th>Sell price</th><th>Status</th><th /></tr></thead>
             <tbody>
-              {items.map((row) => (
+              {filteredItems.map((row) => (
                 <tr key={row._id}>
                   <td><strong className="mono">{row.sku}</strong></td>
                   <td><strong>{row.name}</strong></td>
@@ -993,9 +1016,27 @@ function InventoryView() {
                   <td><button className="icon-button" onClick={() => setSelectedItem(row)} aria-label={`View ${row.sku}`}><MoreHorizontal size={18} /></button></td>
                 </tr>
               ))}
-              {items.length === 0 && <tr><td colSpan={8}>No inventory in the database yet.</td></tr>}
+              {filteredItems.length === 0 && <tr><td colSpan={8}>{items.length === 0 ? 'No inventory in the database yet.' : 'No matching inventory.'}</td></tr>}
             </tbody>
           </table>
+        </div>
+        <div className="mobile-record-list stock-mobile-list">
+          {filteredItems.map((row) => (
+            <article className="mobile-record-card" key={row._id}>
+              <div className="mobile-record-heading">
+                <span className="stock-icon violet"><Package size={17} /></span>
+                <p><strong>{row.name}</strong><small>{row.sku}</small></p>
+                <StatusBadge status={row.status} />
+              </div>
+              <div className="mobile-record-details">
+                <div><span>Category</span><strong>{titleStatus(row.category)}</strong></div>
+                <div><span>In stock</span><strong>{row.quantity}</strong></div>
+                <div><span>Sell price</span><strong>{money.format(row.sellPrice)}</strong></div>
+                <button className="icon-button" onClick={() => setSelectedItem(row)} aria-label={`View ${row.sku}`}><MoreHorizontal size={18} /></button>
+              </div>
+            </article>
+          ))}
+          {filteredItems.length === 0 && <p className="mobile-record-empty">{items.length === 0 ? 'No inventory in the database yet.' : 'No matching inventory.'}</p>}
         </div>
       </article>
       {selectedItem && (
@@ -1264,10 +1305,26 @@ function ReportsView() {
       <section className="dashboard-lower-grid">
         <article className="surface-card table-card">
           <div className="card-heading table-heading"><div><span className="eyebrow">Recent trades</span><h3>Transaction report</h3></div></div>
-          <div className="table-scroll"><table><thead><tr><th>Reference</th><th>Type</th><th>Customer</th><th>Total</th><th>Date</th></tr></thead><tbody>
+          <div className="table-scroll report-desktop-table"><table><thead><tr><th>Reference</th><th>Type</th><th>Customer</th><th>Total</th><th>Date</th></tr></thead><tbody>
             {(data?.recentTrades || []).map((trade) => <tr key={trade._id}><td><strong className="mono">{trade.tradeNo}</strong></td><td><StatusBadge status={trade.type === 'SELL' ? 'Sale' : 'Purchase'} /></td><td>{trade.customer?.name || 'Walk-in'}</td><td>{money.format(trade.total)}</td><td>{dateText(trade.createdAt)}</td></tr>)}
             {data?.recentTrades.length === 0 && <tr><td colSpan={5}>No transactions yet.</td></tr>}
           </tbody></table></div>
+          <div className="mobile-record-list report-mobile-list">
+            {(data?.recentTrades || []).map((trade) => (
+              <article className="mobile-record-card" key={trade._id}>
+                <div className="mobile-record-heading">
+                  <span className={`transaction-icon ${trade.type === 'SELL' ? 'sale' : 'purchase'}`}><Banknote size={17} /></span>
+                  <p><strong>{trade.customer?.name || 'Walk-in'}</strong><small>{trade.tradeNo}</small></p>
+                  <StatusBadge status={trade.type === 'SELL' ? 'Sale' : 'Purchase'} />
+                </div>
+                <div className="mobile-record-details report-record-details">
+                  <div><span>Date</span><strong>{dateText(trade.createdAt)}</strong></div>
+                  <div><span>Total</span><strong>{money.format(trade.total)}</strong></div>
+                </div>
+              </article>
+            ))}
+            {data?.recentTrades.length === 0 && <p className="mobile-record-empty">No transactions yet.</p>}
+          </div>
         </article>
         <article className="surface-card table-card">
           <div className="card-heading table-heading"><div><span className="eyebrow">Audit</span><h3>Recent activity</h3></div></div>
