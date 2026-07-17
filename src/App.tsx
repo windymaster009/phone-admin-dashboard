@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   AlertTriangle,
   ArrowDownRight,
@@ -12,9 +12,11 @@ import {
   ChevronDown,
   CircleDollarSign,
   Clock3,
+  Database,
   FileText,
   HandCoins,
   LayoutDashboard,
+  LogOut,
   Menu,
   Moon,
   MoreHorizontal,
@@ -26,7 +28,9 @@ import {
   Settings,
   ShoppingCart,
   Smartphone,
+  Server,
   Sun,
+  Trash2,
   TrendingDown,
   UserRound,
   Users,
@@ -52,6 +56,26 @@ type NavItem = {
   label: string
   icon: LucideIcon
   badge?: string
+}
+
+const viewPaths: Record<NavKey, string> = {
+  dashboard: '/dashboard',
+  pawn: '/pawn-management',
+  trade: '/buy-sell',
+  inventory: '/stock',
+  customers: '/customers',
+  depreciation: '/depreciation',
+  reports: '/reports',
+  settings: '/settings',
+}
+
+function viewFromPath(pathname: string): NavKey {
+  const normalizedPath = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname
+  const match = (Object.entries(viewPaths) as [NavKey, string][]).find(([, path]) => path === normalizedPath)
+
+  // Both the site root and /admin open the main dashboard.
+  if (normalizedPath === '/' || normalizedPath === '/admin') return 'dashboard'
+  return match?.[0] || 'dashboard'
 }
 
 type Customer = {
@@ -131,11 +155,23 @@ type DashboardData = {
     overdueContracts: number
     lowStock: number
     customerCount: number
+    pawnCount: number
   }
   recentPawns: Pawn[]
   recentTrades: Trade[]
   inventoryMix: { _id: string; count: number; value: number }[]
+  monthPerformance: { _id: 'BUY' | 'SELL'; total: number }[]
   monthlyPerformance: { _id: { month: number; type: 'BUY' | 'SELL' }; total: number }[]
+  dailyPerformance: { _id: { day: number; type: 'BUY' | 'SELL' }; total: number }[]
+}
+
+type ExchangeRateData = {
+  usdKhr: number
+  source: 'ExchangeRate-API' | 'configured-fallback'
+  rateType: 'reference' | 'fallback'
+  configured: boolean
+  updatedAt: string
+  warning?: string
 }
 
 type ActivityLog = {
@@ -155,9 +191,9 @@ const navGroups: { label: string; items: NavItem[] }[] = [
   {
     label: 'Operations',
     items: [
-      { key: 'pawn', label: 'Pawn Management', icon: HandCoins, badge: '12' },
+      { key: 'pawn', label: 'Pawn Management', icon: HandCoins },
       { key: 'trade', label: 'Buy & Sell', icon: ShoppingCart },
-      { key: 'inventory', label: 'Stock Information', icon: Boxes, badge: 'Low 7' },
+      { key: 'inventory', label: 'Stock Information', icon: Boxes },
       { key: 'customers', label: 'Customers', icon: Users },
     ],
   },
@@ -298,10 +334,38 @@ const transactions = [
 const currency = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
-  maximumFractionDigits: 0,
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
 })
 
-const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+const money = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 2,
+})
+const riel = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
+
+function useExchangeRate() {
+  const [exchangeRate, setExchangeRate] = useState<ExchangeRateData | null>(null)
+
+  useEffect(() => {
+    api<ExchangeRateData>('/exchange-rates')
+      .then(setExchangeRate)
+      .catch(() => setExchangeRate(null))
+  }, [])
+
+  return exchangeRate
+}
+
+function convertedKhr(amount: number, exchangeRate: ExchangeRateData | null) {
+  if (!exchangeRate) return 0
+  return Math.round((amount * exchangeRate.usdKhr) / 100) * 100
+}
+
+function khrText(amount: number, exchangeRate: ExchangeRateData | null) {
+  return exchangeRate ? `≈ ${riel.format(convertedKhr(amount, exchangeRate))} ៛` : ''
+}
 const dateText = (value: string) => new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(new Date(value))
 const titleStatus = (status: string) => status.replaceAll('_', ' ').toLowerCase().replace(/(^|\s)\S/g, (letter) => letter.toUpperCase())
 const comingNext = (label: string) => window.alert(`${label} form is next. The tables and dashboard are connected to MongoDB now.`)
@@ -312,6 +376,60 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`status-badge status-${slug}`}>{label}</span>
 }
 
+function PawnDetailModal({ pawn, onClose, onOpenAll }: { pawn: Pawn; onClose: () => void; onOpenAll?: () => void }) {
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    return () => document.removeEventListener('keydown', closeOnEscape)
+  }, [onClose])
+
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <section className="detail-modal pawn-detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="pawn-detail-title" onClick={(event) => event.stopPropagation()}>
+        <header className="detail-modal-header">
+          <div>
+            <span className="eyebrow">Pawn contract</span>
+            <h3 id="pawn-detail-title">{pawn.pawnNo}</h3>
+            <p>{pawn.customer?.name || 'Unknown customer'} - {pawn.itemSnapshot.name}</p>
+          </div>
+          <button className="icon-button" onClick={onClose} aria-label="Close details"><X size={18} /></button>
+        </header>
+        <div className="detail-grid">
+          <div><span>Status</span><strong><StatusBadge status={pawn.status} /></strong></div>
+          <div><span>ID card</span><strong>{pawn.identificationVerified ? 'Verified' : 'Missing'}</strong></div>
+          <div><span>Estimated value</span><strong>{money.format(pawn.estimatedValue)}</strong></div>
+          <div><span>Loan principal</span><strong>{money.format(pawn.principal)}</strong></div>
+          <div><span>Pawn percent</span><strong>{pawn.pawnPercentage}%</strong></div>
+          <div><span>Interest rate</span><strong>{pawn.interestRate}%</strong></div>
+          <div><span>Due date</span><strong>{dateText(pawn.dueDate)}</strong></div>
+          <div><span>Created</span><strong>{dateText(pawn.createdAt)}</strong></div>
+        </div>
+        <div className="detail-sections">
+          <article>
+            <span className="eyebrow">Customer</span>
+            <p><strong>{pawn.customer?.name || 'Unknown'}</strong></p>
+            <p>{pawn.customer?.phone || 'No phone recorded'}</p>
+            <p>{pawn.customer?.nationalIdNumber || 'No National ID recorded'}</p>
+          </article>
+          <article>
+            <span className="eyebrow">Collateral</span>
+            <p><strong>{pawn.itemSnapshot.name}</strong></p>
+            <p>{[pawn.itemSnapshot.brand, pawn.itemSnapshot.model, pawn.itemSnapshot.storage, pawn.itemSnapshot.color].filter(Boolean).join(' ') || 'No extra device details'}</p>
+            <p>{pawn.itemSnapshot.imei || 'No IMEI recorded'}</p>
+          </article>
+        </div>
+        {pawn.notes && <div className="detail-note"><span className="eyebrow">Notes</span><p>{pawn.notes}</p></div>}
+        <footer className="detail-modal-footer">
+          {onOpenAll && <button className="secondary-button" onClick={onOpenAll}>Open pawn management <ArrowUpRight size={15} /></button>}
+          <button className="ghost-button" onClick={onClose}>Close</button>
+        </footer>
+      </section>
+    </div>
+  )
+}
+
 function MetricCard({
   label,
   value,
@@ -319,7 +437,8 @@ function MetricCard({
   trend,
   icon: Icon,
   tone,
-}: (typeof demoMetrics)[number]) {
+  secondaryValue,
+}: (typeof demoMetrics)[number] & { secondaryValue?: string }) {
   return (
     <article className="metric-card surface-card">
       <div className={`metric-icon tone-${tone}`}>
@@ -328,6 +447,7 @@ function MetricCard({
       <div className="metric-copy">
         <p>{label}</p>
         <h3>{value}</h3>
+        {secondaryValue && <small className="khr-value">{secondaryValue}</small>}
       </div>
       <span className={`metric-change ${trend}`}>
         {trend === 'up' ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
@@ -362,15 +482,32 @@ function SectionHeader({
 
 function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: SessionUser }) {
   const [data, setData] = useState<DashboardData | null>(null)
+  const [selectedPawn, setSelectedPawn] = useState<Pawn | null>(null)
+  const [performancePeriod, setPerformancePeriod] = useState<'month' | 'year'>('month')
+  const [inventoryMenuOpen, setInventoryMenuOpen] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState('')
+  const exchangeRate = useExchangeRate()
+
+  const loadDashboard = async (showRefresh = false) => {
+    if (showRefresh) setRefreshing(true)
+    try {
+      setData(await api<DashboardData>('/dashboard'))
+      setError('')
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Could not load dashboard data')
+    } finally {
+      if (showRefresh) setRefreshing(false)
+    }
+  }
 
   useEffect(() => {
-    api<DashboardData>('/dashboard').then(setData).catch((reason: Error) => setError(reason.message))
+    void loadDashboard()
   }, [])
 
   const metrics = data ? [
-    { label: "Today's sales", value: money.format(data.metrics.salesToday), change: `${money.format(data.metrics.purchasesToday)} purchases`, trend: 'up' as const, icon: CircleDollarSign, tone: 'violet' },
-    { label: 'Active pawn value', value: money.format(data.metrics.activePawnValue), change: `${data.metrics.overdueContracts} overdue`, trend: data.metrics.overdueContracts > 0 ? 'down' as const : 'up' as const, icon: HandCoins, tone: 'blue' },
+    { label: "Today's sales", value: money.format(data.metrics.salesToday), secondaryValue: khrText(data.metrics.salesToday, exchangeRate), change: `${money.format(data.metrics.purchasesToday)} purchases${exchangeRate ? ` · ${khrText(data.metrics.purchasesToday, exchangeRate)}` : ''}`, trend: 'up' as const, icon: CircleDollarSign, tone: 'violet' },
+    { label: 'Active pawn value', value: money.format(data.metrics.activePawnValue), secondaryValue: khrText(data.metrics.activePawnValue, exchangeRate), change: `${data.metrics.overdueContracts} overdue`, trend: data.metrics.overdueContracts > 0 ? 'down' as const : 'up' as const, icon: HandCoins, tone: 'blue' },
     { label: 'Phones in stock', value: String(data.metrics.phonesInStock), change: `${data.metrics.lowStock} low stock`, trend: data.metrics.lowStock > 0 ? 'down' as const : 'up' as const, icon: Smartphone, tone: 'orange' },
     { label: 'Customers', value: String(data.metrics.customerCount), change: 'live database', trend: 'up' as const, icon: Users, tone: 'rose' },
   ] : demoMetrics
@@ -379,9 +516,27 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
     const month = index + 1
     const sales = data?.monthlyPerformance.find((item) => item._id.month === month && item._id.type === 'SELL')?.total || 0
     const purchases = data?.monthlyPerformance.find((item) => item._id.month === month && item._id.type === 'BUY')?.total || 0
-    return Math.max(0, sales - purchases)
+    return sales - purchases
   })
-  const maxMonthlyNet = Math.max(...monthlyNet, 1)
+  const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()
+  const dayLabels = Array.from({ length: daysInMonth }, (_, index) => String(index + 1))
+  const dailyNet = dayLabels.map((_, index) => {
+    const day = index + 1
+    const sales = data?.dailyPerformance?.find((item) => item._id.day === day && item._id.type === 'SELL')?.total || 0
+    const purchases = data?.dailyPerformance?.find((item) => item._id.day === day && item._id.type === 'BUY')?.total || 0
+    return sales - purchases
+  })
+  const performanceValues = performancePeriod === 'month' ? dailyNet : monthlyNet
+  const performanceLabels = performancePeriod === 'month' ? dayLabels : monthLabels
+  const performanceSales = performancePeriod === 'month'
+    ? data?.monthPerformance?.find((item) => item._id === 'SELL')?.total || 0
+    : data?.monthlyPerformance.filter((item) => item._id.type === 'SELL').reduce((sum, item) => sum + item.total, 0) || 0
+  const performancePurchases = performancePeriod === 'month'
+    ? data?.monthPerformance?.find((item) => item._id === 'BUY')?.total || 0
+    : data?.monthlyPerformance.filter((item) => item._id.type === 'BUY').reduce((sum, item) => sum + item.total, 0) || 0
+  const performanceNet = performanceSales - performancePurchases
+  const maxPerformanceValue = Math.max(...performanceValues.map((value) => Math.abs(value)), 1)
+  const hasPerformanceData = performanceValues.some((value) => value !== 0)
   const inventoryMix = data?.inventoryMix.length ? data.inventoryMix : [{ _id: 'PHONE', count: 0, value: 0 }, { _id: 'ACCESSORY', count: 0, value: 0 }, { _id: 'SPARE_PART', count: 0, value: 0 }]
   const totalInventoryValue = inventoryMix.reduce((sum, item) => sum + item.value, 0)
   const phoneValue = inventoryMix.find((item) => item._id === 'PHONE')?.value || 0
@@ -420,21 +575,23 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
               <span className="eyebrow">Revenue overview</span>
               <h3>Shop performance</h3>
             </div>
-            <button className="ghost-button">
-              This month <ChevronDown size={15} />
-            </button>
+            <select className="ghost-button performance-period-select" value={performancePeriod} onChange={(event) => setPerformancePeriod(event.target.value as 'month' | 'year')} aria-label="Performance period">
+              <option value="month">This month</option>
+              <option value="year">This year</option>
+            </select>
           </div>
 
           <div className="revenue-total">
-            <strong>{money.format((data?.metrics.salesToday || 0) - (data?.metrics.purchasesToday || 0))}</strong>
-            <span><ArrowUpRight size={15} /> net cash movement today</span>
+            <div className="revenue-amount"><strong>{money.format(performanceNet)}</strong>{exchangeRate && <small>{khrText(performanceNet, exchangeRate)}</small>}</div>
+            <span className={performanceNet < 0 ? 'negative' : ''}>{performanceNet < 0 ? <ArrowDownRight size={15} /> : <ArrowUpRight size={15} />} net cash movement this {performancePeriod}</span>
           </div>
 
-          <div className="chart-shell" aria-label="Monthly revenue bar chart">
-            {monthlyNet.map((total, index) => (
+          <div className={`chart-shell ${performancePeriod === 'month' ? 'daily-chart' : ''}`} aria-label={`${performancePeriod === 'month' ? 'Daily' : 'Monthly'} net cash movement chart`}>
+            {!hasPerformanceData && <div className="chart-empty"><BarChart3 size={22} /><strong>No completed transactions</strong><span>Sales and purchases will appear here when they are completed.</span></div>}
+            {performanceValues.map((total, index) => (
               <div className="chart-column" key={index}>
-                <span style={{ height: `${Math.max(total > 0 ? (total / maxMonthlyNet) * 100 : 0, total > 0 ? 12 : 3)}%` }} title={money.format(total)} />
-                <small>{monthLabels[index]}</small>
+                <span className={total < 0 ? 'negative' : ''} style={{ height: `${total === 0 ? 3 : Math.max((Math.abs(total) / maxPerformanceValue) * 100, 12)}%` }} title={`${money.format(total)}${exchangeRate ? ` / ${khrText(total, exchangeRate)}` : ''}`} />
+                <small>{performancePeriod === 'month' && index % 5 !== 0 && index !== performanceValues.length - 1 ? '' : performanceLabels[index]}</small>
               </div>
             ))}
           </div>
@@ -446,14 +603,21 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
               <span className="eyebrow">Stock value</span>
               <h3>Inventory mix</h3>
             </div>
-            <button className="icon-button" aria-label="More options"><MoreHorizontal size={19} /></button>
+            <div className="card-options" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setInventoryMenuOpen(false) }}>
+              <button className={`icon-button ${inventoryMenuOpen ? 'open' : ''}`} onClick={() => setInventoryMenuOpen((current) => !current)} aria-label="Inventory options" aria-expanded={inventoryMenuOpen}><MoreHorizontal size={19} /></button>
+              {inventoryMenuOpen && <div className="card-options-menu surface-card" role="menu">
+                <button onClick={() => goTo('inventory')} role="menuitem"><Boxes size={16} />Open inventory</button>
+                <button onClick={() => { setInventoryMenuOpen(false); comingNext('Add stock') }} role="menuitem"><Plus size={16} />Add stock</button>
+                <button onClick={() => { setInventoryMenuOpen(false); void loadDashboard(true) }} role="menuitem" disabled={refreshing}><RefreshCcw size={16} />{refreshing ? 'Refreshing…' : 'Refresh values'}</button>
+              </div>}
+            </div>
           </div>
           <div className="donut-wrap">
-            <div className="donut-chart" style={donutStyle}><span>{money.format(totalInventoryValue)}<small>Total value</small></span></div>
+            <div className="donut-chart" style={donutStyle}><span>{money.format(totalInventoryValue)}{exchangeRate && <small className="donut-khr">{khrText(totalInventoryValue, exchangeRate)}</small>}<small>Total value</small></span></div>
           </div>
           <div className="legend-list">
             {inventoryMix.map((item, index) => (
-              <div key={item._id}><span className={`legend-dot ${['dot-violet', 'dot-blue', 'dot-orange'][index] || 'dot-violet'}`} /><p>{titleStatus(item._id)}<small>{item.count} units</small></p><strong>{money.format(item.value)}</strong></div>
+              <div key={item._id}><span className={`legend-dot ${['dot-violet', 'dot-blue', 'dot-orange'][index] || 'dot-violet'}`} /><p>{titleStatus(item._id)}<small>{item.count} units</small></p><span className="legend-money"><strong>{money.format(item.value)}</strong>{exchangeRate && <small>{khrText(item.value, exchangeRate)}</small>}</span></div>
             ))}
           </div>
         </article>
@@ -468,7 +632,7 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
             </div>
             <button className="text-button" onClick={() => goTo('pawn')}>View all <ArrowUpRight size={15} /></button>
           </div>
-          <div className="table-scroll">
+          <div className="table-scroll recent-contract-table">
             <table>
               <thead>
                 <tr>
@@ -490,15 +654,32 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
                         <p>{row.customer?.name || 'Unknown'}<small>{row.itemSnapshot.name}</small></p>
                       </div>
                     </td>
-                    <td><strong>{money.format(row.principal)}</strong><small className="table-subtext">of {money.format(row.estimatedValue)}</small></td>
+                    <td><strong>{money.format(row.principal)}</strong>{exchangeRate && <small className="table-subtext khr-table-value">{khrText(row.principal, exchangeRate)}</small>}<small className="table-subtext">of {money.format(row.estimatedValue)}{exchangeRate ? ` / ${khrText(row.estimatedValue, exchangeRate)}` : ''}</small></td>
                     <td>{dateText(row.dueDate)}</td>
                     <td><StatusBadge status={row.status} /></td>
-                    <td><button className="icon-button"><MoreHorizontal size={18} /></button></td>
+                    <td><button className="icon-button" onClick={() => setSelectedPawn(row)} aria-label={`View contract ${row.pawnNo}`}><MoreHorizontal size={18} /></button></td>
                   </tr>
                 ))}
                 {data?.recentPawns.length === 0 && <tr><td colSpan={6}>No pawn contracts in the database yet.</td></tr>}
               </tbody>
             </table>
+          </div>
+          <div className="mobile-contract-list">
+            {(data?.recentPawns || []).map((row) => (
+              <article className="mobile-contract-card" key={row._id}>
+                <div className="mobile-contract-heading">
+                  <span className="avatar">{(row.customer?.name || 'NA').slice(0, 2).toUpperCase()}</span>
+                  <p><strong>{row.customer?.name || 'Unknown'}</strong><small>{row.itemSnapshot.name}</small></p>
+                  <StatusBadge status={row.status} />
+                </div>
+                <div className="mobile-contract-details">
+                  <div><span>Loan</span><strong>{money.format(row.principal)}</strong><small>{exchangeRate && khrText(row.principal, exchangeRate)}</small></div>
+                  <div><span>Due date</span><strong>{dateText(row.dueDate)}</strong><small className="mono">{row.pawnNo}</small></div>
+                  <button className="icon-button" onClick={() => setSelectedPawn(row)} aria-label={`View contract ${row.pawnNo}`}><MoreHorizontal size={18} /></button>
+                </div>
+              </article>
+            ))}
+            {data?.recentPawns.length === 0 && <p className="mobile-contract-empty">No pawn contracts in the database yet.</p>}
           </div>
         </article>
 
@@ -510,13 +691,23 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
             </div>
           </div>
           <div className="quick-actions-list">
-            <button onClick={() => goTo('pawn')}><span className="quick-icon violet"><HandCoins size={19} /></span><p>New pawn contract<small>Register ID and collateral</small></p><ArrowUpRight size={17} /></button>
-            <button onClick={() => goTo('trade')}><span className="quick-icon blue"><ShoppingCart size={19} /></span><p>New sale<small>Phone or accessories</small></p><ArrowUpRight size={17} /></button>
-            <button onClick={() => goTo('inventory')}><span className="quick-icon orange"><Package size={19} /></span><p>Add stock<small>Phone, part or accessory</small></p><ArrowUpRight size={17} /></button>
+            <button onClick={() => comingNext('New pawn')}><span className="quick-icon violet"><HandCoins size={19} /></span><p>New pawn contract<small>Register ID and collateral</small></p><ArrowUpRight size={17} /></button>
+            <button onClick={() => comingNext('New sale')}><span className="quick-icon blue"><ShoppingCart size={19} /></span><p>New sale<small>Phone or accessories</small></p><ArrowUpRight size={17} /></button>
+            <button onClick={() => comingNext('Add stock')}><span className="quick-icon orange"><Package size={19} /></span><p>Add stock<small>Phone, part or accessory</small></p><ArrowUpRight size={17} /></button>
             <button onClick={() => goTo('depreciation')}><span className="quick-icon rose"><Calculator size={19} /></span><p>Value a phone<small>Calculate depreciation</small></p><ArrowUpRight size={17} /></button>
           </div>
         </article>
       </section>
+      {selectedPawn && (
+        <PawnDetailModal
+          pawn={selectedPawn}
+          onClose={() => setSelectedPawn(null)}
+          onOpenAll={() => {
+            setSelectedPawn(null)
+            goTo('pawn')
+          }}
+        />
+      )}
     </>
   )
 }
@@ -524,13 +715,29 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
 function PawnView() {
   const [pawns, setPawns] = useState<Pawn[]>([])
   const [selectedPawn, setSelectedPawn] = useState<Pawn | null>(null)
+  const [searchTerm, setSearchTerm] = useState('')
+  const [statusFilter, setStatusFilter] = useState('ALL')
+  const [dueSort, setDueSort] = useState<'soonest' | 'latest'>('soonest')
   const [error, setError] = useState('')
+  const exchangeRate = useExchangeRate()
 
   useEffect(() => {
     api<{ pawns: Pawn[] }>('/pawns')
       .then((result) => setPawns(result.pawns))
       .catch((reason: Error) => setError(reason.message))
   }, [])
+
+  const visiblePawns = pawns
+    .filter((pawn) => {
+      if (statusFilter !== 'ALL' && pawn.status !== statusFilter) return false
+      const query = searchTerm.trim().toLowerCase()
+      if (!query) return true
+      return [pawn.pawnNo, pawn.customer?.name, pawn.itemSnapshot.name, pawn.itemSnapshot.imei]
+        .some((value) => value?.toLowerCase().includes(query))
+    })
+    .sort((a, b) => dueSort === 'soonest'
+      ? new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+      : new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime())
 
   return (
     <>
@@ -548,15 +755,19 @@ function PawnView() {
       </section>
       <article className="surface-card table-card page-table">
         <div className="filter-row">
-          <div className="search-field"><Search size={17} /><input placeholder="Search contract, customer, phone or IMEI" /></div>
-          <button className="ghost-button">All statuses <ChevronDown size={15} /></button>
-          <button className="ghost-button">Due date <ChevronDown size={15} /></button>
+          <div className="search-field"><Search size={17} /><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search contract, customer, phone or IMEI" /></div>
+          <select className="ghost-button filter-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter pawn status">
+            <option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="DUE_SOON">Due soon</option><option value="OVERDUE">Overdue</option><option value="RENEWED">Renewed</option><option value="REDEEMED">Redeemed</option><option value="FORFEITED">Forfeited</option>
+          </select>
+          <select className="ghost-button filter-select" value={dueSort} onChange={(event) => setDueSort(event.target.value as 'soonest' | 'latest')} aria-label="Sort by due date">
+            <option value="soonest">Due soonest</option><option value="latest">Due latest</option>
+          </select>
         </div>
-        <div className="table-scroll">
+        <div className="table-scroll pawn-management-table">
           <table>
             <thead><tr><th>Contract</th><th>Customer</th><th>Collateral</th><th>Estimated value</th><th>Loan</th><th>ID card</th><th>Due date</th><th>Status</th><th /></tr></thead>
             <tbody>
-              {pawns.map((row) => (
+              {visiblePawns.map((row) => (
                 <tr key={row._id}>
                   <td><strong className="mono">{row.pawnNo}</strong></td>
                   <td>{row.customer?.name || 'Unknown'}</td>
@@ -569,62 +780,33 @@ function PawnView() {
                   <td><button className="icon-button" onClick={() => setSelectedPawn(row)} aria-label={`View ${row.pawnNo}`}><MoreHorizontal size={18} /></button></td>
                 </tr>
               ))}
-              {pawns.length === 0 && <tr><td colSpan={9}>No pawn contracts in the database yet.</td></tr>}
+              {visiblePawns.length === 0 && <tr><td colSpan={9}>No pawn contracts match these filters.</td></tr>}
             </tbody>
           </table>
         </div>
-      </article>
-      {selectedPawn && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setSelectedPawn(null)}>
-          <section className="detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="pawn-detail-title" onClick={(event) => event.stopPropagation()}>
-            <header className="detail-modal-header">
-              <div>
-                <span className="eyebrow">Pawn contract</span>
-                <h3 id="pawn-detail-title">{selectedPawn.pawnNo}</h3>
-                <p>{selectedPawn.customer?.name || 'Unknown customer'} - {selectedPawn.itemSnapshot.name}</p>
+        <div className="mobile-contract-list pawn-management-mobile-list">
+          {visiblePawns.map((row) => (
+            <article className="mobile-contract-card" key={row._id}>
+              <div className="mobile-contract-heading">
+                <span className="avatar">{(row.customer?.name || 'NA').slice(0, 2).toUpperCase()}</span>
+                <p><strong>{row.customer?.name || 'Unknown'}</strong><small>{row.itemSnapshot.name}</small></p>
+                <StatusBadge status={row.status} />
               </div>
-              <button className="icon-button" onClick={() => setSelectedPawn(null)} aria-label="Close details"><X size={18} /></button>
-            </header>
-
-            <div className="detail-grid">
-              <div><span>Status</span><strong><StatusBadge status={selectedPawn.status} /></strong></div>
-              <div><span>ID card</span><strong>{selectedPawn.identificationVerified ? 'Verified' : 'Missing'}</strong></div>
-              <div><span>Estimated value</span><strong>{money.format(selectedPawn.estimatedValue)}</strong></div>
-              <div><span>Loan principal</span><strong>{money.format(selectedPawn.principal)}</strong></div>
-              <div><span>Pawn percent</span><strong>{selectedPawn.pawnPercentage}%</strong></div>
-              <div><span>Interest rate</span><strong>{selectedPawn.interestRate}%</strong></div>
-              <div><span>Due date</span><strong>{dateText(selectedPawn.dueDate)}</strong></div>
-              <div><span>Created</span><strong>{dateText(selectedPawn.createdAt)}</strong></div>
-            </div>
-
-            <div className="detail-sections">
-              <article>
-                <span className="eyebrow">Customer</span>
-                <p><strong>{selectedPawn.customer?.name || 'Unknown'}</strong></p>
-                <p>{selectedPawn.customer?.phone || 'No phone recorded'}</p>
-                <p>{selectedPawn.customer?.nationalIdNumber || 'No National ID recorded'}</p>
-              </article>
-              <article>
-                <span className="eyebrow">Collateral</span>
-                <p><strong>{selectedPawn.itemSnapshot.name}</strong></p>
-                <p>{[selectedPawn.itemSnapshot.brand, selectedPawn.itemSnapshot.model, selectedPawn.itemSnapshot.storage, selectedPawn.itemSnapshot.color].filter(Boolean).join(' ') || 'No extra device details'}</p>
-                <p>{selectedPawn.itemSnapshot.imei || 'No IMEI recorded'}</p>
-              </article>
-            </div>
-
-            {selectedPawn.notes && (
-              <div className="detail-note">
-                <span className="eyebrow">Notes</span>
-                <p>{selectedPawn.notes}</p>
+              <div className="mobile-pawn-verification">
+                {row.identificationVerified ? <span className="verified"><BadgeCheck size={13} /> ID verified</span> : <span className="unverified"><AlertTriangle size={13} /> ID missing</span>}
+                <small className="mono">{row.pawnNo}</small>
               </div>
-            )}
-
-            <footer className="detail-modal-footer">
-              <button className="ghost-button" onClick={() => setSelectedPawn(null)}>Close</button>
-            </footer>
-          </section>
+              <div className="mobile-contract-details">
+                <div><span>Loan</span><strong>{money.format(row.principal)}</strong><small>{exchangeRate && khrText(row.principal, exchangeRate)}</small></div>
+                <div><span>Due date</span><strong>{dateText(row.dueDate)}</strong><small>Value {money.format(row.estimatedValue)}</small></div>
+                <button className="icon-button" onClick={() => setSelectedPawn(row)} aria-label={`View ${row.pawnNo}`}><MoreHorizontal size={18} /></button>
+              </div>
+            </article>
+          ))}
+          {visiblePawns.length === 0 && <p className="mobile-contract-empty">No pawn contracts match these filters.</p>}
         </div>
-      )}
+      </article>
+      {selectedPawn && <PawnDetailModal pawn={selectedPawn} onClose={() => setSelectedPawn(null)} />}
     </>
   )
 }
@@ -707,7 +889,7 @@ function TradeView() {
       </article>
       {selectedTrade && (
         <div className="modal-backdrop" role="presentation" onClick={() => setSelectedTrade(null)}>
-          <section className="detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="trade-detail-title" onClick={(event) => event.stopPropagation()}>
+          <section className="detail-modal trade-detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="trade-detail-title" onClick={(event) => event.stopPropagation()}>
             <header className="detail-modal-header">
               <div>
                 <span className="eyebrow">{selectedTrade.type === 'SELL' ? 'Sale transaction' : 'Purchase transaction'}</span>
@@ -771,6 +953,9 @@ function TradeView() {
 function InventoryView() {
   const [items, setItems] = useState<InventoryItem[]>([])
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
+  const [search, setSearch] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('ALL')
+  const [statusFilter, setStatusFilter] = useState('ALL')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -782,6 +967,14 @@ function InventoryView() {
   const phoneCount = items.filter((item) => item.category === 'PHONE').reduce((sum, item) => sum + item.quantity, 0)
   const accessoryCount = items.filter((item) => item.category === 'ACCESSORY').reduce((sum, item) => sum + item.quantity, 0)
   const sparePartCount = items.filter((item) => item.category === 'SPARE_PART').reduce((sum, item) => sum + item.quantity, 0)
+  const filteredItems = items.filter((item) => {
+    const term = search.trim().toLowerCase()
+    const matchesSearch = !term || [item.sku, item.name, item.brand, item.model, item.imei1, item.serialNumber]
+      .some((value) => String(value || '').toLowerCase().includes(term))
+    return matchesSearch
+      && (categoryFilter === 'ALL' || item.category === categoryFilter)
+      && (statusFilter === 'ALL' || item.status === statusFilter)
+  })
 
   return (
     <>
@@ -799,15 +992,19 @@ function InventoryView() {
       </section>
       <article className="surface-card table-card page-table">
         <div className="filter-row">
-          <div className="search-field"><Search size={17} /><input placeholder="Search SKU, product, IMEI or serial number" /></div>
-          <button className="ghost-button">All categories <ChevronDown size={15} /></button>
-          <button className="ghost-button">Stock status <ChevronDown size={15} /></button>
+          <div className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search SKU, product, IMEI or serial number" /></div>
+          <select className="ghost-button filter-select" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} aria-label="Filter inventory category">
+            <option value="ALL">All categories</option><option value="PHONE">Phones</option><option value="ACCESSORY">Accessories</option><option value="SPARE_PART">Spare parts</option>
+          </select>
+          <select className="ghost-button filter-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter stock status">
+            <option value="ALL">All stock statuses</option><option value="IN_STOCK">In stock</option><option value="LOW_STOCK">Low stock</option><option value="OUT_OF_STOCK">Out of stock</option>
+          </select>
         </div>
-        <div className="table-scroll">
+        <div className="table-scroll stock-desktop-table">
           <table>
             <thead><tr><th>SKU</th><th>Item</th><th>Category</th><th>Stock</th><th>Buy price</th><th>Sell price</th><th>Status</th><th /></tr></thead>
             <tbody>
-              {items.map((row) => (
+              {filteredItems.map((row) => (
                 <tr key={row._id}>
                   <td><strong className="mono">{row.sku}</strong></td>
                   <td><strong>{row.name}</strong></td>
@@ -819,9 +1016,27 @@ function InventoryView() {
                   <td><button className="icon-button" onClick={() => setSelectedItem(row)} aria-label={`View ${row.sku}`}><MoreHorizontal size={18} /></button></td>
                 </tr>
               ))}
-              {items.length === 0 && <tr><td colSpan={8}>No inventory in the database yet.</td></tr>}
+              {filteredItems.length === 0 && <tr><td colSpan={8}>{items.length === 0 ? 'No inventory in the database yet.' : 'No matching inventory.'}</td></tr>}
             </tbody>
           </table>
+        </div>
+        <div className="mobile-record-list stock-mobile-list">
+          {filteredItems.map((row) => (
+            <article className="mobile-record-card" key={row._id}>
+              <div className="mobile-record-heading">
+                <span className="stock-icon violet"><Package size={17} /></span>
+                <p><strong>{row.name}</strong><small>{row.sku}</small></p>
+                <StatusBadge status={row.status} />
+              </div>
+              <div className="mobile-record-details">
+                <div><span>Category</span><strong>{titleStatus(row.category)}</strong></div>
+                <div><span>In stock</span><strong>{row.quantity}</strong></div>
+                <div><span>Sell price</span><strong>{money.format(row.sellPrice)}</strong></div>
+                <button className="icon-button" onClick={() => setSelectedItem(row)} aria-label={`View ${row.sku}`}><MoreHorizontal size={18} /></button>
+              </div>
+            </article>
+          ))}
+          {filteredItems.length === 0 && <p className="mobile-record-empty">{items.length === 0 ? 'No inventory in the database yet.' : 'No matching inventory.'}</p>}
         </div>
       </article>
       {selectedItem && (
@@ -884,6 +1099,7 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
   const [ageMonths, setAgeMonths] = useState(12)
   const [condition, setCondition] = useState('good')
   const [pawnRate, setPawnRate] = useState(45)
+  const exchangeRate = useExchangeRate()
 
   const result = useMemo(() => {
     const conditionRates: Record<string, number> = {
@@ -909,6 +1125,8 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
       pawnRate,
       estimatedValue: result.estimatedValue,
       maximumPawn: result.maximumPawn,
+      usdKhrRate: exchangeRate?.usdKhr,
+      maximumPawnKhr: exchangeRate ? convertedKhr(result.maximumPawn, exchangeRate) : undefined,
     }
     const previous = JSON.parse(localStorage.getItem('phoneflow_valuations') || '[]') as unknown[]
     localStorage.setItem('phoneflow_valuations', JSON.stringify([record, ...previous].slice(0, 50)))
@@ -923,6 +1141,8 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
       pawnRate,
       estimatedValue: result.estimatedValue,
       maximumPawn: result.maximumPawn,
+      usdKhrRate: exchangeRate?.usdKhr,
+      maximumPawnKhr: exchangeRate ? convertedKhr(result.maximumPawn, exchangeRate) : undefined,
     }))
     window.alert(`Valuation ready: estimated value ${currency.format(result.estimatedValue)}, max pawn ${currency.format(result.maximumPawn)}. Use these numbers in the new pawn form.`)
     goTo('pawn')
@@ -949,7 +1169,19 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
 
         <article className="surface-card valuation-result-card">
           <span className="eyebrow">Calculated offer</span>
-          <div className="valuation-hero"><small>Maximum pawn amount</small><strong>{currency.format(result.maximumPawn)}</strong><span>{pawnRate}% of estimated resale value</span></div>
+          <div className="valuation-hero">
+            <small>Maximum pawn amount</small>
+            <strong>{currency.format(result.maximumPawn)}</strong>
+            <div className="khr-equivalent">
+              {exchangeRate ? khrText(result.maximumPawn, exchangeRate) : 'Loading KHR rate…'}
+            </div>
+            <span>{pawnRate}% of estimated resale value</span>
+            {exchangeRate && (
+              <span className="exchange-rate-source">
+                1 USD = {riel.format(exchangeRate.usdKhr)} KHR · {exchangeRate.source === 'ExchangeRate-API' ? 'ExchangeRate-API reference' : 'Configured fallback rate'}
+              </span>
+            )}
+          </div>
           <div className="calculation-breakdown">
             <div><span>Market price</span><strong>{currency.format(marketPrice)}</strong></div>
             <div><span>Age deduction</span><strong>-{Math.round(result.ageDepreciation * 100)}%</strong></div>
@@ -1073,10 +1305,26 @@ function ReportsView() {
       <section className="dashboard-lower-grid">
         <article className="surface-card table-card">
           <div className="card-heading table-heading"><div><span className="eyebrow">Recent trades</span><h3>Transaction report</h3></div></div>
-          <div className="table-scroll"><table><thead><tr><th>Reference</th><th>Type</th><th>Customer</th><th>Total</th><th>Date</th></tr></thead><tbody>
+          <div className="table-scroll report-desktop-table"><table><thead><tr><th>Reference</th><th>Type</th><th>Customer</th><th>Total</th><th>Date</th></tr></thead><tbody>
             {(data?.recentTrades || []).map((trade) => <tr key={trade._id}><td><strong className="mono">{trade.tradeNo}</strong></td><td><StatusBadge status={trade.type === 'SELL' ? 'Sale' : 'Purchase'} /></td><td>{trade.customer?.name || 'Walk-in'}</td><td>{money.format(trade.total)}</td><td>{dateText(trade.createdAt)}</td></tr>)}
             {data?.recentTrades.length === 0 && <tr><td colSpan={5}>No transactions yet.</td></tr>}
           </tbody></table></div>
+          <div className="mobile-record-list report-mobile-list">
+            {(data?.recentTrades || []).map((trade) => (
+              <article className="mobile-record-card" key={trade._id}>
+                <div className="mobile-record-heading">
+                  <span className={`transaction-icon ${trade.type === 'SELL' ? 'sale' : 'purchase'}`}><Banknote size={17} /></span>
+                  <p><strong>{trade.customer?.name || 'Walk-in'}</strong><small>{trade.tradeNo}</small></p>
+                  <StatusBadge status={trade.type === 'SELL' ? 'Sale' : 'Purchase'} />
+                </div>
+                <div className="mobile-record-details report-record-details">
+                  <div><span>Date</span><strong>{dateText(trade.createdAt)}</strong></div>
+                  <div><span>Total</span><strong>{money.format(trade.total)}</strong></div>
+                </div>
+              </article>
+            ))}
+            {data?.recentTrades.length === 0 && <p className="mobile-record-empty">No transactions yet.</p>}
+          </div>
         </article>
         <article className="surface-card table-card">
           <div className="card-heading table-heading"><div><span className="eyebrow">Audit</span><h3>Recent activity</h3></div></div>
@@ -1096,24 +1344,155 @@ function SettingsView({ user, onLogout }: { user: SessionUser; onLogout: () => v
   return (
     <>
       <SectionHeader eyebrow="System" title="System settings" description="Current account, environment, security, and local app preferences." />
-      <section className="placeholder-grid">
-        <article className="surface-card module-card"><UserRound /><h3>{user.name}</h3><p>{user.email}<br />Role: {titleStatus(user.role)}<br />Status: {user.active ? 'Active' : 'Disabled'}</p><button className="ghost-button" onClick={onLogout}>Log out</button></article>
-        <article className="surface-card module-card"><Settings /><h3>App environment</h3><p>Frontend: Vite local app<br />API: proxied through /api<br />Database: MongoDB Atlas from backend .env</p></article>
-        <article className="surface-card module-card"><Calculator /><h3>Saved valuations</h3><p>{savedValuations.length} valuation record{savedValuations.length === 1 ? '' : 's'} saved on this device.</p><button className="ghost-button" onClick={() => { localStorage.removeItem('phoneflow_valuations'); window.location.reload() }}>Clear saved valuations</button></article>
+      <section className="settings-grid">
+        <article className="surface-card settings-card account-settings-card">
+          <div className="settings-card-heading">
+            <span className="settings-icon violet"><UserRound size={20} /></span>
+            <div>
+              <h3>Account profile</h3>
+              <p>Your signed-in account and access details.</p>
+            </div>
+            <span className={`account-status ${user.active ? 'active' : 'disabled'}`}>
+              <i />{user.active ? 'Active' : 'Disabled'}
+            </span>
+          </div>
+
+          <div className="account-profile">
+            <div className="settings-avatar">{user.name.slice(0, 2).toUpperCase()}</div>
+            <div className="account-identity">
+              <h4>{user.name}</h4>
+              <span>{user.email}</span>
+            </div>
+          </div>
+
+          <div className="account-details">
+            <div><span>Role</span><strong>{titleStatus(user.role)}</strong></div>
+            <div><span>Access level</span><strong>{user.role === 'OWNER' ? 'Full access' : 'Role based'}</strong></div>
+            <div><span>Authentication</span><strong>Password protected</strong></div>
+          </div>
+
+          <div className="settings-card-footer">
+            <p>Signing out will end your current session on this device.</p>
+            <button className="ghost-button danger-button" onClick={onLogout}><LogOut size={15} />Log out</button>
+          </div>
+        </article>
+
+        <article className="surface-card settings-card environment-settings-card">
+          <div className="settings-card-heading">
+            <span className="settings-icon blue"><Settings size={20} /></span>
+            <div>
+              <h3>App environment</h3>
+              <p>Services currently powering PhoneFlow.</p>
+            </div>
+          </div>
+          <div className="environment-list">
+            <div>
+              <span className="environment-icon"><Smartphone size={17} /></span>
+              <p><strong>Frontend</strong><small>Vite local application</small></p>
+              <span className="service-state"><i />Online</span>
+            </div>
+            <div>
+              <span className="environment-icon"><Server size={17} /></span>
+              <p><strong>API service</strong><small>Proxied securely through /api</small></p>
+              <span className="service-state"><i />Connected</span>
+            </div>
+            <div>
+              <span className="environment-icon"><Database size={17} /></span>
+              <p><strong>Database</strong><small>MongoDB Atlas</small></p>
+              <span className="service-state"><i />Connected</span>
+            </div>
+          </div>
+        </article>
+
+        <article className="surface-card settings-card valuation-settings-card">
+          <div className="settings-card-heading">
+            <span className="settings-icon orange"><Calculator size={20} /></span>
+            <div>
+              <h3>Saved valuations</h3>
+              <p>Calculator records stored on this device.</p>
+            </div>
+          </div>
+          <div className="saved-valuation-summary">
+            <strong>{savedValuations.length}</strong>
+            <p>Saved record{savedValuations.length === 1 ? '' : 's'}<small>Local browser storage</small></p>
+          </div>
+          <div className="settings-card-footer">
+            <p>Clearing local records cannot be undone.</p>
+            <button
+              className="ghost-button danger-button"
+              disabled={savedValuations.length === 0}
+              onClick={() => { localStorage.removeItem('phoneflow_valuations'); window.location.reload() }}
+            >
+              <Trash2 size={15} />Clear records
+            </button>
+          </div>
+        </article>
       </section>
     </>
   )
 }
 
 function App({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
-  const [active, setActive] = useState<NavKey>('dashboard')
+  const [active, setActive] = useState<NavKey>(() => viewFromPath(window.location.pathname))
   const [mobileOpen, setMobileOpen] = useState(false)
   const [darkMode, setDarkMode] = useState(true)
+  const [profileOpen, setProfileOpen] = useState(false)
+  const [sidebarCounts, setSidebarCounts] = useState({ pawns: 0, lowStock: 0 })
+  const profileMenuRef = useRef<HTMLDivElement>(null)
 
   const changePage = (key: NavKey) => {
     setActive(key)
     setMobileOpen(false)
+    setProfileOpen(false)
+    const nextPath = viewPaths[key]
+    if (window.location.pathname !== nextPath) window.history.pushState({ view: key }, '', nextPath)
   }
+
+  useEffect(() => {
+    api<DashboardData>('/dashboard')
+      .then((result) => setSidebarCounts({ pawns: result.metrics.pawnCount, lowStock: result.metrics.lowStock }))
+      .catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
+    const currentView = viewFromPath(window.location.pathname)
+    const canonicalPath = viewPaths[currentView]
+
+    if (window.location.pathname !== canonicalPath) {
+      window.history.replaceState({ view: currentView }, '', canonicalPath)
+    }
+
+    const handlePopState = () => {
+      setActive(viewFromPath(window.location.pathname))
+      setMobileOpen(false)
+      setProfileOpen(false)
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+
+  useEffect(() => {
+    document.title = `${navGroups.flatMap((group) => group.items).find((item) => item.key === active)?.label || 'Dashboard'} · PhoneFlow`
+  }, [active])
+
+  useEffect(() => {
+    if (!profileOpen) return
+
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!profileMenuRef.current?.contains(event.target as Node)) setProfileOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setProfileOpen(false)
+    }
+
+    document.addEventListener('mousedown', closeOnOutsideClick)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('mousedown', closeOnOutsideClick)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [profileOpen])
 
   const renderView = () => {
     switch (active) {
@@ -1145,11 +1524,16 @@ function App({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
               <span className="nav-group-label">{group.label}</span>
               {group.items.map((item) => {
                 const Icon = item.icon
+                const badge = item.key === 'pawn'
+                  ? String(sidebarCounts.pawns)
+                  : item.key === 'inventory'
+                    ? `Low ${sidebarCounts.lowStock}`
+                    : item.badge
                 return (
                   <button className={active === item.key ? 'active' : ''} key={item.key} onClick={() => changePage(item.key)}>
                     <Icon size={19} />
                     <span>{item.label}</span>
-                    {item.badge && <small>{item.badge}</small>}
+                    {badge && <small>{badge}</small>}
                   </button>
                 )
               })}
@@ -1177,7 +1561,35 @@ function App({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
           <div className="topbar-actions">
             <button className="icon-button theme-toggle" onClick={() => setDarkMode((current) => !current)} aria-label="Toggle theme">{darkMode ? <Sun size={18} /> : <Moon size={18} />}</button>
             <button className="icon-button notification-button" aria-label="Notifications"><Bell size={18} /><span /></button>
-            <div className="topbar-user"><span className="avatar">{user.name.slice(0, 2).toUpperCase()}</span><p><strong>{user.name.split(' ')[0]}</strong><small>{titleStatus(user.role)}</small></p><ChevronDown size={15} /></div>
+            <div className="profile-menu" ref={profileMenuRef}>
+              <button
+                className={`topbar-user ${profileOpen ? 'open' : ''}`}
+                onClick={() => setProfileOpen((current) => !current)}
+                aria-expanded={profileOpen}
+                aria-haspopup="menu"
+              >
+                <span className="avatar">{user.name.slice(0, 2).toUpperCase()}</span>
+                <p><strong>{user.name.split(' ')[0]}</strong><small>{titleStatus(user.role)}</small></p>
+                <ChevronDown className="profile-chevron" size={15} />
+              </button>
+
+              {profileOpen && (
+                <div className="profile-dropdown surface-card" role="menu">
+                  <div className="profile-dropdown-header">
+                    <span className="avatar large">{user.name.slice(0, 2).toUpperCase()}</span>
+                    <p><strong>{user.name}</strong><small>{user.email}</small></p>
+                  </div>
+                  <div className="profile-dropdown-role">
+                    <span>Signed in as</span>
+                    <strong>{titleStatus(user.role)}</strong>
+                  </div>
+                  <div className="profile-dropdown-actions">
+                    <button role="menuitem" onClick={() => changePage('settings')}><Settings size={16} /><span>Account settings</span></button>
+                    <button className="logout-action" role="menuitem" onClick={onLogout}><LogOut size={16} /><span>Log out</span></button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </header>
         <main className="main-content">{renderView()}</main>
