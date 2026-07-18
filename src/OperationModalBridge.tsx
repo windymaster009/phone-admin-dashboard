@@ -1,16 +1,26 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import {
   AlertTriangle,
+  Barcode,
+  Camera,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   HandCoins,
   Package,
+  Plus,
+  Printer,
+  ScanLine,
   ShoppingCart,
   Smartphone,
+  Trash2,
   Wrench,
   X,
 } from 'lucide-react'
 import { api } from './api'
+import { BarcodeGraphic, printInventoryLabels } from './barcode'
 
-type ModalKind = 'stock' | 'purchase' | 'sale' | 'pawn'
+type ModalKind = 'stock' | 'purchase' | 'sale' | 'pawn' | 'scan' | 'label'
 type StockCategory = 'PHONE' | 'ACCESSORY' | 'SPARE_PART'
 
 type Customer = {
@@ -26,7 +36,52 @@ type InventoryItem = {
   category: StockCategory
   quantity: number
   sellPrice: number
+  buyPrice?: number
+  barcode?: string
+  brand?: string
+  model?: string
+  condition?: string
+  status: string
   imei1?: string
+}
+
+type Supplier = {
+  _id: string
+  name: string
+  phone?: string
+  nationalIdNumber?: string
+}
+
+type SellerType = 'EXISTING_SUPPLIER' | 'WALK_IN' | 'NEW_SUPPLIER'
+type PurchaseCurrency = 'USD' | 'KHR'
+
+type PurchaseDevice = {
+  id: string
+  collapsed: boolean
+  imei: string
+  brand: string
+  model: string
+  storage: string
+  ram: string
+  color: string
+  condition: string
+  batteryHealth: string
+  carrierLock: string
+  purchasePrice: string
+  accessoriesIncluded: string[]
+  notes: string
+}
+
+function newPurchaseDevice(): PurchaseDevice {
+  return {
+    id: crypto.randomUUID(), collapsed: false, imei: '', brand: '', model: '', storage: '', ram: '', color: '',
+    condition: 'GOOD', batteryHealth: '', carrierLock: 'UNKNOWN', purchasePrice: '', accessoriesIncluded: [], notes: '',
+  }
+}
+
+function localDateValue() {
+  const now = new Date()
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10)
 }
 
 const modalMeta: Record<ModalKind, { title: string; description: string; icon: ReactNode }> = {
@@ -49,6 +104,16 @@ const modalMeta: Record<ModalKind, { title: string; description: string; icon: R
     title: 'New pawn contract',
     description: 'Register customer collateral, value, principal, and due date.',
     icon: <HandCoins size={21} />,
+  },
+  scan: {
+    title: 'Scan product',
+    description: 'Use a barcode scanner, type a code, or scan with this device camera.',
+    icon: <ScanLine size={21} />,
+  },
+  label: {
+    title: 'Purchase completed',
+    description: 'The product was added to stock and its barcode label is ready.',
+    icon: <Printer size={21} />,
   },
 }
 
@@ -86,7 +151,7 @@ function ModalShell({ kind, error, busy, onClose, children }: {
     <div className="operation-modal-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget && !busy) onClose()
     }}>
-      <section className="operation-modal" role="dialog" aria-modal="true" aria-label={meta.title}>
+      <section className={`operation-modal operation-modal-${kind}`} role="dialog" aria-modal="true" aria-label={meta.title}>
         <header className="operation-modal-header">
           <span className="operation-modal-icon">{meta.icon}</span>
           <div>
@@ -133,20 +198,96 @@ function StockFields({ category }: { category: StockCategory }) {
   )
 }
 
+function CameraBarcodeReader({ onScan, onError }: { onScan: (code: string) => void; onError: (message: string) => void }) {
+  const [active, setActive] = useState(false)
+
+  useEffect(() => {
+    if (!active) return
+    let scanner: import('html5-qrcode').Html5Qrcode | null = null
+    let disposed = false
+
+    async function startCamera() {
+      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode')
+      if (disposed) return
+      scanner = new Html5Qrcode('phoneflow-barcode-reader', {
+        formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128],
+        verbose: false,
+      })
+      await scanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 280, height: 130 } },
+        (decodedText) => {
+          if (disposed) return
+          setActive(false)
+          onScan(decodedText)
+        },
+        () => undefined,
+      )
+    }
+
+    void startCamera().catch((reason: Error) => {
+      setActive(false)
+      onError(reason.message || 'Unable to start the camera. Check camera permission and try again.')
+    })
+
+    return () => {
+      disposed = true
+      if (scanner?.isScanning) void scanner.stop().finally(() => scanner?.clear())
+      else scanner?.clear()
+    }
+  }, [active, onError, onScan])
+
+  return (
+    <div className="camera-scanner">
+      <div id="phoneflow-barcode-reader" className={active ? 'active' : ''} />
+      <button type="button" className="secondary-button" onClick={() => setActive((value) => !value)}>
+        <Camera size={17} /> {active ? 'Stop camera' : 'Scan with camera'}
+      </button>
+      <small>Camera scanning requires permission and works on localhost or HTTPS.</small>
+    </div>
+  )
+}
+
 export default function OperationModalBridge() {
   const [kind, setKind] = useState<ModalKind | null>(null)
   const [category, setCategory] = useState<StockCategory>('PHONE')
   const [customers, setCustomers] = useState<Customer[]>([])
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [inventory, setInventory] = useState<InventoryItem[]>([])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [estimatedValue, setEstimatedValue] = useState(0)
   const [pawnPercentage, setPawnPercentage] = useState(45)
+  const [scanCode, setScanCode] = useState('')
+  const [scannedItem, setScannedItem] = useState<InventoryItem | null>(null)
+  const [labelItems, setLabelItems] = useState<InventoryItem[]>([])
+  const [saleItemId, setSaleItemId] = useState('')
+  const [saleUnitPrice, setSaleUnitPrice] = useState('')
+  const [sellerType, setSellerType] = useState<SellerType>('WALK_IN')
+  const [supplierId, setSupplierId] = useState('')
+  const [sellerName, setSellerName] = useState('')
+  const [sellerPhone, setSellerPhone] = useState('')
+  const [sellerNationalId, setSellerNationalId] = useState('')
+  const [purchaseDate, setPurchaseDate] = useState(localDateValue)
+  const [purchasePaymentMethod, setPurchasePaymentMethod] = useState('CASH')
+  const [purchaseCurrency, setPurchaseCurrency] = useState<PurchaseCurrency>('USD')
+  const [purchaseAmountPaid, setPurchaseAmountPaid] = useState('0')
+  const [purchaseNotes, setPurchaseNotes] = useState('')
+  const [purchaseDevices, setPurchaseDevices] = useState<PurchaseDevice[]>(() => [newPurchaseDevice()])
+  const [usdKhrRate, setUsdKhrRate] = useState(4100)
+  const imeiInputs = useRef(new Map<string, HTMLInputElement>())
 
   const maximumPawn = useMemo(
     () => Math.max(0, estimatedValue * pawnPercentage / 100),
     [estimatedValue, pawnPercentage],
   )
+  const purchaseTotal = useMemo(
+    () => purchaseDevices.reduce((sum, device) => sum + Math.max(0, Number(device.purchasePrice) || 0), 0),
+    [purchaseDevices],
+  )
+  const purchasePaid = Math.max(0, Number(purchaseAmountPaid) || 0)
+  const purchaseBalance = Math.max(0, purchaseTotal - purchasePaid)
+  const purchasePaymentStatus = purchasePaid <= 0 ? 'UNPAID' : purchasePaid < purchaseTotal ? 'PARTIAL' : 'PAID'
 
   useEffect(() => {
     const originalAlert = window.alert.bind(window)
@@ -163,8 +304,19 @@ export default function OperationModalBridge() {
   }, [])
 
   useEffect(() => {
+    const openScanner = () => {
+      setError('')
+      setScanCode('')
+      setScannedItem(null)
+      setKind('scan')
+    }
+    window.addEventListener('phoneflow:open-scanner', openScanner)
+    return () => window.removeEventListener('phoneflow:open-scanner', openScanner)
+  }, [])
+
+  useEffect(() => {
     if (!kind) return
-    if (kind === 'sale' || kind === 'pawn' || kind === 'purchase') {
+    if (kind === 'sale' || kind === 'pawn') {
       api<{ customers: Customer[] }>('/customers')
         .then((result) => setCustomers(result.customers))
         .catch((reason: Error) => setError(reason.message))
@@ -174,15 +326,72 @@ export default function OperationModalBridge() {
         .then((result) => setInventory(result.items.filter((item) => item.quantity > 0)))
         .catch((reason: Error) => setError(reason.message))
     }
+    if (kind === 'purchase') {
+      api<{ suppliers: Supplier[] }>('/suppliers')
+        .then((result) => setSuppliers(result.suppliers))
+        .catch((reason: Error) => setError(reason.message))
+      api<{ usdKhr: number }>('/exchange-rates')
+        .then((result) => setUsdKhrRate(result.usdKhr))
+        .catch(() => setUsdKhrRate(4100))
+    }
   }, [kind])
 
   const close = () => {
     if (busy) return
+    const shouldRefresh = kind === 'label' && labelItems.length > 0
     setKind(null)
     setError('')
     setCategory('PHONE')
     setEstimatedValue(0)
     setPawnPercentage(45)
+    setScanCode('')
+    setScannedItem(null)
+    setLabelItems([])
+    setSaleItemId('')
+    setSaleUnitPrice('')
+    setSellerType('WALK_IN')
+    setSupplierId('')
+    setSellerName('')
+    setSellerPhone('')
+    setSellerNationalId('')
+    setPurchaseDate(localDateValue())
+    setPurchasePaymentMethod('CASH')
+    setPurchaseCurrency('USD')
+    setPurchaseAmountPaid('0')
+    setPurchaseNotes('')
+    setPurchaseDevices([newPurchaseDevice()])
+    if (shouldRefresh) window.location.reload()
+  }
+
+  const findScannedProduct = useCallback(async (rawCode: string) => {
+    const code = rawCode.trim()
+    if (!code) {
+      setError('Scan or enter a barcode first')
+      return
+    }
+    setBusy(true)
+    setError('')
+    setScannedItem(null)
+    try {
+      const result = await api<{ item: InventoryItem }>(`/inventory/scan/${encodeURIComponent(code)}`)
+      setScanCode(code)
+      setScannedItem(result.item)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to find this product')
+    } finally {
+      setBusy(false)
+    }
+  }, [])
+
+  const handleCameraError = useCallback((message: string) => setError(message), [])
+
+  function sellScannedProduct() {
+    if (!scannedItem || scannedItem.status !== 'IN_STOCK' || scannedItem.quantity < 1 || scannedItem.sellPrice <= 0) return
+    setInventory((current) => current.some((item) => item._id === scannedItem._id) ? current : [scannedItem, ...current])
+    setSaleItemId(scannedItem._id)
+    setSaleUnitPrice(String(scannedItem.sellPrice))
+    setError('')
+    setKind('sale')
   }
 
   async function submitStock(event: FormEvent<HTMLFormElement>) {
@@ -219,35 +428,49 @@ export default function OperationModalBridge() {
     }
   }
 
+  function updatePurchaseDevice(id: string, update: Partial<PurchaseDevice>) {
+    setPurchaseDevices((current) => current.map((device) => device.id === id ? { ...device, ...update } : device))
+  }
+
+  function addPurchaseDevice() {
+    const device = newPurchaseDevice()
+    setPurchaseDevices((current) => [...current.map((item) => ({ ...item, collapsed: true })), device])
+    window.setTimeout(() => imeiInputs.current.get(device.id)?.focus(), 0)
+  }
+
+  function removePurchaseDevice(id: string) {
+    if (purchaseDevices.length === 1) return
+    setPurchaseDevices((current) => current.filter((device) => device.id !== id))
+    imeiInputs.current.delete(id)
+  }
+
   async function submitPurchase(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setBusy(true)
     setError('')
-    const form = new FormData(event.currentTarget)
-    const purchaseCategory = String(form.get('category') || 'PHONE') as StockCategory
-    const unitPrice = Number(form.get('unitPrice') || 0)
     const payload = {
       type: 'BUY',
-      customer: form.get('customer') || undefined,
-      items: [{
-        category: purchaseCategory,
-        name: String(form.get('name') || ''),
-        brand: String(form.get('brand') || ''),
-        model: String(form.get('model') || ''),
-        imei1: purchaseCategory === 'PHONE' ? String(form.get('imei1') || '') : undefined,
-        condition: String(form.get('condition') || 'GOOD'),
-        quantity: purchaseCategory === 'PHONE' ? 1 : Number(form.get('quantity') || 1),
-        unitPrice,
-        sellPrice: Number(form.get('sellPrice') || 0),
-      }],
-      amountPaid: Number(form.get('amountPaid') || unitPrice),
-      paymentMethod: String(form.get('paymentMethod') || 'CASH'),
-      notes: String(form.get('notes') || ''),
+      sellerType,
+      supplier: sellerType === 'EXISTING_SUPPLIER' ? supplierId : undefined,
+      seller: sellerType === 'EXISTING_SUPPLIER' ? undefined : { name: sellerName, phone: sellerPhone, nationalIdNumber: sellerNationalId },
+      purchaseDate,
+      paymentMethod: purchasePaymentMethod,
+      currency: purchaseCurrency,
+      exchangeRate: purchaseCurrency === 'KHR' ? usdKhrRate : 1,
+      amountPaid: purchasePaid,
+      notes: purchaseNotes,
+      devices: purchaseDevices.map(({ id: _id, collapsed: _collapsed, ...device }) => device),
     }
     try {
-      await api('/trades', { method: 'POST', body: JSON.stringify(payload) })
-      close()
-      window.location.reload()
+      const result = await api<{ trade: { items: { inventoryItem: InventoryItem }[] } }>('/trades', { method: 'POST', body: JSON.stringify(payload) })
+      const purchasedItems = result.trade.items.map((item) => item.inventoryItem).filter(Boolean)
+      if (purchasedItems.length > 0) {
+        setLabelItems(purchasedItems)
+        setKind('label')
+      } else {
+        setKind(null)
+        window.location.reload()
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to save purchase')
     } finally {
@@ -339,24 +562,99 @@ export default function OperationModalBridge() {
         <footer className="operation-modal-actions"><button type="button" className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={busy}>{busy ? 'Saving...' : `Add ${category === 'SPARE_PART' ? 'spare part' : category.toLowerCase()}`}</button></footer>
       </form>}
 
-      {kind === 'purchase' && <form className="operation-form" onSubmit={submitPurchase}>
-        <div className="operation-form-grid">
-          <label>Seller<select name="customer" defaultValue=""><option value="">Walk-in / not selected</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name} — {customer.phone}</option>)}</select></label>
-          <label>Category<select name="category" defaultValue="PHONE"><option value="PHONE">Phone</option><option value="ACCESSORY">Accessory</option><option value="SPARE_PART">Spare part</option></select></label>
-          <label>Item name<input name="name" required /></label><label>Brand<input name="brand" /></label><label>Model<input name="model" /></label><label>IMEI<input name="imei1" /></label>
-          <label>Condition<select name="condition" defaultValue="GOOD"><option value="NEW">New</option><option value="LIKE_NEW">Like new</option><option value="GOOD">Good</option><option value="FAIR">Fair</option><option value="DAMAGED">Damaged</option></select></label>
-          <label>Quantity<input name="quantity" type="number" min="1" defaultValue="1" /></label><label>Purchase price<input name="unitPrice" type="number" min="0" step="0.01" required /></label><label>Expected selling price<input name="sellPrice" type="number" min="0" step="0.01" required /></label>
-          <label>Amount paid<input name="amountPaid" type="number" min="0" step="0.01" /></label><label>Payment method<select name="paymentMethod"><option value="CASH">Cash</option><option value="BANK">Bank transfer</option><option value="CARD">Card</option><option value="OTHER">Other</option></select></label>
-          <label className="operation-wide">Notes<textarea name="notes" rows={3} /></label>
-        </div>
-        <footer className="operation-modal-actions"><button type="button" className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={busy}>{busy ? 'Saving...' : 'Complete purchase'}</button></footer>
+      {kind === 'purchase' && <form className="operation-form purchase-workflow-form" onSubmit={submitPurchase}>
+        <section className="purchase-section-card">
+          <div className="purchase-section-heading"><span>1</span><div><h3>Purchase</h3><p>Seller and payment details for this transaction.</p></div></div>
+          <div className="purchase-seller-tabs">
+            <button type="button" className={sellerType === 'EXISTING_SUPPLIER' ? 'active' : ''} onClick={() => setSellerType('EXISTING_SUPPLIER')}>Existing supplier</button>
+            <button type="button" className={sellerType === 'WALK_IN' ? 'active' : ''} onClick={() => setSellerType('WALK_IN')}>Walk-in customer</button>
+            <button type="button" className={sellerType === 'NEW_SUPPLIER' ? 'active' : ''} onClick={() => setSellerType('NEW_SUPPLIER')}>New supplier</button>
+          </div>
+          <div className="operation-form-grid purchase-fields-grid">
+            {sellerType === 'EXISTING_SUPPLIER' ? <label className="operation-wide">Supplier<select required value={supplierId} onChange={(event) => setSupplierId(event.target.value)}><option value="" disabled>Select supplier</option>{suppliers.map((supplier) => <option key={supplier._id} value={supplier._id}>{supplier.name}{supplier.phone ? ` — ${supplier.phone}` : ''}</option>)}</select></label> : <>
+              <label>Seller name<input required value={sellerName} onChange={(event) => setSellerName(event.target.value)} placeholder={sellerType === 'NEW_SUPPLIER' ? 'Supplier or business name' : 'Customer name'} /></label>
+              <label>Phone number <small>Optional</small><input value={sellerPhone} onChange={(event) => setSellerPhone(event.target.value)} placeholder="012 345 678" /></label>
+              <label>National ID <small>Optional</small><input value={sellerNationalId} onChange={(event) => setSellerNationalId(event.target.value)} /></label>
+            </>}
+            <label>Purchase date<input type="date" required value={purchaseDate} onChange={(event) => setPurchaseDate(event.target.value)} /></label>
+            <label>Payment method<select value={purchasePaymentMethod} onChange={(event) => setPurchasePaymentMethod(event.target.value)}><option value="CASH">Cash</option><option value="BANK">Bank transfer</option><option value="CARD">Card</option><option value="OTHER">Other</option></select></label>
+            <label>Currency<select value={purchaseCurrency} onChange={(event) => setPurchaseCurrency(event.target.value as PurchaseCurrency)}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Khmer Riel</option></select></label>
+            <label>Amount paid<input type="number" min="0" max={purchaseTotal || undefined} step={purchaseCurrency === 'KHR' ? '100' : '0.01'} value={purchaseAmountPaid} onChange={(event) => setPurchaseAmountPaid(event.target.value)} /></label>
+            <label className="operation-wide">Purchase notes <small>Optional</small><textarea rows={2} value={purchaseNotes} onChange={(event) => setPurchaseNotes(event.target.value)} /></label>
+          </div>
+          <div className="purchase-payment-summary">
+            <div><span>Total amount</span><strong>{purchaseCurrency === 'KHR' ? `${purchaseTotal.toLocaleString()} ៛` : `$${purchaseTotal.toFixed(2)}`}</strong></div>
+            <div><span>Amount paid</span><strong>{purchaseCurrency === 'KHR' ? `${purchasePaid.toLocaleString()} ៛` : `$${purchasePaid.toFixed(2)}`}</strong></div>
+            <div><span>Balance due</span><strong>{purchaseCurrency === 'KHR' ? `${purchaseBalance.toLocaleString()} ៛` : `$${purchaseBalance.toFixed(2)}`}</strong></div>
+            <div><span>Payment status</span><strong className={`payment-state ${purchasePaymentStatus.toLowerCase()}`}>{purchasePaymentStatus}</strong></div>
+          </div>
+        </section>
+
+        <section className="purchase-section-card devices-section">
+          <div className="purchase-section-heading"><span>2</span><div><h3>Devices</h3><p>Every phone receives its own IMEI, inventory record, and barcode.</p></div><b>{purchaseDevices.length} device{purchaseDevices.length === 1 ? '' : 's'}</b></div>
+          <div className="purchase-device-list">
+            {purchaseDevices.map((device, index) => <article className={`purchase-device-card ${device.collapsed ? 'collapsed' : ''}`} key={device.id}>
+              <header><button type="button" className="device-collapse-button" onClick={() => updatePurchaseDevice(device.id, { collapsed: !device.collapsed })}><span>{index + 1}</span><p><strong>Device {index + 1}</strong><small>{[device.brand, device.model, device.storage].filter(Boolean).join(' ') || 'Enter phone information'}{device.imei ? ` · ${device.imei}` : ''}</small></p>{device.collapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}</button><button type="button" className="device-remove-button" onClick={() => removePurchaseDevice(device.id)} disabled={purchaseDevices.length === 1} aria-label={`Remove device ${index + 1}`}><Trash2 size={16} /></button></header>
+              {!device.collapsed && <div className="device-fields-grid">
+                <label className="device-imei-field"><span>IMEI</span><div><input ref={(node) => { if (node) imeiInputs.current.set(device.id, node); else imeiInputs.current.delete(device.id) }} required inputMode="numeric" pattern="[0-9]{15}" maxLength={15} value={device.imei} onChange={(event) => updatePurchaseDevice(device.id, { imei: event.target.value.replace(/\D/g, '').slice(0, 15) })} placeholder="15-digit IMEI" /><button type="button" className="secondary-button" onClick={() => imeiInputs.current.get(device.id)?.focus()}><ScanLine size={16} /> Scan IMEI</button></div><small>Click Scan IMEI, then use the barcode scanner.</small></label>
+                <label>Brand<input required value={device.brand} onChange={(event) => updatePurchaseDevice(device.id, { brand: event.target.value })} placeholder="Apple" /></label>
+                <label>Model<input required value={device.model} onChange={(event) => updatePurchaseDevice(device.id, { model: event.target.value })} placeholder="iPhone 13 Pro" /></label>
+                <label>Storage<input required value={device.storage} onChange={(event) => updatePurchaseDevice(device.id, { storage: event.target.value })} placeholder="128GB" /></label>
+                <label>RAM <small>Optional</small><input value={device.ram} onChange={(event) => updatePurchaseDevice(device.id, { ram: event.target.value })} placeholder="6GB" /></label>
+                <label>Color<input required value={device.color} onChange={(event) => updatePurchaseDevice(device.id, { color: event.target.value })} placeholder="Blue" /></label>
+                <label>Condition<select value={device.condition} onChange={(event) => updatePurchaseDevice(device.id, { condition: event.target.value })}><option value="NEW">New</option><option value="LIKE_NEW">Like new</option><option value="GOOD">Good</option><option value="FAIR">Fair</option><option value="DAMAGED">Damaged</option></select></label>
+                <label>Battery health <small>iPhone</small><input type="number" min="0" max="100" value={device.batteryHealth} onChange={(event) => updatePurchaseDevice(device.id, { batteryHealth: event.target.value })} placeholder="88" /></label>
+                <label>Carrier lock<select value={device.carrierLock} onChange={(event) => updatePurchaseDevice(device.id, { carrierLock: event.target.value })}><option value="UNKNOWN">Unknown</option><option value="UNLOCKED">Unlocked</option><option value="LOCKED">Carrier locked</option></select></label>
+                <label>Purchase price ({purchaseCurrency})<input required type="number" min="0" step={purchaseCurrency === 'KHR' ? '100' : '0.01'} value={device.purchasePrice} onChange={(event) => updatePurchaseDevice(device.id, { purchasePrice: event.target.value })} /></label>
+                <fieldset className="device-accessories"><legend>Accessories included</legend>{['BOX', 'CHARGER', 'CABLE', 'CASE', 'EARPHONES'].map((accessory) => <label key={accessory}><input type="checkbox" checked={device.accessoriesIncluded.includes(accessory)} onChange={(event) => updatePurchaseDevice(device.id, { accessoriesIncluded: event.target.checked ? [...device.accessoriesIncluded, accessory] : device.accessoriesIncluded.filter((item) => item !== accessory) })} /> {accessory.charAt(0) + accessory.slice(1).toLowerCase()}</label>)}</fieldset>
+                <label className="device-notes-field">Device notes <small>Optional</small><textarea rows={2} value={device.notes} onChange={(event) => updatePurchaseDevice(device.id, { notes: event.target.value })} /></label>
+              </div>}
+            </article>)}
+          </div>
+          <button type="button" className="add-device-button" onClick={addPurchaseDevice}><Plus size={17} /> Add another device</button>
+        </section>
+        <footer className="operation-modal-actions"><div className="purchase-submit-summary"><span>{purchaseDevices.length} device{purchaseDevices.length === 1 ? '' : 's'}</span><strong>{purchaseCurrency === 'KHR' ? `${purchaseTotal.toLocaleString()} ៛` : `$${purchaseTotal.toFixed(2)}`}</strong></div><button type="button" className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={busy || purchaseDevices.length === 0}>{busy ? 'Saving purchase...' : 'Complete purchase'}</button></footer>
       </form>}
+
+      {kind === 'scan' && <div className={`scanner-workflow ${scannedItem ? 'has-result' : ''}`}>
+        {!scannedItem ? <>
+          <div className="scanner-intro"><h3>How would you like to scan?</h3><p>Use a barcode scanner for the fastest checkout, or open the camera on this device.</p></div>
+          <form className="scanner-code-form" onSubmit={(event) => { event.preventDefault(); void findScannedProduct(scanCode) }}>
+            <div className="scanner-method-heading"><span><Barcode size={18} /></span><div><strong>Barcode scanner</strong><small>Keep this field selected, then scan the label.</small></div></div>
+            <div className="scanner-input-row"><input id="barcode-code" aria-label="Barcode, SKU, IMEI, or serial number" autoFocus value={scanCode} onChange={(event) => setScanCode(event.target.value)} placeholder="Scan or enter product code" autoComplete="off" /><button className="primary-button" disabled={busy}>{busy ? 'Finding...' : 'Find product'}</button></div>
+            <small>Works with barcode, SKU, IMEI, and serial number. Most scanners press Enter automatically.</small>
+          </form>
+          <div className="scanner-divider"><span>or use this device</span></div>
+          <CameraBarcodeReader onScan={findScannedProduct} onError={handleCameraError} />
+        </> : <>
+          <div className="scan-success-banner"><span><CheckCircle2 size={22} /></span><div><strong>Product found</strong><small>Code {scannedItem.barcode || scannedItem.sku} matched an inventory record.</small></div></div>
+          <article className="scanned-product-card">
+            <div className="scanned-product-heading"><span className="operation-modal-icon"><Package size={20} /></span><div><span className="eyebrow">Ready to continue</span><h3>{scannedItem.name}</h3><p>{[scannedItem.brand, scannedItem.model].filter(Boolean).join(' ') || scannedItem.sku}</p></div><span className={`status-badge status-${scannedItem.status.toLowerCase().replaceAll('_', '-')}`}>{scannedItem.status.replaceAll('_', ' ')}</span></div>
+            <div className="scanned-product-details">
+              <div><span>Inventory</span><p><small>SKU</small><strong>{scannedItem.sku}</strong></p><p><small>Available</small><strong>{scannedItem.quantity}</strong></p></div>
+              <div><span>Device</span><p><small>IMEI</small><strong>{scannedItem.imei1 || 'Not recorded'}</strong></p><p><small>Condition</small><strong>{scannedItem.condition?.replaceAll('_', ' ') || 'Not recorded'}</strong></p></div>
+              <div className="price-group"><span>Shop price</span><strong>{scannedItem.sellPrice > 0 ? `$${scannedItem.sellPrice.toFixed(2)}` : 'Not set'}</strong><small>{scannedItem.sellPrice > 0 ? 'Current selling price' : 'Set a price in Stock Information first'}</small></div>
+            </div>
+            <footer className="scanner-result-actions"><button type="button" className="secondary-button" onClick={() => { setScannedItem(null); setScanCode(''); setError('') }}><ScanLine size={17} /> Scan another</button><div><button type="button" className="ghost-button" onClick={close}>Close</button><button type="button" className="primary-button" onClick={sellScannedProduct} disabled={scannedItem.status !== 'IN_STOCK' || scannedItem.quantity < 1 || scannedItem.sellPrice <= 0}><ShoppingCart size={17} /> Sell product</button></div></footer>
+          </article>
+        </>}
+      </div>}
+
+      {kind === 'label' && labelItems.length > 0 && <div className="label-prompt">
+        <div className="label-success"><span><Printer size={21} /></span><div><h3>Print barcode labels now?</h3><p>{labelItems.length} device{labelItems.length === 1 ? ' was' : 's were'} added to inventory. You can also print later from Stock Information.</p></div></div>
+        <div className="barcode-label-preview-list">{labelItems.slice(0, 3).map((item) => <article className="barcode-label-preview" key={item.sku}><strong>{item.name}</strong><small>{item.imei1 || item.sku}</small><BarcodeGraphic item={item} compact /></article>)}{labelItems.length > 3 && <p>+ {labelItems.length - 3} more label{labelItems.length - 3 === 1 ? '' : 's'}</p>}</div>
+        <footer className="operation-modal-actions"><button type="button" className="ghost-button" onClick={close}>Print later</button><button type="button" className="primary-button" onClick={() => { printInventoryLabels(labelItems); close() }}><Printer size={17} /> Print labels</button></footer>
+      </div>}
 
       {kind === 'sale' && <form className="operation-form" onSubmit={submitSale}>
         <div className="operation-form-grid">
           <label>Customer<select name="customer" defaultValue=""><option value="">Walk-in customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name} — {customer.phone}</option>)}</select></label>
-          <label className="operation-wide">Inventory item<select name="inventoryItem" required defaultValue=""><option value="" disabled>Select available stock</option>{inventory.map((item) => <option key={item._id} value={item._id}>{item.name}{item.imei1 ? ` — ${item.imei1}` : ''} — Qty ${item.quantity} — ${item.sellPrice.toFixed(2)}</option>)}</select></label>
-          <label>Quantity<input name="quantity" type="number" min="1" defaultValue="1" /></label><label>Selling price<input name="unitPrice" type="number" min="0" step="0.01" placeholder="Uses stock price when empty" /></label>
+          <label className="operation-wide">Inventory item<select name="inventoryItem" required value={saleItemId} onChange={(event) => {
+            const item = inventory.find((entry) => entry._id === event.target.value)
+            setSaleItemId(event.target.value)
+            setSaleUnitPrice(item ? String(item.sellPrice) : '')
+          }}><option value="" disabled>Select available stock</option>{inventory.map((item) => <option key={item._id} value={item._id}>{item.name}{item.imei1 ? ` — ${item.imei1}` : ''} — Qty ${item.quantity} — ${item.sellPrice.toFixed(2)}</option>)}</select></label>
+          <label>Quantity<input name="quantity" type="number" min="1" defaultValue="1" /></label><label>Selling price<input name="unitPrice" type="number" min="0" step="0.01" value={saleUnitPrice} onChange={(event) => setSaleUnitPrice(event.target.value)} placeholder="Uses stock price when empty" /></label>
           <label>Discount<input name="discount" type="number" min="0" step="0.01" defaultValue="0" /></label><label>Amount paid<input name="amountPaid" type="number" min="0" step="0.01" /></label>
           <label>Payment method<select name="paymentMethod"><option value="CASH">Cash</option><option value="BANK">Bank transfer</option><option value="CARD">Card</option><option value="OTHER">Other</option></select></label>
           <label className="operation-wide">Notes<textarea name="notes" rows={3} /></label>

@@ -40,6 +40,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { api, type SessionUser } from './api'
+import { printInventoryLabel } from './barcode'
 
 type NavKey =
   | 'dashboard'
@@ -91,6 +92,7 @@ type Customer = {
 type InventoryItem = {
   _id: string
   sku: string
+  barcode?: string
   category: 'PHONE' | 'ACCESSORY' | 'SPARE_PART'
   name: string
   brand?: string
@@ -134,7 +136,17 @@ type Trade = {
   tradeNo: string
   type: 'BUY' | 'SELL'
   customer?: Customer
-  items: { name: string; quantity: number; unitPrice: number; costPrice?: number }[]
+  supplier?: { _id: string; name: string; phone?: string; nationalIdNumber?: string }
+  sellerSnapshot?: { name?: string; phone?: string; nationalIdNumber?: string }
+  sellerType?: string
+  purchaseDate?: string
+  currency?: 'USD' | 'KHR'
+  paymentStatus?: 'PAID' | 'PARTIAL' | 'UNPAID'
+  transactionSubtotal?: number
+  transactionTotal?: number
+  transactionAmountPaid?: number
+  transactionBalance?: number
+  items: { name: string; quantity: number; unitPrice: number; costPrice?: number; originalUnitPrice?: number; currency?: 'USD' | 'KHR' }[]
   subtotal: number
   discount: number
   total: number
@@ -344,6 +356,15 @@ const money = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 0,
   maximumFractionDigits: 2,
 })
+const tradePartyName = (trade: Trade) => trade.type === 'BUY'
+  ? trade.supplier?.name || trade.sellerSnapshot?.name || trade.customer?.name || 'Walk-in seller'
+  : trade.customer?.name || 'Walk-in customer'
+const tradePartyPhone = (trade: Trade) => trade.type === 'BUY'
+  ? trade.supplier?.phone || trade.sellerSnapshot?.phone || trade.customer?.phone
+  : trade.customer?.phone
+const tradeTransactionMoney = (trade: Trade, original: number | undefined, fallback: number) => trade.type === 'BUY' && trade.currency === 'KHR' && original !== undefined
+  ? `${Math.round(original).toLocaleString()} ៛`
+  : money.format(original ?? fallback)
 const riel = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
 
 function useExchangeRate() {
@@ -691,6 +712,7 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
             </div>
           </div>
           <div className="quick-actions-list">
+            <button onClick={() => window.dispatchEvent(new Event('phoneflow:open-scanner'))}><span className="quick-icon blue"><ScanLine size={19} /></span><p>Scan product<small>Find stock and start a sale</small></p><ArrowUpRight size={17} /></button>
             <button onClick={() => comingNext('New pawn')}><span className="quick-icon violet"><HandCoins size={19} /></span><p>New pawn contract<small>Register ID and collateral</small></p><ArrowUpRight size={17} /></button>
             <button onClick={() => comingNext('New sale')}><span className="quick-icon blue"><ShoppingCart size={19} /></span><p>New sale<small>Phone or accessories</small></p><ArrowUpRight size={17} /></button>
             <button onClick={() => comingNext('Add stock')}><span className="quick-icon orange"><Package size={19} /></span><p>Add stock<small>Phone, part or accessory</small></p><ArrowUpRight size={17} /></button>
@@ -827,7 +849,7 @@ function TradeView() {
     const rows = trades.map((trade) => [
       trade.tradeNo,
       trade.type,
-      trade.customer?.name || 'Walk-in',
+      tradePartyName(trade),
       trade.items.map((item) => `${item.name} x${item.quantity}`).join('; '),
       trade.subtotal,
       trade.discount,
@@ -878,7 +900,7 @@ function TradeView() {
           {trades.map((transaction) => (
             <div className="transaction-row" key={transaction._id}>
               <span className={`transaction-icon ${transaction.type === 'SELL' ? 'sale' : 'purchase'}`}>{transaction.type === 'SELL' ? <ArrowUpRight /> : <ArrowDownRight />}</span>
-              <p><strong>{transaction.items.map((item) => `${item.name} x${item.quantity}`).join(', ')}</strong><small>{transaction.tradeNo} - {transaction.customer?.name || 'Walk-in'} - {dateText(transaction.createdAt)}</small></p>
+              <p><strong>{transaction.items.map((item) => `${item.name} x${item.quantity}`).join(', ')}</strong><small>{transaction.tradeNo} - {tradePartyName(transaction)} - {dateText(transaction.purchaseDate || transaction.createdAt)}</small></p>
               <StatusBadge status={transaction.type === 'SELL' ? 'Sale' : 'Purchase'} />
               <strong className={transaction.type === 'SELL' ? 'money-in' : 'money-out'}>{transaction.type === 'SELL' ? '+' : '-'}{money.format(transaction.total)}</strong>
               <button className="icon-button" onClick={() => setSelectedTrade(transaction)} aria-label={`View ${transaction.tradeNo}`}><MoreHorizontal size={18} /></button>
@@ -894,31 +916,31 @@ function TradeView() {
               <div>
                 <span className="eyebrow">{selectedTrade.type === 'SELL' ? 'Sale transaction' : 'Purchase transaction'}</span>
                 <h3 id="trade-detail-title">{selectedTrade.tradeNo}</h3>
-                <p>{selectedTrade.customer?.name || 'Walk-in'} - {dateText(selectedTrade.createdAt)}</p>
+                <p>{tradePartyName(selectedTrade)} - {dateText(selectedTrade.purchaseDate || selectedTrade.createdAt)}</p>
               </div>
               <button className="icon-button" onClick={() => setSelectedTrade(null)} aria-label="Close details"><X size={18} /></button>
             </header>
 
             <div className="detail-grid">
               <div><span>Type</span><strong>{selectedTrade.type === 'SELL' ? 'Sale' : 'Purchase'}</strong></div>
-              <div><span>Status</span><strong><StatusBadge status={selectedTrade.status} /></strong></div>
+              <div><span>{selectedTrade.type === 'BUY' ? 'Payment status' : 'Status'}</span><strong><StatusBadge status={selectedTrade.type === 'BUY' ? selectedTrade.paymentStatus || selectedTrade.status : selectedTrade.status} /></strong></div>
               <div><span>Payment</span><strong>{titleStatus(selectedTrade.paymentMethod)}</strong></div>
               <div><span>Date</span><strong>{dateText(selectedTrade.createdAt)}</strong></div>
-              <div><span>Subtotal</span><strong>{money.format(selectedTrade.subtotal)}</strong></div>
+              <div><span>Subtotal</span><strong>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionSubtotal, selectedTrade.subtotal)}</strong></div>
               <div><span>Discount</span><strong>{money.format(selectedTrade.discount)}</strong></div>
-              <div><span>Amount paid</span><strong>{money.format(selectedTrade.amountPaid)}</strong></div>
-              <div><span>Balance</span><strong>{money.format(selectedTrade.balance)}</strong></div>
+              <div><span>Amount paid</span><strong>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionAmountPaid, selectedTrade.amountPaid)}</strong></div>
+              <div><span>Balance</span><strong>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionBalance, selectedTrade.balance)}</strong></div>
             </div>
 
             <div className="detail-sections">
               <article>
-                <span className="eyebrow">Customer</span>
-                <p><strong>{selectedTrade.customer?.name || 'Walk-in customer'}</strong></p>
-                <p>{selectedTrade.customer?.phone || 'No phone recorded'}</p>
+                <span className="eyebrow">{selectedTrade.type === 'BUY' ? 'Seller' : 'Customer'}</span>
+                <p><strong>{tradePartyName(selectedTrade)}</strong></p>
+                <p>{tradePartyPhone(selectedTrade) || 'No phone recorded'}</p>
               </article>
               <article>
                 <span className="eyebrow">Total</span>
-                <p><strong>{selectedTrade.type === 'SELL' ? '+' : '-'}{money.format(selectedTrade.total)}</strong></p>
+                <p><strong>{selectedTrade.type === 'SELL' ? '+' : '-'}{tradeTransactionMoney(selectedTrade, selectedTrade.transactionTotal, selectedTrade.total)}</strong></p>
                 <p>{selectedTrade.items.length} line item{selectedTrade.items.length === 1 ? '' : 's'}</p>
               </article>
             </div>
@@ -928,7 +950,7 @@ function TradeView() {
               {selectedTrade.items.map((item, index) => (
                 <div className="detail-line" key={`${item.name}-${index}`}>
                   <p><strong>{item.name}</strong><small>Quantity {item.quantity}</small></p>
-                  <strong>{money.format(item.unitPrice * item.quantity)}</strong>
+                  <strong>{tradeTransactionMoney(selectedTrade, item.originalUnitPrice === undefined ? undefined : item.originalUnitPrice * item.quantity, item.unitPrice * item.quantity)}</strong>
                 </div>
               ))}
             </div>
@@ -953,6 +975,10 @@ function TradeView() {
 function InventoryView() {
   const [items, setItems] = useState<InventoryItem[]>([])
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
+  const [editingPrice, setEditingPrice] = useState(false)
+  const [sellingPriceDraft, setSellingPriceDraft] = useState('')
+  const [minimumPriceDraft, setMinimumPriceDraft] = useState('')
+  const [savingPrice, setSavingPrice] = useState(false)
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('ALL')
   const [statusFilter, setStatusFilter] = useState('ALL')
@@ -969,12 +995,38 @@ function InventoryView() {
   const sparePartCount = items.filter((item) => item.category === 'SPARE_PART').reduce((sum, item) => sum + item.quantity, 0)
   const filteredItems = items.filter((item) => {
     const term = search.trim().toLowerCase()
-    const matchesSearch = !term || [item.sku, item.name, item.brand, item.model, item.imei1, item.serialNumber]
+    const matchesSearch = !term || [item.sku, item.barcode, item.name, item.brand, item.model, item.imei1, item.serialNumber]
       .some((value) => String(value || '').toLowerCase().includes(term))
     return matchesSearch
       && (categoryFilter === 'ALL' || item.category === categoryFilter)
       && (statusFilter === 'ALL' || item.status === statusFilter)
   })
+
+  function openPriceEditor() {
+    if (!selectedItem) return
+    setSellingPriceDraft(String(selectedItem.sellPrice || ''))
+    setMinimumPriceDraft(String(selectedItem.minimumSellPrice || ''))
+    setEditingPrice(true)
+  }
+
+  async function saveSellingPrice() {
+    if (!selectedItem) return
+    setSavingPrice(true)
+    setError('')
+    try {
+      const result = await api<{ item: InventoryItem }>(`/inventory/${selectedItem._id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ sellPrice: Number(sellingPriceDraft || 0), minimumSellPrice: Number(minimumPriceDraft || 0) }),
+      })
+      setSelectedItem(result.item)
+      setItems((current) => current.map((item) => item._id === result.item._id ? result.item : item))
+      setEditingPrice(false)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to update selling price')
+    } finally {
+      setSavingPrice(false)
+    }
+  }
 
   return (
     <>
@@ -982,7 +1034,10 @@ function InventoryView() {
         eyebrow="Stock control"
         title="Stock information"
         description={error || 'Manage individually tracked phones, quantity-based accessories, and compatible spare parts.'}
-        action={<button className="primary-button" onClick={() => comingNext('Add stock')}><Plus size={17} /> Add stock</button>}
+        action={<div className="section-header-actions">
+          <button className="secondary-button" onClick={() => window.dispatchEvent(new Event('phoneflow:open-scanner'))}><ScanLine size={17} /> Scan product</button>
+          <button className="primary-button" onClick={() => comingNext('Add stock')}><Plus size={17} /> Add stock</button>
+        </div>}
       />
       <section className="stock-category-grid">
         <article className="surface-card stock-category"><span className="stock-icon violet"><Smartphone /></span><p>Phones<strong>184</strong><small>112 new · 72 second-hand</small></p><ArrowUpRight /></article>
@@ -1040,7 +1095,7 @@ function InventoryView() {
         </div>
       </article>
       {selectedItem && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setSelectedItem(null)}>
+        <div className="modal-backdrop" role="presentation" onClick={() => { setSelectedItem(null); setEditingPrice(false) }}>
           <section className="detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="stock-detail-title" onClick={(event) => event.stopPropagation()}>
             <header className="detail-modal-header">
               <div>
@@ -1048,11 +1103,12 @@ function InventoryView() {
                 <h3 id="stock-detail-title">{selectedItem.name}</h3>
                 <p>{selectedItem.sku} - {titleStatus(selectedItem.category)}</p>
               </div>
-              <button className="icon-button" onClick={() => setSelectedItem(null)} aria-label="Close details"><X size={18} /></button>
+              <button className="icon-button" onClick={() => { setSelectedItem(null); setEditingPrice(false) }} aria-label="Close details"><X size={18} /></button>
             </header>
 
             <div className="detail-grid">
               <div><span>Status</span><strong><StatusBadge status={selectedItem.status} /></strong></div>
+              <div><span>Barcode</span><strong className="mono">{selectedItem.barcode || selectedItem.sku}</strong></div>
               <div><span>Quantity</span><strong>{selectedItem.quantity}</strong></div>
               <div><span>Buy price</span><strong>{money.format(selectedItem.buyPrice)}</strong></div>
               <div><span>Sell price</span><strong>{money.format(selectedItem.sellPrice)}</strong></div>
@@ -1077,6 +1133,13 @@ function InventoryView() {
               </article>
             </div>
 
+            {editingPrice && <div className="inventory-price-editor">
+              <div><span className="eyebrow">Inventory pricing</span><h4>Set selling price</h4><p>Changing these values does not modify the original purchase transaction.</p></div>
+              <label>Regular selling price<div className="input-prefix"><span>$</span><input autoFocus type="number" min="0" step="0.01" value={sellingPriceDraft} onChange={(event) => setSellingPriceDraft(event.target.value)} /></div></label>
+              <label>Discount / minimum price<div className="input-prefix"><span>$</span><input type="number" min="0" step="0.01" value={minimumPriceDraft} onChange={(event) => setMinimumPriceDraft(event.target.value)} /></div></label>
+              <div className="inventory-price-actions"><button className="ghost-button" onClick={() => setEditingPrice(false)}>Cancel</button><button className="primary-button" onClick={() => void saveSellingPrice()} disabled={savingPrice}>{savingPrice ? 'Saving...' : 'Save price'}</button></div>
+            </div>}
+
             {selectedItem.notes && (
               <div className="detail-note">
                 <span className="eyebrow">Notes</span>
@@ -1085,7 +1148,9 @@ function InventoryView() {
             )}
 
             <footer className="detail-modal-footer">
-              <button className="ghost-button" onClick={() => setSelectedItem(null)}>Close</button>
+              {!editingPrice && <button className="primary-button" onClick={openPriceEditor}>{selectedItem.sellPrice > 0 ? 'Change price' : 'Set selling price'}</button>}
+              <button className="secondary-button" onClick={() => printInventoryLabel(selectedItem)}><ScanLine size={16} /> Print label</button>
+              <button className="ghost-button" onClick={() => { setSelectedItem(null); setEditingPrice(false) }}>Close</button>
             </footer>
           </section>
         </div>
@@ -1306,7 +1371,7 @@ function ReportsView() {
         <article className="surface-card table-card">
           <div className="card-heading table-heading"><div><span className="eyebrow">Recent trades</span><h3>Transaction report</h3></div></div>
           <div className="table-scroll report-desktop-table"><table><thead><tr><th>Reference</th><th>Type</th><th>Customer</th><th>Total</th><th>Date</th></tr></thead><tbody>
-            {(data?.recentTrades || []).map((trade) => <tr key={trade._id}><td><strong className="mono">{trade.tradeNo}</strong></td><td><StatusBadge status={trade.type === 'SELL' ? 'Sale' : 'Purchase'} /></td><td>{trade.customer?.name || 'Walk-in'}</td><td>{money.format(trade.total)}</td><td>{dateText(trade.createdAt)}</td></tr>)}
+            {(data?.recentTrades || []).map((trade) => <tr key={trade._id}><td><strong className="mono">{trade.tradeNo}</strong></td><td><StatusBadge status={trade.type === 'SELL' ? 'Sale' : 'Purchase'} /></td><td>{tradePartyName(trade)}</td><td>{tradeTransactionMoney(trade, trade.transactionTotal, trade.total)}</td><td>{dateText(trade.purchaseDate || trade.createdAt)}</td></tr>)}
             {data?.recentTrades.length === 0 && <tr><td colSpan={5}>No transactions yet.</td></tr>}
           </tbody></table></div>
           <div className="mobile-record-list report-mobile-list">
@@ -1314,12 +1379,12 @@ function ReportsView() {
               <article className="mobile-record-card" key={trade._id}>
                 <div className="mobile-record-heading">
                   <span className={`transaction-icon ${trade.type === 'SELL' ? 'sale' : 'purchase'}`}><Banknote size={17} /></span>
-                  <p><strong>{trade.customer?.name || 'Walk-in'}</strong><small>{trade.tradeNo}</small></p>
+                  <p><strong>{tradePartyName(trade)}</strong><small>{trade.tradeNo}</small></p>
                   <StatusBadge status={trade.type === 'SELL' ? 'Sale' : 'Purchase'} />
                 </div>
                 <div className="mobile-record-details report-record-details">
                   <div><span>Date</span><strong>{dateText(trade.createdAt)}</strong></div>
-                  <div><span>Total</span><strong>{money.format(trade.total)}</strong></div>
+                  <div><span>Total</span><strong>{tradeTransactionMoney(trade, trade.transactionTotal, trade.total)}</strong></div>
                 </div>
               </article>
             ))}

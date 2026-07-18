@@ -20,6 +20,9 @@ An internal full-stack phone shop system for pawn contracts, buying and selling,
 - Unique IMEI protection
 - Buy transactions that add inventory
 - Sell transactions that reduce inventory
+- Code 128 inventory labels with purchase-time printing and later reprinting
+- USB/Bluetooth scanner input and mobile camera barcode scanning
+- Scan-to-sale product lookup and sale-form prefilling
 - Pawn valuation limited to a configurable 40–50%
 - Pawn contracts, due dates, overdue state, redemption, and forfeiture
 - Forfeited pawn items transferred into second-hand stock
@@ -150,6 +153,15 @@ Never commit `.env`. If a password or secret has been pasted into chat or anothe
 
 ### 3. Start frontend and backend together
 
+Apply pending database migrations after pulling changes and before starting the application:
+
+```bash
+npm run migrate:status
+npm run migrate
+```
+
+Migration history is stored in MongoDB. Applied migration files are protected by checksums, so never edit an applied migration; create a new file in `server/migrations` instead.
+
 ```bash
 npm run dev
 ```
@@ -174,6 +186,9 @@ The first time the application opens, it shows **Create the owner account**. Thi
 npm run dev          # frontend + API
 npm run dev:client   # frontend only
 npm run dev:server   # API only
+npm run migrate      # apply all pending MongoDB migrations
+npm run migrate:status # list pending, applied, or modified migrations
+npm run migrate:down # roll back the latest applied migration
 npm run lint         # optional local TypeScript and Node checks
 npm run build        # optional production frontend build
 npm start            # run API and serve dist in production
@@ -187,6 +202,7 @@ npm start            # run API and serve dist in production
 /api/dashboard
 /api/customers
 /api/inventory
+/api/inventory/scan/:code
 /api/valuation
 /api/exchange-rates
 /api/pawns

@@ -1,12 +1,14 @@
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
+import mongoose from 'mongoose'
 import { allowRoles, requireAuth, signToken, writeActivity } from './auth.js'
-import { ActivityLog, Customer, InventoryItem, Pawn, Trade, User } from './models.js'
+import { ActivityLog, Customer, InventoryItem, Pawn, Supplier, Trade, User } from './models.js'
 
 const router = Router()
 
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
 const clean = (value) => (typeof value === 'string' ? value.trim() : value)
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 let exchangeRateCache = null
 const EXCHANGE_RATE_CACHE_MS = 30 * 60 * 1000
@@ -20,6 +22,18 @@ function makeCode(prefix) {
   const date = new Date().toISOString().slice(0, 10).replaceAll('-', '')
   const random = Math.random().toString(36).slice(2, 7).toUpperCase()
   return `${prefix}-${date}-${random}`
+}
+
+function requestError(status, message) {
+  const error = new Error(message)
+  error.status = status
+  return error
+}
+
+function paymentState(total, paid) {
+  if (paid <= 0) return 'UNPAID'
+  if (paid + 0.000001 < total) return 'PARTIAL'
+  return 'PAID'
 }
 
 function publicUser(user) {
@@ -128,7 +142,7 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
 
   const [recentPawns, recentTrades, inventoryMix, monthPerformance, monthlyPerformance, dailyPerformance] = await Promise.all([
     Pawn.find().populate('customer', 'name phone nationalIdNumber').sort({ createdAt: -1 }).limit(6),
-    Trade.find().populate('customer', 'name phone').sort({ createdAt: -1 }).limit(6),
+    Trade.find().populate('customer', 'name phone').populate('supplier', 'name phone nationalIdNumber').sort({ createdAt: -1 }).limit(6),
     InventoryItem.aggregate([
       { $match: { status: { $ne: 'ARCHIVED' } } },
       { $group: { _id: '$category', count: { $sum: '$quantity' }, value: { $sum: { $multiply: ['$quantity', '$buyPrice'] } } } },
@@ -209,6 +223,32 @@ router.patch('/customers/:id', requireAuth, asyncRoute(async (req, res) => {
   res.json({ customer })
 }))
 
+router.get('/suppliers', requireAuth, asyncRoute(async (req, res) => {
+  const q = clean(req.query.q || '')
+  const filter = { active: { $ne: false } }
+  if (q) filter.$or = [
+    { name: { $regex: escapeRegex(q), $options: 'i' } },
+    { phone: { $regex: escapeRegex(q), $options: 'i' } },
+    { nationalIdNumber: { $regex: escapeRegex(q), $options: 'i' } },
+  ]
+  const suppliers = await Supplier.find(filter).sort({ name: 1 }).limit(250)
+  res.json({ suppliers })
+}))
+
+router.post('/suppliers', requireAuth, asyncRoute(async (req, res) => {
+  const name = clean(req.body.name)
+  if (!name) return res.status(400).json({ message: 'Supplier name is required' })
+  const supplier = await Supplier.create({
+    name,
+    phone: clean(req.body.phone),
+    nationalIdNumber: clean(req.body.nationalIdNumber),
+    notes: clean(req.body.notes),
+    createdBy: req.user._id,
+  })
+  await writeActivity(req, { action: 'CREATE', entity: 'SUPPLIER', entityId: supplier._id })
+  res.status(201).json({ supplier })
+}))
+
 router.get('/inventory', requireAuth, asyncRoute(async (req, res) => {
   const q = clean(req.query.q || '')
   const filter = {}
@@ -218,14 +258,38 @@ router.get('/inventory', requireAuth, asyncRoute(async (req, res) => {
   if (q) filter.$or = [
     { name: { $regex: q, $options: 'i' } }, { brand: { $regex: q, $options: 'i' } },
     { model: { $regex: q, $options: 'i' } }, { sku: { $regex: q, $options: 'i' } },
+    { barcode: { $regex: q, $options: 'i' } },
     { imei1: { $regex: q, $options: 'i' } }, { serialNumber: { $regex: q, $options: 'i' } },
   ]
   const items = await InventoryItem.find(filter).sort({ createdAt: -1 }).limit(500)
   res.json({ items })
 }))
 
+router.get('/inventory/scan/:code', requireAuth, asyncRoute(async (req, res) => {
+  const code = clean(decodeURIComponent(req.params.code || '')).toUpperCase()
+  if (!code) return res.status(400).json({ message: 'Scan a barcode, SKU, IMEI, or serial number' })
+  const exactCode = new RegExp(`^${escapeRegex(code)}$`, 'i')
+
+  const item = await InventoryItem.findOne({
+    $or: [
+      { barcode: exactCode },
+      { sku: exactCode },
+      { imei1: exactCode },
+      { imei2: exactCode },
+      { serialNumber: exactCode },
+    ],
+  })
+  if (!item) return res.status(404).json({ message: `No product found for ${code}` })
+  res.json({ item })
+}))
+
 router.post('/inventory', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
-  const item = await InventoryItem.create({ ...req.body, sku: clean(req.body.sku || makeCode('STK')), createdBy: req.user._id })
+  const item = await InventoryItem.create({
+    ...req.body,
+    sku: clean(req.body.sku || makeCode('STK')),
+    barcode: clean(req.body.barcode || makeCode('PF')),
+    createdBy: req.user._id,
+  })
   await writeActivity(req, { action: 'CREATE', entity: 'INVENTORY', entityId: item._id, details: { sku: item.sku } })
   res.status(201).json({ item })
 }))
@@ -233,8 +297,17 @@ router.post('/inventory', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), 
 router.patch('/inventory/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
   const forbidden = ['_id', 'createdAt', 'updatedAt', 'createdBy']
   const update = Object.fromEntries(Object.entries(req.body).filter(([key]) => !forbidden.includes(key)))
+  const current = await InventoryItem.findById(req.params.id).select('sellPrice minimumSellPrice')
+  if (!current) return res.status(404).json({ message: 'Inventory item not found' })
+  const nextSellPrice = update.sellPrice === undefined ? current.sellPrice : Number(update.sellPrice)
+  const nextMinimumPrice = update.minimumSellPrice === undefined ? current.minimumSellPrice : Number(update.minimumSellPrice)
+  if (!Number.isFinite(nextSellPrice) || nextSellPrice < 0 || !Number.isFinite(nextMinimumPrice) || nextMinimumPrice < 0) {
+    return res.status(400).json({ message: 'Selling prices must be valid positive amounts or zero' })
+  }
+  if (nextSellPrice > 0 && nextMinimumPrice > nextSellPrice) {
+    return res.status(400).json({ message: 'Discount or minimum price cannot exceed the regular selling price' })
+  }
   const item = await InventoryItem.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true })
-  if (!item) return res.status(404).json({ message: 'Inventory item not found' })
   await writeActivity(req, { action: 'UPDATE', entity: 'INVENTORY', entityId: item._id, details: update })
   res.json({ item })
 }))
@@ -386,13 +459,182 @@ router.post('/pawns/:id/forfeit', requireAuth, allowRoles('OWNER', 'MANAGER'), a
   res.json({ pawn })
 }))
 
+async function createMultiDevicePurchase(req, res) {
+  const {
+    sellerType,
+    supplier: supplierId,
+    seller = {},
+    purchaseDate,
+    paymentMethod = 'CASH',
+    currency = 'USD',
+    exchangeRate,
+    amountPaid = 0,
+    notes,
+    devices,
+  } = req.body
+
+  if (!['EXISTING_SUPPLIER', 'WALK_IN', 'NEW_SUPPLIER'].includes(sellerType)) {
+    throw requestError(400, 'Choose an existing supplier, walk-in customer, or new supplier')
+  }
+  if (!Array.isArray(devices) || devices.length === 0) throw requestError(400, 'Add at least one device')
+  if (devices.length > 50) throw requestError(400, 'A purchase can contain at most 50 devices')
+  if (!['USD', 'KHR'].includes(currency)) throw requestError(400, 'Currency must be USD or KHR')
+  if (!['CASH', 'BANK', 'CARD', 'OTHER'].includes(paymentMethod)) throw requestError(400, 'Invalid payment method')
+
+  const purchasedAt = purchaseDate ? new Date(purchaseDate) : new Date()
+  if (Number.isNaN(purchasedAt.getTime())) throw requestError(400, 'Purchase date is invalid')
+  const usdKhrRate = currency === 'KHR' ? Number(exchangeRate || fallbackExchangeRate()) : 1
+  if (!Number.isFinite(usdKhrRate) || usdKhrRate <= 0) throw requestError(400, 'A valid exchange rate is required')
+
+  const normalizedDevices = devices.map((device, index) => {
+    const imei = clean(device.imei)?.replace(/[\s-]/g, '')
+    const brand = clean(device.brand)
+    const model = clean(device.model)
+    const storage = clean(device.storage)
+    const color = clean(device.color)
+    const purchasePrice = Number(device.purchasePrice)
+    if (!/^\d{15}$/.test(imei || '')) throw requestError(400, `Device ${index + 1}: IMEI must contain exactly 15 digits`)
+    if (!brand || !model || !storage || !color) throw requestError(400, `Device ${index + 1}: brand, model, storage, and color are required`)
+    if (!Number.isFinite(purchasePrice) || purchasePrice < 0) throw requestError(400, `Device ${index + 1}: purchase price is invalid`)
+    const batteryHealth = device.batteryHealth === '' || device.batteryHealth === undefined ? undefined : Number(device.batteryHealth)
+    if (batteryHealth !== undefined && (!Number.isFinite(batteryHealth) || batteryHealth < 0 || batteryHealth > 100)) {
+      throw requestError(400, `Device ${index + 1}: battery health must be between 0 and 100`)
+    }
+    const accessories = Array.isArray(device.accessoriesIncluded)
+      ? device.accessoriesIncluded.filter((item) => ['BOX', 'CHARGER', 'CABLE', 'CASE', 'EARPHONES'].includes(item))
+      : []
+    return {
+      imei, brand, model, storage, color, purchasePrice, batteryHealth,
+      ram: clean(device.ram),
+      condition: ['NEW', 'LIKE_NEW', 'GOOD', 'FAIR', 'DAMAGED'].includes(device.condition) ? device.condition : 'GOOD',
+      carrierLock: ['UNLOCKED', 'LOCKED', 'UNKNOWN'].includes(device.carrierLock) ? device.carrierLock : 'UNKNOWN',
+      accessoriesIncluded: accessories,
+      notes: clean(device.notes),
+    }
+  })
+
+  const duplicateImei = normalizedDevices.find((device, index) => normalizedDevices.findIndex((item) => item.imei === device.imei) !== index)
+  if (duplicateImei) throw requestError(409, `IMEI ${duplicateImei.imei} appears more than once in this purchase`)
+  const existingImei = await InventoryItem.findOne({ imei1: { $in: normalizedDevices.map((device) => device.imei) } }).select('imei1')
+  if (existingImei) throw requestError(409, `IMEI ${existingImei.imei1} already exists in inventory`)
+
+  const transactionTotal = normalizedDevices.reduce((sum, device) => sum + device.purchasePrice, 0)
+  const transactionPaid = Number(amountPaid || 0)
+  if (!Number.isFinite(transactionPaid) || transactionPaid < 0) throw requestError(400, 'Amount paid is invalid')
+  if (transactionPaid > transactionTotal + 0.000001) throw requestError(400, 'Amount paid cannot exceed the total amount')
+  const transactionBalance = Math.max(0, transactionTotal - transactionPaid)
+  const toUsd = (amount) => currency === 'KHR' ? amount / usdKhrRate : amount
+
+  const session = await mongoose.startSession()
+  let trade
+  try {
+    await session.withTransaction(async () => {
+      let supplier
+      let sellerSnapshot
+      if (sellerType === 'EXISTING_SUPPLIER') {
+        if (!supplierId) throw requestError(400, 'Select an existing supplier')
+        supplier = await Supplier.findById(supplierId).session(session)
+        if (!supplier || !supplier.active) throw requestError(404, 'Supplier was not found')
+        sellerSnapshot = { name: supplier.name, phone: supplier.phone, nationalIdNumber: supplier.nationalIdNumber }
+      } else {
+        const sellerName = clean(seller.name)
+        if (!sellerName) throw requestError(400, 'Seller name is required')
+        sellerSnapshot = { name: sellerName, phone: clean(seller.phone), nationalIdNumber: clean(seller.nationalIdNumber) }
+        if (sellerType === 'NEW_SUPPLIER') {
+          ;[supplier] = await Supplier.create([{
+            ...sellerSnapshot,
+            createdBy: req.user._id,
+          }], { session })
+        }
+      }
+
+      const source = sellerType === 'WALK_IN' ? 'CUSTOMER' : 'SUPPLIER'
+      const inventoryDocuments = normalizedDevices.map((device) => ({
+        sku: makeCode('BUY'),
+        barcode: makeCode('PF'),
+        category: 'PHONE',
+        name: `${device.brand} ${device.model} ${device.storage}`,
+        brand: device.brand,
+        model: device.model,
+        imei1: device.imei,
+        storage: device.storage,
+        ram: device.ram,
+        color: device.color,
+        condition: device.condition,
+        batteryHealth: device.batteryHealth,
+        carrierLock: device.carrierLock,
+        accessoriesIncluded: device.accessoriesIncluded,
+        quantity: 1,
+        reorderLevel: 0,
+        buyPrice: toUsd(device.purchasePrice),
+        sellPrice: 0,
+        minimumSellPrice: 0,
+        status: 'IN_STOCK',
+        source,
+        notes: device.notes,
+        createdBy: req.user._id,
+      }))
+      const inventoryItems = await InventoryItem.create(inventoryDocuments, { session })
+      const tradeLines = inventoryItems.map((item, index) => ({
+        inventoryItem: item._id,
+        name: item.name,
+        quantity: 1,
+        unitPrice: toUsd(normalizedDevices[index].purchasePrice),
+        costPrice: toUsd(normalizedDevices[index].purchasePrice),
+        originalUnitPrice: normalizedDevices[index].purchasePrice,
+        currency,
+      }))
+      ;[trade] = await Trade.create([{
+        tradeNo: makeCode('BY'),
+        type: 'BUY',
+        supplier: supplier?._id,
+        sellerType,
+        sellerSnapshot,
+        purchaseDate: purchasedAt,
+        currency,
+        exchangeRate: usdKhrRate,
+        transactionSubtotal: transactionTotal,
+        transactionTotal,
+        transactionAmountPaid: transactionPaid,
+        transactionBalance,
+        paymentStatus: paymentState(transactionTotal, transactionPaid),
+        purchaseWorkflowVersion: 2,
+        items: tradeLines,
+        subtotal: toUsd(transactionTotal),
+        discount: 0,
+        total: toUsd(transactionTotal),
+        amountPaid: toUsd(transactionPaid),
+        balance: toUsd(transactionBalance),
+        paymentMethod,
+        notes: clean(notes),
+        createdBy: req.user._id,
+      }], { session })
+    })
+  } finally {
+    await session.endSession()
+  }
+
+  await writeActivity(req, {
+    action: 'CREATE', entity: 'TRADE', entityId: trade._id,
+    details: { tradeNo: trade.tradeNo, type: 'BUY', deviceCount: devices.length, currency, total: transactionTotal },
+  })
+  await trade.populate('supplier', 'name phone nationalIdNumber')
+  await trade.populate('items.inventoryItem', 'sku barcode name category brand model imei1 storage ram color condition batteryHealth carrierLock accessoriesIncluded quantity buyPrice sellPrice status')
+  res.status(201).json({ trade })
+}
+
 router.get('/trades', requireAuth, asyncRoute(async (req, res) => {
   const filter = req.query.type ? { type: req.query.type } : {}
-  const trades = await Trade.find(filter).populate('customer', 'name phone').sort({ createdAt: -1 }).limit(300)
+  const trades = await Trade.find(filter)
+    .populate('customer', 'name phone')
+    .populate('supplier', 'name phone nationalIdNumber')
+    .sort({ createdAt: -1 })
+    .limit(300)
   res.json({ trades })
 }))
 
 router.post('/trades', requireAuth, asyncRoute(async (req, res) => {
+  if (req.body.type === 'BUY' && Array.isArray(req.body.devices)) return createMultiDevicePurchase(req, res)
   const { type, customer, items = [], discount = 0, amountPaid, paymentMethod = 'CASH', notes } = req.body
   if (!['BUY', 'SELL'].includes(type) || items.length === 0) return res.status(400).json({ message: 'Trade type and items are required' })
 
@@ -419,6 +661,7 @@ router.post('/trades', requireAuth, asyncRoute(async (req, res) => {
       } else {
         item = await InventoryItem.create({
           sku: clean(line.sku || makeCode('BUY')), category: line.category || 'PHONE',
+          barcode: clean(line.barcode || makeCode('PF')),
           name: line.name, brand: line.brand, model: line.model, imei1: line.imei1 || undefined,
           condition: line.condition || 'GOOD', quantity, buyPrice: Number(line.unitPrice || 0),
           sellPrice: Number(line.sellPrice || 0), status: 'IN_STOCK', source: 'CUSTOMER', createdBy: req.user._id,
@@ -437,7 +680,9 @@ router.post('/trades', requireAuth, asyncRoute(async (req, res) => {
     amountPaid: paid, balance: Math.max(0, total - paid), paymentMethod, notes, createdBy: req.user._id,
   })
   await writeActivity(req, { action: 'CREATE', entity: 'TRADE', entityId: trade._id, details: { tradeNo: trade.tradeNo, type, total } })
-  res.status(201).json({ trade: await trade.populate('customer', 'name phone') })
+  await trade.populate('customer', 'name phone')
+  await trade.populate('items.inventoryItem', 'sku barcode name category brand model imei1 condition quantity buyPrice sellPrice status')
+  res.status(201).json({ trade })
 }))
 
 router.get('/activity-logs', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (_req, res) => {
