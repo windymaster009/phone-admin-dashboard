@@ -7,6 +7,7 @@ import {
   Banknote,
   BarChart3,
   Bell,
+  Building2,
   Boxes,
   Calculator,
   ChevronDown,
@@ -41,6 +42,7 @@ import {
 } from 'lucide-react'
 import { api, type SessionUser } from './api'
 import { printInventoryLabel } from './barcode'
+import SupplierWorkspace from './SupplierWorkspace'
 
 type NavKey =
   | 'dashboard'
@@ -48,6 +50,7 @@ type NavKey =
   | 'trade'
   | 'inventory'
   | 'customers'
+  | 'suppliers'
   | 'depreciation'
   | 'reports'
   | 'settings'
@@ -65,6 +68,7 @@ const viewPaths: Record<NavKey, string> = {
   trade: '/buy-sell',
   inventory: '/stock',
   customers: '/customers',
+  suppliers: '/suppliers',
   depreciation: '/depreciation',
   reports: '/reports',
   settings: '/settings',
@@ -207,6 +211,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
       { key: 'trade', label: 'Buy & Sell', icon: ShoppingCart },
       { key: 'inventory', label: 'Stock Information', icon: Boxes },
       { key: 'customers', label: 'Customers', icon: Users },
+      { key: 'suppliers', label: 'Suppliers', icon: Building2 },
     ],
   },
   {
@@ -1569,6 +1574,7 @@ function App({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
       case 'trade': return <TradeView />
       case 'inventory': return <InventoryView />
       case 'customers': return <CustomersView />
+      case 'suppliers': return <SupplierWorkspace />
       case 'depreciation': return <DepreciationView goTo={changePage} />
       case 'reports': return <ReportsView />
       case 'settings': return <SettingsView user={user} onLogout={onLogout} />

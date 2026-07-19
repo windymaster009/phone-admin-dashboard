@@ -166,7 +166,7 @@ const tradeSchema = new Schema(
     type: { type: String, enum: ['BUY', 'SELL'], required: true, index: true },
     customer: { type: Schema.Types.ObjectId, ref: 'Customer' },
     supplier: { type: Schema.Types.ObjectId, ref: 'Supplier' },
-    sellerType: { type: String, enum: ['EXISTING_SUPPLIER', 'WALK_IN', 'NEW_SUPPLIER', 'LEGACY'] },
+    sellerType: { type: String, enum: ['EXISTING_CUSTOMER', 'EXISTING_SUPPLIER', 'NEW_CUSTOMER', 'NEW_SUPPLIER', 'WALK_IN', 'LEGACY'] },
     sellerSnapshot: {
       name: String,
       phone: String,

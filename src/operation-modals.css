@@ -278,7 +278,7 @@ body.operation-modal-open {
 .purchase-section-heading h3 { margin: 0 0 4px; font: 800 16px Manrope, sans-serif; }
 .purchase-section-heading p { margin: 0; color: var(--muted, #8f9bb4); font-size: 9px; line-height: 1.5; }
 .purchase-section-heading > b { padding: 6px 9px; color: #a78bfa; border-radius: 999px; background: rgba(139,92,246,.1); font-size: 9px; }
-.purchase-seller-tabs { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; margin-bottom: 16px; padding: 5px; border-radius: 12px; background: var(--surface-solid, #151e34); }
+.purchase-seller-tabs { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 7px; margin-bottom: 16px; padding: 5px; border-radius: 12px; background: var(--surface-solid, #151e34); }
 .purchase-seller-tabs button { min-height: 38px; border: 0; border-radius: 9px; color: var(--muted, #8f9bb4); background: transparent; font-size: 10px; font-weight: 700; }
 .purchase-seller-tabs button:hover { color: var(--text, #f4f6fb); background: var(--surface-hover, rgba(255,255,255,.05)); }
 .purchase-seller-tabs button.active { color: #fff; background: linear-gradient(105deg, #7c3aed, #8b5cf6); box-shadow: 0 8px 20px rgba(124,58,237,.2); }

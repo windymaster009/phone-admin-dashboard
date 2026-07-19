@@ -52,7 +52,7 @@ type Supplier = {
   nationalIdNumber?: string
 }
 
-type SellerType = 'EXISTING_SUPPLIER' | 'WALK_IN' | 'NEW_SUPPLIER'
+type SellerType = 'EXISTING_CUSTOMER' | 'EXISTING_SUPPLIER' | 'WALK_IN' | 'NEW_CUSTOMER' | 'NEW_SUPPLIER'
 type PurchaseCurrency = 'USD' | 'KHR'
 
 type PurchaseDevice = {
@@ -272,6 +272,7 @@ export default function OperationModalBridge() {
   const [saleUnitPrice, setSaleUnitPrice] = useState('')
   const [sellerType, setSellerType] = useState<SellerType>('WALK_IN')
   const [supplierId, setSupplierId] = useState('')
+  const [sellerCustomerId, setSellerCustomerId] = useState('')
   const [sellerName, setSellerName] = useState('')
   const [sellerPhone, setSellerPhone] = useState('')
   const [sellerNationalId, setSellerNationalId] = useState('')
@@ -325,7 +326,7 @@ export default function OperationModalBridge() {
 
   useEffect(() => {
     if (!kind) return
-    if (kind === 'sale' || kind === 'pawn') {
+    if (kind === 'sale' || kind === 'pawn' || kind === 'purchase') {
       api<{ customers: Customer[] }>('/customers')
         .then((result) => setCustomers(result.customers))
         .catch((reason: Error) => setError(reason.message))
@@ -360,6 +361,7 @@ export default function OperationModalBridge() {
     setSaleUnitPrice('')
     setSellerType('WALK_IN')
     setSupplierId('')
+    setSellerCustomerId('')
     setSellerName('')
     setSellerPhone('')
     setSellerNationalId('')
@@ -472,7 +474,11 @@ export default function OperationModalBridge() {
     return errors
   }
 
-  const purchaseSellerValid = sellerType === 'EXISTING_SUPPLIER' ? Boolean(supplierId) : Boolean(sellerName.trim())
+  const purchaseSellerValid = sellerType === 'EXISTING_SUPPLIER'
+    ? Boolean(supplierId)
+    : sellerType === 'EXISTING_CUSTOMER'
+      ? Boolean(sellerCustomerId)
+      : Boolean(sellerName.trim()) && (sellerType !== 'NEW_CUSTOMER' || Boolean(sellerPhone.trim()))
   const purchaseItemsValid = purchaseDevices.length > 0 && purchaseDevices.every((item) => Object.keys(purchaseItemErrors(item)).length === 0)
 
   function openPurchaseItem(id: string) {
@@ -512,7 +518,8 @@ export default function OperationModalBridge() {
       type: 'BUY',
       sellerType,
       supplier: sellerType === 'EXISTING_SUPPLIER' ? supplierId : undefined,
-      seller: sellerType === 'EXISTING_SUPPLIER' ? undefined : { name: sellerName, phone: sellerPhone, nationalIdNumber: sellerNationalId },
+      customer: sellerType === 'EXISTING_CUSTOMER' ? sellerCustomerId : undefined,
+      seller: sellerType.startsWith('EXISTING_') ? undefined : { name: sellerName, phone: sellerPhone, nationalIdNumber: sellerNationalId },
       purchaseDate,
       paymentMethod: purchasePaymentMethod,
       currency: purchaseCurrency,
@@ -636,14 +643,16 @@ export default function OperationModalBridge() {
         <section className="purchase-section-card">
           <div className="purchase-section-heading"><span>1</span><div><h3>Purchase</h3><p>Seller and payment details for this transaction.</p></div></div>
           <div className="purchase-seller-tabs">
+            <button type="button" className={sellerType === 'EXISTING_CUSTOMER' ? 'active' : ''} onClick={() => setSellerType('EXISTING_CUSTOMER')}>Existing customer</button>
             <button type="button" className={sellerType === 'EXISTING_SUPPLIER' ? 'active' : ''} onClick={() => setSellerType('EXISTING_SUPPLIER')}>Existing supplier</button>
             <button type="button" className={sellerType === 'WALK_IN' ? 'active' : ''} onClick={() => setSellerType('WALK_IN')}>Walk-in customer</button>
+            <button type="button" className={sellerType === 'NEW_CUSTOMER' ? 'active' : ''} onClick={() => setSellerType('NEW_CUSTOMER')}>New customer</button>
             <button type="button" className={sellerType === 'NEW_SUPPLIER' ? 'active' : ''} onClick={() => setSellerType('NEW_SUPPLIER')}>New supplier</button>
           </div>
           <div className="operation-form-grid purchase-fields-grid">
-            {sellerType === 'EXISTING_SUPPLIER' ? <label className={`operation-wide ${purchaseAttempted && !supplierId ? 'field-invalid' : ''}`}>Supplier<select required value={supplierId} onChange={(event) => setSupplierId(event.target.value)}><option value="" disabled>Select supplier</option>{suppliers.map((supplier) => <option key={supplier._id} value={supplier._id}>{supplier.name}{supplier.phone ? ` — ${supplier.phone}` : ''}</option>)}</select>{purchaseAttempted && !supplierId && <small>Select a supplier</small>}</label> : <>
+            {sellerType === 'EXISTING_SUPPLIER' ? <label className={`operation-wide ${purchaseAttempted && !supplierId ? 'field-invalid' : ''}`}>Supplier<select required value={supplierId} onChange={(event) => setSupplierId(event.target.value)}><option value="" disabled>Select supplier</option>{suppliers.map((supplier) => <option key={supplier._id} value={supplier._id}>{supplier.name}{supplier.phone ? ` — ${supplier.phone}` : ''}</option>)}</select>{purchaseAttempted && !supplierId && <small>Select a supplier</small>}</label> : sellerType === 'EXISTING_CUSTOMER' ? <label className={`operation-wide ${purchaseAttempted && !sellerCustomerId ? 'field-invalid' : ''}`}>Customer<select required value={sellerCustomerId} onChange={(event) => setSellerCustomerId(event.target.value)}><option value="" disabled>Select customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name} — {customer.phone}</option>)}</select>{purchaseAttempted && !sellerCustomerId && <small>Select a customer</small>}</label> : <>
               <label className={purchaseAttempted && !sellerName.trim() ? 'field-invalid' : ''}>Seller name<input required value={sellerName} onChange={(event) => setSellerName(event.target.value)} placeholder={sellerType === 'NEW_SUPPLIER' ? 'Supplier or business name' : 'Customer name'} />{purchaseAttempted && !sellerName.trim() && <small>Seller name is required</small>}</label>
-              <label>Phone number <small className="optional-marker">Optional</small><input value={sellerPhone} onChange={(event) => setSellerPhone(event.target.value)} placeholder="012 345 678" /></label>
+              <label className={purchaseAttempted && sellerType === 'NEW_CUSTOMER' && !sellerPhone.trim() ? 'field-invalid' : ''}>Phone number {sellerType !== 'NEW_CUSTOMER' && <small className="optional-marker">Optional</small>}<input required={sellerType === 'NEW_CUSTOMER'} value={sellerPhone} onChange={(event) => setSellerPhone(event.target.value)} placeholder="012 345 678" />{purchaseAttempted && sellerType === 'NEW_CUSTOMER' && !sellerPhone.trim() && <small>Phone number is required for a new customer</small>}</label>
               <label>National ID <small className="optional-marker">Optional</small><input value={sellerNationalId} onChange={(event) => setSellerNationalId(event.target.value)} /></label>
             </>}
             <label>Purchase date<input type="date" required value={purchaseDate} onChange={(event) => setPurchaseDate(event.target.value)} /></label>

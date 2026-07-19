@@ -228,7 +228,7 @@ router.patch('/customers/:id', requireAuth, asyncRoute(async (req, res) => {
 
 router.get('/suppliers', requireAuth, asyncRoute(async (req, res) => {
   const q = clean(req.query.q || '')
-  const filter = { active: { $ne: false } }
+  const filter = req.query.includeInactive === 'true' ? {} : { active: { $ne: false } }
   if (q) filter.$or = [
     { name: { $regex: escapeRegex(q), $options: 'i' } },
     { phone: { $regex: escapeRegex(q), $options: 'i' } },
@@ -250,6 +250,22 @@ router.post('/suppliers', requireAuth, asyncRoute(async (req, res) => {
   })
   await writeActivity(req, { action: 'CREATE', entity: 'SUPPLIER', entityId: supplier._id })
   res.status(201).json({ supplier })
+}))
+
+router.patch('/suppliers/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
+  const allowed = ['name', 'phone', 'nationalIdNumber', 'notes', 'active']
+  const update = Object.fromEntries(Object.entries(req.body).filter(([key]) => allowed.includes(key)))
+  if (update.name !== undefined) {
+    update.name = clean(update.name)
+    if (!update.name) return res.status(400).json({ message: 'Supplier name is required' })
+  }
+  for (const field of ['phone', 'nationalIdNumber', 'notes']) {
+    if (update[field] !== undefined) update[field] = clean(update[field])
+  }
+  const supplier = await Supplier.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true })
+  if (!supplier) return res.status(404).json({ message: 'Supplier not found' })
+  await writeActivity(req, { action: 'UPDATE', entity: 'SUPPLIER', entityId: supplier._id, details: update })
+  res.json({ supplier })
 }))
 
 router.get('/inventory', requireAuth, asyncRoute(async (req, res) => {
@@ -466,6 +482,7 @@ async function createMultiDevicePurchase(req, res) {
   const {
     sellerType,
     supplier: supplierId,
+    customer: customerId,
     seller = {},
     purchaseDate,
     paymentMethod = 'CASH',
@@ -479,8 +496,8 @@ async function createMultiDevicePurchase(req, res) {
 
   const items = Array.isArray(purchaseItems) ? purchaseItems : devices
 
-  if (!['EXISTING_SUPPLIER', 'WALK_IN', 'NEW_SUPPLIER'].includes(sellerType)) {
-    throw requestError(400, 'Choose an existing supplier, walk-in customer, or new supplier')
+  if (!['EXISTING_CUSTOMER', 'EXISTING_SUPPLIER', 'WALK_IN', 'NEW_CUSTOMER', 'NEW_SUPPLIER'].includes(sellerType)) {
+    throw requestError(400, 'Choose an existing, walk-in, or new customer or supplier')
   }
   if (!Array.isArray(items) || items.length === 0) throw requestError(400, 'Add at least one purchase item')
   if (items.length > 100) throw requestError(400, 'A purchase can contain at most 100 items')
@@ -570,12 +587,18 @@ async function createMultiDevicePurchase(req, res) {
   try {
     await session.withTransaction(async () => {
       let supplier
+      let customer
       let sellerSnapshot
       if (sellerType === 'EXISTING_SUPPLIER') {
         if (!supplierId) throw requestError(400, 'Select an existing supplier')
         supplier = await Supplier.findById(supplierId).session(session)
         if (!supplier || !supplier.active) throw requestError(404, 'Supplier was not found')
         sellerSnapshot = { name: supplier.name, phone: supplier.phone, nationalIdNumber: supplier.nationalIdNumber }
+      } else if (sellerType === 'EXISTING_CUSTOMER') {
+        if (!customerId) throw requestError(400, 'Select an existing customer')
+        customer = await Customer.findById(customerId).session(session)
+        if (!customer) throw requestError(404, 'Customer was not found')
+        sellerSnapshot = { name: customer.name, phone: customer.phone, nationalIdNumber: customer.nationalIdNumber }
       } else {
         const sellerName = clean(seller.name)
         if (!sellerName) throw requestError(400, 'Seller name is required')
@@ -585,10 +608,19 @@ async function createMultiDevicePurchase(req, res) {
             ...sellerSnapshot,
             createdBy: req.user._id,
           }], { session })
+        } else if (sellerType === 'NEW_CUSTOMER') {
+          if (!sellerSnapshot.phone) throw requestError(400, 'A phone number is required for a new customer')
+          ;[customer] = await Customer.create([{
+            name: sellerSnapshot.name,
+            phone: sellerSnapshot.phone,
+            nationalIdNumber: sellerSnapshot.nationalIdNumber,
+            notes: clean(notes),
+            createdBy: req.user._id,
+          }], { session })
         }
       }
 
-      const source = sellerType === 'WALK_IN' ? 'CUSTOMER' : 'SUPPLIER'
+      const source = sellerType.endsWith('SUPPLIER') ? 'SUPPLIER' : 'CUSTOMER'
       const inventoryDocuments = normalizedItems.map((item) => ({
         sku: item.sku || makeCode('BUY'),
         barcode: makeCode('PF'),
@@ -629,6 +661,7 @@ async function createMultiDevicePurchase(req, res) {
       ;[trade] = await Trade.create([{
         tradeNo: makeCode('BY'),
         type: 'BUY',
+        customer: customer?._id,
         supplier: supplier?._id,
         sellerType,
         sellerSnapshot,
@@ -661,6 +694,7 @@ async function createMultiDevicePurchase(req, res) {
     details: { tradeNo: trade.tradeNo, type: 'BUY', itemCount: items.length, unitCount: normalizedItems.reduce((sum, item) => sum + item.quantity, 0), currency, total: transactionTotal },
   })
   await trade.populate('supplier', 'name phone nationalIdNumber')
+  await trade.populate('customer', 'name phone nationalIdNumber')
   await trade.populate('items.inventoryItem', 'sku barcode name category brand model imei1 storage ram color condition batteryHealth carrierLock accessoriesIncluded compatibleModels oemQuality quantity buyPrice sellPrice status')
   res.status(201).json({ trade })
 }
