@@ -93,7 +93,7 @@ type InventoryItem = {
   _id: string
   sku: string
   barcode?: string
-  category: 'PHONE' | 'ACCESSORY' | 'SPARE_PART'
+  category: 'PHONE' | 'TABLET' | 'ACCESSORY' | 'SPARE_PART' | 'OTHER'
   name: string
   brand?: string
   model?: string
@@ -877,12 +877,12 @@ function TradeView() {
       <SectionHeader
         eyebrow="Operations"
         title="Buy & sell"
-        description={error || 'Purchase phones from customers and process shop sales with complete transaction history.'}
+        description={error || 'Purchase inventory from sellers and process shop sales with complete transaction history.'}
       />
       <section className="trade-action-grid">
         <article className="surface-card trade-action buy-action">
           <span className="trade-icon"><Banknote size={28} /></span>
-          <div><span className="eyebrow">Purchase from customer</span><h3>Buy a phone</h3><p>Capture seller ID, IMEI, condition, purchase cost, and expected selling price.</p></div>
+          <div><span className="eyebrow">Purchase inventory</span><h3>Buy products</h3><p>Record one transaction containing serialized phones or quantity-based shop stock.</p></div>
           <button className="primary-button" onClick={() => comingNext('New purchase')}><Plus size={17} /> New purchase</button>
         </article>
         <article className="surface-card trade-action sell-action">
@@ -991,8 +991,10 @@ function InventoryView() {
   }, [])
 
   const phoneCount = items.filter((item) => item.category === 'PHONE').reduce((sum, item) => sum + item.quantity, 0)
+  const tabletCount = items.filter((item) => item.category === 'TABLET').reduce((sum, item) => sum + item.quantity, 0)
   const accessoryCount = items.filter((item) => item.category === 'ACCESSORY').reduce((sum, item) => sum + item.quantity, 0)
   const sparePartCount = items.filter((item) => item.category === 'SPARE_PART').reduce((sum, item) => sum + item.quantity, 0)
+  const otherCount = items.filter((item) => item.category === 'OTHER').reduce((sum, item) => sum + item.quantity, 0)
   const filteredItems = items.filter((item) => {
     const term = search.trim().toLowerCase()
     const matchesSearch = !term || [item.sku, item.barcode, item.name, item.brand, item.model, item.imei1, item.serialNumber]
@@ -1033,23 +1035,24 @@ function InventoryView() {
       <SectionHeader
         eyebrow="Stock control"
         title="Stock information"
-        description={error || 'Manage individually tracked phones, quantity-based accessories, and compatible spare parts.'}
+        description={error || 'Manage serialized phones and quantity-based tablets, accessories, spare parts, and other stock.'}
         action={<div className="section-header-actions">
           <button className="secondary-button" onClick={() => window.dispatchEvent(new Event('phoneflow:open-scanner'))}><ScanLine size={17} /> Scan product</button>
           <button className="primary-button" onClick={() => comingNext('Add stock')}><Plus size={17} /> Add stock</button>
         </div>}
       />
       <section className="stock-category-grid">
-        <article className="surface-card stock-category"><span className="stock-icon violet"><Smartphone /></span><p>Phones<strong>184</strong><small>112 new · 72 second-hand</small></p><ArrowUpRight /></article>
         <article className="surface-card stock-category"><span className="stock-icon violet"><Smartphone /></span><p>Phones<strong>{phoneCount}</strong><small>live stock units</small></p><ArrowUpRight /></article>
+        <article className="surface-card stock-category"><span className="stock-icon violet"><Smartphone /></span><p>Tablets<strong>{tabletCount}</strong><small>live stock units</small></p><ArrowUpRight /></article>
         <article className="surface-card stock-category"><span className="stock-icon blue"><Package /></span><p>Accessories<strong>{accessoryCount}</strong><small>live stock units</small></p><ArrowUpRight /></article>
         <article className="surface-card stock-category"><span className="stock-icon orange"><Wrench /></span><p>Spare parts<strong>{sparePartCount}</strong><small>live stock units</small></p><ArrowUpRight /></article>
+        <article className="surface-card stock-category"><span className="stock-icon blue"><Package /></span><p>Other<strong>{otherCount}</strong><small>live stock units</small></p><ArrowUpRight /></article>
       </section>
       <article className="surface-card table-card page-table">
         <div className="filter-row">
           <div className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search SKU, product, IMEI or serial number" /></div>
           <select className="ghost-button filter-select" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} aria-label="Filter inventory category">
-            <option value="ALL">All categories</option><option value="PHONE">Phones</option><option value="ACCESSORY">Accessories</option><option value="SPARE_PART">Spare parts</option>
+            <option value="ALL">All categories</option><option value="PHONE">Phones</option><option value="TABLET">Tablets</option><option value="ACCESSORY">Accessories</option><option value="SPARE_PART">Spare parts</option><option value="OTHER">Other</option>
           </select>
           <select className="ghost-button filter-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter stock status">
             <option value="ALL">All stock statuses</option><option value="IN_STOCK">In stock</option><option value="LOW_STOCK">Low stock</option><option value="OUT_OF_STOCK">Out of stock</option>
@@ -1122,7 +1125,7 @@ function InventoryView() {
               <article>
                 <span className="eyebrow">Device</span>
                 <p><strong>{[selectedItem.brand, selectedItem.model].filter(Boolean).join(' ') || selectedItem.name}</strong></p>
-                <p>{[selectedItem.storage, selectedItem.color, selectedItem.condition && titleStatus(selectedItem.condition)].filter(Boolean).join(' ') || 'No extra device details'}</p>
+                <p>{[selectedItem.storage, selectedItem.color, selectedItem.condition && titleStatus(selectedItem.condition)].filter(Boolean).join(' ') || 'No extra product details'}</p>
                 <p>{selectedItem.batteryHealth !== undefined ? `Battery ${selectedItem.batteryHealth}%` : 'Battery not recorded'}</p>
               </article>
               <article>

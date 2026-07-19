@@ -52,7 +52,7 @@ const inventoryItemSchema = new Schema(
     barcode: { type: String, unique: true, sparse: true, uppercase: true, trim: true, index: true },
     category: {
       type: String,
-      enum: ['PHONE', 'ACCESSORY', 'SPARE_PART'],
+      enum: ['PHONE', 'TABLET', 'ACCESSORY', 'SPARE_PART', 'OTHER'],
       required: true,
       index: true,
     },
@@ -74,6 +74,7 @@ const inventoryItemSchema = new Schema(
     carrierLock: { type: String, enum: ['UNLOCKED', 'LOCKED', 'UNKNOWN'], default: 'UNKNOWN' },
     accessoriesIncluded: [{ type: String, enum: ['BOX', 'CHARGER', 'CABLE', 'CASE', 'EARPHONES'] }],
     compatibleModels: [String],
+    oemQuality: { type: String, trim: true },
     quantity: { type: Number, min: 0, default: 1 },
     reorderLevel: { type: Number, min: 0, default: 2 },
     buyPrice: { type: Number, min: 0, default: 0 },

@@ -94,9 +94,12 @@ router.post('/auth/login', asyncRoute(async (req, res) => {
     return res.status(401).json({ message: 'Invalid email or password' })
   }
 
-  user.lastLoginAt = new Date()
-  await user.save()
-  res.json({ token: signToken(user), user: publicUser(user) })
+  const token = signToken(user)
+  res.json({ token, user: publicUser(user) })
+
+  // Login history is useful but must never turn valid credentials into a 500.
+  void User.updateOne({ _id: user._id }, { $set: { lastLoginAt: new Date() } })
+    .catch((error) => console.error(`[request ${req.id || 'unknown'}] Last-login update failed:`, error.message))
 }))
 
 router.get('/auth/me', requireAuth, (req, res) => res.json({ user: publicUser(req.user) }))
@@ -470,14 +473,17 @@ async function createMultiDevicePurchase(req, res) {
     exchangeRate,
     amountPaid = 0,
     notes,
+    items: purchaseItems,
     devices,
   } = req.body
+
+  const items = Array.isArray(purchaseItems) ? purchaseItems : devices
 
   if (!['EXISTING_SUPPLIER', 'WALK_IN', 'NEW_SUPPLIER'].includes(sellerType)) {
     throw requestError(400, 'Choose an existing supplier, walk-in customer, or new supplier')
   }
-  if (!Array.isArray(devices) || devices.length === 0) throw requestError(400, 'Add at least one device')
-  if (devices.length > 50) throw requestError(400, 'A purchase can contain at most 50 devices')
+  if (!Array.isArray(items) || items.length === 0) throw requestError(400, 'Add at least one purchase item')
+  if (items.length > 100) throw requestError(400, 'A purchase can contain at most 100 items')
   if (!['USD', 'KHR'].includes(currency)) throw requestError(400, 'Currency must be USD or KHR')
   if (!['CASH', 'BANK', 'CARD', 'OTHER'].includes(paymentMethod)) throw requestError(400, 'Invalid payment method')
 
@@ -486,39 +492,73 @@ async function createMultiDevicePurchase(req, res) {
   const usdKhrRate = currency === 'KHR' ? Number(exchangeRate || fallbackExchangeRate()) : 1
   if (!Number.isFinite(usdKhrRate) || usdKhrRate <= 0) throw requestError(400, 'A valid exchange rate is required')
 
-  const normalizedDevices = devices.map((device, index) => {
-    const imei = clean(device.imei)?.replace(/[\s-]/g, '')
-    const brand = clean(device.brand)
-    const model = clean(device.model)
-    const storage = clean(device.storage)
-    const color = clean(device.color)
-    const purchasePrice = Number(device.purchasePrice)
-    if (!/^\d{15}$/.test(imei || '')) throw requestError(400, `Device ${index + 1}: IMEI must contain exactly 15 digits`)
-    if (!brand || !model || !storage || !color) throw requestError(400, `Device ${index + 1}: brand, model, storage, and color are required`)
-    if (!Number.isFinite(purchasePrice) || purchasePrice < 0) throw requestError(400, `Device ${index + 1}: purchase price is invalid`)
-    const batteryHealth = device.batteryHealth === '' || device.batteryHealth === undefined ? undefined : Number(device.batteryHealth)
-    if (batteryHealth !== undefined && (!Number.isFinite(batteryHealth) || batteryHealth < 0 || batteryHealth > 100)) {
-      throw requestError(400, `Device ${index + 1}: battery health must be between 0 and 100`)
+  const categories = ['PHONE', 'TABLET', 'ACCESSORY', 'SPARE_PART', 'OTHER']
+  const normalizedItems = items.map((item, index) => {
+    const category = categories.includes(item.category) ? item.category : 'PHONE'
+    const serialized = category === 'PHONE'
+    const imei = clean(item.imei)?.replace(/[\s-]/g, '')
+    const brand = clean(item.brand)
+    const model = clean(item.model)
+    const storage = clean(item.storage)
+    const color = clean(item.color)
+    const sku = clean(item.sku)?.toUpperCase()
+    const quantity = serialized ? 1 : Number(item.quantity)
+    const purchasePrice = Number(item.purchasePrice)
+    const label = `Item ${index + 1}`
+    let name = clean(item.name)
+
+    if (serialized) {
+      if (!/^\d{15}$/.test(imei || '')) throw requestError(400, `${label}: IMEI must contain exactly 15 digits`)
+      if (!brand || !model || !storage || !color) throw requestError(400, `${label}: brand, model, storage, and color are required`)
+      name = `${brand} ${model} ${storage}`
+    } else if (category === 'TABLET') {
+      if (!brand || !model || !storage || !color) throw requestError(400, `${label}: brand, model, storage, and color are required`)
+      name = `${brand} ${model} ${storage}`
+    } else if (category === 'ACCESSORY') {
+      if (!name || !brand || !sku) throw requestError(400, `${label}: item name, brand, and SKU are required`)
+    } else if (category === 'SPARE_PART') {
+      if (!name) throw requestError(400, `${label}: part name is required`)
+      if (!clean(item.compatibleModels)) throw requestError(400, `${label}: compatible models are required`)
+      if (!clean(item.oemQuality)) throw requestError(400, `${label}: OEM quality is required`)
+    } else if (!name) {
+      throw requestError(400, `${label}: item name is required`)
     }
-    const accessories = Array.isArray(device.accessoriesIncluded)
-      ? device.accessoriesIncluded.filter((item) => ['BOX', 'CHARGER', 'CABLE', 'CASE', 'EARPHONES'].includes(item))
+    if (!serialized && (!Number.isInteger(quantity) || quantity < 1)) throw requestError(400, `${label}: quantity must be a whole number greater than zero`)
+    if (!Number.isFinite(purchasePrice) || purchasePrice < 0) throw requestError(400, `${label}: unit purchase price is invalid`)
+    const batteryHealth = item.batteryHealth === '' || item.batteryHealth === undefined ? undefined : Number(item.batteryHealth)
+    if (batteryHealth !== undefined && (!Number.isFinite(batteryHealth) || batteryHealth < 0 || batteryHealth > 100)) {
+      throw requestError(400, `${label}: battery health must be between 0 and 100`)
+    }
+    const accessories = Array.isArray(item.accessoriesIncluded)
+      ? item.accessoriesIncluded.filter((value) => ['BOX', 'CHARGER', 'CABLE', 'CASE', 'EARPHONES'].includes(value))
       : []
     return {
-      imei, brand, model, storage, color, purchasePrice, batteryHealth,
-      ram: clean(device.ram),
-      condition: ['NEW', 'LIKE_NEW', 'GOOD', 'FAIR', 'DAMAGED'].includes(device.condition) ? device.condition : 'GOOD',
-      carrierLock: ['UNLOCKED', 'LOCKED', 'UNKNOWN'].includes(device.carrierLock) ? device.carrierLock : 'UNKNOWN',
+      category, name, sku, quantity, imei, brand, model, storage, color, purchasePrice, batteryHealth,
+      ram: clean(item.ram),
+      condition: ['NEW', 'LIKE_NEW', 'GOOD', 'FAIR', 'DAMAGED'].includes(item.condition) ? item.condition : 'GOOD',
+      carrierLock: ['UNLOCKED', 'LOCKED', 'UNKNOWN'].includes(item.carrierLock) ? item.carrierLock : 'UNKNOWN',
+      compatibleModels: clean(item.compatibleModels)?.split(',').map((value) => value.trim()).filter(Boolean) || [],
+      oemQuality: clean(item.oemQuality),
       accessoriesIncluded: accessories,
-      notes: clean(device.notes),
+      notes: clean(item.notes),
     }
   })
 
-  const duplicateImei = normalizedDevices.find((device, index) => normalizedDevices.findIndex((item) => item.imei === device.imei) !== index)
+  const phones = normalizedItems.filter((item) => item.category === 'PHONE')
+  const duplicateImei = phones.find((phone, index) => phones.findIndex((item) => item.imei === phone.imei) !== index)
   if (duplicateImei) throw requestError(409, `IMEI ${duplicateImei.imei} appears more than once in this purchase`)
-  const existingImei = await InventoryItem.findOne({ imei1: { $in: normalizedDevices.map((device) => device.imei) } }).select('imei1')
-  if (existingImei) throw requestError(409, `IMEI ${existingImei.imei1} already exists in inventory`)
+  if (phones.length) {
+    const existingImei = await InventoryItem.findOne({ imei1: { $in: phones.map((phone) => phone.imei) } }).select('imei1')
+    if (existingImei) throw requestError(409, `IMEI ${existingImei.imei1} already exists in inventory`)
+  }
+  const suppliedSkus = normalizedItems.map((item) => item.sku).filter(Boolean)
+  if (new Set(suppliedSkus).size !== suppliedSkus.length) throw requestError(409, 'The same SKU appears more than once in this purchase')
+  if (suppliedSkus.length) {
+    const existingSku = await InventoryItem.findOne({ sku: { $in: suppliedSkus } }).select('sku')
+    if (existingSku) throw requestError(409, `SKU ${existingSku.sku} already exists in inventory`)
+  }
 
-  const transactionTotal = normalizedDevices.reduce((sum, device) => sum + device.purchasePrice, 0)
+  const transactionTotal = normalizedItems.reduce((sum, item) => sum + item.purchasePrice * item.quantity, 0)
   const transactionPaid = Number(amountPaid || 0)
   if (!Number.isFinite(transactionPaid) || transactionPaid < 0) throw requestError(400, 'Amount paid is invalid')
   if (transactionPaid > transactionTotal + 0.000001) throw requestError(400, 'Amount paid cannot exceed the total amount')
@@ -549,39 +589,41 @@ async function createMultiDevicePurchase(req, res) {
       }
 
       const source = sellerType === 'WALK_IN' ? 'CUSTOMER' : 'SUPPLIER'
-      const inventoryDocuments = normalizedDevices.map((device) => ({
-        sku: makeCode('BUY'),
+      const inventoryDocuments = normalizedItems.map((item) => ({
+        sku: item.sku || makeCode('BUY'),
         barcode: makeCode('PF'),
-        category: 'PHONE',
-        name: `${device.brand} ${device.model} ${device.storage}`,
-        brand: device.brand,
-        model: device.model,
-        imei1: device.imei,
-        storage: device.storage,
-        ram: device.ram,
-        color: device.color,
-        condition: device.condition,
-        batteryHealth: device.batteryHealth,
-        carrierLock: device.carrierLock,
-        accessoriesIncluded: device.accessoriesIncluded,
-        quantity: 1,
-        reorderLevel: 0,
-        buyPrice: toUsd(device.purchasePrice),
+        category: item.category,
+        name: item.name,
+        brand: item.brand,
+        model: item.model,
+        imei1: item.category === 'PHONE' ? item.imei : undefined,
+        storage: item.storage,
+        ram: item.ram,
+        color: item.color,
+        condition: item.condition,
+        batteryHealth: item.category === 'PHONE' ? item.batteryHealth : undefined,
+        carrierLock: item.category === 'PHONE' ? item.carrierLock : 'UNKNOWN',
+        accessoriesIncluded: item.category === 'PHONE' ? item.accessoriesIncluded : [],
+        compatibleModels: item.compatibleModels,
+        oemQuality: item.oemQuality,
+        quantity: item.quantity,
+        reorderLevel: item.category === 'PHONE' ? 0 : 2,
+        buyPrice: toUsd(item.purchasePrice),
         sellPrice: 0,
         minimumSellPrice: 0,
         status: 'IN_STOCK',
         source,
-        notes: device.notes,
+        notes: item.notes,
         createdBy: req.user._id,
       }))
       const inventoryItems = await InventoryItem.create(inventoryDocuments, { session })
       const tradeLines = inventoryItems.map((item, index) => ({
         inventoryItem: item._id,
         name: item.name,
-        quantity: 1,
-        unitPrice: toUsd(normalizedDevices[index].purchasePrice),
-        costPrice: toUsd(normalizedDevices[index].purchasePrice),
-        originalUnitPrice: normalizedDevices[index].purchasePrice,
+        quantity: normalizedItems[index].quantity,
+        unitPrice: toUsd(normalizedItems[index].purchasePrice),
+        costPrice: toUsd(normalizedItems[index].purchasePrice),
+        originalUnitPrice: normalizedItems[index].purchasePrice,
         currency,
       }))
       ;[trade] = await Trade.create([{
@@ -598,7 +640,7 @@ async function createMultiDevicePurchase(req, res) {
         transactionAmountPaid: transactionPaid,
         transactionBalance,
         paymentStatus: paymentState(transactionTotal, transactionPaid),
-        purchaseWorkflowVersion: 2,
+        purchaseWorkflowVersion: 3,
         items: tradeLines,
         subtotal: toUsd(transactionTotal),
         discount: 0,
@@ -616,10 +658,10 @@ async function createMultiDevicePurchase(req, res) {
 
   await writeActivity(req, {
     action: 'CREATE', entity: 'TRADE', entityId: trade._id,
-    details: { tradeNo: trade.tradeNo, type: 'BUY', deviceCount: devices.length, currency, total: transactionTotal },
+    details: { tradeNo: trade.tradeNo, type: 'BUY', itemCount: items.length, unitCount: normalizedItems.reduce((sum, item) => sum + item.quantity, 0), currency, total: transactionTotal },
   })
   await trade.populate('supplier', 'name phone nationalIdNumber')
-  await trade.populate('items.inventoryItem', 'sku barcode name category brand model imei1 storage ram color condition batteryHealth carrierLock accessoriesIncluded quantity buyPrice sellPrice status')
+  await trade.populate('items.inventoryItem', 'sku barcode name category brand model imei1 storage ram color condition batteryHealth carrierLock accessoriesIncluded compatibleModels oemQuality quantity buyPrice sellPrice status')
   res.status(201).json({ trade })
 }
 
@@ -634,7 +676,7 @@ router.get('/trades', requireAuth, asyncRoute(async (req, res) => {
 }))
 
 router.post('/trades', requireAuth, asyncRoute(async (req, res) => {
-  if (req.body.type === 'BUY' && Array.isArray(req.body.devices)) return createMultiDevicePurchase(req, res)
+  if (req.body.type === 'BUY' && (Array.isArray(req.body.items) || Array.isArray(req.body.devices))) return createMultiDevicePurchase(req, res)
   const { type, customer, items = [], discount = 0, amountPaid, paymentMethod = 'CASH', notes } = req.body
   if (!['BUY', 'SELL'].includes(type) || items.length === 0) return res.status(400).json({ message: 'Trade type and items are required' })
 

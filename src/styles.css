@@ -284,9 +284,8 @@ td strong { color: var(--text); }
 .transaction-row p small { color: var(--muted); margin-top: 4px; font-size: 9px; }
 .money-in { color: var(--green); font-size: 11px; } .money-out { color: var(--orange); font-size: 11px; }
 
-.stock-category-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 16px; }
-.stock-category-grid .stock-category:first-child { display: none; }
-.stock-category { padding: 20px; display: flex; align-items: center; gap: 14px; color: var(--muted); }
+.stock-category-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stock-category { min-width: 0; padding: 17px; display: flex; align-items: center; gap: 12px; color: var(--muted); }
 .stock-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px; }
 .stock-category p { flex: 1; display: flex; flex-direction: column; margin: 0; color: var(--muted); font-size: 10px; }
 .stock-category strong { margin: 4px 0 2px; color: var(--text); font: 800 22px Manrope, sans-serif; }
@@ -480,6 +479,7 @@ td strong { color: var(--text); }
   .settings-grid { grid-template-columns: 1fr; }
   .account-settings-card { grid-row: auto; }
   .inventory-mix-card { min-height: 350px; }
+  .stock-category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 900px) {
@@ -496,7 +496,7 @@ td strong { color: var(--text); }
   .global-search { flex: 1; width: auto; }
   .topbar-user p, .topbar-user > svg, kbd { display: none; }
   .topbar-user { min-height: 42px; padding: 3px 6px; }
-  .trade-action-grid, .stock-category-grid { grid-template-columns: 1fr; }
+  .trade-action-grid { grid-template-columns: 1fr; }
   .trade-detail-modal { display: block; width: min(760px, 100%); }
   .trade-detail-modal .detail-sections { grid-template-columns: repeat(2, 1fr); padding: 14px 18px; }
   .trade-detail-modal .detail-lines { margin: 0 18px 14px; }
@@ -537,7 +537,6 @@ td strong { color: var(--text); }
   .trade-action h3 { margin-block: 4px 6px; font-size: 18px; }
   .trade-action p { margin-bottom: 13px; font-size: 10px; line-height: 1.55; }
   .stock-category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-  .stock-category-grid .stock-category:nth-child(2) { grid-column: 1 / -1; }
   .stock-category { min-width: 0; padding: 13px; gap: 9px; }
   .stock-category > svg { display: none; }
   .stock-category .stock-icon { width: 38px; height: 38px; flex: 0 0 auto; border-radius: 11px; }
