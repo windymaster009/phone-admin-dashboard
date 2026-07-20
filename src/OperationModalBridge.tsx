@@ -189,7 +189,7 @@ function StockFields({ category }: { category: StockCategory }) {
         <label>IMEI 1<input name="imei1" required placeholder="15-digit IMEI" inputMode="numeric" /></label>
         <label>Serial number<input name="serialNumber" /></label>
       </>}
-      {(category === 'PHONE' || category === 'TABLET') && <><label>Storage<input name="storage" required placeholder="256GB" /></label><label>Color<input name="color" required /></label></>}
+      {(category === 'PHONE' || category === 'TABLET') && <><label>Storage<div className="device-unit-input"><input name="storage" type="number" min="1" step="1" required placeholder="256" /><span>GB</span></div></label><label>Color<input name="color" required /></label></>}
       <label>Condition<select name="condition" defaultValue={category === 'PHONE' ? 'GOOD' : 'NEW'}>
         <option value="NEW">New</option>
         <option value="LIKE_NEW">Like new</option>
@@ -451,18 +451,20 @@ export default function OperationModalBridge() {
     const errors: Record<string, string> = {}
     const price = Number(item.purchasePrice)
     const quantity = Number(item.quantity)
+    const validGigabytes = (value: string) => Number.isFinite(Number(value)) && Number(value) > 0
     if (!Number.isFinite(price) || price < 0 || item.purchasePrice === '') errors.purchasePrice = 'Enter a valid unit purchase price'
     if (item.category !== 'PHONE' && (!Number.isInteger(quantity) || quantity < 1)) errors.quantity = 'Quantity must be at least 1'
     if (item.category === 'PHONE') {
       if (!/^\d{15}$/.test(item.imei)) errors.imei = 'IMEI must contain exactly 15 digits'
       if (!item.brand.trim()) errors.brand = 'Brand is required'
       if (!item.model.trim()) errors.model = 'Model is required'
-      if (!item.storage.trim()) errors.storage = 'Storage is required'
+      if (!validGigabytes(item.storage)) errors.storage = 'Enter storage in GB'
+      if (item.ram && !validGigabytes(item.ram)) errors.ram = 'Enter RAM in GB'
       if (!item.color.trim()) errors.color = 'Color is required'
     } else if (item.category === 'TABLET') {
       if (!item.brand.trim()) errors.brand = 'Brand is required'
       if (!item.model.trim()) errors.model = 'Model is required'
-      if (!item.storage.trim()) errors.storage = 'Storage is required'
+      if (!validGigabytes(item.storage)) errors.storage = 'Enter storage in GB'
       if (!item.color.trim()) errors.color = 'Color is required'
     } else {
       if (!item.name.trim()) errors.name = item.category === 'SPARE_PART' ? 'Part name is required' : 'Item name is required'
@@ -686,17 +688,17 @@ export default function OperationModalBridge() {
                   <label className={`device-imei-field ${purchaseAttempted && itemErrors.imei ? 'field-invalid' : ''}`}><span>IMEI</span><div><input ref={(node) => { if (node) imeiInputs.current.set(device.id, node); else imeiInputs.current.delete(device.id) }} required inputMode="numeric" pattern="[0-9]{15}" maxLength={15} value={device.imei} onChange={(event) => updatePurchaseDevice(device.id, { imei: event.target.value.replace(/\D/g, '').slice(0, 15) })} placeholder="15-digit IMEI" /><button type="button" className="secondary-button" onClick={() => imeiInputs.current.get(device.id)?.focus()}><ScanLine size={16} /> Scan IMEI</button></div><small>{purchaseAttempted && itemErrors.imei ? itemErrors.imei : 'Click Scan IMEI, then use the barcode scanner.'}</small></label>
                   <label className={purchaseAttempted && itemErrors.brand ? 'field-invalid' : ''}>Brand<input required value={device.brand} onChange={(event) => updatePurchaseDevice(device.id, { brand: event.target.value })} placeholder="Apple" />{purchaseAttempted && itemErrors.brand && <small>{itemErrors.brand}</small>}</label>
                   <label className={purchaseAttempted && itemErrors.model ? 'field-invalid' : ''}>Model<input required value={device.model} onChange={(event) => updatePurchaseDevice(device.id, { model: event.target.value })} placeholder="iPhone 13 Pro" />{purchaseAttempted && itemErrors.model && <small>{itemErrors.model}</small>}</label>
-                  <label className={purchaseAttempted && itemErrors.storage ? 'field-invalid' : ''}>Storage<input required value={device.storage} onChange={(event) => updatePurchaseDevice(device.id, { storage: event.target.value })} placeholder="128GB" />{purchaseAttempted && itemErrors.storage && <small>{itemErrors.storage}</small>}</label>
-                  <label>RAM <small className="optional-marker">Optional</small><input value={device.ram} onChange={(event) => updatePurchaseDevice(device.id, { ram: event.target.value })} placeholder="6GB" /></label>
+                  <label className={purchaseAttempted && itemErrors.storage ? 'field-invalid' : ''}>Storage<div className="device-unit-input"><input required type="number" min="1" step="1" value={device.storage} onChange={(event) => updatePurchaseDevice(device.id, { storage: event.target.value })} placeholder="128" /><span>GB</span></div>{purchaseAttempted && itemErrors.storage && <small>{itemErrors.storage}</small>}</label>
+                  <label className={purchaseAttempted && itemErrors.ram ? 'field-invalid' : ''}>RAM <small className="optional-marker">Optional</small><div className="device-unit-input"><input type="number" min="1" step="1" value={device.ram} onChange={(event) => updatePurchaseDevice(device.id, { ram: event.target.value })} placeholder="6" /><span>GB</span></div>{purchaseAttempted && itemErrors.ram && <small>{itemErrors.ram}</small>}</label>
                   <label className={purchaseAttempted && itemErrors.color ? 'field-invalid' : ''}>Color<input required value={device.color} onChange={(event) => updatePurchaseDevice(device.id, { color: event.target.value })} placeholder="Blue" />{purchaseAttempted && itemErrors.color && <small>{itemErrors.color}</small>}</label>
-                  <label>Battery health <small className="optional-marker">Optional</small><input type="number" min="0" max="100" value={device.batteryHealth} onChange={(event) => updatePurchaseDevice(device.id, { batteryHealth: event.target.value })} placeholder="88" /></label>
+                  <label>Battery health <small className="optional-marker">Optional</small><div className="device-unit-input"><input type="number" min="0" max="100" step="1" value={device.batteryHealth} onChange={(event) => updatePurchaseDevice(device.id, { batteryHealth: event.target.value })} placeholder="88" /><span>%</span></div></label>
                   <label>Carrier lock<select value={device.carrierLock} onChange={(event) => updatePurchaseDevice(device.id, { carrierLock: event.target.value })}><option value="UNKNOWN">Unknown</option><option value="UNLOCKED">Unlocked</option><option value="LOCKED">Carrier locked</option></select></label>
                   <fieldset className="device-accessories"><legend>Accessories included</legend>{['BOX', 'CHARGER', 'CABLE', 'CASE', 'EARPHONES'].map((accessory) => <label key={accessory}><input type="checkbox" checked={device.accessoriesIncluded.includes(accessory)} onChange={(event) => updatePurchaseDevice(device.id, { accessoriesIncluded: event.target.checked ? [...device.accessoriesIncluded, accessory] : device.accessoriesIncluded.filter((item) => item !== accessory) })} /> {accessory.charAt(0) + accessory.slice(1).toLowerCase()}</label>)}</fieldset>
                 </> : <>
                   {device.category === 'TABLET' ? <>
                     <label className={purchaseAttempted && itemErrors.brand ? 'field-invalid' : ''}>Brand<input required value={device.brand} onChange={(event) => updatePurchaseDevice(device.id, { brand: event.target.value })} placeholder="Apple" />{purchaseAttempted && itemErrors.brand && <small>{itemErrors.brand}</small>}</label>
                     <label className={purchaseAttempted && itemErrors.model ? 'field-invalid' : ''}>Model<input required value={device.model} onChange={(event) => updatePurchaseDevice(device.id, { model: event.target.value })} placeholder="iPad Air" />{purchaseAttempted && itemErrors.model && <small>{itemErrors.model}</small>}</label>
-                    <label className={purchaseAttempted && itemErrors.storage ? 'field-invalid' : ''}>Storage<input required value={device.storage} onChange={(event) => updatePurchaseDevice(device.id, { storage: event.target.value })} placeholder="256GB" />{purchaseAttempted && itemErrors.storage && <small>{itemErrors.storage}</small>}</label>
+                    <label className={purchaseAttempted && itemErrors.storage ? 'field-invalid' : ''}>Storage<div className="device-unit-input"><input required type="number" min="1" step="1" value={device.storage} onChange={(event) => updatePurchaseDevice(device.id, { storage: event.target.value })} placeholder="256" /><span>GB</span></div>{purchaseAttempted && itemErrors.storage && <small>{itemErrors.storage}</small>}</label>
                     <label className={purchaseAttempted && itemErrors.color ? 'field-invalid' : ''}>Color<input required value={device.color} onChange={(event) => updatePurchaseDevice(device.id, { color: event.target.value })} placeholder="Space Gray" />{purchaseAttempted && itemErrors.color && <small>{itemErrors.color}</small>}</label>
                     <label>SKU <small className="optional-marker">Optional</small><input value={device.sku} onChange={(event) => updatePurchaseDevice(device.id, { sku: event.target.value.toUpperCase() })} placeholder="Generated if empty" /></label>
                   </> : <>

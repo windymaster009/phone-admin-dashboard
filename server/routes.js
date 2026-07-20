@@ -10,6 +10,13 @@ const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req,
 const clean = (value) => (typeof value === 'string' ? value.trim() : value)
 const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
+function normalizeGigabytes(value) {
+  const raw = clean(String(value ?? '')).toUpperCase().replace(/\s+/g, '')
+  if (!raw) return undefined
+  const number = Number(raw.replace(/GB$/, ''))
+  return Number.isFinite(number) && number > 0 ? `${number}GB` : undefined
+}
+
 let exchangeRateCache = null
 const EXCHANGE_RATE_CACHE_MS = 30 * 60 * 1000
 
@@ -303,8 +310,20 @@ router.get('/inventory/scan/:code', requireAuth, asyncRoute(async (req, res) => 
 }))
 
 router.post('/inventory', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
+  const category = clean(req.body.category)?.toUpperCase()
+  const storage = normalizeGigabytes(req.body.storage)
+  const ram = normalizeGigabytes(req.body.ram)
+  if (['PHONE', 'TABLET'].includes(category) && !storage) {
+    return res.status(400).json({ message: 'Storage must be a positive GB value' })
+  }
+  if (clean(req.body.ram) && !ram) {
+    return res.status(400).json({ message: 'RAM must be a positive GB value' })
+  }
   const item = await InventoryItem.create({
     ...req.body,
+    category,
+    storage,
+    ram,
     sku: clean(req.body.sku || makeCode('STK')),
     barcode: clean(req.body.barcode || makeCode('PF')),
     createdBy: req.user._id,
@@ -516,7 +535,8 @@ async function createMultiDevicePurchase(req, res) {
     const imei = clean(item.imei)?.replace(/[\s-]/g, '')
     const brand = clean(item.brand)
     const model = clean(item.model)
-    const storage = clean(item.storage)
+    const storage = normalizeGigabytes(item.storage)
+    const ram = normalizeGigabytes(item.ram)
     const color = clean(item.color)
     const sku = clean(item.sku)?.toUpperCase()
     const quantity = serialized ? 1 : Number(item.quantity)
@@ -542,6 +562,7 @@ async function createMultiDevicePurchase(req, res) {
     }
     if (!serialized && (!Number.isInteger(quantity) || quantity < 1)) throw requestError(400, `${label}: quantity must be a whole number greater than zero`)
     if (!Number.isFinite(purchasePrice) || purchasePrice < 0) throw requestError(400, `${label}: unit purchase price is invalid`)
+    if (clean(item.ram) && !ram) throw requestError(400, `${label}: RAM must be a positive GB value`)
     const batteryHealth = item.batteryHealth === '' || item.batteryHealth === undefined ? undefined : Number(item.batteryHealth)
     if (batteryHealth !== undefined && (!Number.isFinite(batteryHealth) || batteryHealth < 0 || batteryHealth > 100)) {
       throw requestError(400, `${label}: battery health must be between 0 and 100`)
@@ -551,7 +572,7 @@ async function createMultiDevicePurchase(req, res) {
       : []
     return {
       category, name, sku, quantity, imei, brand, model, storage, color, purchasePrice, batteryHealth,
-      ram: clean(item.ram),
+      ram,
       condition: ['NEW', 'LIKE_NEW', 'GOOD', 'FAIR', 'DAMAGED'].includes(item.condition) ? item.condition : 'GOOD',
       carrierLock: ['UNLOCKED', 'LOCKED', 'UNKNOWN'].includes(item.carrierLock) ? item.carrierLock : 'UNKNOWN',
       compatibleModels: clean(item.compatibleModels)?.split(',').map((value) => value.trim()).filter(Boolean) || [],
