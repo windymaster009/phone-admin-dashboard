@@ -37,6 +37,54 @@ function requestError(status, message) {
   return error
 }
 
+const openPawnStatuses = ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED']
+const roundMoney = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100
+
+function parsePawnDueDate(value) {
+  const raw = clean(String(value || ''))
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(raw)
+    ? new Date(`${raw}T23:59:59.999+07:00`)
+    : new Date(raw)
+  if (Number.isNaN(date.getTime())) throw requestError(400, 'Due date is invalid')
+  return date
+}
+
+function pawnGraceEnd(dueDate, days = 3) {
+  return new Date(dueDate.getTime() + Math.max(0, Number(days) || 0) * 86_400_000)
+}
+
+function pawnAmountDue(pawn) {
+  return roundMoney(
+    Math.max(0, Number(pawn.remainingPrincipal ?? pawn.principal) || 0)
+    + Math.max(0, Number(pawn.accruedInterest) || 0)
+    + Math.max(0, Number(pawn.fees) || 0),
+  )
+}
+
+function applyPawnPayment(pawn, rawAmount, { type = 'PRINCIPAL', userId, note, paidAt } = {}) {
+  const amount = roundMoney(rawAmount)
+  const outstanding = pawnAmountDue(pawn)
+  if (!Number.isFinite(amount) || amount <= 0) throw requestError(400, 'Payment amount must be greater than zero')
+  if (amount > outstanding + 0.01) throw requestError(400, `Payment cannot exceed the outstanding balance of ${outstanding.toFixed(2)}`)
+
+  let unapplied = amount
+  const feesApplied = Math.min(unapplied, Math.max(0, Number(pawn.fees) || 0))
+  pawn.fees = roundMoney((Number(pawn.fees) || 0) - feesApplied)
+  unapplied = roundMoney(unapplied - feesApplied)
+  const interestApplied = Math.min(unapplied, Math.max(0, Number(pawn.accruedInterest) || 0))
+  pawn.accruedInterest = roundMoney((Number(pawn.accruedInterest) || 0) - interestApplied)
+  unapplied = roundMoney(unapplied - interestApplied)
+  const principalApplied = Math.min(unapplied, Math.max(0, Number(pawn.remainingPrincipal ?? pawn.principal) || 0))
+  pawn.remainingPrincipal = roundMoney((Number(pawn.remainingPrincipal ?? pawn.principal) || 0) - principalApplied)
+  pawn.amountPaid = roundMoney((Number(pawn.amountPaid) || 0) + amount)
+  const balanceAfter = pawnAmountDue(pawn)
+  pawn.payments.push({
+    amount, type, feesApplied, interestApplied, principalApplied, balanceAfter,
+    paidAt: paidAt || new Date(), note: clean(note), receivedBy: userId,
+  })
+  return { amount, feesApplied, interestApplied, principalApplied, balanceAfter }
+}
+
 function paymentState(total, paid) {
   if (paid <= 0) return 'UNPAID'
   if (paid + 0.000001 < total) return 'PARTIAL'
@@ -62,6 +110,10 @@ async function refreshPawnStatuses() {
   await Pawn.updateMany(
     { status: { $in: ['ACTIVE', 'RENEWED'] }, dueDate: { $gte: now, $lte: soon } },
     { $set: { status: 'DUE_SOON' } },
+  )
+  await Pawn.updateMany(
+    { status: { $in: ['DUE_SOON', 'RENEWED'] }, dueDate: { $gt: soon } },
+    { $set: { status: 'ACTIVE' } },
   )
 }
 
@@ -142,7 +194,10 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
   const [salesToday, purchasesToday, activePawnValue, phonesInStock, overdueContracts, lowStock, customerCount, pawnCount] = await Promise.all([
     Trade.aggregate([{ $match: { type: 'SELL', status: 'COMPLETED', createdAt: { $gte: today } } }, { $group: { _id: null, total: { $sum: '$total' } } }]),
     Trade.aggregate([{ $match: { type: 'BUY', status: 'COMPLETED', createdAt: { $gte: today } } }, { $group: { _id: null, total: { $sum: '$total' } } }]),
-    Pawn.aggregate([{ $match: { status: { $in: ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED'] } } }, { $group: { _id: null, total: { $sum: '$principal' } } }]),
+    Pawn.aggregate([
+      { $match: { status: { $in: openPawnStatuses } } },
+      { $group: { _id: null, total: { $sum: { $ifNull: ['$remainingPrincipal', '$principal'] } } } },
+    ]),
     InventoryItem.countDocuments({ category: 'PHONE', status: 'IN_STOCK', quantity: { $gt: 0 } }),
     Pawn.countDocuments({ status: 'OVERDUE' }),
     InventoryItem.countDocuments({ status: 'IN_STOCK', $expr: { $lte: ['$quantity', '$reorderLevel'] } }),
@@ -426,26 +481,47 @@ router.post('/pawns', requireAuth, asyncRoute(async (req, res) => {
   const { customer, itemSnapshot, estimatedValue, pawnPercentage, principal, interestRate, dueDate, identificationVerified, notes } = req.body
   if (!customer || !itemSnapshot?.name || !dueDate) return res.status(400).json({ message: 'Customer, item and due date are required' })
 
+  const customerRecord = await Customer.findById(customer).select('nationalIdNumber')
+  if (!customerRecord) throw requestError(404, 'Customer not found')
+  if (!identificationVerified || !clean(customerRecord.nationalIdNumber)) {
+    throw requestError(400, 'A recorded and verified National ID is required before releasing pawn money')
+  }
   const percentage = Math.min(50, Math.max(40, Number(pawnPercentage || 45)))
-  const maxPrincipal = Number(estimatedValue || 0) * (percentage / 100)
-  const requestedPrincipal = Number(principal || maxPrincipal)
+  const valuation = roundMoney(estimatedValue)
+  const maxPrincipal = roundMoney(valuation * (percentage / 100))
+  const requestedPrincipal = roundMoney(principal)
+  const rate = roundMoney(interestRate === undefined ? 5 : interestRate)
+  const maturityDate = parsePawnDueDate(dueDate)
+  if (!Number.isFinite(valuation) || valuation <= 0) throw requestError(400, 'Estimated value must be greater than zero')
+  if (!Number.isFinite(requestedPrincipal) || requestedPrincipal <= 0) throw requestError(400, 'Principal must be greater than zero')
+  if (!Number.isFinite(rate) || rate < 0 || rate > 100) throw requestError(400, 'Interest rate must be between 0 and 100')
+  if (maturityDate <= new Date()) throw requestError(400, 'Due date must be in the future')
+  if (!/^\d{15}$/.test(clean(itemSnapshot.imei) || '')) throw requestError(400, 'IMEI must contain exactly 15 digits')
   if (requestedPrincipal > maxPrincipal + 0.01) {
     return res.status(400).json({ message: `Principal cannot exceed the ${percentage}% valuation limit` })
   }
 
-  const inventoryItem = await InventoryItem.create({
-    sku: makeCode('PWN'), category: 'PHONE', name: itemSnapshot.name,
-    brand: itemSnapshot.brand, model: itemSnapshot.model, imei1: itemSnapshot.imei || undefined,
-    condition: itemSnapshot.condition || 'GOOD', color: itemSnapshot.color, storage: itemSnapshot.storage,
-    quantity: 1, buyPrice: requestedPrincipal, sellPrice: Number(estimatedValue || 0),
-    status: 'PAWNED', source: 'CUSTOMER', createdBy: req.user._id,
-  })
-
-  const pawn = await Pawn.create({
-    pawnNo: makeCode('PW'), customer, inventoryItem: inventoryItem._id, itemSnapshot,
-    estimatedValue: Number(estimatedValue || 0), pawnPercentage: percentage,
-    principal: requestedPrincipal, interestRate: Number(interestRate || 5), dueDate,
-    identificationVerified: Boolean(identificationVerified), notes, createdBy: req.user._id,
+  const gracePeriodDays = 3
+  let pawn
+  await mongoose.connection.transaction(async (session) => {
+    const [inventoryItem] = await InventoryItem.create([{
+      sku: makeCode('PWN'), category: 'PHONE', name: clean(itemSnapshot.name),
+      brand: clean(itemSnapshot.brand), model: clean(itemSnapshot.model), imei1: clean(itemSnapshot.imei),
+      condition: itemSnapshot.condition || 'GOOD', color: clean(itemSnapshot.color), storage: normalizeGigabytes(itemSnapshot.storage),
+      quantity: 1, buyPrice: requestedPrincipal, sellPrice: valuation,
+      status: 'PAWNED', source: 'CUSTOMER', createdBy: req.user._id,
+    }], { session })
+    const created = await Pawn.create([{
+      pawnNo: makeCode('PW'), customer, inventoryItem: inventoryItem._id,
+      itemSnapshot: { ...itemSnapshot, imei: clean(itemSnapshot.imei), storage: normalizeGigabytes(itemSnapshot.storage) },
+      estimatedValue: valuation, pawnPercentage: percentage, principal: requestedPrincipal,
+      originalPrincipal: requestedPrincipal, remainingPrincipal: requestedPrincipal,
+      interestRate: rate, interestPeriod: 'MONTHLY', accruedInterest: roundMoney(requestedPrincipal * rate / 100),
+      fees: 0, amountPaid: 0, currency: 'USD', exchangeRate: 1,
+      dueDate: maturityDate, gracePeriodDays, graceEndsAt: pawnGraceEnd(maturityDate, gracePeriodDays),
+      identificationVerified: true, notes: clean(notes), createdBy: req.user._id, workflowVersion: 2,
+    }], { session })
+    pawn = created[0]
   })
   await writeActivity(req, { action: 'CREATE', entity: 'PAWN', entityId: pawn._id, details: { pawnNo: pawn.pawnNo, principal: pawn.principal } })
   res.status(201).json({ pawn: await pawn.populate('customer', 'name phone nationalIdNumber') })
@@ -454,45 +530,89 @@ router.post('/pawns', requireAuth, asyncRoute(async (req, res) => {
 router.post('/pawns/:id/payment', requireAuth, asyncRoute(async (req, res) => {
   const pawn = await Pawn.findById(req.params.id)
   if (!pawn) return res.status(404).json({ message: 'Pawn contract not found' })
-  if (!['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED'].includes(pawn.status)) return res.status(409).json({ message: 'This pawn contract is closed' })
-
-  pawn.payments.push({
-    amount: Number(req.body.amount), type: req.body.type || 'INTEREST',
-    paidAt: req.body.paidAt || new Date(), note: req.body.note, receivedBy: req.user._id,
+  if (!openPawnStatuses.includes(pawn.status)) return res.status(409).json({ message: 'This pawn contract is closed' })
+  const allocation = applyPawnPayment(pawn, req.body.amount, {
+    type: 'PRINCIPAL', userId: req.user._id, note: req.body.note, paidAt: req.body.paidAt,
   })
-  if (req.body.newDueDate) {
-    pawn.dueDate = req.body.newDueDate
-    pawn.status = 'RENEWED'
-  }
   await pawn.save()
-  await writeActivity(req, { action: 'PAYMENT', entity: 'PAWN', entityId: pawn._id, details: req.body })
-  res.json({ pawn })
+  await writeActivity(req, { action: 'PAYMENT', entity: 'PAWN', entityId: pawn._id, details: allocation })
+  res.json({ pawn: await pawn.populate('customer', 'name phone nationalIdNumber') })
+}))
+
+router.post('/pawns/:id/renew', requireAuth, asyncRoute(async (req, res) => {
+  const pawn = await Pawn.findById(req.params.id)
+  if (!pawn) return res.status(404).json({ message: 'Pawn contract not found' })
+  if (!openPawnStatuses.includes(pawn.status)) return res.status(409).json({ message: 'This pawn contract is closed' })
+  const newDueDate = parsePawnDueDate(req.body.newDueDate)
+  if (newDueDate <= new Date(pawn.dueDate) || newDueDate <= new Date()) {
+    throw requestError(400, 'New due date must be later than the current due date')
+  }
+  const requiredInterestAndFees = roundMoney((Number(pawn.accruedInterest) || 0) + (Number(pawn.fees) || 0))
+  const paymentAmount = roundMoney(req.body.amount)
+  if (paymentAmount + 0.01 < requiredInterestAndFees) {
+    throw requestError(400, `Renewal requires at least ${requiredInterestAndFees.toFixed(2)} to clear interest and fees`)
+  }
+  const previousDueDate = pawn.dueDate
+  const allocation = paymentAmount > 0
+    ? applyPawnPayment(pawn, paymentAmount, { type: 'RENEWAL', userId: req.user._id, note: req.body.note })
+    : { amount: 0, feesApplied: 0, interestApplied: 0, principalApplied: 0, balanceAfter: pawnAmountDue(pawn) }
+  const nextInterest = roundMoney((Number(pawn.remainingPrincipal) || 0) * (Number(pawn.interestRate) || 0) / 100)
+  pawn.accruedInterest = nextInterest
+  pawn.dueDate = newDueDate
+  pawn.graceEndsAt = pawnGraceEnd(newDueDate, pawn.gracePeriodDays)
+  pawn.status = 'ACTIVE'
+  pawn.renewals.push({
+    previousDueDate, newDueDate, paymentAmount, interestCharged: nextInterest,
+    renewedBy: req.user._id, note: clean(req.body.note),
+  })
+  if (paymentAmount > 0 && pawn.payments.length) pawn.payments[pawn.payments.length - 1].balanceAfter = pawnAmountDue(pawn)
+  await pawn.save()
+  await writeActivity(req, { action: 'RENEW', entity: 'PAWN', entityId: pawn._id, details: { ...allocation, newDueDate, nextInterest } })
+  res.json({ pawn: await pawn.populate('customer', 'name phone nationalIdNumber') })
 }))
 
 router.post('/pawns/:id/redeem', requireAuth, asyncRoute(async (req, res) => {
-  const pawn = await Pawn.findById(req.params.id)
-  if (!pawn) return res.status(404).json({ message: 'Pawn contract not found' })
-  if (!['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED'].includes(pawn.status)) return res.status(409).json({ message: 'This pawn contract is already closed' })
-  pawn.status = 'REDEEMED'
-  if (req.body.amount) pawn.payments.push({ amount: Number(req.body.amount), type: 'REDEMPTION', receivedBy: req.user._id })
-  await pawn.save()
-  if (pawn.inventoryItem) await InventoryItem.findByIdAndUpdate(pawn.inventoryItem, { status: 'ARCHIVED', quantity: 0 })
-  await writeActivity(req, { action: 'REDEEM', entity: 'PAWN', entityId: pawn._id })
-  res.json({ pawn })
+  let pawn
+  let allocation
+  await mongoose.connection.transaction(async (session) => {
+    pawn = await Pawn.findById(req.params.id).session(session)
+    if (!pawn) throw requestError(404, 'Pawn contract not found')
+    if (!openPawnStatuses.includes(pawn.status)) throw requestError(409, 'This pawn contract is already closed')
+    const outstanding = pawnAmountDue(pawn)
+    const amount = roundMoney(req.body.amount)
+    if (Math.abs(amount - outstanding) > 0.01) throw requestError(400, `Redemption requires the full outstanding amount of ${outstanding.toFixed(2)}`)
+    allocation = outstanding > 0
+      ? applyPawnPayment(pawn, amount, { type: 'REDEMPTION', userId: req.user._id, note: req.body.note })
+      : { amount: 0, feesApplied: 0, interestApplied: 0, principalApplied: 0, balanceAfter: 0 }
+    pawn.status = 'REDEEMED'
+    pawn.redeemedAt = new Date()
+    await pawn.save({ session })
+    if (pawn.inventoryItem) await InventoryItem.findByIdAndUpdate(pawn.inventoryItem, { status: 'ARCHIVED', quantity: 0 }, { session })
+  })
+  await writeActivity(req, { action: 'REDEEM', entity: 'PAWN', entityId: pawn._id, details: allocation })
+  res.json({ pawn: await pawn.populate('customer', 'name phone nationalIdNumber') })
 }))
 
 router.post('/pawns/:id/forfeit', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
-  const pawn = await Pawn.findById(req.params.id)
-  if (!pawn) return res.status(404).json({ message: 'Pawn contract not found' })
-  if (!['OVERDUE', 'DUE_SOON', 'ACTIVE', 'RENEWED'].includes(pawn.status)) return res.status(409).json({ message: 'This pawn cannot be forfeited' })
-  pawn.status = 'FORFEITED'
-  await pawn.save()
-  if (pawn.inventoryItem) {
-    await InventoryItem.findByIdAndUpdate(pawn.inventoryItem, {
-      status: 'IN_STOCK', source: 'PAWN_FORFEIT', quantity: 1,
-      buyPrice: pawn.principal, sellPrice: Number(req.body.sellPrice || pawn.estimatedValue),
-    })
-  }
+  await refreshPawnStatuses()
+  let pawn
+  await mongoose.connection.transaction(async (session) => {
+    pawn = await Pawn.findById(req.params.id).session(session)
+    if (!pawn) throw requestError(404, 'Pawn contract not found')
+    if (pawn.status !== 'OVERDUE') throw requestError(409, 'Only overdue pawn contracts can be forfeited')
+    const graceEndsAt = pawn.graceEndsAt || pawnGraceEnd(new Date(pawn.dueDate), pawn.gracePeriodDays)
+    if (new Date() <= graceEndsAt) throw requestError(409, `This pawn is still in its grace period until ${graceEndsAt.toISOString()}`)
+    pawn.status = 'FORFEITED'
+    pawn.forfeitedAt = new Date()
+    await pawn.save({ session })
+    if (pawn.inventoryItem) {
+      await InventoryItem.findByIdAndUpdate(pawn.inventoryItem, {
+        status: 'IN_STOCK', source: 'PAWN_FORFEIT', quantity: 1,
+        buyPrice: Number(pawn.originalPrincipal ?? pawn.principal) || 0,
+        sellPrice: Number(req.body.sellPrice || pawn.estimatedValue),
+      }, { session })
+    }
+  })
   await writeActivity(req, { action: 'FORFEIT', entity: 'PAWN', entityId: pawn._id })
   res.json({ pawn })
 }))

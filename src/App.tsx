@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import {
   AlertTriangle,
   ArrowDownRight,
@@ -127,13 +127,22 @@ type Pawn = {
   estimatedValue: number
   pawnPercentage: number
   principal: number
+  originalPrincipal?: number
+  remainingPrincipal?: number
   interestRate: number
+  accruedInterest?: number
+  fees?: number
+  amountPaid?: number
+  renewals?: unknown[]
   dueDate: string
+  graceEndsAt?: string
   status: string
   identificationVerified: boolean
   notes?: string
   createdAt: string
 }
+
+type PawnAction = 'payment' | 'renew' | 'redeem' | 'forfeit'
 
 type Trade = {
   _id: string
@@ -402,7 +411,46 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`status-badge status-${slug}`}>{label}</span>
 }
 
-function PawnDetailModal({ pawn, onClose, onOpenAll }: { pawn: Pawn; onClose: () => void; onOpenAll?: () => void }) {
+function pawnOutstanding(pawn: Pawn) {
+  return Math.max(0, (pawn.remainingPrincipal ?? pawn.principal) + (pawn.accruedInterest || 0) + (pawn.fees || 0))
+}
+
+function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; onClose: () => void; onOpenAll?: () => void; onAction?: (action: PawnAction, payload: Record<string, unknown>) => Promise<void> }) {
+  const [action, setAction] = useState<PawnAction | null>(null)
+  const [amount, setAmount] = useState('')
+  const [newDueDate, setNewDueDate] = useState('')
+  const [note, setNote] = useState('')
+  const [actionError, setActionError] = useState('')
+  const [actionBusy, setActionBusy] = useState(false)
+  const outstanding = pawnOutstanding(pawn)
+  const isOpen = ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED'].includes(pawn.status)
+
+  function openAction(nextAction: PawnAction) {
+    setAction(nextAction)
+    setActionError('')
+    setNote('')
+    setNewDueDate('')
+    setAmount(nextAction === 'redeem' ? outstanding.toFixed(2) : nextAction === 'renew' ? ((pawn.accruedInterest || 0) + (pawn.fees || 0)).toFixed(2) : '')
+  }
+
+  async function submitAction(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!action || !onAction) return
+    setActionBusy(true)
+    setActionError('')
+    try {
+      const payload: Record<string, unknown> = { note }
+      if (action !== 'forfeit') payload.amount = Number(amount)
+      if (action === 'renew') payload.newDueDate = newDueDate
+      if (action === 'forfeit' && amount) payload.sellPrice = Number(amount)
+      await onAction(action, payload)
+      setAction(null)
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : 'Unable to update pawn contract')
+    } finally {
+      setActionBusy(false)
+    }
+  }
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
@@ -426,7 +474,10 @@ function PawnDetailModal({ pawn, onClose, onOpenAll }: { pawn: Pawn; onClose: ()
           <div><span>Status</span><strong><StatusBadge status={pawn.status} /></strong></div>
           <div><span>ID card</span><strong>{pawn.identificationVerified ? 'Verified' : 'Missing'}</strong></div>
           <div><span>Estimated value</span><strong>{money.format(pawn.estimatedValue)}</strong></div>
-          <div><span>Loan principal</span><strong>{money.format(pawn.principal)}</strong></div>
+          <div><span>Remaining principal</span><strong>{money.format(pawn.remainingPrincipal ?? pawn.principal)}</strong></div>
+          <div><span>Interest due</span><strong>{money.format(pawn.accruedInterest || 0)}</strong></div>
+          <div><span>Total due</span><strong>{money.format(outstanding)}</strong></div>
+          <div><span>Amount paid</span><strong>{money.format(pawn.amountPaid || 0)}</strong></div>
           <div><span>Pawn percent</span><strong>{pawn.pawnPercentage}%</strong></div>
           <div><span>Interest rate</span><strong>{pawn.interestRate}%</strong></div>
           <div><span>Due date</span><strong>{dateText(pawn.dueDate)}</strong></div>
@@ -447,10 +498,29 @@ function PawnDetailModal({ pawn, onClose, onOpenAll }: { pawn: Pawn; onClose: ()
           </article>
         </div>
         {pawn.notes && <div className="detail-note"><span className="eyebrow">Notes</span><p>{pawn.notes}</p></div>}
-        <footer className="detail-modal-footer">
+        {action && <form className="pawn-action-form" onSubmit={submitAction}>
+          <div className="pawn-action-header">
+            <div>
+              <span className="eyebrow">{action === 'payment' ? 'Record payment' : action === 'renew' ? 'Renew contract' : action === 'redeem' ? 'Redeem collateral' : 'Forfeit collateral'}</span>
+              <p>{action === 'payment' ? `Apply a payment to the ${money.format(outstanding)} outstanding balance.` : action === 'renew' ? 'Record the required payment and extend the contract due date.' : action === 'redeem' ? 'Collect the full balance and return the collateral to the customer.' : 'Close the contract and move the collateral into shop inventory.'}</p>
+            </div>
+            <button type="button" className="icon-button" onClick={() => setAction(null)} aria-label="Cancel action"><X size={15} /></button>
+          </div>
+          {actionError && <p className="pawn-action-error">{actionError}</p>}
+          {action !== 'forfeit' && <label>{action === 'redeem' ? 'Full amount due' : 'Payment amount'}<div className="input-prefix"><span>$</span><input autoFocus type="text" inputMode="decimal" required readOnly={action === 'redeem'} value={amount} onChange={(event) => setAmount(event.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00" /></div></label>}
+          {action === 'forfeit' && <label><span>Selling price <small>Optional</small></span><div className="input-prefix"><span>$</span><input autoFocus type="text" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value.replace(/[^0-9.]/g, ''))} placeholder={String(pawn.estimatedValue)} /></div></label>}
+          {action === 'renew' && <label>New due date<input type="date" required value={newDueDate} onChange={(event) => setNewDueDate(event.target.value)} /></label>}
+          {action !== 'forfeit' && <label className="pawn-action-note"><span>Note <small>Optional</small></span><textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add a reference or payment note" /></label>}
+          <div className="pawn-action-buttons">
+            <button type="button" className="ghost-button" onClick={() => setAction(null)}>Cancel</button>
+            <button className={`primary-button ${action === 'forfeit' ? 'danger-button' : ''}`} disabled={actionBusy}>{actionBusy ? 'Saving...' : action === 'payment' ? 'Save payment' : action === 'renew' ? 'Confirm renewal' : action === 'redeem' ? 'Confirm full redemption' : 'Confirm forfeiture'}</button>
+          </div>
+        </form>}
+        {!action && <footer className="detail-modal-footer">
+          {onAction && isOpen && !action && <><button className="secondary-button" onClick={() => openAction('payment')}>Payment</button><button className="secondary-button" onClick={() => openAction('renew')}>Renew</button><button className="primary-button" onClick={() => openAction('redeem')}>Redeem</button>{pawn.status === 'OVERDUE' && <button className="ghost-button danger-link" onClick={() => openAction('forfeit')}>Forfeit</button>}</>}
           {onOpenAll && <button className="secondary-button" onClick={onOpenAll}>Open pawn management <ArrowUpRight size={15} /></button>}
           <button className="ghost-button" onClick={onClose}>Close</button>
-        </footer>
+        </footer>}
       </section>
     </div>
   )
@@ -766,6 +836,18 @@ function PawnView() {
       ? new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
       : new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime())
 
+  async function updatePawn(action: PawnAction, payload: Record<string, unknown>) {
+    if (!selectedPawn) return
+    const result = await api<{ pawn: Pawn }>(`/pawns/${selectedPawn._id}/${action}`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
+    setPawns((current) => current.map((pawn) => pawn._id === result.pawn._id ? result.pawn : pawn))
+    setSelectedPawn(result.pawn)
+  }
+
+  const openPawns = pawns.filter((pawn) => ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED'].includes(pawn.status))
+
   return (
     <>
       <div className="pawn-page-heading">
@@ -777,16 +859,16 @@ function PawnView() {
         />
       </div>
       <section className="mini-stats-grid pawn-stats-grid">
-        <div className="surface-card mini-stat"><HandCoins /><p>Active contracts<strong>{pawns.filter((pawn) => ['ACTIVE', 'DUE_SOON', 'RENEWED'].includes(pawn.status)).length}</strong><small>{money.format(pawns.reduce((sum, pawn) => sum + pawn.principal, 0))} principal</small></p></div>
+        <div className="surface-card mini-stat"><HandCoins /><p>Open contracts<strong>{openPawns.length}</strong><small>{money.format(openPawns.reduce((sum, pawn) => sum + (pawn.remainingPrincipal ?? pawn.principal), 0))} remaining</small></p></div>
         <div className="surface-card mini-stat"><Clock3 /><p>Due soon<strong>{pawns.filter((pawn) => pawn.status === 'DUE_SOON').length}</strong><small>needs follow-up</small></p></div>
         <div className="surface-card mini-stat"><AlertTriangle /><p>Overdue<strong>{pawns.filter((pawn) => pawn.status === 'OVERDUE').length}</strong><small>past due contracts</small></p></div>
-        <div className="surface-card mini-stat"><RefreshCcw /><p>Renewed<strong>{pawns.filter((pawn) => pawn.status === 'RENEWED').length}</strong><small>active renewals</small></p></div>
+        <div className="surface-card mini-stat"><RefreshCcw /><p>Renewed contracts<strong>{pawns.filter((pawn) => (pawn.renewals?.length || 0) > 0).length}</strong><small>contracts with renewal history</small></p></div>
       </section>
       <article className="surface-card table-card page-table pawn-workspace-card">
         <div className="filter-row">
           <div className="search-field"><Search size={17} /><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search contract, customer, phone or IMEI" /></div>
           <select className="ghost-button filter-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter pawn status">
-            <option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="DUE_SOON">Due soon</option><option value="OVERDUE">Overdue</option><option value="RENEWED">Renewed</option><option value="REDEEMED">Redeemed</option><option value="FORFEITED">Forfeited</option>
+            <option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="DUE_SOON">Due soon</option><option value="OVERDUE">Overdue</option><option value="REDEEMED">Redeemed</option><option value="FORFEITED">Forfeited</option>
           </select>
           <select className="ghost-button filter-select" value={dueSort} onChange={(event) => setDueSort(event.target.value as 'soonest' | 'latest')} aria-label="Sort by due date">
             <option value="soonest">Due soonest</option><option value="latest">Due latest</option>
@@ -802,7 +884,7 @@ function PawnView() {
                   <td>{row.customer?.name || 'Unknown'}</td>
                   <td>{row.itemSnapshot.name}<small className="table-subtext">{row.itemSnapshot.imei || 'No IMEI'}</small></td>
                   <td>{money.format(row.estimatedValue)}</td>
-                  <td><strong>{money.format(row.principal)}</strong></td>
+                  <td><strong>{money.format(row.remainingPrincipal ?? row.principal)}</strong></td>
                   <td>{row.identificationVerified ? <span className="verified"><BadgeCheck size={15} /> Verified</span> : <span className="unverified"><AlertTriangle size={15} /> Missing</span>}</td>
                   <td>{dateText(row.dueDate)}</td>
                   <td><StatusBadge status={row.status} /></td>
@@ -822,7 +904,7 @@ function PawnView() {
                 <StatusBadge status={row.status} />
               </div>
               <div className="mobile-contract-details">
-                <div><span>Loan</span><strong>{money.format(row.principal)}</strong><small>{exchangeRate && khrText(row.principal, exchangeRate)}</small></div>
+                <div><span>Due now</span><strong>{money.format(pawnOutstanding(row))}</strong><small>{exchangeRate && khrText(pawnOutstanding(row), exchangeRate)}</small></div>
                 <div><span>Due date</span><strong>{dateText(row.dueDate)}</strong><small className={row.identificationVerified ? 'verified' : 'unverified'}>{row.identificationVerified ? <><BadgeCheck size={11} /> ID verified</> : <><AlertTriangle size={11} /> ID missing</>}</small></div>
                 <button className="icon-button" onClick={() => setSelectedPawn(row)} aria-label={`View ${row.pawnNo}`}><MoreHorizontal size={18} /></button>
               </div>
@@ -831,7 +913,7 @@ function PawnView() {
           {visiblePawns.length === 0 && <p className="mobile-contract-empty">No pawn contracts match these filters.</p>}
         </div>
       </article>
-      {selectedPawn && <PawnDetailModal pawn={selectedPawn} onClose={() => setSelectedPawn(null)} />}
+      {selectedPawn && <PawnDetailModal pawn={selectedPawn} onClose={() => setSelectedPawn(null)} onAction={updatePawn} />}
     </>
   )
 }

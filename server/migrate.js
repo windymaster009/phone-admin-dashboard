@@ -34,7 +34,9 @@ async function loadMigrations() {
   for (const filename of filenames) {
     const filepath = path.join(migrationsDirectory, filename)
     const source = await readFile(filepath, 'utf8')
-    const checksum = createHash('sha256').update(source).digest('hex')
+    // Git may check files out as CRLF on Windows even when the applied migration
+    // used LF. Normalize line endings so unchanged migrations keep one checksum.
+    const checksum = createHash('sha256').update(source.replace(/\r\n/g, '\n')).digest('hex')
     const migration = await import(`${pathToFileURL(filepath).href}?checksum=${checksum}`)
 
     if (!migration.id || typeof migration.up !== 'function' || typeof migration.down !== 'function') {

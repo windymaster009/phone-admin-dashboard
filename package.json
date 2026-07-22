@@ -13,7 +13,7 @@
     "migrate:status": "node server/migrate.js status",
     "migrate:down": "node server/migrate.js down",
     "preview": "vite preview",
-    "lint": "tsc --noEmit && node --check server/index.js && node --check server/routes.js && node --check server/models.js && node --check server/auth.js && node --check server/migrate.js && node --check server/migrations/202607190001-backfill-inventory-barcodes.js && node --check server/migrations/202607190002-add-multi-device-purchases.js"
+    "lint": "tsc --noEmit && node --check server/index.js && node --check server/routes.js && node --check server/models.js && node --check server/auth.js && node --check server/migrate.js && node --check server/migrations/202607190001-backfill-inventory-barcodes.js && node --check server/migrations/202607190002-add-multi-device-purchases.js && node --check server/migrations/202607230001-correct-pawn-lifecycle.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

@@ -27,6 +27,7 @@ type Customer = {
   _id: string
   name: string
   phone: string
+  nationalIdNumber?: string
 }
 
 type InventoryItem = {
@@ -88,6 +89,12 @@ function newPurchaseDevice(): PurchaseDevice {
 function localDateValue() {
   const now = new Date()
   return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10)
+}
+
+function futureDateValue(days: number) {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 10)
 }
 
 const modalMeta: Record<ModalKind, { title: string; description: string; icon: ReactNode }> = {
@@ -270,6 +277,9 @@ export default function OperationModalBridge() {
   const [busy, setBusy] = useState(false)
   const [estimatedValue, setEstimatedValue] = useState(0)
   const [pawnPercentage, setPawnPercentage] = useState(45)
+  const [pawnPrincipal, setPawnPrincipal] = useState('')
+  const [pawnCustomerId, setPawnCustomerId] = useState('')
+  const [pawnIdConfirmed, setPawnIdConfirmed] = useState(false)
   const [scanCode, setScanCode] = useState('')
   const [scannedItem, setScannedItem] = useState<InventoryItem | null>(null)
   const [labelItems, setLabelItems] = useState<InventoryItem[]>([])
@@ -351,6 +361,21 @@ export default function OperationModalBridge() {
         .then((result) => setUsdKhrRate(result.usdKhr))
         .catch(() => setUsdKhrRate(4100))
     }
+    if (kind === 'pawn') {
+      const saved = sessionStorage.getItem('phoneflow_last_valuation')
+      if (saved) {
+        try {
+          const valuation = JSON.parse(saved) as { estimatedValue?: number; maximumPawn?: number; pawnRate?: number }
+          if (Number(valuation.estimatedValue) > 0) setEstimatedValue(Number(valuation.estimatedValue))
+          if (Number(valuation.pawnRate) >= 40 && Number(valuation.pawnRate) <= 50) setPawnPercentage(Number(valuation.pawnRate))
+          if (Number(valuation.maximumPawn) > 0) setPawnPrincipal(String(Number(valuation.maximumPawn).toFixed(2)))
+        } catch {
+          // Ignore an invalid saved valuation and let the employee enter it again.
+        } finally {
+          sessionStorage.removeItem('phoneflow_last_valuation')
+        }
+      }
+    }
   }, [kind])
 
   const close = () => {
@@ -361,6 +386,9 @@ export default function OperationModalBridge() {
     setCategory('PHONE')
     setEstimatedValue(0)
     setPawnPercentage(45)
+    setPawnPrincipal('')
+    setPawnCustomerId('')
+    setPawnIdConfirmed(false)
     setScanCode('')
     setScannedItem(null)
     setLabelItems([])
@@ -814,14 +842,14 @@ export default function OperationModalBridge() {
 
       {kind === 'pawn' && <form className="operation-form" onSubmit={submitPawn}>
         <div className="operation-form-grid">
-          <label>Customer<select name="customer" required defaultValue=""><option value="" disabled>Select customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name} — {customer.phone}</option>)}</select></label>
+          <label>Customer<select name="customer" required value={pawnCustomerId} onChange={(event) => { setPawnCustomerId(event.target.value); setPawnIdConfirmed(false) }}><option value="" disabled>Select customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name} — {customer.phone}{customer.nationalIdNumber ? ' — ID recorded' : ' — ID missing'}</option>)}</select></label>
           <label>Phone name<input name="name" required /></label><label>Brand<input name="brand" /></label><label>Model<input name="model" /></label><label>IMEI<input name="imei" required /></label><label>Storage<input name="storage" /></label><label>Color<input name="color" /></label>
           <label>Condition<select name="condition" defaultValue="GOOD"><option value="LIKE_NEW">Like new</option><option value="GOOD">Good</option><option value="FAIR">Fair</option><option value="DAMAGED">Damaged</option></select></label>
-          <label>Estimated resale value<input name="estimatedValue" type="number" min="0" step="0.01" required onChange={(event) => setEstimatedValue(Number(event.target.value))} /></label>
-          <label>Pawn percentage<input name="pawnPercentage" type="number" min="40" max="50" value={pawnPercentage} onChange={(event) => setPawnPercentage(Number(event.target.value))} /></label>
-          <label>Principal <small>Maximum ${maximumPawn.toFixed(2)}</small><input name="principal" type="number" min="0" max={maximumPawn || undefined} step="0.01" required /></label>
-          <label>Interest rate %<input name="interestRate" type="number" min="0" step="0.01" defaultValue="5" /></label><label>Due date<input name="dueDate" type="date" required /></label>
-          <label className="operation-checkbox"><input name="identificationVerified" type="checkbox" /> National ID verified</label>
+          <label>Estimated resale value<input name="estimatedValue" type="number" min="0.01" step="0.01" required value={estimatedValue || ''} onChange={(event) => { const value = Number(event.target.value); setEstimatedValue(value); setPawnPrincipal(value > 0 ? String((value * pawnPercentage / 100).toFixed(2)) : '') }} /></label>
+          <label>Pawn percentage<input name="pawnPercentage" type="number" min="40" max="50" value={pawnPercentage} onChange={(event) => { const value = Number(event.target.value); setPawnPercentage(value); if (estimatedValue > 0) setPawnPrincipal(String((estimatedValue * value / 100).toFixed(2))) }} /></label>
+          <label>Principal <small>Maximum ${maximumPawn.toFixed(2)}</small><input name="principal" type="number" min="0.01" max={maximumPawn || undefined} step="0.01" required value={pawnPrincipal} onChange={(event) => setPawnPrincipal(event.target.value)} /></label>
+          <label>Monthly interest %<input name="interestRate" type="number" min="0" max="100" step="0.01" defaultValue="5" /></label><label>Due date<input name="dueDate" type="date" min={futureDateValue(1)} defaultValue={futureDateValue(30)} required /></label>
+          <label className="operation-checkbox"><input name="identificationVerified" type="checkbox" disabled={!customers.find((customer) => customer._id === pawnCustomerId)?.nationalIdNumber} checked={pawnIdConfirmed} onChange={(event) => setPawnIdConfirmed(event.target.checked)} /> {customers.find((customer) => customer._id === pawnCustomerId)?.nationalIdNumber ? 'National ID checked against customer record' : 'Customer must have a National ID record'}</label>
           <label className="operation-wide">Notes<textarea name="notes" rows={3} /></label>
         </div>
         <footer className="operation-modal-actions"><button type="button" className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={busy}>{busy ? 'Saving...' : 'Create pawn contract'}</button></footer>
