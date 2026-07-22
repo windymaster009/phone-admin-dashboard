@@ -9,8 +9,11 @@
     "dev:server": "node --watch server/index.js",
     "build": "tsc -b && vite build",
     "start": "node server/index.js",
+    "migrate": "node server/migrate.js up",
+    "migrate:status": "node server/migrate.js status",
+    "migrate:down": "node server/migrate.js down",
     "preview": "vite preview",
-    "lint": "tsc --noEmit && node --check server/index.js && node --check server/routes.js && node --check server/models.js && node --check server/auth.js"
+    "lint": "tsc --noEmit && node --check server/index.js && node --check server/routes.js && node --check server/models.js && node --check server/auth.js && node --check server/migrate.js && node --check server/migrations/202607190001-backfill-inventory-barcodes.js && node --check server/migrations/202607190002-add-multi-device-purchases.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -19,6 +22,8 @@
     "express": "^4.21.2",
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.0.0",
+    "html5-qrcode": "^2.3.8",
+    "jsbarcode": "^3.12.3",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.468.0",
     "mongoose": "^8.9.5",
@@ -27,6 +32,7 @@
     "react-dom": "^19.1.1"
   },
   "devDependencies": {
+    "@types/jsbarcode": "^3.11.4",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",

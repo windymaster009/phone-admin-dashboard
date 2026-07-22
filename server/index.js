@@ -1,4 +1,5 @@
 import 'dotenv/config'
+import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import cors from 'cors'
@@ -12,6 +13,25 @@ import router from './routes.js'
 const app = express()
 const port = Number(process.env.PORT || 5000)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+function positiveEnvNumber(name, fallback) {
+  const value = Number(process.env[name])
+  return Number.isFinite(value) && value > 0 ? value : fallback
+}
+
+function isTransientDatabaseError(error) {
+  const transientNames = new Set([
+    'MongoNetworkError',
+    'MongoNetworkTimeoutError',
+    'MongoServerSelectionError',
+    'MongooseServerSelectionError',
+  ])
+  const transientCodes = new Set([6, 7, 89, 91, 189, 262, 9001])
+  return transientNames.has(error?.name)
+    || transientCodes.has(Number(error?.code))
+    || error?.hasErrorLabel?.('RetryableWriteError')
+    || /socket|timed?\s*out|connection (?:closed|reset)|server selection/i.test(error?.message || '')
+}
 
 function validateEnv() {
   const mongoUri = process.env.MONGO_URI || ''
@@ -42,6 +62,12 @@ try {
 }
 
 app.set('trust proxy', 1)
+app.use((req, res, next) => {
+  const suppliedId = String(req.get('x-request-id') || '')
+  req.id = /^[a-zA-Z0-9_-]{8,80}$/.test(suppliedId) ? suppliedId : randomUUID()
+  res.setHeader('X-Request-ID', req.id)
+  next()
+})
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
 app.use(cors({
   origin(origin, callback) {
@@ -55,7 +81,10 @@ app.use(cors({
 }))
 app.use(express.json({ limit: '5mb' }))
 app.use(express.urlencoded({ extended: true, limit: '5mb' }))
-app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'))
+morgan.token('request-id', (req) => req.id)
+app.use(morgan(process.env.NODE_ENV === 'production'
+  ? ':remote-addr - :remote-user [:date[clf]] ":method :url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent" request=:request-id'
+  : ':method :url :status :response-time ms request=:request-id'))
 app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: true, legacyHeaders: false }))
 
 app.get('/api/health', async (_req, res) => {
@@ -76,7 +105,10 @@ if (process.env.NODE_ENV === 'production') {
 }
 
 app.use((error, _req, res, _next) => {
-  console.error(error)
+  const req = _req
+  console.error(`[request ${req.id || 'unknown'}]`, error)
+
+  if (res.headersSent) return _next(error)
 
   if (error?.code === 11000) {
     const field = Object.keys(error.keyPattern || {})[0] || 'field'
@@ -88,17 +120,29 @@ app.use((error, _req, res, _next) => {
     return res.status(400).json({ message })
   }
 
+  if (isTransientDatabaseError(error)) {
+    return res.status(503).json({
+      message: 'The database response timed out. Check whether the change was saved before trying again.',
+      requestId: req.id,
+      retryable: true,
+    })
+  }
+
   res.status(error.status || 500).json({
     message: process.env.NODE_ENV === 'production' ? 'Something went wrong' : error.message || 'Something went wrong',
+    requestId: req.id,
   })
 })
 
 try {
   console.log('Connecting to MongoDB...')
   await mongoose.connect(process.env.MONGO_URI, {
-    serverSelectionTimeoutMS: 10000,
-    connectTimeoutMS: 10000,
-    socketTimeoutMS: 10000,
+    serverSelectionTimeoutMS: positiveEnvNumber('MONGO_SERVER_SELECTION_TIMEOUT_MS', 30000),
+    connectTimeoutMS: positiveEnvNumber('MONGO_CONNECT_TIMEOUT_MS', 30000),
+    socketTimeoutMS: positiveEnvNumber('MONGO_SOCKET_TIMEOUT_MS', 60000),
+    maxPoolSize: positiveEnvNumber('MONGO_MAX_POOL_SIZE', 10),
+    minPoolSize: 1,
+    heartbeatFrequencyMS: 10000,
   })
   console.log(`MongoDB connected: ${mongoose.connection.name}`)
 } catch (error) {

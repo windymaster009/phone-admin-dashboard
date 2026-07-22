@@ -148,11 +148,13 @@ kbd { border: 1px solid var(--border-strong); border-radius: 6px; padding: 3px 7
 .section-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 22px; margin-bottom: 24px; }
 .section-header h2 { margin: 4px 0 6px; font-family: Manrope, sans-serif; font-size: clamp(25px, 3vw, 34px); letter-spacing: -1.1px; }
 .section-header p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
+.section-header-actions { display: flex; align-items: center; gap: 9px; }
 .eyebrow { color: var(--primary); font-size: 10px; text-transform: uppercase; font-weight: 800; letter-spacing: 1.35px; }
 
 .primary-button, .secondary-button, .ghost-button, .text-button { min-height: 40px; border-radius: 11px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 15px; font-size: 12px; font-weight: 700; transition: 0.18s ease; white-space: nowrap; }
 .primary-button { border: 1px solid transparent; color: white; background: linear-gradient(105deg, #7c3aed, #8b5cf6); box-shadow: 0 9px 24px rgba(124, 58, 237, 0.22); }
 .primary-button:hover { transform: translateY(-1px); box-shadow: 0 12px 28px rgba(124, 58, 237, 0.3); }
+.primary-button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; box-shadow: none; }
 .secondary-button { border: 1px solid rgba(56, 189, 248, 0.18); color: var(--blue); background: rgba(56, 189, 248, 0.1); }
 .ghost-button { border: 1px solid var(--border); color: var(--muted); background: transparent; }
 .ghost-button:hover { color: var(--text); background: var(--surface-hover); }
@@ -237,6 +239,9 @@ td strong { color: var(--text); }
 .customer-cell small, .table-subtext { display: block; margin-top: 3px; color: var(--muted-2); font-size: 9px; }
 .status-badge { display: inline-flex; align-items: center; padding: 5px 8px; border-radius: 999px; font-size: 9px; font-weight: 700; }
 .status-active, .status-in-stock, .status-sale { color: var(--green); background: rgba(52, 211, 153, 0.11); }
+.status-paid { color: var(--green); background: rgba(52, 211, 153, 0.11); }
+.status-partial { color: var(--orange); background: rgba(251, 146, 60, 0.12); }
+.status-unpaid { color: var(--rose); background: rgba(251, 113, 133, 0.12); }
 .status-due-soon, .status-purchase { color: var(--orange); background: rgba(251, 146, 60, 0.12); }
 .status-overdue, .status-low-stock { color: var(--rose); background: rgba(251, 113, 133, 0.12); }
 .quick-actions-list { display: grid; gap: 6px; margin-top: 15px; }
@@ -279,9 +284,8 @@ td strong { color: var(--text); }
 .transaction-row p small { color: var(--muted); margin-top: 4px; font-size: 9px; }
 .money-in { color: var(--green); font-size: 11px; } .money-out { color: var(--orange); font-size: 11px; }
 
-.stock-category-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 16px; }
-.stock-category-grid .stock-category:first-child { display: none; }
-.stock-category { padding: 20px; display: flex; align-items: center; gap: 14px; color: var(--muted); }
+.stock-category-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stock-category { min-width: 0; padding: 17px; display: flex; align-items: center; gap: 12px; color: var(--muted); }
 .stock-icon { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px; }
 .stock-category p { flex: 1; display: flex; flex-direction: column; margin: 0; color: var(--muted); font-size: 10px; }
 .stock-category strong { margin: 4px 0 2px; color: var(--text); font: 800 22px Manrope, sans-serif; }
@@ -460,7 +464,13 @@ td strong { color: var(--text); }
 .detail-line small { margin-top: 4px; color: var(--muted); font-size: 10px; }
 .detail-line > strong { color: var(--text); font-size: 12px; }
 .detail-note { margin: 0 18px 18px; }
-.detail-modal-footer { display: flex; justify-content: flex-end; padding: 16px 18px 18px; border-top: 1px solid var(--border); }
+.inventory-price-editor { display: grid; grid-template-columns: minmax(0,1.1fr) repeat(2,minmax(0,.8fr)); align-items: end; gap: 12px; margin: 0 18px 18px; padding: 16px; border: 1px solid rgba(139,92,246,.24); border-radius: 13px; background: rgba(139,92,246,.07); }
+.inventory-price-editor h4 { margin: 4px 0; font: 800 14px Manrope, sans-serif; }
+.inventory-price-editor p { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
+.inventory-price-editor label { min-width: 0; display: flex; flex-direction: column; gap: 7px; color: var(--muted); font-size: 9px; font-weight: 700; }
+.inventory-price-editor .input-prefix { height: 40px; }
+.inventory-price-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 9px; }
+.detail-modal-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 18px 18px; border-top: 1px solid var(--border); }
 .mobile-overlay { display: none; }
 
 @media (max-width: 1180px) {
@@ -469,6 +479,7 @@ td strong { color: var(--text); }
   .settings-grid { grid-template-columns: 1fr; }
   .account-settings-card { grid-row: auto; }
   .inventory-mix-card { min-height: 350px; }
+  .stock-category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 900px) {
@@ -485,7 +496,7 @@ td strong { color: var(--text); }
   .global-search { flex: 1; width: auto; }
   .topbar-user p, .topbar-user > svg, kbd { display: none; }
   .topbar-user { min-height: 42px; padding: 3px 6px; }
-  .trade-action-grid, .stock-category-grid { grid-template-columns: 1fr; }
+  .trade-action-grid { grid-template-columns: 1fr; }
   .trade-detail-modal { display: block; width: min(760px, 100%); }
   .trade-detail-modal .detail-sections { grid-template-columns: repeat(2, 1fr); padding: 14px 18px; }
   .trade-detail-modal .detail-lines { margin: 0 18px 14px; }
@@ -499,6 +510,8 @@ td strong { color: var(--text); }
   .topbar-actions { gap: 5px; }
   .section-header { align-items: flex-start; flex-direction: column; margin-bottom: 19px; }
   .section-header .primary-button { width: 100%; }
+  .section-header-actions { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .section-header-actions .primary-button, .section-header-actions .secondary-button { width: 100%; padding-inline: 10px; }
   .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .form-grid { grid-template-columns: 1fr; }
   .mini-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
@@ -524,7 +537,6 @@ td strong { color: var(--text); }
   .trade-action h3 { margin-block: 4px 6px; font-size: 18px; }
   .trade-action p { margin-bottom: 13px; font-size: 10px; line-height: 1.55; }
   .stock-category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-  .stock-category-grid .stock-category:nth-child(2) { grid-column: 1 / -1; }
   .stock-category { min-width: 0; padding: 13px; gap: 9px; }
   .stock-category > svg { display: none; }
   .stock-category .stock-icon { width: 38px; height: 38px; flex: 0 0 auto; border-radius: 11px; }
@@ -604,6 +616,9 @@ td strong { color: var(--text); }
   .trade-detail-modal .detail-sections { grid-template-columns: 1fr; padding: 12px; }
   .trade-detail-modal .detail-lines, .trade-detail-modal .detail-note { margin: 0 12px 12px; }
   .trade-detail-modal .detail-grid { padding: 12px; }
+  .inventory-price-editor { grid-template-columns: 1fr; margin: 0 12px 12px; padding: 13px; }
+  .inventory-price-actions { grid-column: 1; display: grid; grid-template-columns: 1fr 1fr; }
+  .detail-modal:not(.pawn-detail-modal) .detail-modal-footer { flex-wrap: wrap; }
   .settings-card-heading { align-items: flex-start; padding: 17px; }
   .account-status { margin-top: 7px; }
   .account-profile { padding: 20px 17px 17px; }
