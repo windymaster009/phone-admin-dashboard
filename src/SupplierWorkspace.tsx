@@ -128,7 +128,7 @@ export default function SupplierWorkspace() {
   const openCreate = () => { setEditing(null); setModalError(''); setModalOpen(true) }
   const openEdit = (supplier: Supplier) => { setEditing(supplier); setModalError(''); setModalOpen(true) }
 
-  return <>
+  return <div className="supplier-workspace">
     <div className="section-header">
       <div><span className="eyebrow">Operations</span><h2>Supplier management</h2><p>Manage reusable suppliers for stock purchases and transaction history.</p></div>
       <button className="primary-button" onClick={openCreate}><Plus size={17} /> Add supplier</button>
@@ -150,5 +150,5 @@ export default function SupplierWorkspace() {
       <div className="supplier-mobile-list">{filtered.map((supplier) => <article className="supplier-mobile-card" key={supplier._id}><div><span className="avatar">{supplier.name.slice(0, 2).toUpperCase()}</span><p><strong>{supplier.name}</strong><small>{supplier.phone || 'No phone recorded'}</small></p><span className={supplier.active ? 'verified' : 'unverified'}>{supplier.active ? 'Active' : 'Inactive'}</span></div><section><p><span>National ID</span><strong>{supplier.nationalIdNumber || 'Not recorded'}</strong></p><p><span>Added</span><strong>{formatDate(supplier.createdAt)}</strong></p></section><footer><button className="ghost-button" onClick={() => openEdit(supplier)}><Pencil size={14} /> Edit</button><button className="ghost-button" disabled={busy} onClick={() => void toggleSupplier(supplier)}><Power size={14} /> {supplier.active ? 'Deactivate' : 'Activate'}</button></footer></article>)}</div>
     </article>
     {modalOpen && <SupplierModal supplier={editing} busy={busy} error={modalError} onClose={() => { if (!busy) { setModalOpen(false); setEditing(null) } }} onSubmit={saveSupplier} />}
-  </>
+  </div>
 }

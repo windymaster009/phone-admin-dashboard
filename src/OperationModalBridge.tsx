@@ -205,8 +205,8 @@ function StockFields({ category }: { category: StockCategory }) {
   )
 }
 
-function CameraBarcodeReader({ onScan, onError }: { onScan: (code: string) => void; onError: (message: string) => void }) {
-  const [active, setActive] = useState(false)
+function CameraBarcodeReader({ onScan, onError, readerId = 'phoneflow-barcode-reader', autoStart = false }: { onScan: (code: string) => void; onError: (message: string) => void; readerId?: string; autoStart?: boolean }) {
+  const [active, setActive] = useState(autoStart)
 
   useEffect(() => {
     if (!active) return
@@ -216,8 +216,13 @@ function CameraBarcodeReader({ onScan, onError }: { onScan: (code: string) => vo
     async function startCamera() {
       const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode')
       if (disposed) return
-      scanner = new Html5Qrcode('phoneflow-barcode-reader', {
-        formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128],
+      scanner = new Html5Qrcode(readerId, {
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.DATA_MATRIX,
+        ],
         verbose: false,
       })
       await scanner.start(
@@ -242,15 +247,15 @@ function CameraBarcodeReader({ onScan, onError }: { onScan: (code: string) => vo
       if (scanner?.isScanning) void scanner.stop().finally(() => scanner?.clear())
       else scanner?.clear()
     }
-  }, [active, onError, onScan])
+  }, [active, onError, onScan, readerId])
 
   return (
-    <div className="camera-scanner">
-      <div id="phoneflow-barcode-reader" className={active ? 'active' : ''} />
-      <button type="button" className="secondary-button" onClick={() => setActive((value) => !value)}>
+    <div className={`camera-scanner ${autoStart ? 'automatic' : ''}`}>
+      <div id={readerId} className={active ? 'active' : ''} />
+      {!autoStart && <button type="button" className="secondary-button" onClick={() => setActive((value) => !value)}>
         <Camera size={17} /> {active ? 'Stop camera' : 'Scan with camera'}
-      </button>
-      <small>Camera scanning requires permission and works on localhost or HTTPS.</small>
+      </button>}
+      {!autoStart && <small>Camera scanning requires permission and works on localhost or HTTPS.</small>}
     </div>
   )
 }
@@ -285,6 +290,8 @@ export default function OperationModalBridge() {
   const [purchaseStep, setPurchaseStep] = useState<1 | 2>(1)
   const [purchaseAttempted, setPurchaseAttempted] = useState(false)
   const [usdKhrRate, setUsdKhrRate] = useState(4100)
+  const [imeiScanDeviceId, setImeiScanDeviceId] = useState<string | null>(null)
+  const [imeiScanError, setImeiScanError] = useState('')
   const imeiInputs = useRef(new Map<string, HTMLInputElement>())
 
   const maximumPawn = useMemo(
@@ -446,6 +453,24 @@ export default function OperationModalBridge() {
   function updatePurchaseDevice(id: string, update: Partial<PurchaseDevice>) {
     setPurchaseDevices((current) => current.map((device) => device.id === id ? { ...device, ...update } : device))
   }
+
+  function openImeiScanner(deviceId: string) {
+    setImeiScanDeviceId(deviceId)
+    setImeiScanError('')
+  }
+
+  const applyScannedImei = useCallback((rawCode: string) => {
+    const imei = rawCode.replace(/\D/g, '')
+    if (imei.length !== 15) {
+      setImeiScanError(`IMEI must contain exactly 15 digits. The scan returned ${imei.length}.`)
+      return
+    }
+    if (!imeiScanDeviceId) return
+    setPurchaseDevices((current) => current.map((device) => device.id === imeiScanDeviceId ? { ...device, imei } : device))
+    setImeiScanDeviceId(null)
+    setImeiScanError('')
+    window.setTimeout(() => imeiInputs.current.get(imeiScanDeviceId)?.focus(), 0)
+  }, [imeiScanDeviceId])
 
   function purchaseItemErrors(item: PurchaseDevice) {
     const errors: Record<string, string> = {}
@@ -685,7 +710,7 @@ export default function OperationModalBridge() {
 
                 <div className="device-group-label"><span>Product identity</span><small>Required identification information</small></div>
                 {device.category === 'PHONE' ? <>
-                  <label className={`device-imei-field ${purchaseAttempted && itemErrors.imei ? 'field-invalid' : ''}`}><span>IMEI</span><div><input ref={(node) => { if (node) imeiInputs.current.set(device.id, node); else imeiInputs.current.delete(device.id) }} required inputMode="numeric" pattern="[0-9]{15}" maxLength={15} value={device.imei} onChange={(event) => updatePurchaseDevice(device.id, { imei: event.target.value.replace(/\D/g, '').slice(0, 15) })} placeholder="15-digit IMEI" /><button type="button" className="secondary-button" onClick={() => imeiInputs.current.get(device.id)?.focus()}><ScanLine size={16} /> Scan IMEI</button></div><small>{purchaseAttempted && itemErrors.imei ? itemErrors.imei : 'Click Scan IMEI, then use the barcode scanner.'}</small></label>
+                  <label className={`device-imei-field ${purchaseAttempted && itemErrors.imei ? 'field-invalid' : ''}`}><span>IMEI</span><div><input ref={(node) => { if (node) imeiInputs.current.set(device.id, node); else imeiInputs.current.delete(device.id) }} required inputMode="numeric" pattern="[0-9]{15}" maxLength={15} value={device.imei} onChange={(event) => updatePurchaseDevice(device.id, { imei: event.target.value.replace(/\D/g, '').slice(0, 15) })} placeholder="15-digit IMEI" /><button type="button" className="secondary-button" onClick={() => openImeiScanner(device.id)}><ScanLine size={16} /> Scan IMEI</button></div><small>{purchaseAttempted && itemErrors.imei ? itemErrors.imei : 'Scan with a handheld scanner or this device camera.'}</small></label>
                   <label className={purchaseAttempted && itemErrors.brand ? 'field-invalid' : ''}>Brand<input required value={device.brand} onChange={(event) => updatePurchaseDevice(device.id, { brand: event.target.value })} placeholder="Apple" />{purchaseAttempted && itemErrors.brand && <small>{itemErrors.brand}</small>}</label>
                   <label className={purchaseAttempted && itemErrors.model ? 'field-invalid' : ''}>Model<input required value={device.model} onChange={(event) => updatePurchaseDevice(device.id, { model: event.target.value })} placeholder="iPhone 13 Pro" />{purchaseAttempted && itemErrors.model && <small>{itemErrors.model}</small>}</label>
                   <label className={purchaseAttempted && itemErrors.storage ? 'field-invalid' : ''}>Storage<div className="device-unit-input"><input required type="number" min="1" step="1" value={device.storage} onChange={(event) => updatePurchaseDevice(device.id, { storage: event.target.value })} placeholder="128" /><span>GB</span></div>{purchaseAttempted && itemErrors.storage && <small>{itemErrors.storage}</small>}</label>
@@ -732,6 +757,14 @@ export default function OperationModalBridge() {
         <footer className="operation-modal-actions"><div className="purchase-submit-summary"><span>Step 2 of 2 · {purchaseDevices.length} item{purchaseDevices.length === 1 ? '' : 's'}</span><strong>{purchaseCurrency === 'KHR' ? `${purchaseTotal.toLocaleString()} ៛` : `$${purchaseTotal.toFixed(2)}`}</strong></div><button type="button" className="ghost-button" onClick={() => { setError(''); setPurchaseAttempted(false); setPurchaseStep(1) }}>Back</button><button className="primary-button" disabled={busy} aria-disabled={!purchaseItemsValid || purchasePaid > purchaseTotal}>{busy ? 'Saving purchase...' : purchaseItemsValid ? 'Complete purchase' : 'Complete required fields'}</button></footer>
         </>}
       </form>}
+
+      {kind === 'purchase' && imeiScanDeviceId && <div className="imei-scanner-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setImeiScanDeviceId(null) }}>
+        <section className="imei-scanner-dialog" role="dialog" aria-modal="true" aria-labelledby="imei-scanner-title">
+          <header><span><Camera size={20} /></span><div><small>CAMERA ACTIVE</small><h3 id="imei-scanner-title">Point camera at the IMEI</h3><p>The IMEI will be filled automatically when the 15-digit barcode is detected.</p></div><button type="button" onClick={() => setImeiScanDeviceId(null)} aria-label="Close IMEI scanner"><X size={18} /></button></header>
+          {imeiScanError && <div className="imei-scan-error"><AlertTriangle size={16} />{imeiScanError}</div>}
+          <CameraBarcodeReader autoStart readerId="phoneflow-imei-reader" onScan={applyScannedImei} onError={setImeiScanError} />
+        </section>
+      </div>}
 
       {kind === 'scan' && <div className={`scanner-workflow ${scannedItem ? 'has-result' : ''}`}>
         {!scannedItem ? <>

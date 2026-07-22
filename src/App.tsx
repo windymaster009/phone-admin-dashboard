@@ -768,19 +768,21 @@ function PawnView() {
 
   return (
     <>
-      <SectionHeader
-        eyebrow="Operations"
-        title="Pawn management"
-        description={error || 'Track collateral, National ID verification, repayments, renewals, and overdue contracts.'}
-        action={<button className="primary-button" onClick={() => comingNext('New pawn')}><Plus size={17} /> New pawn</button>}
-      />
-      <section className="mini-stats-grid">
+      <div className="pawn-page-heading">
+        <SectionHeader
+          eyebrow="Operations"
+          title="Pawn management"
+          description={error || 'Track collateral, National ID verification, repayments, renewals, and overdue contracts.'}
+          action={<button className="primary-button" onClick={() => comingNext('New pawn')}><Plus size={17} /> New pawn</button>}
+        />
+      </div>
+      <section className="mini-stats-grid pawn-stats-grid">
         <div className="surface-card mini-stat"><HandCoins /><p>Active contracts<strong>{pawns.filter((pawn) => ['ACTIVE', 'DUE_SOON', 'RENEWED'].includes(pawn.status)).length}</strong><small>{money.format(pawns.reduce((sum, pawn) => sum + pawn.principal, 0))} principal</small></p></div>
         <div className="surface-card mini-stat"><Clock3 /><p>Due soon<strong>{pawns.filter((pawn) => pawn.status === 'DUE_SOON').length}</strong><small>needs follow-up</small></p></div>
         <div className="surface-card mini-stat"><AlertTriangle /><p>Overdue<strong>{pawns.filter((pawn) => pawn.status === 'OVERDUE').length}</strong><small>past due contracts</small></p></div>
         <div className="surface-card mini-stat"><RefreshCcw /><p>Renewed<strong>{pawns.filter((pawn) => pawn.status === 'RENEWED').length}</strong><small>active renewals</small></p></div>
       </section>
-      <article className="surface-card table-card page-table">
+      <article className="surface-card table-card page-table pawn-workspace-card">
         <div className="filter-row">
           <div className="search-field"><Search size={17} /><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search contract, customer, phone or IMEI" /></div>
           <select className="ghost-button filter-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter pawn status">
@@ -816,16 +818,12 @@ function PawnView() {
             <article className="mobile-contract-card" key={row._id}>
               <div className="mobile-contract-heading">
                 <span className="avatar">{(row.customer?.name || 'NA').slice(0, 2).toUpperCase()}</span>
-                <p><strong>{row.customer?.name || 'Unknown'}</strong><small>{row.itemSnapshot.name}</small></p>
+                <p><strong>{row.customer?.name || 'Unknown'}</strong><small>{row.itemSnapshot.name} · {row.pawnNo}</small></p>
                 <StatusBadge status={row.status} />
-              </div>
-              <div className="mobile-pawn-verification">
-                {row.identificationVerified ? <span className="verified"><BadgeCheck size={13} /> ID verified</span> : <span className="unverified"><AlertTriangle size={13} /> ID missing</span>}
-                <small className="mono">{row.pawnNo}</small>
               </div>
               <div className="mobile-contract-details">
                 <div><span>Loan</span><strong>{money.format(row.principal)}</strong><small>{exchangeRate && khrText(row.principal, exchangeRate)}</small></div>
-                <div><span>Due date</span><strong>{dateText(row.dueDate)}</strong><small>Value {money.format(row.estimatedValue)}</small></div>
+                <div><span>Due date</span><strong>{dateText(row.dueDate)}</strong><small className={row.identificationVerified ? 'verified' : 'unverified'}>{row.identificationVerified ? <><BadgeCheck size={11} /> ID verified</> : <><AlertTriangle size={11} /> ID missing</>}</small></div>
                 <button className="icon-button" onClick={() => setSelectedPawn(row)} aria-label={`View ${row.pawnNo}`}><MoreHorizontal size={18} /></button>
               </div>
             </article>
@@ -842,6 +840,7 @@ function TradeView() {
   const [trades, setTrades] = useState<Trade[]>([])
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null)
   const [error, setError] = useState('')
+  const [transactionsCollapsed, setTransactionsCollapsed] = useState(() => window.matchMedia('(max-width: 640px)').matches)
 
   useEffect(() => {
     api<{ trades: Trade[] }>('/trades')
@@ -879,11 +878,13 @@ function TradeView() {
 
   return (
     <>
-      <SectionHeader
-        eyebrow="Operations"
-        title="Buy & sell"
-        description={error || 'Purchase inventory from sellers and process shop sales with complete transaction history.'}
-      />
+      <div className="trade-page-heading">
+        <SectionHeader
+          eyebrow="Operations"
+          title="Buy & sell"
+          description={error || 'Purchase inventory from sellers and process shop sales with complete transaction history.'}
+        />
+      </div>
       <section className="trade-action-grid">
         <article className="surface-card trade-action buy-action">
           <span className="trade-icon"><Banknote size={28} /></span>
@@ -896,12 +897,15 @@ function TradeView() {
           <button className="secondary-button" onClick={() => comingNext('New sale')}><ShoppingCart size={17} /> New sale</button>
         </article>
       </section>
-      <article className="surface-card table-card page-table">
+      <article className={`surface-card table-card page-table trade-transactions-card ${transactionsCollapsed ? 'collapsed' : ''}`}>
         <div className="card-heading table-heading">
           <div><span className="eyebrow">Activity</span><h3>Recent transactions</h3></div>
-          <button className="ghost-button" onClick={exportTrades} disabled={trades.length === 0}>Export <FileText size={16} /></button>
+          <div className="trade-table-actions">
+            {!transactionsCollapsed && <button className="ghost-button trade-export-button" onClick={exportTrades} disabled={trades.length === 0} aria-label="Export transactions as CSV"><FileText size={15} /><span>Export</span></button>}
+            <button className="ghost-button transaction-collapse-button" type="button" onClick={() => setTransactionsCollapsed((value) => !value)} aria-expanded={!transactionsCollapsed} aria-label={transactionsCollapsed ? 'Expand recent transactions' : 'Collapse recent transactions'}><ChevronDown size={17} /></button>
+          </div>
         </div>
-        <div className="transaction-list">
+        {!transactionsCollapsed && <div className="transaction-list">
           {trades.map((transaction) => (
             <div className="transaction-row" key={transaction._id}>
               <span className={`transaction-icon ${transaction.type === 'SELL' ? 'sale' : 'purchase'}`}>{transaction.type === 'SELL' ? <ArrowUpRight /> : <ArrowDownRight />}</span>
@@ -912,7 +916,7 @@ function TradeView() {
             </div>
           ))}
           {trades.length === 0 && <div className="transaction-row"><p><strong>No transactions yet</strong><small>Create a buy or sell transaction to see it here.</small></p></div>}
-        </div>
+        </div>}
       </article>
       {selectedTrade && (
         <div className="modal-backdrop" role="presentation" onClick={() => setSelectedTrade(null)}>
@@ -1037,15 +1041,17 @@ function InventoryView() {
 
   return (
     <>
-      <SectionHeader
-        eyebrow="Stock control"
-        title="Stock information"
-        description={error || 'Manage serialized phones and quantity-based tablets, accessories, spare parts, and other stock.'}
-        action={<div className="section-header-actions">
-          <button className="secondary-button" onClick={() => window.dispatchEvent(new Event('phoneflow:open-scanner'))}><ScanLine size={17} /> Scan product</button>
-          <button className="primary-button" onClick={() => comingNext('Add stock')}><Plus size={17} /> Add stock</button>
-        </div>}
-      />
+      <div className="stock-page-heading">
+        <SectionHeader
+          eyebrow="Stock control"
+          title="Stock information"
+          description={error || 'Manage serialized phones and quantity-based tablets, accessories, spare parts, and other stock.'}
+          action={<div className="section-header-actions">
+            <button className="secondary-button" onClick={() => window.dispatchEvent(new Event('phoneflow:open-scanner'))}><ScanLine size={17} /> Scan product</button>
+            <button className="primary-button" onClick={() => comingNext('Add stock')}><Plus size={17} /> Add stock</button>
+          </div>}
+        />
+      </div>
       <section className="stock-category-grid">
         <article className="surface-card stock-category"><span className="stock-icon violet"><Smartphone /></span><p>Phones<strong>{phoneCount}</strong><small>live stock units</small></p><ArrowUpRight /></article>
         <article className="surface-card stock-category"><span className="stock-icon violet"><Smartphone /></span><p>Tablets<strong>{tabletCount}</strong><small>live stock units</small></p><ArrowUpRight /></article>
@@ -1053,7 +1059,7 @@ function InventoryView() {
         <article className="surface-card stock-category"><span className="stock-icon orange"><Wrench /></span><p>Spare parts<strong>{sparePartCount}</strong><small>live stock units</small></p><ArrowUpRight /></article>
         <article className="surface-card stock-category"><span className="stock-icon blue"><Package /></span><p>Other<strong>{otherCount}</strong><small>live stock units</small></p><ArrowUpRight /></article>
       </section>
-      <article className="surface-card table-card page-table">
+      <article className="surface-card table-card page-table stock-workspace-card">
         <div className="filter-row">
           <div className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search SKU, product, IMEI or serial number" /></div>
           <select className="ghost-button filter-select" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} aria-label="Filter inventory category">
@@ -1223,11 +1229,13 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
 
   return (
     <>
-      <SectionHeader
-        eyebrow="Valuation"
-        title="Depreciation calculator"
-        description="Estimate second-hand value and calculate a safe 40–50% pawn amount. Managers can override the final offer with a reason."
-      />
+      <div className="depreciation-page-heading">
+        <SectionHeader
+          eyebrow="Valuation"
+          title="Depreciation calculator"
+          description="Estimate second-hand value and calculate a safe 40–50% pawn amount. Managers can override the final offer with a reason."
+        />
+      </div>
       <section className="calculator-layout">
         <article className="surface-card calculator-card">
           <div className="card-heading"><div><span className="eyebrow">Phone details</span><h3>Calculate value</h3></div><span className="calculator-mark"><Calculator size={20} /></span></div>
@@ -1237,7 +1245,7 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
             <label><span>Condition</span><select value={condition} onChange={(event) => setCondition(event.target.value)}><option value="excellent">Excellent / Like new</option><option value="good">Good / Minor wear</option><option value="fair">Fair / Visible wear</option><option value="damaged">Damaged / Repair needed</option></select></label>
             <label><span>Pawn percentage</span><div className="range-label"><strong>{pawnRate}%</strong><small>Recommended range: 40–50%</small></div><input className="range-input" type="range" min="40" max="50" value={pawnRate} onChange={(event) => setPawnRate(Number(event.target.value))} /></label>
           </div>
-          <div className="notice-box"><AlertTriangle size={18} /><p><strong>Before approving</strong><span>Confirm IMEI, National ID, ownership, lock status, battery health, display, cameras, speakers, and repair cost.</span></p></div>
+          <div className="notice-box"><AlertTriangle size={18} /><p><strong>Verify device and ID before approving</strong><span>Confirm IMEI, National ID, ownership, lock status, battery health, display, cameras, speakers, and repair cost.</span></p></div>
         </article>
 
         <article className="surface-card valuation-result-card">
@@ -1277,6 +1285,7 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
 function CustomersView() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
+  const [search, setSearch] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -1285,23 +1294,32 @@ function CustomersView() {
       .catch((reason: Error) => setError(reason.message))
   }, [])
 
+  const filteredCustomers = customers.filter((customer) => {
+    const term = search.trim().toLowerCase()
+    if (!term) return true
+    return [customer.name, customer.phone, customer.nationalIdNumber, customer.address]
+      .some((value) => String(value || '').toLowerCase().includes(term))
+  })
+
   return (
     <>
-      <SectionHeader
-        eyebrow="Customer records"
-        title="Customer management"
-        description={error || 'Customer profiles, National ID records, addresses, notes, and contact details from MongoDB.'}
-        action={<button className="primary-button" onClick={() => comingNext('Add customer')}><Plus size={17} /> Add customer</button>}
-      />
-      <article className="surface-card table-card page-table">
+      <div className="customer-page-heading">
+        <SectionHeader
+          eyebrow="Customer records"
+          title="Customer management"
+          description={error || 'Customer profiles, National ID records, addresses, notes, and contact details from MongoDB.'}
+          action={<button className="primary-button" onClick={() => comingNext('Add customer')}><Plus size={17} /> Add customer</button>}
+        />
+      </div>
+      <article className="surface-card table-card page-table customer-workspace-card">
         <div className="filter-row">
-          <div className="search-field"><Search size={17} /><input placeholder="Search customer, phone or National ID" /></div>
+          <div className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search customer, phone or National ID" /></div>
         </div>
-        <div className="table-scroll">
+        <div className="table-scroll customer-desktop-table">
           <table>
             <thead><tr><th>Customer</th><th>Phone</th><th>National ID</th><th>Address</th><th>Created</th><th /></tr></thead>
             <tbody>
-              {customers.map((customer) => (
+              {filteredCustomers.map((customer) => (
                 <tr key={customer._id}>
                   <td><strong>{customer.name}</strong></td>
                   <td>{customer.phone}</td>
@@ -1311,9 +1329,26 @@ function CustomersView() {
                   <td><button className="icon-button" onClick={() => setSelectedCustomer(customer)} aria-label={`View ${customer.name}`}><MoreHorizontal size={18} /></button></td>
                 </tr>
               ))}
-              {customers.length === 0 && <tr><td colSpan={6}>No customers in the database yet.</td></tr>}
+              {filteredCustomers.length === 0 && <tr><td colSpan={6}>{customers.length === 0 ? 'No customers in the database yet.' : 'No customers match this search.'}</td></tr>}
             </tbody>
           </table>
+        </div>
+        <div className="mobile-record-list customer-mobile-list">
+          {filteredCustomers.map((customer) => (
+            <article className="mobile-record-card customer-mobile-card" key={customer._id}>
+              <div className="mobile-record-heading">
+                <span className="avatar">{customer.name.slice(0, 2).toUpperCase()}</span>
+                <p><strong>{customer.name}</strong><small>{customer.phone || 'No phone recorded'}</small></p>
+                <button className="icon-button" onClick={() => setSelectedCustomer(customer)} aria-label={`View ${customer.name}`}><MoreHorizontal size={18} /></button>
+              </div>
+              <div className="customer-mobile-details">
+                <div><span>National ID</span><strong>{customer.nationalIdNumber || 'Not recorded'}</strong></div>
+                <div><span>Address</span><strong>{customer.address || 'Not recorded'}</strong></div>
+                <span className={customer.nationalIdNumber ? 'verified' : 'unverified'}>{customer.nationalIdNumber ? <><BadgeCheck size={12} /> ID recorded</> : <><AlertTriangle size={12} /> Missing ID</>}</span>
+              </div>
+            </article>
+          ))}
+          {filteredCustomers.length === 0 && <p className="mobile-record-empty">{customers.length === 0 ? 'No customers in the database yet.' : 'No customers match this search.'}</p>}
         </div>
       </article>
 

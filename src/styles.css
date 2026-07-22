@@ -274,6 +274,11 @@ td strong { color: var(--text); }
 .trade-action h3 { margin: 5px 0 8px; font-family: Manrope, sans-serif; font-size: 21px; }
 .trade-action p { max-width: 520px; margin: 0 0 20px; color: var(--muted); font-size: 12px; line-height: 1.7; }
 .transaction-list { padding: 4px 18px 16px; }
+.trade-table-actions { display: flex; align-items: center; gap: 8px; }
+.transaction-collapse-button svg { transition: transform 160ms ease; }
+.trade-transactions-card:not(.collapsed) .transaction-collapse-button svg { transform: rotate(180deg); }
+.trade-transactions-card.collapsed { min-height: 0; }
+.trade-transactions-card.collapsed .table-heading { padding-bottom: 20px; }
 .transaction-row { display: grid; grid-template-columns: auto minmax(180px, 1fr) auto auto auto; align-items: center; gap: 15px; padding: 14px 3px; border-top: 1px solid var(--border); }
 .transaction-icon { width: 37px; height: 37px; display: grid; place-items: center; border-radius: 11px; }
 .transaction-icon svg { width: 17px; }
@@ -520,6 +525,44 @@ td strong { color: var(--text); }
   .mini-stat p { min-width: 0; }
   .mini-stat strong { margin-block: 4px 2px; font-size: 18px; }
   .mini-stat small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pawn-page-heading .section-header { margin-bottom: 12px; flex-direction: row; align-items: center; }
+  .pawn-page-heading .section-header .eyebrow,
+  .pawn-page-heading .section-header p { display: none; }
+  .pawn-page-heading .section-header h2 { margin: 0; font-size: 22px; }
+  .pawn-page-heading .section-header .primary-button { width: auto; flex: 0 0 auto; padding-inline: 13px; }
+  .pawn-stats-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-bottom: 10px; }
+  .pawn-stats-grid .mini-stat { min-height: 74px; padding: 10px 6px; display: grid; place-items: center; text-align: center; }
+  .pawn-stats-grid .mini-stat > svg,
+  .pawn-stats-grid .mini-stat small { display: none; }
+  .pawn-stats-grid .mini-stat p { width: 100%; align-items: center; overflow: hidden; font-size: 8px; white-space: nowrap; text-overflow: ellipsis; }
+  .pawn-stats-grid .mini-stat strong { margin: 5px 0 0; font-size: 18px; }
+  .pawn-workspace-card .filter-row { padding: 11px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .pawn-workspace-card .filter-row .search-field { grid-column: 1 / -1; width: 100%; }
+  .pawn-workspace-card .filter-row .filter-select { width: 100%; min-width: 0; padding-inline: 10px; font-size: 9px; }
+  .stock-page-heading .section-header { margin-bottom: 10px; }
+  .stock-page-heading .section-header .eyebrow,
+  .stock-page-heading .section-header p { display: none; }
+  .stock-page-heading .section-header h2 { margin: 0; font-size: 22px; }
+  .stock-page-heading .section-header-actions { gap: 8px; }
+  .stock-page-heading .section-header-actions .primary-button,
+  .stock-page-heading .section-header-actions .secondary-button { min-height: 39px; }
+  .stock-page-heading + .stock-category-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; margin-bottom: 10px; }
+  .stock-page-heading + .stock-category-grid .stock-category { min-height: 72px; padding: 9px 4px; display: grid; place-items: center; text-align: center; }
+  .stock-page-heading + .stock-category-grid .stock-category > svg,
+  .stock-page-heading + .stock-category-grid .stock-category .stock-icon,
+  .stock-page-heading + .stock-category-grid .stock-category small { display: none; }
+  .stock-page-heading + .stock-category-grid .stock-category p { width: 100%; align-items: center; overflow: hidden; font-size: 7px; white-space: nowrap; text-overflow: ellipsis; }
+  .stock-page-heading + .stock-category-grid .stock-category strong { margin-top: 5px; font-size: 17px; }
+  .stock-workspace-card .filter-row { padding: 11px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .stock-workspace-card .filter-row .search-field { grid-column: 1 / -1; width: 100%; }
+  .stock-workspace-card .filter-row .filter-select { width: 100%; min-width: 0; padding-inline: 9px; font-size: 9px; }
+  .customer-page-heading .section-header { margin-bottom: 12px; flex-direction: row; align-items: center; }
+  .customer-page-heading .section-header .eyebrow,
+  .customer-page-heading .section-header p { display: none; }
+  .customer-page-heading .section-header h2 { margin: 0; font-size: 21px; }
+  .customer-page-heading .section-header .primary-button { width: auto; flex: 0 0 auto; padding-inline: 12px; }
+  .customer-workspace-card .filter-row { padding: 11px; }
+  .customer-workspace-card .search-field { width: 100%; }
   .metric-card { min-width: 0; min-height: 108px; padding: 13px; grid-template-columns: auto minmax(0, 1fr); gap: 9px; }
   .metric-card::after { width: 66px; height: 66px; right: -26px; bottom: -28px; }
   .metric-icon { width: 36px; height: 36px; border-radius: 11px; }
@@ -530,12 +573,44 @@ td strong { color: var(--text); }
   .metric-copy .khr-value { font-size: 8px; }
   .metric-change { grid-column: 1 / -1; margin: 0; overflow: hidden; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
   .trade-action-grid { gap: 10px; }
-  .trade-action { min-height: 0; padding: 16px; }
-  .trade-action::after { width: 118px; height: 118px; right: -46px; top: -48px; }
-  .trade-icon { width: 42px; height: 42px; margin-bottom: 13px; border-radius: 12px; }
-  .trade-icon svg { width: 20px; }
-  .trade-action h3 { margin-block: 4px 6px; font-size: 18px; }
-  .trade-action p { margin-bottom: 13px; font-size: 10px; line-height: 1.55; }
+  .trade-page-heading .section-header { margin-bottom: 12px; }
+  .trade-page-heading .section-header .eyebrow,
+  .trade-page-heading .section-header p { display: none; }
+  .trade-page-heading .section-header h2 { margin: 0; font-size: 23px; }
+  .trade-action {
+    min-height: 0;
+    padding: 13px;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 11px;
+  }
+  .trade-action::after { width: 88px; height: 88px; right: -38px; top: -40px; }
+  .trade-icon { width: 40px; height: 40px; margin: 0; border-radius: 11px; }
+  .trade-icon svg { width: 19px; }
+  .trade-action > div { min-width: 0; }
+  .trade-action .eyebrow { font-size: 8px; }
+  .trade-action h3 { margin: 3px 0 0; font-size: 16px; }
+  .trade-action p { display: none; }
+  .trade-action > button { position: relative; z-index: 1; min-width: 0; padding-inline: 12px; white-space: nowrap; }
+  .trade-transactions-card .table-heading { align-items: center; padding: 13px 14px 10px; }
+  .trade-transactions-card .table-heading .eyebrow { display: none; }
+  .trade-transactions-card .table-heading h3 { margin: 0; font-size: 15px; }
+  .trade-transactions-card .table-heading .ghost-button { height: 36px; display: flex; align-items: center; justify-content: center; }
+  .trade-transactions-card .table-heading .ghost-button svg { color: var(--muted); }
+  .trade-transactions-card .table-heading .trade-export-button { width: auto; min-width: 70px; gap: 6px; padding: 0 10px; color: var(--muted); font-size: 9px; font-weight: 700; }
+  .trade-transactions-card .table-heading .transaction-collapse-button { width: 36px; min-width: 36px; padding: 0; }
+  .trade-transactions-card.collapsed .table-heading { padding-bottom: 13px; }
+  .trade-transactions-card .transaction-list { padding: 0 14px 8px; }
+  .trade-transactions-card .transaction-row { grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; padding: 9px 0; }
+  .trade-transactions-card .transaction-icon { width: 32px; height: 32px; border-radius: 9px; }
+  .trade-transactions-card .transaction-icon svg { width: 15px; }
+  .trade-transactions-card .transaction-row p { min-width: 0; }
+  .trade-transactions-card .transaction-row p strong,
+  .trade-transactions-card .transaction-row p small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .trade-transactions-card .transaction-row p strong { font-size: 10px; }
+  .trade-transactions-card .transaction-row p small { margin-top: 2px; font-size: 8px; }
+  .trade-transactions-card .transaction-row .icon-button { width: 32px; height: 32px; }
   .stock-category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
   .stock-category { min-width: 0; padding: 13px; gap: 9px; }
   .stock-category > svg { display: none; }
@@ -571,7 +646,7 @@ td strong { color: var(--text); }
   .filter-row { flex-direction: column; }
   .filter-row .ghost-button { width: 100%; }
   .page-table { min-height: 0; }
-  .stock-desktop-table, .report-desktop-table { display: none; }
+  .stock-desktop-table, .customer-desktop-table, .report-desktop-table { display: none; }
   .mobile-record-list { display: grid; border-top: 1px solid var(--border); }
   .mobile-record-card { min-width: 0; padding: 14px; border-bottom: 1px solid var(--border); }
   .mobile-record-card:last-child { border-bottom: 0; }
@@ -586,11 +661,72 @@ td strong { color: var(--text); }
   .mobile-record-details span { color: var(--muted-2); font-size: 7px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; }
   .mobile-record-details strong { margin-top: 5px; overflow: hidden; color: var(--text); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
   .report-record-details { grid-template-columns: minmax(0, 1fr) auto; }
+  .stock-mobile-list .mobile-record-card { padding: 11px 12px; }
+  .stock-mobile-list .mobile-record-heading { gap: 9px; }
+  .stock-mobile-list .mobile-record-heading .stock-icon { width: 33px; height: 33px; }
+  .stock-mobile-list .mobile-record-details { grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 6px; margin-top: 8px; padding: 9px; }
+  .stock-mobile-list .mobile-record-details span { font-size: 7px; }
+  .stock-mobile-list .mobile-record-details strong { margin-top: 4px; font-size: 9px; }
+  .stock-mobile-list .mobile-record-details .icon-button { width: 32px; height: 32px; }
+  .customer-mobile-list .customer-mobile-card { padding: 11px 12px; }
+  .customer-mobile-list .mobile-record-heading { gap: 9px; }
+  .customer-mobile-list .mobile-record-heading .avatar { width: 34px; height: 34px; border-radius: 10px; font-size: 9px; }
+  .customer-mobile-details { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 8px; margin-top: 9px; padding: 9px 10px; border-radius: 10px; background: var(--bg-soft); }
+  .customer-mobile-details > div { min-width: 0; display: flex; flex-direction: column; }
+  .customer-mobile-details > div span { color: var(--muted-2); font-size: 7px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; }
+  .customer-mobile-details > div strong { margin-top: 4px; overflow: hidden; color: var(--text); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+  .customer-mobile-details > span { grid-column: 1 / -1; padding-top: 7px; border-top: 1px solid var(--border); }
+  .depreciation-page-heading .section-header { margin-bottom: 11px; }
+  .depreciation-page-heading .section-header .eyebrow,
+  .depreciation-page-heading .section-header p { display: none; }
+  .depreciation-page-heading .section-header h2 { margin: 0; font-size: 21px; }
+  .calculator-layout { gap: 10px; }
+  .calculator-card,
+  .valuation-result-card { padding: 14px; }
+  .calculator-card .card-heading { align-items: center; }
+  .calculator-card .card-heading .eyebrow,
+  .calculator-card .calculator-mark { display: none; }
+  .calculator-card .card-heading h3 { margin: 0; font-size: 15px; }
+  .calculator-card .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px 9px; margin-top: 14px; }
+  .calculator-card .form-grid > label:nth-child(3),
+  .calculator-card .form-grid > label:nth-child(4) { grid-column: 1 / -1; }
+  .calculator-card .form-grid label { gap: 6px; font-size: 9px; }
+  .calculator-card .form-grid input,
+  .calculator-card .form-grid select { height: 40px; padding-inline: 10px; }
+  .calculator-card .input-prefix span,
+  .calculator-card .input-suffix span { padding-inline: 9px; font-size: 9px; }
+  .calculator-card .range-label strong { font-size: 17px; }
+  .calculator-card .range-label small { font-size: 7px; }
+  .calculator-card .notice-box { align-items: center; gap: 8px; margin-top: 14px; padding: 10px 11px; }
+  .calculator-card .notice-box svg { width: 15px; flex: 0 0 auto; }
+  .calculator-card .notice-box strong { font-size: 9px; }
+  .calculator-card .notice-box span { display: none; }
+  .valuation-result-card > .eyebrow { display: none; }
+  .valuation-result-card .valuation-hero { margin: 0 0 13px; padding: 15px 12px; }
+  .valuation-result-card .valuation-hero strong { margin: 5px 0; font-size: 30px; }
+  .valuation-result-card .valuation-hero .khr-equivalent { margin-bottom: 6px; font-size: 14px; }
+  .valuation-result-card .valuation-hero .exchange-rate-source { display: none; }
+  .valuation-result-card .calculation-breakdown { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 13px; }
+  .valuation-result-card .calculation-breakdown div { min-width: 0; padding: 8px; flex-direction: column; gap: 4px; border-radius: 9px; background: var(--bg-soft); }
+  .valuation-result-card .calculation-breakdown .estimated-row { margin: 0; padding: 8px; border: 0; font-size: 10px; }
+  .valuation-result-card .full-width { display: inline-flex; width: calc(50% - 4px); min-height: 39px; padding-inline: 8px; font-size: 9px; }
+  .valuation-result-card .full-width + .full-width { margin-left: 4px; }
+  .depreciation-page-heading ~ .workflow-note { margin-top: 10px; padding: 13px; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
+  .depreciation-page-heading ~ .workflow-note .workflow-note-icon { width: 38px; height: 38px; border-radius: 11px; }
+  .depreciation-page-heading ~ .workflow-note .eyebrow,
+  .depreciation-page-heading ~ .workflow-note p { display: none; }
+  .depreciation-page-heading ~ .workflow-note h3 { margin: 0; font-size: 12px; }
+  .depreciation-page-heading ~ .workflow-note .secondary-button { grid-column: auto; width: auto; min-height: 36px; padding-inline: 10px; font-size: 8px; }
   .mobile-record-empty { margin: 0; padding: 24px 14px; color: var(--muted); font-size: 10px; text-align: center; }
   .pawn-management-table { display: none; }
   .pawn-management-mobile-list { display: grid; }
-  .mobile-pawn-verification { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 11px; }
-  .mobile-pawn-verification > small { max-width: 55%; overflow: hidden; color: var(--muted-2); text-overflow: ellipsis; white-space: nowrap; }
+  .pawn-management-mobile-list .mobile-contract-card { padding: 12px; }
+  .pawn-management-mobile-list .mobile-contract-heading { gap: 9px; }
+  .pawn-management-mobile-list .mobile-contract-heading .avatar { width: 34px; height: 34px; border-radius: 10px; font-size: 9px; }
+  .pawn-management-mobile-list .mobile-contract-heading p small { max-width: 100%; }
+  .pawn-management-mobile-list .mobile-contract-details { grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr) auto; gap: 8px; margin-top: 9px; padding: 10px; }
+  .pawn-management-mobile-list .mobile-contract-details > div:nth-child(2) small { display: flex; align-items: center; gap: 4px; }
+  .pawn-management-mobile-list .mobile-contract-details .icon-button { width: 34px; height: 34px; }
   .transaction-row { grid-template-columns: auto 1fr auto; }
   .transaction-row .status-badge, .transaction-row > strong { display: none; }
   .workflow-note { grid-template-columns: auto 1fr; align-items: start; }
