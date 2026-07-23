@@ -2,6 +2,14 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import mongoose from 'mongoose'
 import { allowRoles, requireAuth, signToken, writeActivity } from './auth.js'
+import {
+  checkPaywayTransaction,
+  closePaywayTransaction,
+  fetchPaywayExchangeRates,
+  generateKhqr,
+  paywayConfiguration,
+  usdKhrFromPayway,
+} from './integrations/payway/index.js'
 import { ActivityLog, Customer, InventoryItem, Pawn, Supplier, Trade, User } from './models.js'
 
 const router = Router()
@@ -35,6 +43,10 @@ function requestError(status, message) {
   const error = new Error(message)
   error.status = status
   return error
+}
+
+function makePaywayTransactionId() {
+  return `PF${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`.toUpperCase()
 }
 
 const openPawnStatuses = ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED']
@@ -434,34 +446,34 @@ router.get('/exchange-rates', requireAuth, asyncRoute(async (_req, res) => {
   }
 
   const fallbackRate = fallbackExchangeRate()
-  const apiUrl = process.env.EXCHANGE_RATE_API_URL || 'https://open.er-api.com/v6/latest/USD'
+  const payway = paywayConfiguration()
 
   try {
-    const response = await fetch(apiUrl, { signal: AbortSignal.timeout(8000) })
-    const payload = await response.json()
-    if (!response.ok || payload?.result !== 'success') throw new Error(payload?.['error-type'] || `Rate provider returned ${response.status}`)
-
-    const usdKhr = Number(payload?.rates?.KHR)
-    if (!Number.isFinite(usdKhr) || usdKhr <= 0) throw new Error('Rate response did not include USD/KHR')
+    const payload = await fetchPaywayExchangeRates()
+    const rate = usdKhrFromPayway(payload, payway.exchangeRateSide)
 
     const result = {
-      usdKhr,
-      source: 'ExchangeRate-API',
-      rateType: 'reference',
+      ...rate,
+      source: 'ABA PayWay',
+      rateType: 'bank',
       configured: true,
-      updatedAt: payload.time_last_update_utc || new Date().toISOString(),
+      environment: payway.environment,
+      updatedAt: new Date().toISOString(),
     }
     exchangeRateCache = { payload: result, cachedAt: Date.now() }
     return res.json(result)
   } catch (error) {
-    console.error('Exchange-rate request failed:', error.message)
+    if (payway.enabled) console.error('ABA PayWay exchange-rate request failed:', error.message)
     return res.json({
       usdKhr: fallbackRate,
-      source: 'configured-fallback',
+      source: 'ABA configured fallback',
       rateType: 'fallback',
-      configured: false,
+      configured: payway.configured,
+      environment: payway.environment,
       updatedAt: new Date().toISOString(),
-      warning: 'Live exchange rate is temporarily unavailable',
+      warning: payway.enabled
+        ? 'ABA PayWay live exchange rate is temporarily unavailable'
+        : 'ABA PayWay is disabled; using the configured fallback rate',
     })
   }
 }))
@@ -478,12 +490,19 @@ router.get('/pawns', requireAuth, asyncRoute(async (req, res) => {
 }))
 
 router.post('/pawns', requireAuth, asyncRoute(async (req, res) => {
-  const { customer, itemSnapshot, estimatedValue, pawnPercentage, principal, interestRate, dueDate, identificationVerified, notes } = req.body
-  if (!customer || !itemSnapshot?.name || !dueDate) return res.status(400).json({ message: 'Customer, item and due date are required' })
+  const { customer, customerDetails, itemSnapshot, estimatedValue, pawnPercentage, principal, interestRate, dueDate, identificationVerified, notes } = req.body
+  if ((!customer && !customerDetails) || !itemSnapshot?.name || !dueDate) return res.status(400).json({ message: 'Customer, item and due date are required' })
 
-  const customerRecord = await Customer.findById(customer).select('nationalIdNumber')
-  if (!customerRecord) throw requestError(404, 'Customer not found')
-  if (!identificationVerified || !clean(customerRecord.nationalIdNumber)) {
+  let existingCustomer
+  if (customer) {
+    existingCustomer = await Customer.findById(customer).select('nationalIdNumber')
+    if (!existingCustomer) throw requestError(404, 'Customer not found')
+  } else {
+    if (!clean(customerDetails?.name)) throw requestError(400, 'New customer name is required')
+    if (!clean(customerDetails?.phone)) throw requestError(400, 'New customer phone number is required')
+  }
+  const nationalIdNumber = clean(existingCustomer?.nationalIdNumber || customerDetails?.nationalIdNumber)
+  if (!identificationVerified || !nationalIdNumber) {
     throw requestError(400, 'A recorded and verified National ID is required before releasing pawn money')
   }
   const percentage = Math.min(50, Math.max(40, Number(pawnPercentage || 45)))
@@ -504,16 +523,37 @@ router.post('/pawns', requireAuth, asyncRoute(async (req, res) => {
   const gracePeriodDays = 3
   let pawn
   await mongoose.connection.transaction(async (session) => {
+    let pawnCustomerId = customer
+    if (!pawnCustomerId) {
+      const [createdCustomer] = await Customer.create([{
+        name: clean(customerDetails.name),
+        phone: clean(customerDetails.phone),
+        nationalIdNumber,
+        address: clean(customerDetails.address),
+        notes: 'Created during new pawn registration',
+        createdBy: req.user._id,
+      }], { session })
+      pawnCustomerId = createdCustomer._id
+    }
     const [inventoryItem] = await InventoryItem.create([{
       sku: makeCode('PWN'), category: 'PHONE', name: clean(itemSnapshot.name),
       brand: clean(itemSnapshot.brand), model: clean(itemSnapshot.model), imei1: clean(itemSnapshot.imei),
       condition: itemSnapshot.condition || 'GOOD', color: clean(itemSnapshot.color), storage: normalizeGigabytes(itemSnapshot.storage),
+      ram: normalizeGigabytes(itemSnapshot.ram), batteryHealth: itemSnapshot.batteryHealth,
+      carrierLock: itemSnapshot.carrierLock || 'UNKNOWN',
+      accessoriesIncluded: Array.isArray(itemSnapshot.accessoriesIncluded) ? itemSnapshot.accessoriesIncluded : [],
       quantity: 1, buyPrice: requestedPrincipal, sellPrice: valuation,
       status: 'PAWNED', source: 'CUSTOMER', createdBy: req.user._id,
     }], { session })
     const created = await Pawn.create([{
-      pawnNo: makeCode('PW'), customer, inventoryItem: inventoryItem._id,
-      itemSnapshot: { ...itemSnapshot, imei: clean(itemSnapshot.imei), storage: normalizeGigabytes(itemSnapshot.storage) },
+      pawnNo: makeCode('PW'), customer: pawnCustomerId, inventoryItem: inventoryItem._id,
+      itemSnapshot: {
+        ...itemSnapshot,
+        imei: clean(itemSnapshot.imei),
+        storage: normalizeGigabytes(itemSnapshot.storage),
+        ram: normalizeGigabytes(itemSnapshot.ram),
+        accessoriesIncluded: Array.isArray(itemSnapshot.accessoriesIncluded) ? itemSnapshot.accessoriesIncluded : [],
+      },
       estimatedValue: valuation, pawnPercentage: percentage, principal: requestedPrincipal,
       originalPrincipal: requestedPrincipal, remainingPrincipal: requestedPrincipal,
       interestRate: rate, interestPeriod: 'MONTHLY', accruedInterest: roundMoney(requestedPrincipal * rate / 100),
@@ -850,12 +890,110 @@ router.get('/trades', requireAuth, asyncRoute(async (req, res) => {
   res.json({ trades })
 }))
 
+router.get('/payway/config', requireAuth, asyncRoute(async (_req, res) => {
+  const config = paywayConfiguration()
+  res.json({
+    enabled: config.enabled,
+    configured: config.configured,
+    environment: config.environment,
+    qrLifetimeMinutes: config.qrLifetimeMinutes,
+  })
+}))
+
+router.post('/payway/khqr', requireAuth, asyncRoute(async (req, res) => {
+  const {
+    inventoryItem,
+    customer,
+    quantity: rawQuantity = 1,
+    unitPrice: rawUnitPrice,
+    discount: rawDiscount = 0,
+  } = req.body
+  const item = await InventoryItem.findById(inventoryItem)
+  const quantity = item?.category === 'PHONE' ? 1 : Number(rawQuantity)
+  const unitPrice = Number(rawUnitPrice ?? item?.sellPrice)
+  const discount = Number(rawDiscount)
+
+  if (!item || item.status !== 'IN_STOCK' || item.quantity < quantity) {
+    throw requestError(409, 'The selected item is no longer available')
+  }
+  if (!Number.isInteger(quantity) || quantity < 1) throw requestError(400, 'Quantity must be a whole number greater than zero')
+  if (!Number.isFinite(unitPrice) || unitPrice < 0) throw requestError(400, 'Selling price is invalid')
+  if (!Number.isFinite(discount) || discount < 0) throw requestError(400, 'Discount is invalid')
+
+  const amount = roundMoney(Math.max(0, quantity * unitPrice - discount))
+  if (amount < 0.01) throw requestError(400, 'KHQR total must be at least $0.01')
+
+  const customerRecord = customer ? await Customer.findById(customer) : null
+  const names = String(customerRecord?.name || 'Walk-in customer').trim().split(/\s+/)
+  const transactionId = makePaywayTransactionId()
+  const result = await generateKhqr({
+    transactionId,
+    amount,
+    currency: 'USD',
+    customer: {
+      firstName: names.shift() || 'Walk-in',
+      lastName: names.join(' ') || 'Customer',
+      phone: customerRecord?.phone || '',
+    },
+    items: [{ name: item.name, quantity, price: unitPrice }],
+  })
+  const config = paywayConfiguration()
+
+  res.status(201).json({
+    transactionId,
+    amount,
+    currency: 'USD',
+    qrImage: result.qrImage,
+    qrString: result.qrString,
+    deeplink: result.abapay_deeplink,
+    expiresAt: new Date(Date.now() + config.qrLifetimeMinutes * 60_000).toISOString(),
+    environment: config.environment,
+  })
+}))
+
+router.get('/payway/khqr/:transactionId/status', requireAuth, asyncRoute(async (req, res) => {
+  const payload = await checkPaywayTransaction(req.params.transactionId)
+  const data = payload?.data || {}
+  const approved = Number(data.payment_status_code) === 0
+    && String(data.payment_status || '').toUpperCase() === 'APPROVED'
+  res.json({
+    approved,
+    paymentStatus: data.payment_status || payload?.status?.message || 'PENDING',
+    paymentStatusCode: data.payment_status_code,
+    amount: Number(data.original_amount ?? data.total_amount),
+    currency: data.original_currency || data.payment_currency,
+  })
+}))
+
+router.post('/payway/khqr/:transactionId/close', requireAuth, asyncRoute(async (req, res) => {
+  await closePaywayTransaction(req.params.transactionId)
+  res.json({ closed: true })
+}))
+
 router.post('/trades', requireAuth, asyncRoute(async (req, res) => {
   if (req.body.type === 'BUY' && (Array.isArray(req.body.items) || Array.isArray(req.body.devices))) return createMultiDevicePurchase(req, res)
-  const { type, customer, items = [], discount = 0, amountPaid, paymentMethod = 'CASH', notes } = req.body
+  const {
+    type,
+    customer,
+    items = [],
+    discount = 0,
+    amountPaid,
+    paymentMethod = 'CASH',
+    paywayTransactionId,
+    notes,
+  } = req.body
   if (!['BUY', 'SELL'].includes(type) || items.length === 0) return res.status(400).json({ message: 'Trade type and items are required' })
+  if (!['CASH', 'KHQR', 'BANK', 'CARD', 'OTHER'].includes(paymentMethod)) {
+    throw requestError(400, 'Invalid payment method')
+  }
+  if (paymentMethod === 'KHQR' && type !== 'SELL') throw requestError(400, 'KHQR is only available for sales')
+  if (paymentMethod === 'KHQR' && !paywayTransactionId) throw requestError(400, 'PayWay transaction ID is required')
+  if (paywayTransactionId && await Trade.exists({ paywayTransactionId })) {
+    throw requestError(409, 'This KHQR payment has already been recorded')
+  }
 
   const tradeItems = []
+  const inventoryUpdates = []
   for (const line of items) {
     const quantity = Number(line.quantity || 1)
     if (type === 'SELL') {
@@ -863,9 +1001,7 @@ router.post('/trades', requireAuth, asyncRoute(async (req, res) => {
       if (!item || item.status !== 'IN_STOCK' || item.quantity < quantity) {
         return res.status(409).json({ message: `${line.name || 'Item'} does not have enough available stock` })
       }
-      item.quantity -= quantity
-      if (item.quantity === 0) item.status = item.category === 'PHONE' ? 'SOLD' : 'ARCHIVED'
-      await item.save()
+      inventoryUpdates.push({ item, quantity })
       tradeItems.push({ inventoryItem: item._id, name: item.name, quantity, unitPrice: Number(line.unitPrice ?? item.sellPrice), costPrice: item.buyPrice })
     } else {
       let item
@@ -890,12 +1026,38 @@ router.post('/trades', requireAuth, asyncRoute(async (req, res) => {
 
   const subtotal = tradeItems.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0)
   const total = Math.max(0, subtotal - Number(discount || 0))
-  const paid = amountPaid === undefined ? total : Number(amountPaid)
+  if (paymentMethod === 'KHQR') {
+    const payment = await checkPaywayTransaction(paywayTransactionId)
+    const paymentData = payment?.data || {}
+    const approved = Number(paymentData.payment_status_code) === 0
+      && String(paymentData.payment_status || '').toUpperCase() === 'APPROVED'
+    const paidAmount = Number(paymentData.original_amount ?? paymentData.total_amount)
+    const paidCurrency = String(paymentData.original_currency || paymentData.payment_currency || '').toUpperCase()
+    if (!approved) throw requestError(409, 'KHQR payment has not been approved yet')
+    if (paidCurrency !== 'USD' || !Number.isFinite(paidAmount) || Math.abs(paidAmount - total) > 0.001) {
+      throw requestError(409, 'KHQR payment amount or currency does not match this sale')
+    }
+  }
+  const paid = paymentMethod === 'KHQR' ? total : amountPaid === undefined ? total : Number(amountPaid)
+
+  for (const { item, quantity } of inventoryUpdates) {
+    item.quantity -= quantity
+    if (item.quantity === 0) item.status = item.category === 'PHONE' ? 'SOLD' : 'ARCHIVED'
+    await item.save()
+  }
+
   const trade = await Trade.create({
     tradeNo: makeCode(type === 'SELL' ? 'SL' : 'BY'), type, customer: customer || undefined,
     items: tradeItems, subtotal, discount: Number(discount || 0), total,
-    amountPaid: paid, balance: Math.max(0, total - paid), paymentMethod, notes, createdBy: req.user._id,
+    amountPaid: paid, balance: Math.max(0, total - paid), paymentMethod,
+    paywayTransactionId: paywayTransactionId || undefined,
+    notes, createdBy: req.user._id,
   })
+  if (paymentMethod === 'KHQR') {
+    await closePaywayTransaction(paywayTransactionId).catch((error) => {
+      console.error(`Unable to close completed PayWay transaction ${paywayTransactionId}:`, error.message)
+    })
+  }
   await writeActivity(req, { action: 'CREATE', entity: 'TRADE', entityId: trade._id, details: { tradeNo: trade.tradeNo, type, total } })
   await trade.populate('customer', 'name phone')
   await trade.populate('items.inventoryItem', 'sku barcode name category brand model imei1 condition quantity buyPrice sellPrice status')

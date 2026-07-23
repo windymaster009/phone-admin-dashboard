@@ -52,6 +52,29 @@ function validateEnv() {
   if (!jwtSecret || jwtSecret.length < 32) {
     throw new Error('JWT_SECRET must be at least 32 characters in .env')
   }
+
+  if (String(process.env.PAYWAY_ENABLED || '').toLowerCase() === 'true') {
+    const environment = process.env.PAYWAY_ENV === 'production' ? 'production' : 'sandbox'
+    const expectedBaseUrl = environment === 'production'
+      ? 'https://checkout.payway.com.kh'
+      : 'https://checkout-sandbox.payway.com.kh'
+    const configuredBaseUrl = String(process.env.PAYWAY_BASE_URL || expectedBaseUrl).replace(/\/+$/, '')
+    if (!process.env.PAYWAY_MERCHANT_ID || process.env.PAYWAY_MERCHANT_ID.includes('YOUR_')) {
+      throw new Error('PAYWAY_MERCHANT_ID is required when ABA PayWay is enabled')
+    }
+    if (!process.env.PAYWAY_API_KEY || process.env.PAYWAY_API_KEY.includes('YOUR_')) {
+      throw new Error('PAYWAY_API_KEY is required when ABA PayWay is enabled')
+    }
+    if (configuredBaseUrl !== expectedBaseUrl) {
+      throw new Error(`PAYWAY_BASE_URL must be ${expectedBaseUrl} for the ${environment} environment`)
+    }
+    if ((process.env.PAYWAY_QR_TEMPLATE || 'template3_color') !== 'template3_color') {
+      throw new Error('PAYWAY_QR_TEMPLATE must remain template3_color for this KHQR integration')
+    }
+    if (process.env.PAYWAY_CALLBACK_URL && !process.env.PAYWAY_CALLBACK_URL.startsWith('https://')) {
+      throw new Error('PAYWAY_CALLBACK_URL must use HTTPS')
+    }
+  }
 }
 
 try {

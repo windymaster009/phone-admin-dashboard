@@ -140,14 +140,30 @@ CLIENT_ORIGIN=http://localhost:5173
 NODE_ENV=development
 ```
 
-The USD/KHR display uses a public reference-rate endpoint with no account or API key. Configure it in the backend `.env` file:
+The USD/KHR display is prepared to use ABA PayWay's signed exchange-rate API.
+Configure it only in the backend `.env` file:
 
 ```env
-EXCHANGE_RATE_API_URL=https://open.er-api.com/v6/latest/USD
+PAYWAY_ENABLED=false
+PAYWAY_ENV=sandbox
+PAYWAY_BASE_URL=https://checkout-sandbox.payway.com.kh
+PAYWAY_MERCHANT_ID=YOUR_ABA_PAYWAY_MERCHANT_ID
+PAYWAY_API_KEY=YOUR_ABA_PAYWAY_API_KEY
+PAYWAY_QR_TEMPLATE=template3_color
+PAYWAY_QR_LIFETIME_MINUTES=6
+PAYWAY_USD_KHR_RATE_SIDE=buy
 USD_KHR_FALLBACK_RATE=4100
 ```
 
-The server caches the live rate and falls back to `USD_KHR_FALLBACK_RATE` when the public service is unavailable. An exact ABA counter buy/sell rate would require separate ABA PayWay merchant credentials.
+Keep `PAYWAY_ENABLED=false` until ABA has provided sandbox credentials and
+whitelisted the backend domain/IP. The server caches ABA's live rate and falls
+back to `USD_KHR_FALLBACK_RATE` when PayWay is disabled or unavailable. Confirm
+whether the shop should use ABA's buy or sell side before production.
+
+The server-only KHQR integration scaffold and setup guide are in
+`server/integrations/payway`. It is restricted to `abapay_khqr` and ABA QR image
+template 3 (`template3_color`). Never expose `PAYWAY_API_KEY` through a `VITE_`
+environment variable or frontend response.
 
 Never commit `.env`. If a password or secret has been pasted into chat or another public location, rotate it before using the system.
 

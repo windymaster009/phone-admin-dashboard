@@ -192,9 +192,13 @@ type DashboardData = {
 
 type ExchangeRateData = {
   usdKhr: number
-  source: 'ExchangeRate-API' | 'configured-fallback'
-  rateType: 'reference' | 'fallback'
+  source: 'ABA PayWay' | 'ABA configured fallback'
+  rateType: 'bank' | 'fallback'
   configured: boolean
+  environment?: 'sandbox' | 'production'
+  buy?: number
+  sell?: number
+  side?: 'buy' | 'sell'
   updatedAt: string
   warning?: string
 }
@@ -1341,7 +1345,7 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
             <span>{pawnRate}% of estimated resale value</span>
             {exchangeRate && (
               <span className="exchange-rate-source">
-                1 USD = {riel.format(exchangeRate.usdKhr)} KHR · {exchangeRate.source === 'ExchangeRate-API' ? 'ExchangeRate-API reference' : 'Configured fallback rate'}
+                1 USD = {riel.format(exchangeRate.usdKhr)} KHR · {exchangeRate.source === 'ABA PayWay' ? `ABA PayWay ${exchangeRate.side || 'bank'} rate` : 'ABA configured fallback'}
               </span>
             )}
           </div>

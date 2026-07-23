@@ -1,15 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import QRCode from 'react-qr-code'
+import khqrLogo from '../server/integrations/payway/img/khqr.svg'
 import {
   AlertTriangle,
+  Banknote,
   Barcode,
   Camera,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
   HandCoins,
+  LoaderCircle,
+  Maximize2,
   Package,
   Plus,
   Printer,
+  QrCode,
+  RefreshCw,
   ScanLine,
   ShoppingCart,
   Smartphone,
@@ -55,6 +62,35 @@ type Supplier = {
 
 type SellerType = 'EXISTING_CUSTOMER' | 'EXISTING_SUPPLIER' | 'WALK_IN' | 'NEW_CUSTOMER' | 'NEW_SUPPLIER'
 type PurchaseCurrency = 'USD' | 'KHR'
+type PawnCustomerMode = 'EXISTING' | 'NEW'
+type SalePaymentMethod = 'CASH' | 'KHQR'
+
+type SaleDraft = {
+  type: 'SELL'
+  customer?: string
+  items: Array<{ inventoryItem: string; name: string; quantity: number; unitPrice: number }>
+  discount: number
+  amountPaid: number
+  paymentMethod: SalePaymentMethod
+  notes: string
+}
+
+type SaleKhqr = {
+  transactionId: string
+  amount: number
+  currency: 'USD'
+  qrImage: string
+  qrString: string
+  deeplink?: string
+  expiresAt: string
+  environment: 'sandbox' | 'production'
+}
+
+function paywayImageSource(value: string) {
+  const source = value.trim()
+  if (!source || /^(data:|https?:|blob:)/i.test(source)) return source
+  return `data:image/png;base64,${source}`
+}
 
 type PurchaseDevice = {
   id: string
@@ -139,11 +175,12 @@ function parsePlaceholderAlert(message?: string): ModalKind | null {
   return null
 }
 
-function ModalShell({ kind, error, busy, onClose, children }: {
+function ModalShell({ kind, error, busy, onClose, compact = false, children }: {
   kind: ModalKind
   error: string
   busy: boolean
   onClose: () => void
+  compact?: boolean
   children: ReactNode
 }) {
   const meta = modalMeta[kind]
@@ -164,7 +201,7 @@ function ModalShell({ kind, error, busy, onClose, children }: {
     <div className="operation-modal-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget && !busy) onClose()
     }}>
-      <section className={`operation-modal operation-modal-${kind}`} role="dialog" aria-modal="true" aria-label={meta.title}>
+      <section className={`operation-modal operation-modal-${kind}${compact ? ' operation-modal-compact' : ''}`} role="dialog" aria-modal="true" aria-label={meta.title}>
         <header className="operation-modal-header">
           <span className="operation-modal-icon">{meta.icon}</span>
           <div>
@@ -278,13 +315,36 @@ export default function OperationModalBridge() {
   const [estimatedValue, setEstimatedValue] = useState(0)
   const [pawnPercentage, setPawnPercentage] = useState(45)
   const [pawnPrincipal, setPawnPrincipal] = useState('')
+  const [pawnInterestRate, setPawnInterestRate] = useState(5)
   const [pawnCustomerId, setPawnCustomerId] = useState('')
   const [pawnIdConfirmed, setPawnIdConfirmed] = useState(false)
+  const [pawnCustomerMode, setPawnCustomerMode] = useState<PawnCustomerMode>('EXISTING')
+  const [pawnWalkInName, setPawnWalkInName] = useState('')
+  const [pawnWalkInPhone, setPawnWalkInPhone] = useState('')
+  const [pawnWalkInNationalId, setPawnWalkInNationalId] = useState('')
+  const [pawnWalkInAddress, setPawnWalkInAddress] = useState('')
+  const [pawnStep, setPawnStep] = useState<1 | 2>(1)
+  const [pawnAttempted, setPawnAttempted] = useState(false)
+  const [pawnImei, setPawnImei] = useState('')
+  const [pawnScannerOpen, setPawnScannerOpen] = useState(false)
   const [scanCode, setScanCode] = useState('')
   const [scannedItem, setScannedItem] = useState<InventoryItem | null>(null)
   const [labelItems, setLabelItems] = useState<InventoryItem[]>([])
   const [saleItemId, setSaleItemId] = useState('')
   const [saleUnitPrice, setSaleUnitPrice] = useState('')
+  const [saleCustomerId, setSaleCustomerId] = useState('')
+  const [saleQuantity, setSaleQuantity] = useState('1')
+  const [saleDiscount, setSaleDiscount] = useState('0')
+  const [saleAmountPaid, setSaleAmountPaid] = useState('')
+  const [saleNotes, setSaleNotes] = useState('')
+  const [salePaymentMethod, setSalePaymentMethod] = useState<SalePaymentMethod>('CASH')
+  const [saleKhqr, setSaleKhqr] = useState<SaleKhqr | null>(null)
+  const [saleQrZoomed, setSaleQrZoomed] = useState(false)
+  const [saleDraft, setSaleDraft] = useState<SaleDraft | null>(null)
+  const [salePaymentStatus, setSalePaymentStatus] = useState('Waiting for payment')
+  const [paywayAvailable, setPaywayAvailable] = useState(false)
+  const [saleInventoryLoading, setSaleInventoryLoading] = useState(false)
+  const khqrFinalizing = useRef(false)
   const [sellerType, setSellerType] = useState<SellerType>('WALK_IN')
   const [supplierId, setSupplierId] = useState('')
   const [sellerCustomerId, setSellerCustomerId] = useState('')
@@ -308,6 +368,13 @@ export default function OperationModalBridge() {
     () => Math.max(0, estimatedValue * pawnPercentage / 100),
     [estimatedValue, pawnPercentage],
   )
+  const selectedPawnCustomer = customers.find((customer) => customer._id === pawnCustomerId)
+  const pawnCustomerHasId = pawnCustomerMode === 'EXISTING'
+    ? Boolean(selectedPawnCustomer?.nationalIdNumber)
+    : Boolean(pawnWalkInNationalId.trim())
+  const pawnCustomerValid = pawnCustomerMode === 'EXISTING'
+    ? Boolean(selectedPawnCustomer?.nationalIdNumber && pawnIdConfirmed)
+    : Boolean(pawnWalkInName.trim() && pawnWalkInPhone.trim() && pawnWalkInNationalId.trim() && pawnIdConfirmed)
   const purchaseTotal = useMemo(
     () => purchaseDevices.reduce((sum, item) => sum + Math.max(0, Number(item.purchasePrice) || 0) * (item.category === 'PHONE' ? 1 : Math.max(1, Number(item.quantity) || 1)), 0),
     [purchaseDevices],
@@ -315,6 +382,21 @@ export default function OperationModalBridge() {
   const purchasePaid = Math.max(0, Number(purchaseAmountPaid) || 0)
   const purchaseBalance = Math.max(0, purchaseTotal - purchasePaid)
   const purchasePaymentStatus = purchasePaid <= 0 ? 'UNPAID' : purchasePaid < purchaseTotal ? 'PARTIAL' : 'PAID'
+  const selectedSaleItem = inventory.find((item) => item._id === saleItemId)
+  const effectiveSaleQuantity = selectedSaleItem?.category === 'PHONE' ? 1 : Math.max(1, Number(saleQuantity) || 1)
+  const saleTotal = Math.max(0, effectiveSaleQuantity * (Number(saleUnitPrice) || 0) - (Number(saleDiscount) || 0))
+  const saleActionDisabled = busy || saleInventoryLoading || !saleItemId || (salePaymentMethod === 'KHQR' && saleTotal < 0.01)
+  const saleActionLabel = busy
+    ? salePaymentMethod === 'KHQR' ? 'Generating KHQR...' : 'Saving sale...'
+    : saleInventoryLoading
+      ? 'Loading stock...'
+      : !saleItemId
+        ? 'Select a product first'
+        : salePaymentMethod === 'KHQR' && saleTotal < 0.01
+          ? 'Enter a valid amount'
+          : salePaymentMethod === 'KHQR'
+            ? 'Generate KHQR'
+            : 'Complete cash sale'
 
   useEffect(() => {
     const originalAlert = window.alert.bind(window)
@@ -349,9 +431,14 @@ export default function OperationModalBridge() {
         .catch((reason: Error) => setError(reason.message))
     }
     if (kind === 'sale') {
+      setSaleInventoryLoading(true)
       api<{ items: InventoryItem[] }>('/inventory?status=IN_STOCK')
         .then((result) => setInventory(result.items.filter((item) => item.quantity > 0)))
         .catch((reason: Error) => setError(reason.message))
+        .finally(() => setSaleInventoryLoading(false))
+      api<{ enabled: boolean; configured: boolean }>('/payway/config')
+        .then((result) => setPaywayAvailable(result.enabled && result.configured))
+        .catch(() => setPaywayAvailable(false))
     }
     if (kind === 'purchase') {
       api<{ suppliers: Supplier[] }>('/suppliers')
@@ -378,8 +465,7 @@ export default function OperationModalBridge() {
     }
   }, [kind])
 
-  const close = () => {
-    if (busy) return
+  const resetAndClose = () => {
     const shouldRefresh = kind === 'label' && labelItems.length > 0
     setKind(null)
     setError('')
@@ -387,13 +473,36 @@ export default function OperationModalBridge() {
     setEstimatedValue(0)
     setPawnPercentage(45)
     setPawnPrincipal('')
+    setPawnInterestRate(5)
     setPawnCustomerId('')
     setPawnIdConfirmed(false)
+    setPawnCustomerMode('EXISTING')
+    setPawnWalkInName('')
+    setPawnWalkInPhone('')
+    setPawnWalkInNationalId('')
+    setPawnWalkInAddress('')
+    setPawnStep(1)
+    setPawnAttempted(false)
+    setPawnImei('')
+    setPawnScannerOpen(false)
     setScanCode('')
     setScannedItem(null)
     setLabelItems([])
     setSaleItemId('')
     setSaleUnitPrice('')
+    setSaleCustomerId('')
+    setSaleQuantity('1')
+    setSaleDiscount('0')
+    setSaleAmountPaid('')
+    setSaleNotes('')
+    setSalePaymentMethod('CASH')
+    setSaleKhqr(null)
+    setSaleQrZoomed(false)
+    setSaleDraft(null)
+    setSalePaymentStatus('Waiting for payment')
+    setPaywayAvailable(false)
+    setSaleInventoryLoading(false)
+    khqrFinalizing.current = false
     setSellerType('WALK_IN')
     setSupplierId('')
     setSellerCustomerId('')
@@ -409,6 +518,28 @@ export default function OperationModalBridge() {
     setPurchaseStep(1)
     setPurchaseAttempted(false)
     if (shouldRefresh) window.location.reload()
+  }
+
+  const close = () => {
+    if (busy) return
+    if (saleQrZoomed) {
+      setSaleQrZoomed(false)
+      return
+    }
+    if (kind === 'sale' && saleKhqr) {
+      setBusy(true)
+      setSalePaymentStatus('Closing payment request...')
+      void api(`/payway/khqr/${encodeURIComponent(saleKhqr.transactionId)}/close`, { method: 'POST' })
+        .catch((reason: Error) => {
+          console.warn('Unable to close PayWay transaction:', reason.message)
+        })
+        .finally(() => {
+          setBusy(false)
+          resetAndClose()
+        })
+      return
+    }
+    resetAndClose()
   }
 
   const findScannedProduct = useCallback(async (rawCode: string) => {
@@ -604,32 +735,117 @@ export default function OperationModalBridge() {
     event.preventDefault()
     setBusy(true)
     setError('')
-    const form = new FormData(event.currentTarget)
-    const selected = inventory.find((item) => item._id === form.get('inventoryItem'))
+    const selected = inventory.find((item) => item._id === saleItemId)
     if (!selected) {
       setBusy(false)
       setError('Select an available inventory item')
       return
     }
-    const quantity = selected.category === 'PHONE' ? 1 : Number(form.get('quantity') || 1)
-    const unitPrice = Number(form.get('unitPrice') || selected.sellPrice)
-    const discount = Number(form.get('discount') || 0)
+    const quantity = selected.category === 'PHONE' ? 1 : Number(saleQuantity || 1)
+    const unitPrice = Number(saleUnitPrice || selected.sellPrice)
+    const discount = Number(saleDiscount || 0)
     const total = Math.max(0, quantity * unitPrice - discount)
-    const payload = {
-      type: 'SELL',
-      customer: form.get('customer') || undefined,
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > selected.quantity) {
+      setBusy(false)
+      setError(`Quantity must be between 1 and ${selected.quantity}`)
+      return
+    }
+    if (!Number.isFinite(unitPrice) || unitPrice < 0 || !Number.isFinite(discount) || discount < 0 || discount > quantity * unitPrice) {
+      setBusy(false)
+      setError('Check the selling price and discount')
+      return
+    }
+    const payload: SaleDraft = {
+      type: 'SELL' as const,
+      customer: saleCustomerId || undefined,
       items: [{ inventoryItem: selected._id, name: selected.name, quantity, unitPrice }],
       discount,
-      amountPaid: Number(form.get('amountPaid') || total),
-      paymentMethod: String(form.get('paymentMethod') || 'CASH'),
-      notes: String(form.get('notes') || ''),
+      amountPaid: salePaymentMethod === 'KHQR' ? total : Number(saleAmountPaid || total),
+      paymentMethod: salePaymentMethod,
+      notes: saleNotes,
     }
     try {
-      await api('/trades', { method: 'POST', body: JSON.stringify(payload) })
-      close()
-      window.location.reload()
+      if (salePaymentMethod === 'KHQR') {
+        if (!paywayAvailable) throw new Error('ABA PayWay sandbox is not available. Check the server configuration.')
+        const result = await api<SaleKhqr>('/payway/khqr', {
+          method: 'POST',
+          body: JSON.stringify({
+            inventoryItem: selected._id,
+            customer: saleCustomerId || undefined,
+            quantity,
+            unitPrice,
+            discount,
+          }),
+        })
+        setSaleDraft(payload)
+        setSaleKhqr(result)
+        setSalePaymentStatus('Waiting for payment')
+      } else {
+        if (payload.amountPaid > total) throw new Error('Amount paid cannot be greater than the sale total')
+        await api('/trades', { method: 'POST', body: JSON.stringify(payload) })
+        resetAndClose()
+        window.location.reload()
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to complete sale')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const checkKhqrPayment = useCallback(async () => {
+    if (!saleKhqr || !saleDraft || khqrFinalizing.current) return
+    try {
+      const status = await api<{
+        approved: boolean
+        paymentStatus: string
+        amount?: number
+        currency?: string
+      }>(`/payway/khqr/${encodeURIComponent(saleKhqr.transactionId)}/status`)
+      setSalePaymentStatus(status.approved ? 'Payment approved' : status.paymentStatus || 'Waiting for payment')
+      if (!status.approved) return
+
+      khqrFinalizing.current = true
+      setBusy(true)
+      await api('/trades', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...saleDraft,
+          amountPaid: saleKhqr.amount,
+          paymentMethod: 'KHQR',
+          paywayTransactionId: saleKhqr.transactionId,
+        }),
+      })
+      window.location.reload()
+    } catch (reason) {
+      if (khqrFinalizing.current) {
+        khqrFinalizing.current = false
+        setBusy(false)
+        setError(reason instanceof Error ? reason.message : 'Unable to verify KHQR payment')
+      }
+    }
+  }, [saleDraft, saleKhqr])
+
+  useEffect(() => {
+    if (!saleKhqr || !saleDraft) return
+    void checkKhqrPayment()
+    const timer = window.setInterval(() => void checkKhqrPayment(), 3000)
+    return () => window.clearInterval(timer)
+  }, [checkKhqrPayment, saleDraft, saleKhqr])
+
+  async function cancelKhqrPayment() {
+    if (!saleKhqr || busy) return
+    setBusy(true)
+    setError('')
+    setSalePaymentStatus('Closing payment request...')
+    try {
+      await api(`/payway/khqr/${encodeURIComponent(saleKhqr.transactionId)}/close`, { method: 'POST' })
+      setSaleKhqr(null)
+      setSaleDraft(null)
+      setSalePaymentStatus('Waiting for payment')
+      khqrFinalizing.current = false
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to close this KHQR request')
     } finally {
       setBusy(false)
     }
@@ -640,23 +856,36 @@ export default function OperationModalBridge() {
     setBusy(true)
     setError('')
     const form = new FormData(event.currentTarget)
+    const brand = String(form.get('brand') || '').trim()
+    const model = String(form.get('model') || '').trim()
+    const storage = String(form.get('storage') || '').trim()
     const payload = {
-      customer: form.get('customer'),
+      customer: pawnCustomerMode === 'EXISTING' ? pawnCustomerId : undefined,
+      customerDetails: pawnCustomerMode === 'NEW' ? {
+        name: pawnWalkInName,
+        phone: pawnWalkInPhone,
+        nationalIdNumber: pawnWalkInNationalId,
+        address: pawnWalkInAddress,
+      } : undefined,
       itemSnapshot: {
-        name: String(form.get('name') || ''),
-        brand: String(form.get('brand') || ''),
-        model: String(form.get('model') || ''),
-        imei: String(form.get('imei') || ''),
+        name: [brand, model, storage ? `${storage.replace(/\s*GB$/i, '')}GB` : ''].filter(Boolean).join(' '),
+        brand,
+        model,
+        imei: pawnImei,
         condition: String(form.get('condition') || 'GOOD'),
-        storage: String(form.get('storage') || ''),
+        storage,
+        ram: String(form.get('ram') || ''),
         color: String(form.get('color') || ''),
+        batteryHealth: form.get('batteryHealth') ? Number(form.get('batteryHealth')) : undefined,
+        carrierLock: String(form.get('carrierLock') || 'UNKNOWN'),
+        accessoriesIncluded: form.getAll('accessoriesIncluded').map(String),
       },
       estimatedValue,
       pawnPercentage,
       principal: Number(form.get('principal') || 0),
-      interestRate: Number(form.get('interestRate') || 5),
+      interestRate: pawnInterestRate,
       dueDate: form.get('dueDate'),
-      identificationVerified: form.get('identificationVerified') === 'on',
+      identificationVerified: pawnIdConfirmed,
       notes: String(form.get('notes') || ''),
     }
     try {
@@ -673,7 +902,7 @@ export default function OperationModalBridge() {
   if (!kind) return null
 
   return (
-    <ModalShell kind={kind} error={error} busy={busy} onClose={close}>
+    <ModalShell kind={kind} error={error} busy={busy} compact={kind === 'sale' && Boolean(saleKhqr)} onClose={close}>
       {kind === 'stock' && <form className="operation-form" onSubmit={submitStock}>
         <div className="operation-category-tabs" role="tablist" aria-label="Stock category">
           <button type="button" className={category === 'PHONE' ? 'active' : ''} onClick={() => setCategory('PHONE')}><Smartphone size={18} /> Phone</button>
@@ -824,36 +1053,163 @@ export default function OperationModalBridge() {
         <footer className="operation-modal-actions"><button type="button" className="ghost-button" onClick={close}>Print later</button><button type="button" className="primary-button" onClick={() => { printInventoryLabels(labelItems); close() }}><Printer size={17} /> Print labels</button></footer>
       </div>}
 
-      {kind === 'sale' && <form className="operation-form" onSubmit={submitSale}>
+      {kind === 'pawn' && <form className="operation-form purchase-workflow-form pawn-workflow-form" onSubmit={submitPawn}>
+        <nav className="purchase-stepper" aria-label="Pawn contract progress">
+          <button type="button" className={pawnStep === 1 ? 'active' : pawnCustomerValid ? 'complete' : ''} onClick={() => setPawnStep(1)}><span>{pawnCustomerValid ? <CheckCircle2 size={15} /> : '1'}</span><p><strong>Customer verification</strong><small>Identity and ownership</small></p></button>
+          <i />
+          <button type="button" className={pawnStep === 2 ? 'active' : ''} onClick={() => { setPawnAttempted(true); if (pawnCustomerValid) { setError(''); setPawnStep(2) } else setError('Select a customer and verify their recorded National ID first') }}><span>2</span><p><strong>Collateral & terms</strong><small>Device, valuation, and loan</small></p></button>
+        </nav>
+
+        {pawnStep === 1 && <>
+          <div className="purchase-step-content">
+            <section className="purchase-section-card">
+              <div className="purchase-section-heading"><span>1</span><div><h3>Customer verification</h3><p>Choose the collateral owner and confirm their National ID before releasing money.</p></div></div>
+              <div className="purchase-seller-tabs pawn-customer-tabs">
+                <button type="button" className={pawnCustomerMode === 'EXISTING' ? 'active' : ''} onClick={() => { setPawnCustomerMode('EXISTING'); setPawnIdConfirmed(false); setError('') }}>Existing customer</button>
+                <button type="button" className={pawnCustomerMode === 'NEW' ? 'active' : ''} onClick={() => { setPawnCustomerMode('NEW'); setPawnIdConfirmed(false); setError('') }}>New customer</button>
+              </div>
+              <div className="operation-form-grid purchase-fields-grid">
+                {pawnCustomerMode === 'EXISTING' ? <label className={`operation-wide ${pawnAttempted && !pawnCustomerId ? 'field-invalid' : ''}`}>Customer<select required value={pawnCustomerId} onChange={(event) => { setPawnCustomerId(event.target.value); setPawnIdConfirmed(false); setError('') }}><option value="" disabled>Select customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name} — {customer.phone}{customer.nationalIdNumber ? ' — ID recorded' : ' — ID missing'}</option>)}</select>{pawnAttempted && !pawnCustomerId && <small>Select a customer</small>}</label> : <>
+                  <label className={pawnAttempted && !pawnWalkInName.trim() ? 'field-invalid' : ''}>Customer name<input required value={pawnWalkInName} onChange={(event) => setPawnWalkInName(event.target.value)} placeholder="Full name" />{pawnAttempted && !pawnWalkInName.trim() && <small>Name is required</small>}</label>
+                  <label className={pawnAttempted && !pawnWalkInPhone.trim() ? 'field-invalid' : ''}>Phone number<input required value={pawnWalkInPhone} onChange={(event) => setPawnWalkInPhone(event.target.value)} placeholder="012 345 678" />{pawnAttempted && !pawnWalkInPhone.trim() && <small>Phone number is required</small>}</label>
+                  <label className={pawnAttempted && !pawnWalkInNationalId.trim() ? 'field-invalid' : ''}>National ID<input required value={pawnWalkInNationalId} onChange={(event) => { setPawnWalkInNationalId(event.target.value); setPawnIdConfirmed(false) }} placeholder="Khmer National ID number" />{pawnAttempted && !pawnWalkInNationalId.trim() && <small>National ID is required for a pawn</small>}</label>
+                  <label>Address <small className="optional-marker">Optional</small><input value={pawnWalkInAddress} onChange={(event) => setPawnWalkInAddress(event.target.value)} placeholder="Current address" /></label>
+                </>}
+              </div>
+              {pawnCustomerMode === 'EXISTING' && selectedPawnCustomer && <div className="pawn-customer-summary">
+                <div><span>Customer</span><strong>{selectedPawnCustomer.name}</strong></div>
+                <div><span>Phone</span><strong>{selectedPawnCustomer.phone || 'Not recorded'}</strong></div>
+                <div><span>National ID</span><strong className={selectedPawnCustomer.nationalIdNumber ? 'verified' : 'missing'}>{selectedPawnCustomer.nationalIdNumber || 'Missing'}</strong></div>
+              </div>}
+              <label className={`pawn-verification-check ${pawnAttempted && !pawnCustomerValid ? 'field-invalid' : ''}`}>
+                <input type="checkbox" disabled={!pawnCustomerHasId} checked={pawnIdConfirmed} onChange={(event) => setPawnIdConfirmed(event.target.checked)} />
+                <span><strong>{pawnCustomerHasId ? 'National ID checked against the physical card' : 'A National ID is required'}</strong><small>{pawnCustomerHasId ? 'I confirmed the physical ID belongs to this customer.' : pawnCustomerMode === 'EXISTING' ? 'Update this customer before creating a pawn contract.' : 'Enter the new customer’s National ID first.'}</small></span>
+              </label>
+            </section>
+          </div>
+          <footer className="operation-modal-actions"><div className="purchase-submit-summary"><span>Step 1 of 2</span><strong>Customer verification</strong></div><button type="button" className="ghost-button" onClick={close}>Cancel</button><button type="button" className="primary-button" onClick={() => { setPawnAttempted(true); if (pawnCustomerValid) { setError(''); setPawnStep(2) } else setError('Select a customer and verify their recorded National ID first') }}>Continue to collateral</button></footer>
+        </>}
+
+        {pawnStep === 2 && <>
+          <div className="purchase-step-content">
+            <section className="purchase-section-card devices-section">
+              <div className="purchase-section-heading"><span>2</span><div><h3>Phone collateral</h3><p>The phone is saved as a serialized inventory item with PAWNED status.</p></div><b>1 phone</b></div>
+              <article className="purchase-device-card">
+                <header><div className="pawn-device-heading"><span><Smartphone size={17} /></span><p><strong>Serialized phone</strong><small>Quantity is always 1 and the IMEI must be unique.</small></p></div></header>
+                <div className="device-fields-grid">
+                  <div className="device-group-label"><span>Product identity</span><small>Required identification information</small></div>
+                  <label className="device-imei-field"><span>IMEI</span><div><input required inputMode="numeric" pattern="[0-9]{15}" maxLength={15} value={pawnImei} onChange={(event) => setPawnImei(event.target.value.replace(/\D/g, '').slice(0, 15))} placeholder="15-digit IMEI" /><button type="button" className="secondary-button" onClick={() => setPawnScannerOpen(true)}><ScanLine size={16} /> Scan IMEI</button></div><small>Scan with a handheld scanner or this device camera.</small></label>
+                  <label>Brand<input name="brand" required placeholder="Apple" /></label>
+                  <label>Model<input name="model" required placeholder="iPhone 13 Pro" /></label>
+                  <label>Storage<div className="device-unit-input"><input name="storage" required type="number" min="1" step="1" placeholder="128" /><span>GB</span></div></label>
+                  <label>RAM <small className="optional-marker">Optional</small><div className="device-unit-input"><input name="ram" type="number" min="1" step="1" placeholder="6" /><span>GB</span></div></label>
+                  <label>Color<input name="color" required placeholder="Blue" /></label>
+                  <label>Battery health <small className="optional-marker">Optional</small><div className="device-unit-input"><input name="batteryHealth" type="number" min="0" max="100" step="1" placeholder="88" /><span>%</span></div></label>
+                  <label>Carrier lock<select name="carrierLock" defaultValue="UNKNOWN"><option value="UNKNOWN">Unknown</option><option value="UNLOCKED">Unlocked</option><option value="LOCKED">Carrier locked</option></select></label>
+                  <fieldset className="device-accessories"><legend>Accessories included</legend>{['BOX', 'CHARGER', 'CABLE', 'CASE', 'EARPHONES'].map((accessory) => <label key={accessory}><input name="accessoriesIncluded" type="checkbox" value={accessory} /> {accessory.charAt(0) + accessory.slice(1).toLowerCase()}</label>)}</fieldset>
+                  <div className="device-group-label"><span>Condition</span><small>Condition when accepted as collateral</small></div>
+                  <label>Condition<select name="condition" defaultValue="GOOD"><option value="LIKE_NEW">Like new</option><option value="GOOD">Good</option><option value="FAIR">Fair</option><option value="DAMAGED">Damaged</option></select></label>
+                </div>
+              </article>
+            </section>
+
+            <section className="purchase-section-card pawn-terms-card">
+              <div className="purchase-section-heading"><span><HandCoins size={17} /></span><div><h3>Valuation and contract terms</h3><p>Set the safe loan amount, monthly interest, and maturity date.</p></div></div>
+              <div className="operation-form-grid purchase-fields-grid">
+                <label>Estimated resale value (USD)<input type="number" min="0.01" step="0.01" required value={estimatedValue || ''} onChange={(event) => { const value = Number(event.target.value); setEstimatedValue(value); setPawnPrincipal(value > 0 ? String((value * pawnPercentage / 100).toFixed(2)) : '') }} /></label>
+                <label>Pawn percentage<div className="device-unit-input"><input type="number" min="40" max="50" value={pawnPercentage} onChange={(event) => { const value = Number(event.target.value); setPawnPercentage(value); if (estimatedValue > 0) setPawnPrincipal(String((estimatedValue * value / 100).toFixed(2))) }} /><span>%</span></div></label>
+                <label>Principal (USD) <small>Maximum ${maximumPawn.toFixed(2)}</small><input name="principal" type="number" min="0.01" max={maximumPawn || undefined} step="0.01" required value={pawnPrincipal} onChange={(event) => setPawnPrincipal(event.target.value)} /></label>
+                <label>Monthly interest<div className="device-unit-input"><input type="number" min="0" max="100" step="0.01" value={pawnInterestRate} onChange={(event) => setPawnInterestRate(Number(event.target.value))} /><span>%</span></div></label>
+                <label>Due date<input name="dueDate" type="date" min={futureDateValue(1)} defaultValue={futureDateValue(30)} required /></label>
+                <label className="operation-wide">Contract notes <small className="optional-marker">Optional</small><textarea name="notes" rows={2} /></label>
+              </div>
+              <div className="pawn-contract-summary">
+                <div><span>Inventory status</span><strong>PAWNED</strong></div>
+                <div><span>Maximum principal</span><strong>${maximumPawn.toFixed(2)}</strong></div>
+                <div><span>Initial monthly interest</span><strong>${((Number(pawnPrincipal) || 0) * pawnInterestRate / 100).toFixed(2)}</strong></div>
+              </div>
+            </section>
+          </div>
+          <footer className="operation-modal-actions"><div className="purchase-submit-summary"><span>Step 2 of 2</span><strong>${Number(pawnPrincipal || 0).toFixed(2)} principal</strong></div><button type="button" className="ghost-button" onClick={() => { setError(''); setPawnStep(1) }}>Back</button><button className="primary-button" disabled={busy}>{busy ? 'Saving contract...' : 'Create pawn contract'}</button></footer>
+        </>}
+      </form>}
+
+      {kind === 'sale' && !saleKhqr && <form className="operation-form sale-form" onSubmit={submitSale}>
         <div className="operation-form-grid">
-          <label>Customer<select name="customer" defaultValue=""><option value="">Walk-in customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name} — {customer.phone}</option>)}</select></label>
-          <label className="operation-wide">Inventory item<select name="inventoryItem" required value={saleItemId} onChange={(event) => {
+          <label>Customer<select value={saleCustomerId} onChange={(event) => setSaleCustomerId(event.target.value)}><option value="">Walk-in customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name} — {customer.phone}</option>)}</select></label>
+          <label className="operation-wide">Inventory item<select required value={saleItemId} disabled={saleInventoryLoading || (!saleInventoryLoading && inventory.length === 0)} onChange={(event) => {
             const item = inventory.find((entry) => entry._id === event.target.value)
             setSaleItemId(event.target.value)
             setSaleUnitPrice(item ? String(item.sellPrice) : '')
-          }}><option value="" disabled>Select available stock</option>{inventory.map((item) => <option key={item._id} value={item._id}>{item.name}{item.imei1 ? ` — ${item.imei1}` : ''} — Qty ${item.quantity} — ${item.sellPrice.toFixed(2)}</option>)}</select></label>
-          <label>Quantity<input name="quantity" type="number" min="1" defaultValue="1" /></label><label>Selling price<input name="unitPrice" type="number" min="0" step="0.01" value={saleUnitPrice} onChange={(event) => setSaleUnitPrice(event.target.value)} placeholder="Uses stock price when empty" /></label>
-          <label>Discount<input name="discount" type="number" min="0" step="0.01" defaultValue="0" /></label><label>Amount paid<input name="amountPaid" type="number" min="0" step="0.01" /></label>
-          <label>Payment method<select name="paymentMethod"><option value="CASH">Cash</option><option value="BANK">Bank transfer</option><option value="CARD">Card</option><option value="OTHER">Other</option></select></label>
-          <label className="operation-wide">Notes<textarea name="notes" rows={3} /></label>
+            setSaleQuantity('1')
+          }}><option value="" disabled>{saleInventoryLoading ? 'Loading available stock...' : inventory.length === 0 ? 'No stock available to sell' : 'Select available stock'}</option>{inventory.map((item) => <option key={item._id} value={item._id}>{item.name}{item.imei1 ? ` — ${item.imei1}` : ''} — Qty ${item.quantity} — $${item.sellPrice.toFixed(2)}</option>)}</select>{!saleInventoryLoading && inventory.length === 0 && <small>Add an in-stock product before creating a sale.</small>}</label>
+          <label>Quantity<input type="number" min="1" max={selectedSaleItem?.quantity} value={effectiveSaleQuantity} disabled={!saleItemId || selectedSaleItem?.category === 'PHONE'} onChange={(event) => setSaleQuantity(event.target.value)} /></label>
+          <label>Selling price<input type="number" min="0" step="0.01" value={saleUnitPrice} disabled={!saleItemId} onChange={(event) => setSaleUnitPrice(event.target.value)} placeholder="Select a product first" /></label>
+          <label>Discount<input type="number" min="0" max={effectiveSaleQuantity * (Number(saleUnitPrice) || 0)} step="0.01" value={saleDiscount} disabled={!saleItemId} onChange={(event) => setSaleDiscount(event.target.value)} /></label>
+          {salePaymentMethod === 'CASH' && <label>Amount paid <small className="optional-marker">Defaults to total</small><input type="number" min="0" max={saleTotal || undefined} step="0.01" value={saleAmountPaid} onChange={(event) => setSaleAmountPaid(event.target.value)} placeholder={saleTotal.toFixed(2)} /></label>}
+          <fieldset className="sale-payment-method operation-wide">
+            <legend>How will the customer pay?</legend>
+            <button type="button" className={salePaymentMethod === 'CASH' ? 'active cash' : 'cash'} onClick={() => setSalePaymentMethod('CASH')}>
+              <span><Banknote size={20} /></span><p><strong>Pay with cash</strong><small>Record payment immediately</small></p>{salePaymentMethod === 'CASH' && <CheckCircle2 size={18} />}
+            </button>
+            <button type="button" className={salePaymentMethod === 'KHQR' ? 'active khqr' : 'khqr'} onClick={() => setSalePaymentMethod('KHQR')} disabled={!paywayAvailable}>
+              <span className="khqr-payment-option-logo"><img src={khqrLogo} alt="" /></span><p><strong>Pay with KHQR</strong><small>{paywayAvailable ? 'ABA PayWay sandbox' : 'PayWay unavailable'}</small></p>{salePaymentMethod === 'KHQR' && <CheckCircle2 size={18} />}
+            </button>
+          </fieldset>
+          <label className="operation-wide">Notes <small className="optional-marker">Optional</small><textarea rows={3} value={saleNotes} onChange={(event) => setSaleNotes(event.target.value)} /></label>
         </div>
-        <footer className="operation-modal-actions"><button type="button" className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={busy}>{busy ? 'Saving...' : 'Complete sale'}</button></footer>
+        <footer className="operation-modal-actions"><div className="sale-total"><span>Total</span><strong>${saleTotal.toFixed(2)}</strong></div><button type="button" className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={saleActionDisabled} title={!saleItemId ? 'Choose an inventory product before continuing' : undefined}>{busy || saleInventoryLoading ? <LoaderCircle className="spinning" size={17} /> : salePaymentMethod === 'KHQR' ? <img className="khqr-action-logo" src={khqrLogo} alt="" /> : <Banknote size={17} />}{saleActionLabel}</button></footer>
       </form>}
 
-      {kind === 'pawn' && <form className="operation-form" onSubmit={submitPawn}>
-        <div className="operation-form-grid">
-          <label>Customer<select name="customer" required value={pawnCustomerId} onChange={(event) => { setPawnCustomerId(event.target.value); setPawnIdConfirmed(false) }}><option value="" disabled>Select customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name} — {customer.phone}{customer.nationalIdNumber ? ' — ID recorded' : ' — ID missing'}</option>)}</select></label>
-          <label>Phone name<input name="name" required /></label><label>Brand<input name="brand" /></label><label>Model<input name="model" /></label><label>IMEI<input name="imei" required /></label><label>Storage<input name="storage" /></label><label>Color<input name="color" /></label>
-          <label>Condition<select name="condition" defaultValue="GOOD"><option value="LIKE_NEW">Like new</option><option value="GOOD">Good</option><option value="FAIR">Fair</option><option value="DAMAGED">Damaged</option></select></label>
-          <label>Estimated resale value<input name="estimatedValue" type="number" min="0.01" step="0.01" required value={estimatedValue || ''} onChange={(event) => { const value = Number(event.target.value); setEstimatedValue(value); setPawnPrincipal(value > 0 ? String((value * pawnPercentage / 100).toFixed(2)) : '') }} /></label>
-          <label>Pawn percentage<input name="pawnPercentage" type="number" min="40" max="50" value={pawnPercentage} onChange={(event) => { const value = Number(event.target.value); setPawnPercentage(value); if (estimatedValue > 0) setPawnPrincipal(String((estimatedValue * value / 100).toFixed(2))) }} /></label>
-          <label>Principal <small>Maximum ${maximumPawn.toFixed(2)}</small><input name="principal" type="number" min="0.01" max={maximumPawn || undefined} step="0.01" required value={pawnPrincipal} onChange={(event) => setPawnPrincipal(event.target.value)} /></label>
-          <label>Monthly interest %<input name="interestRate" type="number" min="0" max="100" step="0.01" defaultValue="5" /></label><label>Due date<input name="dueDate" type="date" min={futureDateValue(1)} defaultValue={futureDateValue(30)} required /></label>
-          <label className="operation-checkbox"><input name="identificationVerified" type="checkbox" disabled={!customers.find((customer) => customer._id === pawnCustomerId)?.nationalIdNumber} checked={pawnIdConfirmed} onChange={(event) => setPawnIdConfirmed(event.target.checked)} /> {customers.find((customer) => customer._id === pawnCustomerId)?.nationalIdNumber ? 'National ID checked against customer record' : 'Customer must have a National ID record'}</label>
-          <label className="operation-wide">Notes<textarea name="notes" rows={3} /></label>
+      {kind === 'sale' && saleKhqr && <section className="sale-khqr-workflow">
+        <div className="khqr-heading">
+          <span><img src={khqrLogo} alt="" /></span>
+          <div><span className="eyebrow">ABA KHQR</span><h3>Scan to pay ${saleKhqr.amount.toFixed(2)}</h3><p>Keep this window open. The sale completes automatically after PayWay approves the payment.</p></div>
+          <b>{saleKhqr.environment === 'sandbox' ? 'SANDBOX TEST' : 'LIVE'}</b>
         </div>
-        <footer className="operation-modal-actions"><button type="button" className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={busy}>{busy ? 'Saving...' : 'Create pawn contract'}</button></footer>
-      </form>}
+        <div className="khqr-payment-card" role="button" tabIndex={0} aria-label="Enlarge ABA KHQR payment card" onClick={() => setSaleQrZoomed(true)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSaleQrZoomed(true) } }}>
+          <article className="khqr-native-card" aria-label={`KHQR payment for $${saleKhqr.amount.toFixed(2)}`}>
+            {saleKhqr.qrImage
+              ? <img className="khqr-official-image" src={paywayImageSource(saleKhqr.qrImage)} alt={`Official ABA PayWay KHQR for $${saleKhqr.amount.toFixed(2)}`} />
+              : <div className="khqr-qr-fallback">
+                  <strong>ABA PayWay KHQR</strong>
+                  {saleKhqr.qrString
+                    ? <QRCode value={saleKhqr.qrString} size={300} level="M" bgColor="#ffffff" fgColor="#050505" />
+                    : <span>QR code unavailable</span>}
+                  <small>Scan with a KHQR-supported banking app</small>
+                </div>}
+          </article>
+          <span className="khqr-zoom-hint" aria-hidden="true">
+            <Maximize2 size={14} />
+            Click to enlarge
+          </span>
+        </div>
+        <div className="khqr-inline-status"><RefreshCw size={15} className={busy ? '' : 'spinning'} /><p><strong>{salePaymentStatus}</strong><small>Checking securely with ABA PayWay every 3 seconds</small></p></div>
+        <p className="khqr-security-note">Inventory will not be deducted until PayWay confirms payment.</p>
+        <footer className="operation-modal-actions"><button type="button" className="ghost-button" onClick={cancelKhqrPayment} disabled={busy}>Cancel payment</button>{saleKhqr.deeplink && <a className="primary-button khqr-mobile-link" href={saleKhqr.deeplink}>Open ABA Mobile</a>}<button type="button" className="secondary-button" onClick={() => void checkKhqrPayment()} disabled={busy}><RefreshCw size={16} /> Check now</button></footer>
+        {saleQrZoomed && <div className="khqr-zoom-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSaleQrZoomed(false) }}>
+          <section className="khqr-zoom-dialog" role="dialog" aria-modal="true" aria-label={`Enlarged KHQR payment for $${saleKhqr.amount.toFixed(2)}`}>
+            <button type="button" className="khqr-zoom-close" onClick={() => setSaleQrZoomed(false)} aria-label="Close enlarged KHQR"><X size={20} /></button>
+            <div className="khqr-zoom-outline">
+              <article className="khqr-zoom-card">
+                {saleKhqr.qrImage
+                  ? <img src={paywayImageSource(saleKhqr.qrImage)} alt={`Official ABA PayWay KHQR for $${saleKhqr.amount.toFixed(2)}`} />
+                  : saleKhqr.qrString
+                    ? <QRCode value={saleKhqr.qrString} size={420} level="M" bgColor="#ffffff" fgColor="#050505" />
+                    : <span>QR code unavailable</span>}
+              </article>
+            </div>
+            <p>Scan to pay ${saleKhqr.amount.toFixed(2)} · ABA PayWay KHQR</p>
+          </section>
+        </div>}
+      </section>}
+
+      {kind === 'pawn' && pawnScannerOpen && <div className="imei-scanner-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPawnScannerOpen(false) }}>
+        <section className="imei-scanner-dialog" role="dialog" aria-modal="true" aria-labelledby="pawn-imei-scanner-title">
+          <header><span><Camera size={20} /></span><div><small>CAMERA ACTIVE</small><h3 id="pawn-imei-scanner-title">Point camera at the IMEI</h3><p>The IMEI will be filled automatically when the 15-digit barcode is detected.</p></div><button type="button" onClick={() => setPawnScannerOpen(false)} aria-label="Close IMEI scanner"><X size={18} /></button></header>
+          <CameraBarcodeReader autoStart readerId="phoneflow-pawn-imei-reader" onScan={(code) => { const imei = code.replace(/\D/g, '').slice(0, 15); if (imei.length !== 15) { setError('The scanned value is not a valid 15-digit IMEI'); return }; setPawnImei(imei); setPawnScannerOpen(false); setError('') }} onError={setError} />
+        </section>
+      </div>}
     </ModalShell>
   )
 }
