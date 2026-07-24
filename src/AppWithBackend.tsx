@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { motion } from 'framer-motion'
 import {
   AlertTriangle,
   BadgeCheck,
@@ -157,6 +158,79 @@ function ErrorNotice({ message }: { message: string }) {
   return <div className="error-notice"><AlertTriangle size={16} /> {message}</div>
 }
 
+function StardustBackground() {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    const context = canvas?.getContext('2d')
+    if (!canvas || !context) return
+
+    type Point = { x: number; y: number; opacity: number; speed: number; direction: 1 | -1; blinking: boolean }
+    let points: Point[] = []
+    let frame = 0
+    let lastFrame = 0
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+    const resize = () => {
+      const width = window.innerWidth
+      const height = window.innerHeight
+      const pixelRatio = Math.min(window.devicePixelRatio || 1, 2)
+      canvas.width = Math.round(width * pixelRatio)
+      canvas.height = Math.round(height * pixelRatio)
+      canvas.style.width = `${width}px`
+      canvas.style.height = `${height}px`
+      context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0)
+
+      const gap = 12
+      points = []
+      for (let x = 0; x < width; x += gap) {
+        for (let y = 0; y < height; y += gap) {
+          if (Math.random() <= 0.1) continue
+          points.push({
+            x,
+            y,
+            opacity: Math.random() * 0.7,
+            speed: 0.006 + Math.random() * 0.026,
+            direction: Math.random() > 0.5 ? 1 : -1,
+            blinking: Math.random() < 0.4,
+          })
+        }
+      }
+    }
+
+    const draw = (time = 0) => {
+      if (!reducedMotion && time - lastFrame < 16) {
+        frame = window.requestAnimationFrame(draw)
+        return
+      }
+      lastFrame = time
+      context.fillStyle = '#000'
+      context.fillRect(0, 0, window.innerWidth, window.innerHeight)
+      for (const point of points) {
+        if (!reducedMotion && point.blinking) {
+          point.opacity += point.speed * point.direction
+          if (point.opacity >= 0.9) point.direction = -1
+          if (point.opacity <= 0.1) point.direction = 1
+        }
+        context.fillStyle = `rgba(255,255,255,${point.opacity})`
+        context.fillRect(point.x, point.y, 2, 2)
+      }
+      if (!reducedMotion) frame = window.requestAnimationFrame(draw)
+    }
+
+    resize()
+    draw()
+    window.addEventListener('resize', resize)
+    return () => {
+      window.removeEventListener('resize', resize)
+      window.cancelAnimationFrame(frame)
+    }
+  }, [])
+
+  return <canvas ref={canvasRef} className="auth-stardust" aria-hidden="true" />
+}
+
 function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: SessionUser) => void }) {
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null)
   const [error, setError] = useState('')
@@ -195,33 +269,65 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: SessionUser) 
 
   return (
     <main className="auth-page">
-      <section className="auth-visual">
-        <div className="auth-logo"><Smartphone size={28} /></div>
-        <span className="eyebrow">Internal phone shop system</span>
-        <h1>One workspace for pawn, stock, buying and selling.</h1>
-        <p>Track every phone by IMEI, protect National ID records, calculate safe pawn values and keep an audit trail of staff actions.</p>
-        <div className="auth-features">
-          <span><HandCoins size={18} /> Pawn contracts</span>
-          <span><Boxes size={18} /> Live inventory</span>
-          <span><BadgeCheck size={18} /> Role-based access</span>
-        </div>
-      </section>
+      <StardustBackground />
+      <section className="auth-shell">
+        <motion.div
+          className="auth-brand"
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55 }}
+        >
+          <span className="auth-logo"><Smartphone size={22} /></span>
+          <span><strong>PhoneFlow</strong><small>Shop management</small></span>
+        </motion.div>
 
-      <section className="auth-card surface-card">
-        <span className="eyebrow">{setupRequired ? 'First-time setup' : 'Welcome back'}</span>
-        <h2>{setupRequired ? 'Create the owner account' : 'Sign in to PhoneFlow'}</h2>
-        <p>{setupRequired ? 'This account will have full control of the shop.' : 'Use your staff account to continue.'}</p>
-        {error && <ErrorNotice message={error} />}
-        {setupRequired === null ? (
-          <div className="loading-line">Checking server connection...</div>
-        ) : (
-          <form className="form-stack" onSubmit={submit}>
-            {setupRequired && <label>Owner name<input name="name" required placeholder="Shop owner" /></label>}
-            <label>Email address<input name="email" type="email" required placeholder="owner@shop.com" /></label>
-            <label>Password<input name="password" type="password" minLength={8} required placeholder="At least 8 characters" /></label>
-            <button className="primary-button full-width" disabled={busy}>{busy ? 'Please wait...' : setupRequired ? 'Create shop account' : 'Sign in'}</button>
-          </form>
-        )}
+        <div className="auth-layout">
+          <motion.aside
+            className="auth-overview"
+            initial={{ opacity: 0, x: -22 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.08, duration: 0.55, ease: 'easeOut' }}
+          >
+            <span className="eyebrow">Internal operations</span>
+            <h1>Everything your shop needs, in one place.</h1>
+            <p>Manage serialized stock, pawn contracts, purchases, sales and customer records from one secure workspace.</p>
+            <div className="auth-overview-list">
+              <span><HandCoins size={18} /><b>Pawn desk</b><small>Contracts and repayments</small></span>
+              <span><Boxes size={18} /><b>Live inventory</b><small>IMEI and stock tracking</small></span>
+              <span><BadgeCheck size={18} /><b>Protected access</b><small>Staff roles and audit history</small></span>
+            </div>
+          </motion.aside>
+
+          <motion.section
+            className="auth-card"
+            initial={{ opacity: 0, x: 22, scale: 0.98 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            transition={{ delay: 0.12, duration: 0.55, ease: 'easeOut' }}
+          >
+            <header>
+              <div>
+                <h2>{setupRequired ? 'Create owner account' : 'Welcome back'}</h2>
+                <p>{setupRequired ? 'Set up the owner account for this shop.' : 'Sign in to your PhoneFlow account.'}</p>
+              </div>
+              <span className="auth-security-mark"><BadgeCheck size={20} /></span>
+            </header>
+            {error && <ErrorNotice message={error} />}
+            {setupRequired === null ? (
+              <div className="loading-line">Checking secure connection…</div>
+            ) : (
+              <form className="form-stack" onSubmit={submit}>
+                {setupRequired && <label>Owner name<input name="name" autoComplete="name" required placeholder="Shop owner" /></label>}
+                <label>Email address<input name="email" type="email" autoComplete="email" required placeholder="owner@shop.com" /></label>
+                <label>Password<input name="password" type="password" autoComplete={setupRequired ? 'new-password' : 'current-password'} minLength={8} required placeholder="Enter your password" /></label>
+                <button className="primary-button full-width" disabled={busy}>{busy ? 'Signing in…' : setupRequired ? 'Create shop account' : 'Sign in'}</button>
+              </form>
+            )}
+            <div className="auth-features" aria-label="PhoneFlow features">
+              <span><BadgeCheck size={15} /> Encrypted staff access</span>
+              <span>PhoneFlow v0.2</span>
+            </div>
+          </motion.section>
+        </div>
       </section>
     </main>
   )
