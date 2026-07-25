@@ -42,19 +42,60 @@ button { cursor: pointer; }
 }
 
 .app[data-theme='light'] {
-  --bg: #f4f6fb;
-  --bg-soft: #eef1f7;
-  --sidebar: #ffffff;
-  --surface: rgba(255, 255, 255, 0.92);
-  --surface-solid: #ffffff;
-  --surface-hover: #f4f1ff;
-  --border: rgba(27, 36, 55, 0.08);
-  --border-strong: rgba(27, 36, 55, 0.14);
-  --text: #1c2434;
-  --muted: #68728a;
-  --muted-2: #8b94a8;
-  --primary-soft: rgba(124, 58, 237, 0.10);
-  background: radial-gradient(circle at 80% -20%, rgba(124, 58, 237, 0.13), transparent 35%), var(--bg);
+  --bg: #eaf1eb;
+  --bg-soft: #e2ebe4;
+  --sidebar: #f3f7f3;
+  --surface: rgba(246, 250, 246, 0.88);
+  --surface-solid: #f5f9f5;
+  --surface-hover: #dce9df;
+  --border: rgba(31, 73, 48, 0.10);
+  --border-strong: rgba(31, 73, 48, 0.17);
+  --text: #17251d;
+  --muted: #5f7467;
+  --muted-2: #829388;
+  --primary: #2f8f5b;
+  --primary-strong: #237348;
+  --primary-soft: rgba(47, 143, 91, 0.12);
+  --blue: #268f89;
+  --green: #238b57;
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(circle at 78% -8%, rgba(47, 143, 91, 0.16), transparent 32%),
+    radial-gradient(circle at 18% 74%, rgba(38, 143, 137, 0.08), transparent 28%),
+    radial-gradient(circle, rgba(31, 73, 48, 0.16) 1px, transparent 1.2px);
+  background-size: auto, auto, 22px 22px;
+  background-attachment: fixed;
+}
+
+.app[data-theme='light'] .brand-mark {
+  background: linear-gradient(135deg, #49a56f, #237348);
+  box-shadow: 0 10px 26px rgba(35, 115, 72, 0.24);
+}
+
+.app[data-theme='light'] .nav-group button.active {
+  background: linear-gradient(105deg, #237348, #49a56f);
+  box-shadow: 0 9px 24px rgba(35, 115, 72, 0.18);
+}
+
+.app[data-theme='light'] .primary-button {
+  background: linear-gradient(105deg, #237348, #3d9a66);
+  box-shadow: 0 9px 24px rgba(35, 115, 72, 0.18);
+}
+
+.app[data-theme='light'] .tone-violet,
+.app[data-theme='light'] .quick-icon.violet,
+.app[data-theme='light'] .stock-icon.violet {
+  color: #2f8f5b;
+  background: rgba(47, 143, 91, 0.13);
+}
+
+.app[data-theme='light'] .chart-column span {
+  background: linear-gradient(180deg, #62b783, #237348);
+  box-shadow: 0 9px 18px rgba(35, 115, 72, 0.16);
+}
+
+.app[data-theme='light'] .donut-chart {
+  background: conic-gradient(#2f8f5b 0 62%, #268f89 62% 86%, #d28a3d 86% 100%);
 }
 
 .app-shell { min-height: 100vh; padding-left: 270px; }
