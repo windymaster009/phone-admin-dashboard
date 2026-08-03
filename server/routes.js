@@ -272,9 +272,8 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
 
 router.get('/customers', requireAuth, asyncRoute(async (req, res) => {
   const q = clean(req.query.q || '')
-  const filter = q
-    ? { $or: [{ name: { $regex: q, $options: 'i' } }, { phone: { $regex: q, $options: 'i' } }, { nationalIdNumber: { $regex: q, $options: 'i' } }] }
-    : {}
+  const filter = req.query.includeInactive === 'true' ? {} : { active: { $ne: false } }
+  if (q) filter.$or = [{ name: { $regex: q, $options: 'i' } }, { phone: { $regex: q, $options: 'i' } }, { nationalIdNumber: { $regex: q, $options: 'i' } }]
   const customers = await Customer.find(filter).sort({ createdAt: -1 }).limit(250)
   res.json({ customers })
 }))
@@ -292,12 +291,31 @@ router.post('/customers', requireAuth, asyncRoute(async (req, res) => {
 }))
 
 router.patch('/customers/:id', requireAuth, asyncRoute(async (req, res) => {
-  const allowed = ['name', 'phone', 'nationalIdNumber', 'nationalIdFrontUrl', 'nationalIdBackUrl', 'address', 'notes']
+  const allowed = ['name', 'phone', 'nationalIdNumber', 'nationalIdFrontUrl', 'nationalIdBackUrl', 'address', 'notes', 'active']
   const update = Object.fromEntries(Object.entries(req.body).filter(([key]) => allowed.includes(key)))
   const customer = await Customer.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true })
   if (!customer) return res.status(404).json({ message: 'Customer not found' })
   await writeActivity(req, { action: 'UPDATE', entity: 'CUSTOMER', entityId: customer._id, details: update })
   res.json({ customer })
+}))
+
+router.delete('/customers/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
+  const [pawnExists, tradeExists] = await Promise.all([
+    Pawn.exists({ customer: req.params.id }),
+    Trade.exists({ customer: req.params.id }),
+  ])
+  if (pawnExists || tradeExists) {
+    return res.status(409).json({ message: 'This customer is linked to transaction history. Deactivate them instead.' })
+  }
+  const customer = await Customer.findByIdAndDelete(req.params.id)
+  if (!customer) return res.status(404).json({ message: 'Customer not found' })
+  await writeActivity(req, {
+    action: 'DELETE',
+    entity: 'CUSTOMER',
+    entityId: customer._id,
+    details: { name: customer.name },
+  })
+  res.json({ message: 'Customer deleted' })
 }))
 
 router.get('/suppliers', requireAuth, asyncRoute(async (req, res) => {
@@ -340,6 +358,18 @@ router.patch('/suppliers/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOC
   if (!supplier) return res.status(404).json({ message: 'Supplier not found' })
   await writeActivity(req, { action: 'UPDATE', entity: 'SUPPLIER', entityId: supplier._id, details: update })
   res.json({ supplier })
+}))
+
+router.delete('/suppliers/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
+  const supplier = await Supplier.findByIdAndDelete(req.params.id)
+  if (!supplier) return res.status(404).json({ message: 'Supplier not found' })
+  await writeActivity(req, {
+    action: 'DELETE',
+    entity: 'SUPPLIER',
+    entityId: supplier._id,
+    details: { name: supplier.name },
+  })
+  res.json({ message: 'Supplier deleted' })
 }))
 
 router.get('/inventory', requireAuth, asyncRoute(async (req, res) => {

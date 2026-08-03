@@ -31,7 +31,18 @@ export class ApiError extends Error {
   }
 }
 
-export async function api<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+type ApiBehavior = {
+  /** Only enable this for requests that are safe to repeat, such as sign-in. */
+  retryTransient?: boolean
+}
+
+const TRANSIENT_RETRY_DELAY_MS = 350
+
+function wait(milliseconds: number) {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, milliseconds))
+}
+
+export async function api<T = any>(path: string, options: RequestInit = {}, behavior: ApiBehavior = {}): Promise<T> {
   const token = getToken()
   const headers = new Headers(options.headers)
   const clientRequestId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -39,21 +50,48 @@ export async function api<T = any>(path: string, options: RequestInit = {}): Pro
   if (token) headers.set('Authorization', `Bearer ${token}`)
   if (!headers.has('X-Request-ID')) headers.set('X-Request-ID', clientRequestId)
 
-  const response = await fetch(`/api${path}`, { ...options, headers })
-  const payload = (await response.json().catch(() => ({}))) as { message?: string; requestId?: string; retryable?: boolean } & T
+  const method = String(options.method || 'GET').toUpperCase()
+  const canRetry = method === 'GET' || method === 'HEAD' || behavior.retryTransient === true
+  const attempts = canRetry ? 2 : 1
 
-  if (response.status === 401) setToken(null)
-  if (!response.ok) {
-    const requestId = payload.requestId || response.headers.get('X-Request-ID') || undefined
-    const serverUnavailable = response.status >= 500 && !requestId
-    const message = serverUnavailable
-      ? 'The API server is temporarily unavailable. Check the server terminal before trying again.'
-      : payload.message || `Request failed (${response.status})`
-    const reference = requestId ? ` Reference: ${requestId}` : ''
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(`/api${path}`, { ...options, headers })
+      const payload = (await response.json().catch(() => ({}))) as { message?: string; requestId?: string; retryable?: boolean } & T
 
-    // Mutation requests are deliberately not retried automatically. A timed-out
-    // MongoDB write may already be committed, so retrying could create duplicates.
-    throw new ApiError(`${message}${reference}`, response.status, requestId, Boolean(payload.retryable))
+      if (response.status === 401) setToken(null)
+      if (response.ok) return payload
+
+      const requestId = payload.requestId || response.headers.get('X-Request-ID') || undefined
+      const serverUnavailable = response.status >= 500 && !requestId
+      const transient = serverUnavailable || Boolean(payload.retryable)
+
+      if (transient && attempt < attempts) {
+        await wait(TRANSIENT_RETRY_DELAY_MS)
+        continue
+      }
+
+      const message = serverUnavailable
+        ? 'The API server is temporarily unavailable. Check the server terminal before trying again.'
+        : payload.message || `Request failed (${response.status})`
+      const reference = requestId ? ` Reference: ${requestId}` : ''
+      throw new ApiError(`${message}${reference}`, response.status, requestId, transient)
+    } catch (error) {
+      if (error instanceof ApiError) throw error
+      if (error instanceof DOMException && error.name === 'AbortError') throw error
+      if (attempt < attempts) {
+        await wait(TRANSIENT_RETRY_DELAY_MS)
+        continue
+      }
+
+      throw new ApiError(
+        'The API server is temporarily unavailable. Check the server terminal before trying again.',
+        0,
+        undefined,
+        true,
+      )
+    }
   }
-  return payload
+
+  throw new ApiError('Unable to complete the request', 0)
 }

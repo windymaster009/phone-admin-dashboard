@@ -29,6 +29,7 @@ const customerSchema = new Schema(
     nationalIdBackUrl: String,
     address: String,
     notes: String,
+    active: { type: Boolean, default: true, index: true },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
   },
   baseOptions,

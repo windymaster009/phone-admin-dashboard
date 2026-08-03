@@ -257,7 +257,7 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: SessionUser) 
       const result = await api<{ token: string; user: SessionUser }>(setupRequired ? '/auth/bootstrap' : '/auth/login', {
         method: 'POST',
         body: JSON.stringify(payload),
-      })
+      }, { retryTransient: setupRequired === false })
       setToken(result.token)
       onAuthenticated(result.user)
     } catch (reason) {

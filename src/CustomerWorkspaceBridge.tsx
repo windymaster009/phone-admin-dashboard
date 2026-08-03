@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ButtonHTMLAttributes, type FormEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import {
   AlertTriangle,
   BadgeCheck,
   MapPin,
+  Pencil,
   Phone,
   Plus,
+  Power,
   Search,
+  Trash2,
   UserRound,
   Users,
   X,
@@ -20,6 +23,7 @@ type Customer = {
   nationalIdNumber?: string
   address?: string
   notes?: string
+  active?: boolean
   createdAt: string
 }
 
@@ -30,12 +34,29 @@ const formatDate = (value: string) => {
     : new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(date)
 }
 
+function CustomerActionButton({ tooltip, children, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & {
+  tooltip: string
+  children: ReactNode
+}) {
+  const [position, setPosition] = useState<{ left: number; top: number } | null>(null)
+  const showTooltip = (button: HTMLButtonElement) => {
+    const bounds = button.getBoundingClientRect()
+    setPosition({ left: bounds.left + bounds.width / 2, top: bounds.bottom + 7 })
+  }
+  return <>
+    <button {...props} onMouseEnter={(event) => showTooltip(event.currentTarget)} onMouseLeave={() => setPosition(null)} onFocus={(event) => showTooltip(event.currentTarget)} onBlur={() => setPosition(null)}>{children}</button>
+    {position && createPortal(<span className="customer-action-tooltip" role="tooltip" style={position}>{tooltip}</span>, document.body)}
+  </>
+}
+
 function CustomerModal({
+  customer,
   busy,
   error,
   onClose,
   onSubmit,
 }: {
+  customer: Customer | null
   busy: boolean
   error: string
   onClose: () => void
@@ -61,13 +82,13 @@ function CustomerModal({
         if (event.target === event.currentTarget && !busy) onClose()
       }}
     >
-      <section className="operation-modal customer-modal" role="dialog" aria-modal="true" aria-label="Add customer">
+      <section className="operation-modal customer-modal" role="dialog" aria-modal="true" aria-label={customer ? 'Edit customer' : 'Add customer'}>
         <header className="operation-modal-header">
           <span className="operation-modal-icon"><UserRound size={21} /></span>
           <div>
             <span className="eyebrow">Customer record</span>
-            <h2>Add customer</h2>
-            <p>Create the customer before starting a pawn, purchase, or sale.</p>
+            <h2>{customer ? 'Edit customer' : 'Add customer'}</h2>
+            <p>{customer ? 'Update customer contact and identification details.' : 'Create the customer before starting a pawn, purchase, or sale.'}</p>
           </div>
           <button type="button" className="operation-modal-close" onClick={onClose} disabled={busy} aria-label="Close">
             <X size={19} />
@@ -76,21 +97,59 @@ function CustomerModal({
 
         {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
 
-        <form className="operation-form" onSubmit={onSubmit}>
+        <form className="operation-form" onSubmit={onSubmit} key={customer?._id || 'new'}>
           <div className="operation-form-grid">
-            <label>Full name<input name="name" required autoFocus placeholder="Customer full name" /></label>
-            <label>Phone number<input name="phone" required placeholder="012 345 678" /></label>
-            <label>National ID number<input name="nationalIdNumber" placeholder="Optional for normal sale" /></label>
-            <label>Address<input name="address" placeholder="Village, district, province" /></label>
-            <label className="operation-wide">Notes<textarea name="notes" rows={4} placeholder="Ownership details, contact notes, or other information" /></label>
+            <label>Full name<input name="name" required autoFocus defaultValue={customer?.name || ''} placeholder="Customer full name" /></label>
+            <label>Phone number<input name="phone" required defaultValue={customer?.phone || ''} placeholder="012 345 678" /></label>
+            <label>National ID number<input name="nationalIdNumber" defaultValue={customer?.nationalIdNumber || ''} placeholder="Optional for normal sale" /></label>
+            <label>Address<input name="address" defaultValue={customer?.address || ''} placeholder="Village, district, province" /></label>
+            <label className="operation-wide">Notes<textarea name="notes" rows={4} defaultValue={customer?.notes || ''} placeholder="Ownership details, contact notes, or other information" /></label>
           </div>
           <footer className="operation-modal-actions">
             <button type="button" className="ghost-button" onClick={onClose} disabled={busy}>Cancel</button>
-            <button className="primary-button" disabled={busy}>{busy ? 'Saving...' : 'Save customer'}</button>
+            <button className="primary-button" disabled={busy}>{busy ? 'Saving...' : customer ? 'Save changes' : 'Save customer'}</button>
           </footer>
         </form>
       </section>
     </div>
+  )
+}
+
+function DeleteCustomerModal({ customer, busy, error, onClose, onConfirm }: {
+  customer: Customer
+  busy: boolean
+  error: string
+  onClose: () => void
+  onConfirm: () => void
+}) {
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape' && !busy) onClose() }
+    document.addEventListener('keydown', closeOnEscape)
+    document.body.classList.add('operation-modal-open')
+    return () => {
+      document.removeEventListener('keydown', closeOnEscape)
+      document.body.classList.remove('operation-modal-open')
+    }
+  }, [busy, onClose])
+
+  return createPortal(
+    <div className="operation-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose() }}>
+      <section className="operation-modal customer-delete-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-customer-title">
+        <button type="button" className="customer-delete-close" onClick={onClose} disabled={busy} aria-label="Close"><X size={18} /></button>
+        {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
+        <div className="customer-delete-content">
+          <span className="customer-delete-icon"><Trash2 size={22} /></span>
+          <h2 id="delete-customer-title">Delete “{customer.name}”?</h2>
+          <p>The customer profile will be permanently deleted. Customers linked to transaction history cannot be deleted.</p>
+          <span className="customer-delete-warning"><AlertTriangle size={14} /> This action cannot be undone.</span>
+        </div>
+        <footer className="customer-delete-actions">
+          <button type="button" className="ghost-button" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="button" className="customer-delete-confirm" onClick={onConfirm} disabled={busy}><Trash2 size={15} /> {busy ? 'Deleting...' : 'Delete'}</button>
+        </footer>
+      </section>
+    </div>,
+    document.body,
   )
 }
 
@@ -101,13 +160,16 @@ function CustomerPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [modalError, setModalError] = useState('')
+  const [deleteError, setDeleteError] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [editing, setEditing] = useState<Customer | null>(null)
+  const [deleting, setDeleting] = useState<Customer | null>(null)
 
   const loadCustomers = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      const result = await api<{ customers: Customer[] }>('/customers')
+      const result = await api<{ customers: Customer[] }>('/customers?includeInactive=true')
       setCustomers(result.customers)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to load customers')
@@ -134,11 +196,12 @@ function CustomerPage() {
   const verifiedCount = customers.filter((customer) => Boolean(customer.nationalIdNumber)).length
   const missingIdCount = customers.length - verifiedCount
 
-  async function createCustomer(event: FormEvent<HTMLFormElement>) {
+  async function saveCustomer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    const formElement = event.currentTarget
     setBusy(true)
     setModalError('')
-    const form = new FormData(event.currentTarget)
+    const form = new FormData(formElement)
     const payload = {
       name: String(form.get('name') || '').trim(),
       phone: String(form.get('phone') || '').trim(),
@@ -148,9 +211,10 @@ function CustomerPage() {
     }
 
     try {
-      await api('/customers', { method: 'POST', body: JSON.stringify(payload) })
-      event.currentTarget.reset()
+      await api(editing ? `/customers/${editing._id}` : '/customers', { method: editing ? 'PATCH' : 'POST', body: JSON.stringify(payload) })
+      formElement.reset()
       setShowModal(false)
+      setEditing(null)
       await loadCustomers()
       window.dispatchEvent(new CustomEvent('phoneflow:customers-updated'))
     } catch (reason) {
@@ -160,6 +224,41 @@ function CustomerPage() {
     }
   }
 
+  async function toggleCustomer(customer: Customer) {
+    const active = customer.active !== false
+    setBusy(true)
+    setError('')
+    try {
+      await api(`/customers/${customer._id}`, { method: 'PATCH', body: JSON.stringify({ active: !active }) })
+      await loadCustomers()
+      window.dispatchEvent(new CustomEvent('phoneflow:customers-updated'))
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to update customer')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function deleteCustomer() {
+    if (!deleting) return
+    const customer = deleting
+    setBusy(true)
+    setDeleteError('')
+    try {
+      await api(`/customers/${customer._id}`, { method: 'DELETE' })
+      setDeleting(null)
+      await loadCustomers()
+      window.dispatchEvent(new CustomEvent('phoneflow:customers-updated'))
+    } catch (reason) {
+      setDeleteError(reason instanceof Error ? reason.message : 'Unable to delete customer')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const openCreate = () => { setEditing(null); setModalError(''); setShowModal(true) }
+  const openEdit = (customer: Customer) => { setEditing(customer); setModalError(''); setShowModal(true) }
+
   return (
     <div className="customer-workspace-bridge">
       <div className="section-header">
@@ -168,7 +267,7 @@ function CustomerPage() {
           <h2>Customer management</h2>
           <p>Manage customer contacts and National ID information used by pawn, purchase, and sale transactions.</p>
         </div>
-        <button className="primary-button" onClick={() => { setModalError(''); setShowModal(true) }}>
+        <button className="primary-button" onClick={openCreate}>
           <Plus size={17} /> Add customer
         </button>
       </div>
@@ -190,7 +289,7 @@ function CustomerPage() {
 
         <div className="table-scroll">
           <table>
-            <thead><tr><th>Customer</th><th>Phone</th><th>National ID</th><th>Address</th><th>Added</th><th>Status</th></tr></thead>
+            <thead><tr><th>Customer</th><th>Phone</th><th>National ID</th><th>Address</th><th>Added</th><th>Status</th><th /></tr></thead>
             <tbody>
               {filtered.map((customer) => (
                 <tr key={customer._id}>
@@ -199,11 +298,12 @@ function CustomerPage() {
                   <td>{customer.nationalIdNumber || <span className="warning-text">Not recorded</span>}</td>
                   <td>{customer.address ? <span className="customer-address"><MapPin size={14} /> {customer.address}</span> : '—'}</td>
                   <td>{formatDate(customer.createdAt)}</td>
-                  <td>{customer.nationalIdNumber ? <span className="verified"><BadgeCheck size={15} /> ID ready</span> : <span className="unverified"><AlertTriangle size={15} /> Basic profile</span>}</td>
+                  <td>{customer.active === false ? <span className="unverified"><Power size={15} /> Inactive</span> : customer.nationalIdNumber ? <span className="verified"><BadgeCheck size={15} /> ID ready</span> : <span className="unverified"><AlertTriangle size={15} /> Basic profile</span>}</td>
+                  <td><div className="customer-row-actions"><CustomerActionButton className="icon-button customer-action-edit" onClick={() => openEdit(customer)} aria-label={`Edit ${customer.name}`} tooltip="Edit"><Pencil size={15} /></CustomerActionButton><CustomerActionButton className="icon-button customer-action-status" disabled={busy} onClick={() => void toggleCustomer(customer)} aria-label={`${customer.active === false ? 'Activate' : 'Deactivate'} ${customer.name}`} tooltip={customer.active === false ? 'Activate' : 'Deactivate'}><Power size={15} /></CustomerActionButton><CustomerActionButton className="icon-button customer-action-delete" disabled={busy} onClick={() => { setDeleteError(''); setDeleting(customer) }} aria-label={`Delete ${customer.name}`} tooltip="Delete"><Trash2 size={15} /></CustomerActionButton></div></td>
                 </tr>
               ))}
-              {!loading && filtered.length === 0 && <tr><td colSpan={6}><div className="customer-empty"><UserRound size={30} /><strong>{customers.length === 0 ? 'No customers yet' : 'No matching customers'}</strong><span>{customers.length === 0 ? 'Add the first customer so they can be selected in pawn, purchase, and sale forms.' : 'Try another search term.'}</span><button className="primary-button" onClick={() => setShowModal(true)}><Plus size={16} /> Add customer</button></div></td></tr>}
-              {loading && <tr><td colSpan={6}>Loading customers...</td></tr>}
+              {!loading && filtered.length === 0 && <tr><td colSpan={7}><div className="customer-empty"><UserRound size={30} /><strong>{customers.length === 0 ? 'No customers yet' : 'No matching customers'}</strong><span>{customers.length === 0 ? 'Add the first customer so they can be selected in pawn, purchase, and sale forms.' : 'Try another search term.'}</span><button className="primary-button" onClick={openCreate}><Plus size={16} /> Add customer</button></div></td></tr>}
+              {loading && <tr><td colSpan={7}>Loading customers...</td></tr>}
             </tbody>
           </table>
         </div>
@@ -220,6 +320,7 @@ function CustomerPage() {
                 <div><span>Added</span><strong>{formatDate(customer.createdAt)}</strong></div>
               </div>
               {customer.address && <p className="customer-mobile-address"><MapPin size={13} /> {customer.address}</p>}
+              <footer className="customer-mobile-actions"><button className="ghost-button customer-action-edit" onClick={() => openEdit(customer)}><Pencil size={14} /> Edit</button><button className="ghost-button customer-action-status" disabled={busy} onClick={() => void toggleCustomer(customer)}><Power size={14} /> {customer.active === false ? 'Activate' : 'Deactivate'}</button><button className="ghost-button customer-action-delete" disabled={busy} onClick={() => { setDeleteError(''); setDeleting(customer) }}><Trash2 size={14} /> Delete</button></footer>
             </article>
           ))}
           {!loading && filtered.length === 0 && <div className="customer-mobile-empty">{customers.length === 0 ? 'No customers yet.' : 'No matching customers.'}</div>}
@@ -227,7 +328,8 @@ function CustomerPage() {
         </div>
       </article>
 
-      {showModal && <CustomerModal busy={busy} error={modalError} onClose={() => !busy && setShowModal(false)} onSubmit={createCustomer} />}
+      {showModal && <CustomerModal customer={editing} busy={busy} error={modalError} onClose={() => { if (!busy) { setShowModal(false); setEditing(null) } }} onSubmit={saveCustomer} />}
+      {deleting && <DeleteCustomerModal customer={deleting} busy={busy} error={deleteError} onClose={() => { if (!busy) setDeleting(null) }} onConfirm={() => void deleteCustomer()} />}
     </div>
   )
 }
