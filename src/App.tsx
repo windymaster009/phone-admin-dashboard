@@ -106,8 +106,14 @@ type InventoryItem = {
   serialNumber?: string
   condition?: string
   storage?: string
+  ram?: string
   color?: string
   batteryHealth?: number
+  carrierLock?: string
+  accessoriesIncluded?: string[]
+  compatibleModels?: string[]
+  oemQuality?: string
+  imageUrl?: string
   source?: string
   notes?: string
   createdAt?: string
@@ -1067,6 +1073,37 @@ function TradeView() {
   )
 }
 
+const categoryMeta: Record<InventoryItem['category'], { label: string; tone: 'violet' | 'blue' | 'orange'; Icon: LucideIcon; fallback: string }> = {
+  PHONE: { label: 'Phones', tone: 'violet', Icon: Smartphone, fallback: 'Phone' },
+  TABLET: { label: 'Tablets', tone: 'violet', Icon: Smartphone, fallback: 'Tab' },
+  ACCESSORY: { label: 'Accessories', tone: 'blue', Icon: Package, fallback: 'Acc' },
+  SPARE_PART: { label: 'Spare parts', tone: 'orange', Icon: Wrench, fallback: 'Part' },
+  OTHER: { label: 'Other', tone: 'blue', Icon: Package, fallback: 'Item' },
+}
+
+function inventorySubtitle(item: InventoryItem) {
+  return [item.brand, item.model, item.storage, item.ram && `${item.ram} RAM`, item.color].filter(Boolean).join(' · ') || item.sku
+}
+
+function inventoryDetails(item: InventoryItem) {
+  const accessoryDetails = item.category === 'ACCESSORY' || item.category === 'SPARE_PART'
+    ? [item.compatibleModels?.join(', '), item.oemQuality].filter(Boolean).join(' · ')
+    : ''
+  return accessoryDetails || [item.condition && titleStatus(item.condition), item.batteryHealth !== undefined && `Battery ${item.batteryHealth}%`, item.imei1 || item.serialNumber].filter(Boolean).join(' · ')
+}
+
+function InventoryPhoto({ item, size = 'normal' }: { item: InventoryItem; size?: 'small' | 'normal' | 'large' }) {
+  const meta = categoryMeta[item.category] || categoryMeta.OTHER
+  const Icon = meta.Icon
+  return (
+    <span className={`inventory-photo inventory-photo-${size} ${item.imageUrl ? 'has-image' : `fallback-${meta.tone}`}`}>
+      {item.imageUrl
+        ? <img src={item.imageUrl} alt={item.name} loading="lazy" />
+        : <><Icon size={size === 'small' ? 16 : size === 'large' ? 28 : 20} /><small>{meta.fallback}</small></>}
+    </span>
+  )
+}
+
 function InventoryView() {
   const [items, setItems] = useState<InventoryItem[]>([])
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
@@ -1074,6 +1111,7 @@ function InventoryView() {
   const [sellingPriceDraft, setSellingPriceDraft] = useState('')
   const [minimumPriceDraft, setMinimumPriceDraft] = useState('')
   const [savingPrice, setSavingPrice] = useState(false)
+  const [savingPhoto, setSavingPhoto] = useState(false)
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('ALL')
   const [statusFilter, setStatusFilter] = useState('ALL')
@@ -1090,6 +1128,13 @@ function InventoryView() {
   const accessoryCount = items.filter((item) => item.category === 'ACCESSORY').reduce((sum, item) => sum + item.quantity, 0)
   const sparePartCount = items.filter((item) => item.category === 'SPARE_PART').reduce((sum, item) => sum + item.quantity, 0)
   const otherCount = items.filter((item) => item.category === 'OTHER').reduce((sum, item) => sum + item.quantity, 0)
+  const categoryCounts: Record<InventoryItem['category'], number> = {
+    PHONE: phoneCount,
+    TABLET: tabletCount,
+    ACCESSORY: accessoryCount,
+    SPARE_PART: sparePartCount,
+    OTHER: otherCount,
+  }
   const filteredItems = items.filter((item) => {
     const term = search.trim().toLowerCase()
     const matchesSearch = !term || [item.sku, item.barcode, item.name, item.brand, item.model, item.imei1, item.serialNumber]
@@ -1098,6 +1143,7 @@ function InventoryView() {
       && (categoryFilter === 'ALL' || item.category === categoryFilter)
       && (statusFilter === 'ALL' || item.status === statusFilter)
   })
+  const featuredItems = filteredItems.slice(0, 12)
 
   function openPriceEditor() {
     if (!selectedItem) return
@@ -1125,6 +1171,56 @@ function InventoryView() {
     }
   }
 
+  function updateInventoryItem(item: InventoryItem) {
+    setSelectedItem(item)
+    setItems((current) => current.map((row) => row._id === item._id ? item : row))
+  }
+
+  async function uploadPhoto(file: File | undefined) {
+    if (!selectedItem || !file) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Upload a JPEG, PNG, or WebP image')
+      return
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      setError('Image must be 4MB or smaller')
+      return
+    }
+    setSavingPhoto(true)
+    setError('')
+    try {
+      const imageData = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result || ''))
+        reader.onerror = () => reject(new Error('Unable to read image file'))
+        reader.readAsDataURL(file)
+      })
+      const result = await api<{ item: InventoryItem }>(`/inventory/${selectedItem._id}/photo`, {
+        method: 'POST',
+        body: JSON.stringify({ imageData }),
+      })
+      updateInventoryItem(result.item)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to upload product photo')
+    } finally {
+      setSavingPhoto(false)
+    }
+  }
+
+  async function removePhoto() {
+    if (!selectedItem) return
+    setSavingPhoto(true)
+    setError('')
+    try {
+      const result = await api<{ item: InventoryItem }>(`/inventory/${selectedItem._id}/photo`, { method: 'DELETE' })
+      updateInventoryItem(result.item)
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to remove product photo')
+    } finally {
+      setSavingPhoto(false)
+    }
+  }
+
   return (
     <>
       <div className="stock-page-heading">
@@ -1139,11 +1235,45 @@ function InventoryView() {
         />
       </div>
       <section className="stock-category-grid">
-        <article className="surface-card stock-category"><span className="stock-icon violet"><Smartphone /></span><p>Phones<strong>{phoneCount}</strong><small>live stock units</small></p><ArrowUpRight /></article>
-        <article className="surface-card stock-category"><span className="stock-icon violet"><Smartphone /></span><p>Tablets<strong>{tabletCount}</strong><small>live stock units</small></p><ArrowUpRight /></article>
-        <article className="surface-card stock-category"><span className="stock-icon blue"><Package /></span><p>Accessories<strong>{accessoryCount}</strong><small>live stock units</small></p><ArrowUpRight /></article>
-        <article className="surface-card stock-category"><span className="stock-icon orange"><Wrench /></span><p>Spare parts<strong>{sparePartCount}</strong><small>live stock units</small></p><ArrowUpRight /></article>
-        <article className="surface-card stock-category"><span className="stock-icon blue"><Package /></span><p>Other<strong>{otherCount}</strong><small>live stock units</small></p><ArrowUpRight /></article>
+        {(Object.keys(categoryMeta) as InventoryItem['category'][]).map((category) => {
+          const meta = categoryMeta[category]
+          const Icon = meta.Icon
+          return (
+            <button
+              className={`surface-card stock-category ${categoryFilter === category ? 'active' : ''}`}
+              key={category}
+              onClick={() => setCategoryFilter((current) => current === category ? 'ALL' : category)}
+            >
+              <span className={`stock-icon ${meta.tone}`}><Icon /></span>
+              <p>{meta.label}<strong>{categoryCounts[category]}</strong><small>live stock units</small></p>
+              <ArrowUpRight />
+            </button>
+          )
+        })}
+      </section>
+      <section className="surface-card inventory-catalog-card">
+        <div className="card-heading table-heading">
+          <div><span className="eyebrow">Item list</span><h3>{categoryFilter === 'ALL' ? 'All shop products' : categoryMeta[categoryFilter as InventoryItem['category']]?.label}</h3></div>
+          <span className="catalog-count">{filteredItems.length} item{filteredItems.length === 1 ? '' : 's'}</span>
+        </div>
+        <div className="inventory-card-grid">
+          {featuredItems.map((item) => (
+            <button className="inventory-product-card" key={item._id} onClick={() => setSelectedItem(item)}>
+              <InventoryPhoto item={item} size="large" />
+              <div>
+                <span>{categoryMeta[item.category]?.label || titleStatus(item.category)}</span>
+                <strong>{item.name}</strong>
+                <small>{inventorySubtitle(item)}</small>
+                <p>{inventoryDetails(item) || 'No extra information recorded'}</p>
+              </div>
+              <footer>
+                <strong>{money.format(item.sellPrice || item.buyPrice)}</strong>
+                <small>{item.quantity} in stock</small>
+              </footer>
+            </button>
+          ))}
+          {featuredItems.length === 0 && <p className="mobile-record-empty">{items.length === 0 ? 'No inventory in the database yet.' : 'No matching inventory.'}</p>}
+        </div>
       </section>
       <article className="surface-card table-card page-table stock-workspace-card">
         <div className="filter-row">
@@ -1152,7 +1282,7 @@ function InventoryView() {
             <option value="ALL">All categories</option><option value="PHONE">Phones</option><option value="TABLET">Tablets</option><option value="ACCESSORY">Accessories</option><option value="SPARE_PART">Spare parts</option><option value="OTHER">Other</option>
           </select>
           <select className="ghost-button filter-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter stock status">
-            <option value="ALL">All stock statuses</option><option value="IN_STOCK">In stock</option><option value="LOW_STOCK">Low stock</option><option value="OUT_OF_STOCK">Out of stock</option>
+            <option value="ALL">All stock statuses</option><option value="IN_STOCK">In stock</option><option value="RESERVED">Reserved</option><option value="SOLD">Sold</option><option value="PAWNED">Pawned</option><option value="REPAIR">Repair</option><option value="ARCHIVED">Archived</option>
           </select>
         </div>
         <div className="table-scroll stock-desktop-table">
@@ -1162,7 +1292,7 @@ function InventoryView() {
               {filteredItems.map((row) => (
                 <tr key={row._id}>
                   <td><strong className="mono">{row.sku}</strong></td>
-                  <td><strong>{row.name}</strong></td>
+                  <td><div className="inventory-table-item"><InventoryPhoto item={row} size="small" /><p><strong>{row.name}</strong><small>{inventorySubtitle(row)}</small></p></div></td>
                   <td>{titleStatus(row.category)}</td>
                   <td><strong>{row.quantity}</strong></td>
                   <td>{money.format(row.buyPrice)}</td>
@@ -1179,8 +1309,8 @@ function InventoryView() {
           {filteredItems.map((row) => (
             <article className="mobile-record-card" key={row._id}>
               <div className="mobile-record-heading">
-                <span className="stock-icon violet"><Package size={17} /></span>
-                <p><strong>{row.name}</strong><small>{row.sku}</small></p>
+                <InventoryPhoto item={row} size="small" />
+                <p><strong>{row.name}</strong><small>{row.sku} · {inventorySubtitle(row)}</small></p>
                 <StatusBadge status={row.status} />
               </div>
               <div className="mobile-record-details">
@@ -1198,10 +1328,11 @@ function InventoryView() {
         <div className="modal-backdrop" role="presentation" onClick={() => { setSelectedItem(null); setEditingPrice(false) }}>
           <section className="detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="stock-detail-title" onClick={(event) => event.stopPropagation()}>
             <header className="detail-modal-header">
+              <InventoryPhoto item={selectedItem} size="large" />
               <div>
                 <span className="eyebrow">Stock record</span>
                 <h3 id="stock-detail-title">{selectedItem.name}</h3>
-                <p>{selectedItem.sku} - {titleStatus(selectedItem.category)}</p>
+                <p>{selectedItem.sku} - {titleStatus(selectedItem.category)}{selectedItem.imageUrl ? ' - Product photo saved' : ''}</p>
               </div>
               <button className="icon-button" onClick={() => { setSelectedItem(null); setEditingPrice(false) }} aria-label="Close details"><X size={18} /></button>
             </header>
@@ -1222,7 +1353,7 @@ function InventoryView() {
               <article>
                 <span className="eyebrow">Device</span>
                 <p><strong>{[selectedItem.brand, selectedItem.model].filter(Boolean).join(' ') || selectedItem.name}</strong></p>
-                <p>{[selectedItem.storage, selectedItem.color, selectedItem.condition && titleStatus(selectedItem.condition)].filter(Boolean).join(' ') || 'No extra product details'}</p>
+                <p>{[selectedItem.storage, selectedItem.ram && `${selectedItem.ram} RAM`, selectedItem.color, selectedItem.condition && titleStatus(selectedItem.condition)].filter(Boolean).join(' ') || 'No extra product details'}</p>
                 <p>{selectedItem.batteryHealth !== undefined ? `Battery ${selectedItem.batteryHealth}%` : 'Battery not recorded'}</p>
               </article>
               <article>
@@ -1230,6 +1361,17 @@ function InventoryView() {
                 <p><strong>{selectedItem.imei1 || 'No IMEI 1'}</strong></p>
                 <p>{selectedItem.imei2 || 'No IMEI 2'}</p>
                 <p>{selectedItem.serialNumber || 'No serial number'}</p>
+              </article>
+              <article>
+                <span className="eyebrow">Accessory info</span>
+                <p><strong>{selectedItem.compatibleModels?.length ? selectedItem.compatibleModels.join(', ') : 'No compatible models recorded'}</strong></p>
+                <p>{selectedItem.oemQuality || 'Quality not recorded'}</p>
+                <p>{selectedItem.accessoriesIncluded?.length ? selectedItem.accessoriesIncluded.map(titleStatus).join(', ') : 'Included accessories not recorded'}</p>
+              </article>
+              <article>
+                <span className="eyebrow">Picture</span>
+                <p><strong>{selectedItem.imageUrl ? 'Photo URL saved' : 'No photo URL saved'}</strong></p>
+                <p>{selectedItem.imageUrl || 'Add imageUrl through the inventory API or purchase payload to show the real product picture here.'}</p>
               </article>
             </div>
 
@@ -1248,6 +1390,11 @@ function InventoryView() {
             )}
 
             <footer className="detail-modal-footer">
+              <label className={`secondary-button upload-photo-button ${savingPhoto ? 'disabled' : ''}`}>
+                <Package size={16} /> {savingPhoto ? 'Saving photo...' : selectedItem.imageUrl ? 'Change photo' : 'Add photo'}
+                <input type="file" accept="image/png,image/jpeg,image/webp" disabled={savingPhoto} onChange={(event) => void uploadPhoto(event.target.files?.[0])} />
+              </label>
+              {selectedItem.imageUrl && <button className="ghost-button" onClick={() => void removePhoto()} disabled={savingPhoto}>Remove photo</button>}
               {!editingPrice && <button className="primary-button" onClick={openPriceEditor}>{selectedItem.sellPrice > 0 ? 'Change price' : 'Set selling price'}</button>}
               <button className="secondary-button" onClick={() => printInventoryLabel(selectedItem)}><ScanLine size={16} /> Print label</button>
               <button className="ghost-button" onClick={() => { setSelectedItem(null); setEditingPrice(false) }}>Close</button>

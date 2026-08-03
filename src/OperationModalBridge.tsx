@@ -307,6 +307,8 @@ function CameraBarcodeReader({ onScan, onError, readerId = 'phoneflow-barcode-re
 export default function OperationModalBridge() {
   const [kind, setKind] = useState<ModalKind | null>(null)
   const [category, setCategory] = useState<StockCategory>('PHONE')
+  const [stockPhotoData, setStockPhotoData] = useState('')
+  const [stockPhotoName, setStockPhotoName] = useState('')
   const [customers, setCustomers] = useState<Customer[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [inventory, setInventory] = useState<InventoryItem[]>([])
@@ -470,6 +472,8 @@ export default function OperationModalBridge() {
     setKind(null)
     setError('')
     setCategory('PHONE')
+    setStockPhotoData('')
+    setStockPhotoName('')
     setEstimatedValue(0)
     setPawnPercentage(45)
     setPawnPrincipal('')
@@ -564,6 +568,26 @@ export default function OperationModalBridge() {
 
   const handleCameraError = useCallback((message: string) => setError(message), [])
 
+  function selectStockPhoto(file: File | undefined) {
+    if (!file) return
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Upload a JPEG, PNG, or WebP image')
+      return
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      setError('Image must be 4MB or smaller')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => {
+      setStockPhotoData(String(reader.result || ''))
+      setStockPhotoName(file.name)
+      setError('')
+    }
+    reader.onerror = () => setError('Unable to read image file')
+    reader.readAsDataURL(file)
+  }
+
   function sellScannedProduct() {
     if (!scannedItem || scannedItem.status !== 'IN_STOCK' || scannedItem.quantity < 1 || scannedItem.sellPrice <= 0) return
     setInventory((current) => current.some((item) => item._id === scannedItem._id) ? current : [scannedItem, ...current])
@@ -597,6 +621,7 @@ export default function OperationModalBridge() {
       sellPrice: Number(form.get('sellPrice') || 0),
       status: 'IN_STOCK',
       source: 'SUPPLIER',
+      imageData: stockPhotoData || undefined,
     }
     try {
       await api('/inventory', { method: 'POST', body: JSON.stringify(payload) })
@@ -911,6 +936,21 @@ export default function OperationModalBridge() {
           <button type="button" className={category === 'SPARE_PART' ? 'active' : ''} onClick={() => setCategory('SPARE_PART')}><Wrench size={18} /> Spare part</button>
           <button type="button" className={category === 'OTHER' ? 'active' : ''} onClick={() => setCategory('OTHER')}><Package size={18} /> Other</button>
         </div>
+        <section className="stock-photo-picker">
+          <div className={`stock-photo-preview ${stockPhotoData ? 'has-image' : ''}`}>
+            {stockPhotoData ? <img src={stockPhotoData} alt="Selected product preview" /> : <Camera size={24} />}
+          </div>
+          <div>
+            <span className="eyebrow">Product photo</span>
+            <strong>{stockPhotoName || 'No photo selected'}</strong>
+            <small>JPEG, PNG, or WebP. Max 4MB.</small>
+          </div>
+          <label className="secondary-button stock-photo-action">
+            <Camera size={16} /> {stockPhotoData ? 'Change photo' : 'Add photo'}
+            <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void selectStockPhoto(event.target.files?.[0])} />
+          </label>
+          {stockPhotoData && <button type="button" className="ghost-button" onClick={() => { setStockPhotoData(''); setStockPhotoName('') }}>Remove</button>}
+        </section>
         <div className="operation-form-grid"><StockFields category={category} /></div>
         <footer className="operation-modal-actions"><button type="button" className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={busy}>{busy ? 'Saving...' : `Add ${category === 'SPARE_PART' ? 'spare part' : category.toLowerCase()}`}</button></footer>
       </form>}

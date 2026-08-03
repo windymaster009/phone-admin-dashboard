@@ -76,6 +76,7 @@ const inventoryItemSchema = new Schema(
     accessoriesIncluded: [{ type: String, enum: ['BOX', 'CHARGER', 'CABLE', 'CASE', 'EARPHONES'] }],
     compatibleModels: [String],
     oemQuality: { type: String, trim: true },
+    imageUrl: { type: String, trim: true },
     quantity: { type: Number, min: 0, default: 1 },
     reorderLevel: { type: Number, min: 0, default: 2 },
     buyPrice: { type: Number, min: 0, default: 0 },

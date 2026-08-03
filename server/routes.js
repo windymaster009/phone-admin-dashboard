@@ -1,3 +1,7 @@
+import { randomUUID } from 'node:crypto'
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import mongoose from 'mongoose'
@@ -13,6 +17,8 @@ import {
 import { ActivityLog, Customer, InventoryItem, Pawn, Supplier, Trade, User } from './models.js'
 
 const router = Router()
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const inventoryUploadDir = path.resolve(__dirname, '../uploads/inventory')
 
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
 const clean = (value) => (typeof value === 'string' ? value.trim() : value)
@@ -43,6 +49,17 @@ function requestError(status, message) {
   const error = new Error(message)
   error.status = status
   return error
+}
+
+function decodeImageDataUrl(value) {
+  const raw = clean(value)
+  const match = /^data:(image\/(?:jpeg|png|webp));base64,([a-zA-Z0-9+/=]+)$/.exec(raw || '')
+  if (!match) throw requestError(400, 'Upload a JPEG, PNG, or WebP image')
+  const extension = match[1] === 'image/jpeg' ? 'jpg' : match[1].replace('image/', '')
+  const buffer = Buffer.from(match[2], 'base64')
+  if (buffer.length === 0) throw requestError(400, 'Image file is empty')
+  if (buffer.length > 4 * 1024 * 1024) throw requestError(400, 'Image must be 4MB or smaller')
+  return { buffer, extension }
 }
 
 function makePaywayTransactionId() {
@@ -410,6 +427,7 @@ router.post('/inventory', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), 
   const category = clean(req.body.category)?.toUpperCase()
   const storage = normalizeGigabytes(req.body.storage)
   const ram = normalizeGigabytes(req.body.ram)
+  const { imageData: rawImageData, ...body } = req.body
   if (['PHONE', 'TABLET'].includes(category) && !storage) {
     return res.status(400).json({ message: 'Storage must be a positive GB value' })
   }
@@ -417,14 +435,23 @@ router.post('/inventory', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), 
     return res.status(400).json({ message: 'RAM must be a positive GB value' })
   }
   const item = await InventoryItem.create({
-    ...req.body,
+    ...body,
     category,
     storage,
     ram,
+    imageUrl: clean(req.body.imageUrl),
     sku: clean(req.body.sku || makeCode('STK')),
     barcode: clean(req.body.barcode || makeCode('PF')),
     createdBy: req.user._id,
   })
+  if (rawImageData) {
+    const { buffer, extension } = decodeImageDataUrl(rawImageData)
+    await fs.mkdir(inventoryUploadDir, { recursive: true })
+    const filename = `${item._id}-${randomUUID()}.${extension}`
+    await fs.writeFile(path.join(inventoryUploadDir, filename), buffer)
+    item.imageUrl = `/uploads/inventory/${filename}`
+    await item.save()
+  }
   await writeActivity(req, { action: 'CREATE', entity: 'INVENTORY', entityId: item._id, details: { sku: item.sku } })
   res.status(201).json({ item })
 }))
@@ -432,6 +459,7 @@ router.post('/inventory', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), 
 router.patch('/inventory/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
   const forbidden = ['_id', 'createdAt', 'updatedAt', 'createdBy']
   const update = Object.fromEntries(Object.entries(req.body).filter(([key]) => !forbidden.includes(key)))
+  if (update.imageUrl !== undefined) update.imageUrl = clean(update.imageUrl)
   const current = await InventoryItem.findById(req.params.id).select('sellPrice minimumSellPrice')
   if (!current) return res.status(404).json({ message: 'Inventory item not found' })
   const nextSellPrice = update.sellPrice === undefined ? current.sellPrice : Number(update.sellPrice)
@@ -444,6 +472,29 @@ router.patch('/inventory/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOC
   }
   const item = await InventoryItem.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true })
   await writeActivity(req, { action: 'UPDATE', entity: 'INVENTORY', entityId: item._id, details: update })
+  res.json({ item })
+}))
+
+router.post('/inventory/:id/photo', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
+  const current = await InventoryItem.findById(req.params.id)
+  if (!current) return res.status(404).json({ message: 'Inventory item not found' })
+
+  const { buffer, extension } = decodeImageDataUrl(req.body.imageData)
+  await fs.mkdir(inventoryUploadDir, { recursive: true })
+  const filename = `${current._id}-${randomUUID()}.${extension}`
+  const filepath = path.join(inventoryUploadDir, filename)
+  await fs.writeFile(filepath, buffer)
+
+  const imageUrl = `/uploads/inventory/${filename}`
+  const item = await InventoryItem.findByIdAndUpdate(current._id, { imageUrl }, { new: true, runValidators: true })
+  await writeActivity(req, { action: 'UPDATE', entity: 'INVENTORY', entityId: item._id, details: { imageUrl } })
+  res.json({ item })
+}))
+
+router.delete('/inventory/:id/photo', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
+  const item = await InventoryItem.findByIdAndUpdate(req.params.id, { $unset: { imageUrl: '' } }, { new: true, runValidators: true })
+  if (!item) return res.status(404).json({ message: 'Inventory item not found' })
+  await writeActivity(req, { action: 'UPDATE', entity: 'INVENTORY', entityId: item._id, details: { imageUrl: null } })
   res.json({ item })
 }))
 
@@ -767,6 +818,7 @@ async function createMultiDevicePurchase(req, res) {
       carrierLock: ['UNLOCKED', 'LOCKED', 'UNKNOWN'].includes(item.carrierLock) ? item.carrierLock : 'UNKNOWN',
       compatibleModels: clean(item.compatibleModels)?.split(',').map((value) => value.trim()).filter(Boolean) || [],
       oemQuality: clean(item.oemQuality),
+      imageUrl: clean(item.imageUrl),
       accessoriesIncluded: accessories,
       notes: clean(item.notes),
     }
@@ -849,6 +901,7 @@ async function createMultiDevicePurchase(req, res) {
         accessoriesIncluded: item.category === 'PHONE' ? item.accessoriesIncluded : [],
         compatibleModels: item.compatibleModels,
         oemQuality: item.oemQuality,
+        imageUrl: item.imageUrl,
         quantity: item.quantity,
         reorderLevel: item.category === 'PHONE' ? 0 : 2,
         buyPrice: toUsd(item.purchasePrice),
@@ -906,7 +959,7 @@ async function createMultiDevicePurchase(req, res) {
   })
   await trade.populate('supplier', 'name phone nationalIdNumber')
   await trade.populate('customer', 'name phone nationalIdNumber')
-  await trade.populate('items.inventoryItem', 'sku barcode name category brand model imei1 storage ram color condition batteryHealth carrierLock accessoriesIncluded compatibleModels oemQuality quantity buyPrice sellPrice status')
+  await trade.populate('items.inventoryItem', 'sku barcode name category brand model imei1 storage ram color condition batteryHealth carrierLock accessoriesIncluded compatibleModels oemQuality imageUrl quantity buyPrice sellPrice status')
   res.status(201).json({ trade })
 }
 
