@@ -4,12 +4,13 @@ plugins {
 
 android {
     namespace "com.phoneflow.scanner"
-    compileSdk 35
+    compileSdk 34
+    buildToolsVersion "34.0.0"
 
     defaultConfig {
         applicationId "com.phoneflow.scanner"
         minSdk 26
-        targetSdk 35
+        targetSdk 34
         versionCode 1
         versionName "1.0"
     }
@@ -17,6 +18,14 @@ android {
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+configurations.configureEach {
+    resolutionStrategy {
+        force "org.jetbrains.kotlin:kotlin-stdlib:1.8.22"
+        force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22"
+        force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22"
     }
 }
 
