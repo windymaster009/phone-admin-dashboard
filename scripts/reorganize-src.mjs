@@ -3,7 +3,6 @@ import path from 'node:path'
 import { existsSync } from 'node:fs'
 
 const root = process.cwd()
-const toPosix = (value) => value.split(path.sep).join('/')
 const fromRoot = (value) => path.join(root, value)
 
 const moves = new Map(Object.entries({
@@ -62,7 +61,11 @@ function findResolvedFile(importer, specifier) {
     candidates.push(`${base}/index.ts`, `${base}/index.tsx`, `${base}/index.js`, `${base}/index.jsx`)
   }
 
-  return candidates.find((candidate) => allKnownFiles.has(candidate) || moves.has(candidate))
+  return candidates.find((candidate) =>
+    allKnownFiles.has(candidate)
+    || moves.has(candidate)
+    || existsSync(fromRoot(candidate)),
+  )
 }
 
 function importPath(importerNew, targetNew, originalSpecifier) {
