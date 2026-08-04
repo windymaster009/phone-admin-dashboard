@@ -44,7 +44,9 @@ import {
 } from 'lucide-react'
 import { api, type SessionUser } from './api'
 import { printInventoryLabel } from './barcode'
+import BackupStatusBridge from './BackupStatusBridge'
 import SupplierWorkspace from './SupplierWorkspace'
+import './backup-status.css'
 
 type NavKey =
   | 'dashboard'
@@ -2027,6 +2029,7 @@ function App({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
         </header>
         <main className="main-content">{renderView()}</main>
       </div>
+      <BackupStatusBridge />
     </div>
   )
 }
