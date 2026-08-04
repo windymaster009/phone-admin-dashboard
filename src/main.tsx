@@ -5,6 +5,7 @@ import OperationModalBridge from './OperationModalBridge'
 import CustomerWorkspaceBridge from './CustomerWorkspaceBridge'
 import ActivityReportBridge from './ActivityReportBridge'
 import LoanWorkspaceBridge from './LoanWorkspaceBridge'
+import LoanDashboardBridge from './LoanDashboardBridge'
 import LoanRouteCompatibility from './LoanRouteCompatibility'
 import './styles.css'
 import './backend.css'
@@ -12,6 +13,7 @@ import './operation-modals.css'
 import './customer-workspace.css'
 import './activity-report.css'
 import './loan-workspace.css'
+import './loan-dashboard.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -20,6 +22,7 @@ createRoot(document.getElementById('root')!).render(
     <CustomerWorkspaceBridge />
     <ActivityReportBridge />
     <LoanWorkspaceBridge />
+    <LoanDashboardBridge />
     <LoanRouteCompatibility />
   </StrictMode>,
 )
