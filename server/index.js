@@ -8,6 +8,7 @@ import rateLimit from 'express-rate-limit'
 import helmet from 'helmet'
 import mongoose from 'mongoose'
 import morgan from 'morgan'
+import loanDashboardRouter from './loanDashboardRoutes.js'
 import loanRouter from './loanRoutes.js'
 import router from './routes.js'
 
@@ -121,6 +122,7 @@ app.get('/api/health', async (_req, res) => {
   })
 })
 
+app.use('/api/loan-dashboard', loanDashboardRouter)
 app.use('/api/loans', loanRouter)
 app.use('/api', router)
 
