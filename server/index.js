@@ -8,6 +8,8 @@ import rateLimit from 'express-rate-limit'
 import helmet from 'helmet'
 import mongoose from 'mongoose'
 import morgan from 'morgan'
+import backupRouter from './backupRoutes.js'
+import { startBackupScheduler, stopBackupScheduler } from './backupService.js'
 import router from './routes.js'
 
 const app = express()
@@ -120,6 +122,7 @@ app.get('/api/health', async (_req, res) => {
   })
 })
 
+app.use('/api/backups', backupRouter)
 app.use('/api', router)
 
 if (process.env.NODE_ENV === 'production') {
@@ -169,6 +172,7 @@ try {
     heartbeatFrequencyMS: 10000,
   })
   console.log(`MongoDB connected: ${mongoose.connection.name}`)
+  await startBackupScheduler()
 } catch (error) {
   console.error(`MongoDB connection failed: ${error.message}`)
   console.error('Check the database password, Atlas Network Access IP allowlist, and that the cluster is running.')
@@ -181,6 +185,7 @@ const server = app.listen(port, () => {
 
 async function shutdown(signal) {
   console.log(`${signal} received, shutting down...`)
+  stopBackupScheduler()
   server.close(async () => {
     await mongoose.disconnect()
     process.exit(0)
