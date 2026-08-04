@@ -241,10 +241,16 @@ export default function ReceiptCenterBridge() {
     const loanTitle = loanModal?.querySelector('h2')?.textContent?.trim() || ''
     const loanReference = loanTitle.match(/^(LN-[A-Z0-9-]+)/)?.[1]
     if (loanModal && loanReference) {
-      const header = loanModal.querySelector<HTMLElement>('.operation-modal-header')
-      if (header) {
-        let host = header.querySelector<HTMLElement>('.receipt-action-host')
-        if (!host) { host = document.createElement('span'); host.className = 'receipt-action-host receipt-loan-action-host'; header.querySelector('.operation-modal-close')?.before(host) }
+      const headerContent = loanModal.querySelector<HTMLElement>('.operation-modal-header > div')
+      if (headerContent) {
+        let host = headerContent.querySelector<HTMLElement>('.receipt-action-host')
+        if (!host) {
+          host = document.createElement('span')
+          host.className = 'receipt-action-host receipt-loan-action-host'
+          host.style.display = 'inline-flex'
+          host.style.marginTop = '8px'
+          headerContent.append(host)
+        }
         setActionTarget(host)
         setContext({ sourceType: 'LOAN', reference: loanReference })
         return
