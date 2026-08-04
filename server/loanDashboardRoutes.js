@@ -92,7 +92,7 @@ router.get('/', requireAuth, asyncRoute(async (_req, res) => {
       .lean(),
     Loan.find({ status: { $in: ['OVERDUE', 'DUE_SOON'] } })
       .select('loanNo borrower remainingBalance totalDue amountPaid currency dueDate status reminderDays')
-      .sort({ status: 1, dueDate: 1, createdAt: 1 })
+      .sort({ dueDate: 1, createdAt: 1 })
       .limit(5)
       .lean(),
   ])
