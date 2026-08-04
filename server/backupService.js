@@ -29,6 +29,17 @@ function positiveInteger(value, fallback) {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
 }
 
+function validTimezone(value) {
+  const candidate = value || 'Asia/Phnom_Penh'
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: candidate }).format(new Date())
+    return candidate
+  } catch {
+    console.warn(`Invalid BACKUP_TIMEZONE ${candidate}; using Asia/Phnom_Penh`)
+    return 'Asia/Phnom_Penh'
+  }
+}
+
 function backupConfig() {
   const enabledValue = String(process.env.BACKUP_ENABLED ?? 'true').toLowerCase()
   const schedule = /^([01]\d|2[0-3]):[0-5]\d$/.test(process.env.BACKUP_SCHEDULE || '')
@@ -42,7 +53,7 @@ function backupConfig() {
     retentionCount: positiveInteger(process.env.BACKUP_RETENTION_COUNT, 14),
     retryMinutes: positiveInteger(process.env.BACKUP_RETRY_MINUTES, 60),
     schedule,
-    timezone: process.env.BACKUP_TIMEZONE || 'Asia/Phnom_Penh',
+    timezone: validTimezone(process.env.BACKUP_TIMEZONE),
   }
 }
 
@@ -130,8 +141,20 @@ export function decodeMongoValue(value) {
 async function writeChunk(stream, chunk) {
   if (stream.write(chunk)) return
   await new Promise((resolve, reject) => {
-    stream.once('drain', resolve)
-    stream.once('error', reject)
+    const cleanup = () => {
+      stream.off('drain', onDrain)
+      stream.off('error', onError)
+    }
+    const onDrain = () => {
+      cleanup()
+      resolve()
+    }
+    const onError = (error) => {
+      cleanup()
+      reject(error)
+    }
+    stream.once('drain', onDrain)
+    stream.once('error', onError)
   })
 }
 
@@ -175,7 +198,8 @@ async function listBackupMetadata(config = backupConfig()) {
     if (!entry.isFile() || !entry.name.endsWith('.meta.json')) continue
     try {
       const item = JSON.parse(await fs.readFile(path.join(config.directory, entry.name), 'utf8'))
-      const archivePath = path.join(config.directory, item.filename || '')
+      if (!backupNamePattern.test(item.filename || '')) throw new Error('Invalid archive filename')
+      const archivePath = path.join(config.directory, item.filename)
       await fs.access(archivePath)
       metadata.push(item)
     } catch (error) {
@@ -200,6 +224,22 @@ async function applyRetention(config = backupConfig()) {
   }
 }
 
+async function clearInterruptedState(config = backupConfig()) {
+  const entries = await fs.readdir(config.directory, { withFileTypes: true })
+  await Promise.all(entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith('.partial'))
+    .map((entry) => fs.rm(path.join(config.directory, entry.name), { force: true })))
+
+  const state = await readState(config)
+  if (state.running) {
+    await updateState({
+      running: false,
+      lastError: 'The previous backup was interrupted before completion',
+      lastErrorAt: new Date().toISOString(),
+    }, config)
+  }
+}
+
 async function performBackup({ trigger = 'MANUAL', requestedBy = null } = {}) {
   const config = backupConfig()
   const db = mongoose.connection.db
@@ -212,7 +252,7 @@ async function performBackup({ trigger = 'MANUAL', requestedBy = null } = {}) {
   const filename = `phoneflow-${backupTimestamp(startedAt)}.json.gz`
   const finalPath = path.join(config.directory, filename)
   const temporaryPath = `${finalPath}.${randomUUID()}.partial`
-  const gzip = createGzip({ level: 9 })
+  const gzip = createGzip({ level: 6 })
   const output = createWriteStream(temporaryPath, { mode: 0o600 })
   gzip.pipe(output)
 
@@ -252,7 +292,7 @@ async function performBackup({ trigger = 'MANUAL', requestedBy = null } = {}) {
 
       await writeChunk(gzip, `{"name":${JSON.stringify(name)},"indexes":${JSON.stringify(encodeMongoValue(indexes))},"documents":[`)
       let firstDocument = true
-      const cursor = collection.find({}, { readConcern: { level: 'majority' } })
+      const cursor = collection.find({})
 
       for await (const document of cursor) {
         if (!firstDocument) await writeChunk(gzip, ',')
@@ -321,6 +361,7 @@ async function performBackup({ trigger = 'MANUAL', requestedBy = null } = {}) {
       lastSuccessAt: completedAt.toISOString(),
       lastSuccessfulFilename: filename,
       lastError: null,
+      lastErrorAt: null,
     }, config)
 
     return metadata
@@ -400,6 +441,7 @@ async function schedulerTick() {
 export async function startBackupScheduler() {
   const config = backupConfig()
   await ensureBackupDirectory(config)
+  await clearInterruptedState(config)
   if (!config.enabled || schedulerTimer) return
 
   schedulerTimer = setInterval(() => {
@@ -438,7 +480,7 @@ export async function getBackupStatus({ canRun = false } = {}) {
   const [backups, state] = await Promise.all([listBackupMetadata(config), readState(config)])
   return {
     enabled: config.enabled,
-    running: isBackupRunning() || Boolean(state.running),
+    running: isBackupRunning(),
     schedule: config.schedule,
     timezone: config.timezone,
     retentionCount: config.retentionCount,
