@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { Smartphone } from 'lucide-react'
 import DeferredBridges from './DeferredBridges'
+import StartupScreen from './StartupScreen'
 import {
   api,
   getSessionUser,
@@ -15,16 +15,6 @@ const loadApp = () => import('./App')
 const loadAuthScreen = () => import('./AuthScreen')
 const App = lazy(loadApp)
 const AuthScreen = lazy(loadAuthScreen)
-
-function StartupScreen({ message = 'Connecting to the shop...' }: { message?: string }) {
-  return (
-    <div className="startup-screen">
-      <Smartphone size={35} />
-      <strong>PhoneFlow</strong>
-      <span>{message}</span>
-    </div>
-  )
-}
 
 export default function AppWithBackend() {
   const [user, setUser] = useState<SessionUser | null>(() => getToken() ? getSessionUser() : null)
@@ -74,18 +64,18 @@ export default function AppWithBackend() {
     setChecking(false)
   }
 
-  if (checking) return <StartupScreen />
+  if (checking) return <StartupScreen stage="checking-session" />
 
   if (!user) {
     return (
-      <Suspense fallback={<StartupScreen message="Loading sign in..." />}>
+      <Suspense fallback={<StartupScreen stage="loading-sign-in" />}>
         <AuthScreen onAuthenticated={handleAuthenticated} />
       </Suspense>
     )
   }
 
   return (
-    <Suspense fallback={<StartupScreen message="Opening your workspace..." />}>
+    <Suspense fallback={<StartupScreen stage="opening-workspace" />}>
       <App
         user={user}
         onLogout={() => {
