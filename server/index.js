@@ -172,11 +172,16 @@ try {
     heartbeatFrequencyMS: 10000,
   })
   console.log(`MongoDB connected: ${mongoose.connection.name}`)
-  await startBackupScheduler()
 } catch (error) {
   console.error(`MongoDB connection failed: ${error.message}`)
   console.error('Check the database password, Atlas Network Access IP allowlist, and that the cluster is running.')
   process.exit(1)
+}
+
+try {
+  await startBackupScheduler()
+} catch (error) {
+  console.error(`Backup scheduler failed to start: ${error.message}`)
 }
 
 const server = app.listen(port, () => {
