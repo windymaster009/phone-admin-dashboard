@@ -8,6 +8,7 @@ import rateLimit from 'express-rate-limit'
 import helmet from 'helmet'
 import mongoose from 'mongoose'
 import morgan from 'morgan'
+import loanRouter from './loanRoutes.js'
 import router from './routes.js'
 
 const app = express()
@@ -120,6 +121,7 @@ app.get('/api/health', async (_req, res) => {
   })
 })
 
+app.use('/api/loans', loanRouter)
 app.use('/api', router)
 
 if (process.env.NODE_ENV === 'production') {
