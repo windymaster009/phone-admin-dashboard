@@ -1,0 +1,90 @@
+.backup-status-host {
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+.backup-status-content {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 0;
+  border-radius: inherit;
+  color: inherit;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.backup-status-content:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.backup-status-content:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.backup-status-icon {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: #88f7c1;
+  background: rgba(58, 212, 139, 0.14);
+}
+
+.backup-status-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.backup-status-copy strong,
+.backup-status-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.backup-status-copy strong {
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.backup-status-copy small {
+  color: var(--muted-text, #94a3b8);
+  font-size: 0.68rem;
+}
+
+.backup-running .backup-status-icon,
+.backup-loading .backup-status-icon {
+  color: #9ec5ff;
+  background: rgba(80, 139, 255, 0.14);
+}
+
+.backup-running .backup-status-icon svg,
+.backup-loading .backup-status-icon svg {
+  animation: backup-spin 1.1s linear infinite;
+}
+
+.backup-error .backup-status-icon,
+.backup-disabled .backup-status-icon {
+  color: #ffb4b4;
+  background: rgba(239, 68, 68, 0.14);
+}
+
+@keyframes backup-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backup-running .backup-status-icon svg,
+  .backup-loading .backup-status-icon svg {
+    animation: none;
+  }
+}
