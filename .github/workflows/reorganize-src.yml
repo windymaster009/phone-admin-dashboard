@@ -1,9 +1,10 @@
 name: Reorganize source tree
 
 on:
-  push:
+  pull_request:
     branches:
-      - refactor/src-structure
+      - feature/receipts
+    types: [opened, synchronize, reopened]
 
 permissions:
   contents: write
