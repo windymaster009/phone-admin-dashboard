@@ -20,7 +20,7 @@ function requestError(status, message) {
 
 function configuredMaximumBytes() {
   const parsed = Number(process.env.DOCUMENT_MAX_BYTES || 5 * 1024 * 1024)
-  if (!Number.isFinite(parsed) || parsed < 1024 || parsed > 10 * 1024 * 1024) return 5 * 1024 * 1024
+  if (!Number.isFinite(parsed) || parsed < 1024 || parsed > 5 * 1024 * 1024) return 5 * 1024 * 1024
   return Math.floor(parsed)
 }
 
@@ -57,7 +57,7 @@ function detectMimeType(buffer) {
 }
 
 function sanitizeFilename(value, mimeType) {
-  const fallbackExtensions = {
+  const extensions = {
     'image/jpeg': '.jpg',
     'image/png': '.png',
     'image/webp': '.webp',
@@ -69,9 +69,8 @@ function sanitizeFilename(value, mimeType) {
     .replace(/[\\/:*?"<>|]/g, '-')
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 120)
-  const safe = cleaned || `document${fallbackExtensions[mimeType]}`
-  return /\.[a-zA-Z0-9]{2,5}$/.test(safe) ? safe : `${safe}${fallbackExtensions[mimeType]}`
+  const stem = cleaned.replace(/\.[a-zA-Z0-9]{1,10}$/, '').trim().slice(0, 110) || 'document'
+  return `${stem}${extensions[mimeType]}`
 }
 
 export function documentSecurityStatus() {
