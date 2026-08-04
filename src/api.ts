@@ -1,4 +1,7 @@
 const TOKEN_KEY = 'phoneflow_token'
+const SESSION_USER_KEY = 'phoneflow_session_user'
+const tokenListeners = new Set<() => void>()
+const inFlightReads = new Map<string, Promise<unknown>>()
 
 export type SessionUser = {
   id: string
@@ -8,13 +11,59 @@ export type SessionUser = {
   active: boolean
 }
 
+const validRoles = new Set<SessionUser['role']>(['OWNER', 'MANAGER', 'CASHIER', 'STOCK'])
+
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY)
 }
 
+export function getSessionUser(): SessionUser | null {
+  try {
+    const stored = localStorage.getItem(SESSION_USER_KEY)
+    if (!stored) return null
+
+    const user = JSON.parse(stored) as Partial<SessionUser>
+    if (
+      typeof user.id !== 'string'
+      || typeof user.name !== 'string'
+      || typeof user.email !== 'string'
+      || !validRoles.has(user.role as SessionUser['role'])
+      || typeof user.active !== 'boolean'
+    ) {
+      localStorage.removeItem(SESSION_USER_KEY)
+      return null
+    }
+
+    return user as SessionUser
+  } catch {
+    localStorage.removeItem(SESSION_USER_KEY)
+    return null
+  }
+}
+
+export function setSessionUser(user: SessionUser | null) {
+  if (user) localStorage.setItem(SESSION_USER_KEY, JSON.stringify(user))
+  else localStorage.removeItem(SESSION_USER_KEY)
+}
+
+export function subscribeToTokenChanges(listener: () => void) {
+  tokenListeners.add(listener)
+  return () => {
+    tokenListeners.delete(listener)
+  }
+}
+
 export function setToken(token: string | null) {
+  const previousToken = getToken()
   if (token) localStorage.setItem(TOKEN_KEY, token)
-  else localStorage.removeItem(TOKEN_KEY)
+  else {
+    localStorage.removeItem(TOKEN_KEY)
+    setSessionUser(null)
+  }
+
+  if (previousToken !== token) {
+    tokenListeners.forEach((listener) => listener())
+  }
 }
 
 export class ApiError extends Error {
@@ -34,6 +83,8 @@ export class ApiError extends Error {
 type ApiBehavior = {
   /** Only enable this for requests that are safe to repeat, such as sign-in. */
   retryTransient?: boolean
+  /** Disable only when two concurrent reads must reach the server separately. */
+  deduplicate?: boolean
 }
 
 const TRANSIENT_RETRY_DELAY_MS = 350
@@ -42,7 +93,7 @@ function wait(milliseconds: number) {
   return new Promise((resolve) => globalThis.setTimeout(resolve, milliseconds))
 }
 
-export async function api<T = any>(path: string, options: RequestInit = {}, behavior: ApiBehavior = {}): Promise<T> {
+async function performRequest<T>(path: string, options: RequestInit, behavior: ApiBehavior): Promise<T> {
   const token = getToken()
   const headers = new Headers(options.headers)
   const clientRequestId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -94,4 +145,32 @@ export async function api<T = any>(path: string, options: RequestInit = {}, beha
   }
 
   throw new ApiError('Unable to complete the request', 0)
+}
+
+export function api<T = any>(path: string, options: RequestInit = {}, behavior: ApiBehavior = {}): Promise<T> {
+  const method = String(options.method || 'GET').toUpperCase()
+  const canDeduplicate = behavior.deduplicate !== false
+    && (method === 'GET' || method === 'HEAD')
+    && !options.body
+    && !options.signal
+
+  if (!canDeduplicate) return performRequest<T>(path, options, behavior)
+
+  const token = getToken() || 'anonymous'
+  const requestKey = `${token}:${method}:${path}`
+  const existing = inFlightReads.get(requestKey)
+  if (existing) return existing as Promise<T>
+
+  const request = performRequest<T>(path, options, behavior)
+  inFlightReads.set(requestKey, request)
+  request.then(
+    () => {
+      if (inFlightReads.get(requestKey) === request) inFlightReads.delete(requestKey)
+    },
+    () => {
+      if (inFlightReads.get(requestKey) === request) inFlightReads.delete(requestKey)
+    },
+  )
+
+  return request
 }
