@@ -16,7 +16,9 @@ import {
   Database,
   FileText,
   HandCoins,
+  Grid2X2,
   LayoutDashboard,
+  List,
   LogOut,
   Menu,
   Moon,
@@ -1115,6 +1117,7 @@ function InventoryView() {
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('ALL')
   const [statusFilter, setStatusFilter] = useState('ALL')
+  const [inventoryView, setInventoryView] = useState<'large' | 'details'>(() => localStorage.getItem('phoneflow_inventory_view') === 'details' ? 'details' : 'large')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -1143,7 +1146,11 @@ function InventoryView() {
       && (categoryFilter === 'ALL' || item.category === categoryFilter)
       && (statusFilter === 'ALL' || item.status === statusFilter)
   })
-  const featuredItems = filteredItems.slice(0, 12)
+
+  function changeInventoryView(view: 'large' | 'details') {
+    setInventoryView(view)
+    localStorage.setItem('phoneflow_inventory_view', view)
+  }
 
   function openPriceEditor() {
     if (!selectedItem) return
@@ -1251,32 +1258,19 @@ function InventoryView() {
           )
         })}
       </section>
-      <section className="surface-card inventory-catalog-card">
-        <div className="card-heading table-heading">
+      <section className="surface-card inventory-catalog-card stock-workspace-card">
+        <div className="card-heading table-heading inventory-catalog-heading">
           <div><span className="eyebrow">Item list</span><h3>{categoryFilter === 'ALL' ? 'All shop products' : categoryMeta[categoryFilter as InventoryItem['category']]?.label}</h3></div>
-          <span className="catalog-count">{filteredItems.length} item{filteredItems.length === 1 ? '' : 's'}</span>
+          <div className="inventory-heading-actions">
+            <span className="catalog-count">{filteredItems.length} item{filteredItems.length === 1 ? '' : 's'}</span>
+            <div className="inventory-view-switcher" role="group" aria-label="Inventory view">
+              <button type="button" className={inventoryView === 'large' ? 'active' : ''} onClick={() => changeInventoryView('large')} aria-pressed={inventoryView === 'large'} title="Large icons view"><Grid2X2 size={15} /><span>Large</span></button>
+              <button type="button" className={inventoryView === 'details' ? 'active' : ''} onClick={() => changeInventoryView('details')} aria-pressed={inventoryView === 'details'} title="Details view"><List size={16} /><span>Details</span></button>
+            </div>
+          </div>
         </div>
-        <div className="inventory-card-grid">
-          {featuredItems.map((item) => (
-            <button className="inventory-product-card" key={item._id} onClick={() => setSelectedItem(item)}>
-              <InventoryPhoto item={item} size="large" />
-              <div>
-                <span>{categoryMeta[item.category]?.label || titleStatus(item.category)}</span>
-                <strong>{item.name}</strong>
-                <small>{inventorySubtitle(item)}</small>
-                <p>{inventoryDetails(item) || 'No extra information recorded'}</p>
-              </div>
-              <footer>
-                <strong>{money.format(item.sellPrice || item.buyPrice)}</strong>
-                <small>{item.quantity} in stock</small>
-              </footer>
-            </button>
-          ))}
-          {featuredItems.length === 0 && <p className="mobile-record-empty">{items.length === 0 ? 'No inventory in the database yet.' : 'No matching inventory.'}</p>}
-        </div>
-      </section>
-      <article className="surface-card table-card page-table stock-workspace-card">
-        <div className="filter-row">
+
+        <div className="filter-row inventory-filter-row">
           <div className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search SKU, product, IMEI or serial number" /></div>
           <select className="ghost-button filter-select" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} aria-label="Filter inventory category">
             <option value="ALL">All categories</option><option value="PHONE">Phones</option><option value="TABLET">Tablets</option><option value="ACCESSORY">Accessories</option><option value="SPARE_PART">Spare parts</option><option value="OTHER">Other</option>
@@ -1285,48 +1279,63 @@ function InventoryView() {
             <option value="ALL">All stock statuses</option><option value="IN_STOCK">In stock</option><option value="RESERVED">Reserved</option><option value="SOLD">Sold</option><option value="PAWNED">Pawned</option><option value="REPAIR">Repair</option><option value="ARCHIVED">Archived</option>
           </select>
         </div>
-        <div className="table-scroll stock-desktop-table">
-          <table>
-            <thead><tr><th>SKU</th><th>Item</th><th>Category</th><th>Stock</th><th>Buy price</th><th>Sell price</th><th>Status</th><th /></tr></thead>
-            <tbody>
+
+        {inventoryView === 'large' ? (
+          <div className="inventory-card-grid">
+            {filteredItems.map((item) => (
+              <button className="inventory-product-card" key={item._id} onClick={() => setSelectedItem(item)}>
+                <InventoryPhoto item={item} size="large" />
+                <div>
+                  <span>{categoryMeta[item.category]?.label || titleStatus(item.category)}</span>
+                  <strong>{item.name}</strong>
+                  <small>{inventorySubtitle(item)}</small>
+                  <p>{inventoryDetails(item) || 'No extra information recorded'}</p>
+                </div>
+                <footer><strong>{money.format(item.sellPrice || item.buyPrice)}</strong><small>{item.quantity} in stock</small></footer>
+              </button>
+            ))}
+            {filteredItems.length === 0 && <p className="mobile-record-empty">{items.length === 0 ? 'No inventory in the database yet.' : 'No matching inventory.'}</p>}
+          </div>
+        ) : (
+          <>
+            <div className="table-scroll stock-desktop-table">
+              <table>
+                <thead><tr><th>SKU</th><th>Item</th><th>Category</th><th>Stock</th><th>Buy price</th><th>Sell price</th><th>Status</th><th /></tr></thead>
+                <tbody>
+                  {filteredItems.map((row) => (
+                    <tr key={row._id}>
+                      <td><strong className="mono">{row.sku}</strong></td>
+                      <td><div className="inventory-table-item"><InventoryPhoto item={row} size="small" /><p><strong>{row.name}</strong><small>{inventorySubtitle(row)}</small></p></div></td>
+                      <td>{titleStatus(row.category)}</td>
+                      <td><strong>{row.quantity}</strong></td>
+                      <td>{money.format(row.buyPrice)}</td>
+                      <td>{money.format(row.sellPrice)}</td>
+                      <td><StatusBadge status={row.status} /></td>
+                      <td><button className="icon-button" onClick={() => setSelectedItem(row)} aria-label={`View ${row.sku}`}><MoreHorizontal size={18} /></button></td>
+                    </tr>
+                  ))}
+                  {filteredItems.length === 0 && <tr><td colSpan={8}>{items.length === 0 ? 'No inventory in the database yet.' : 'No matching inventory.'}</td></tr>}
+                </tbody>
+              </table>
+            </div>
+            <div className="mobile-record-list stock-mobile-list">
               {filteredItems.map((row) => (
-                <tr key={row._id}>
-                  <td><strong className="mono">{row.sku}</strong></td>
-                  <td><div className="inventory-table-item"><InventoryPhoto item={row} size="small" /><p><strong>{row.name}</strong><small>{inventorySubtitle(row)}</small></p></div></td>
-                  <td>{titleStatus(row.category)}</td>
-                  <td><strong>{row.quantity}</strong></td>
-                  <td>{money.format(row.buyPrice)}</td>
-                  <td>{money.format(row.sellPrice)}</td>
-                  <td><StatusBadge status={row.status} /></td>
-                  <td><button className="icon-button" onClick={() => setSelectedItem(row)} aria-label={`View ${row.sku}`}><MoreHorizontal size={18} /></button></td>
-                </tr>
+                <article className="mobile-record-card" key={row._id}>
+                  <div className="mobile-record-heading"><InventoryPhoto item={row} size="small" /><p><strong>{row.name}</strong><small>{row.sku} · {inventorySubtitle(row)}</small></p><StatusBadge status={row.status} /></div>
+                  <div className="mobile-record-details">
+                    <div><span>Category</span><strong>{titleStatus(row.category)}</strong></div><div><span>In stock</span><strong>{row.quantity}</strong></div><div><span>Sell price</span><strong>{money.format(row.sellPrice)}</strong></div>
+                    <button className="icon-button" onClick={() => setSelectedItem(row)} aria-label={`View ${row.sku}`}><MoreHorizontal size={18} /></button>
+                  </div>
+                </article>
               ))}
-              {filteredItems.length === 0 && <tr><td colSpan={8}>{items.length === 0 ? 'No inventory in the database yet.' : 'No matching inventory.'}</td></tr>}
-            </tbody>
-          </table>
-        </div>
-        <div className="mobile-record-list stock-mobile-list">
-          {filteredItems.map((row) => (
-            <article className="mobile-record-card" key={row._id}>
-              <div className="mobile-record-heading">
-                <InventoryPhoto item={row} size="small" />
-                <p><strong>{row.name}</strong><small>{row.sku} · {inventorySubtitle(row)}</small></p>
-                <StatusBadge status={row.status} />
-              </div>
-              <div className="mobile-record-details">
-                <div><span>Category</span><strong>{titleStatus(row.category)}</strong></div>
-                <div><span>In stock</span><strong>{row.quantity}</strong></div>
-                <div><span>Sell price</span><strong>{money.format(row.sellPrice)}</strong></div>
-                <button className="icon-button" onClick={() => setSelectedItem(row)} aria-label={`View ${row.sku}`}><MoreHorizontal size={18} /></button>
-              </div>
-            </article>
-          ))}
-          {filteredItems.length === 0 && <p className="mobile-record-empty">{items.length === 0 ? 'No inventory in the database yet.' : 'No matching inventory.'}</p>}
-        </div>
-      </article>
+              {filteredItems.length === 0 && <p className="mobile-record-empty">{items.length === 0 ? 'No inventory in the database yet.' : 'No matching inventory.'}</p>}
+            </div>
+          </>
+        )}
+      </section>
       {selectedItem && (
         <div className="modal-backdrop" role="presentation" onClick={() => { setSelectedItem(null); setEditingPrice(false) }}>
-          <section className="detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="stock-detail-title" onClick={(event) => event.stopPropagation()}>
+          <section className="detail-modal inventory-detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="stock-detail-title" onClick={(event) => event.stopPropagation()}>
             <header className="detail-modal-header">
               <InventoryPhoto item={selectedItem} size="large" />
               <div>
@@ -1337,57 +1346,59 @@ function InventoryView() {
               <button className="icon-button" onClick={() => { setSelectedItem(null); setEditingPrice(false) }} aria-label="Close details"><X size={18} /></button>
             </header>
 
-            <div className="detail-grid">
-              <div><span>Status</span><strong><StatusBadge status={selectedItem.status} /></strong></div>
-              <div><span>Barcode</span><strong className="mono">{selectedItem.barcode || selectedItem.sku}</strong></div>
-              <div><span>Quantity</span><strong>{selectedItem.quantity}</strong></div>
-              <div><span>Buy price</span><strong>{money.format(selectedItem.buyPrice)}</strong></div>
-              <div><span>Sell price</span><strong>{money.format(selectedItem.sellPrice)}</strong></div>
-              <div><span>Low stock level</span><strong>{selectedItem.reorderLevel}</strong></div>
-              <div><span>Minimum sell</span><strong>{money.format(selectedItem.minimumSellPrice || 0)}</strong></div>
-              <div><span>Source</span><strong>{selectedItem.source ? titleStatus(selectedItem.source) : 'Not recorded'}</strong></div>
-              <div><span>Created</span><strong>{selectedItem.createdAt ? dateText(selectedItem.createdAt) : 'Not recorded'}</strong></div>
-            </div>
-
-            <div className="detail-sections">
-              <article>
-                <span className="eyebrow">Device</span>
-                <p><strong>{[selectedItem.brand, selectedItem.model].filter(Boolean).join(' ') || selectedItem.name}</strong></p>
-                <p>{[selectedItem.storage, selectedItem.ram && `${selectedItem.ram} RAM`, selectedItem.color, selectedItem.condition && titleStatus(selectedItem.condition)].filter(Boolean).join(' ') || 'No extra product details'}</p>
-                <p>{selectedItem.batteryHealth !== undefined ? `Battery ${selectedItem.batteryHealth}%` : 'Battery not recorded'}</p>
-              </article>
-              <article>
-                <span className="eyebrow">Identifiers</span>
-                <p><strong>{selectedItem.imei1 || 'No IMEI 1'}</strong></p>
-                <p>{selectedItem.imei2 || 'No IMEI 2'}</p>
-                <p>{selectedItem.serialNumber || 'No serial number'}</p>
-              </article>
-              <article>
-                <span className="eyebrow">Accessory info</span>
-                <p><strong>{selectedItem.compatibleModels?.length ? selectedItem.compatibleModels.join(', ') : 'No compatible models recorded'}</strong></p>
-                <p>{selectedItem.oemQuality || 'Quality not recorded'}</p>
-                <p>{selectedItem.accessoriesIncluded?.length ? selectedItem.accessoriesIncluded.map(titleStatus).join(', ') : 'Included accessories not recorded'}</p>
-              </article>
-              <article>
-                <span className="eyebrow">Picture</span>
-                <p><strong>{selectedItem.imageUrl ? 'Photo URL saved' : 'No photo URL saved'}</strong></p>
-                <p>{selectedItem.imageUrl || 'Add imageUrl through the inventory API or purchase payload to show the real product picture here.'}</p>
-              </article>
-            </div>
-
-            {editingPrice && <div className="inventory-price-editor">
-              <div className="inventory-price-heading"><span className="eyebrow">Inventory pricing</span><h4>Set selling price</h4><p>Changing these values does not modify the original purchase transaction.</p></div>
-              <label>Regular selling price<div className="input-prefix"><span>$</span><input autoFocus type="number" min="0" step="0.01" inputMode="decimal" placeholder="0.00" value={sellingPriceDraft} onChange={(event) => setSellingPriceDraft(event.target.value)} /></div></label>
-              <label>Discount / minimum price<div className="input-prefix"><span>$</span><input type="number" min="0" step="0.01" inputMode="decimal" placeholder="0.00" value={minimumPriceDraft} onChange={(event) => setMinimumPriceDraft(event.target.value)} /></div></label>
-              <div className="inventory-price-actions"><button className="ghost-button" onClick={() => setEditingPrice(false)}>Cancel</button><button className="primary-button" onClick={() => void saveSellingPrice()} disabled={savingPrice}>{savingPrice ? 'Saving...' : 'Save price'}</button></div>
-            </div>}
-
-            {selectedItem.notes && (
-              <div className="detail-note">
-                <span className="eyebrow">Notes</span>
-                <p>{selectedItem.notes}</p>
+            <div className="inventory-detail-body">
+              <div className="detail-grid">
+                <div><span>Status</span><strong><StatusBadge status={selectedItem.status} /></strong></div>
+                <div><span>Barcode</span><strong className="mono">{selectedItem.barcode || selectedItem.sku}</strong></div>
+                <div><span>Quantity</span><strong>{selectedItem.quantity}</strong></div>
+                <div><span>Buy price</span><strong>{money.format(selectedItem.buyPrice)}</strong></div>
+                <div><span>Sell price</span><strong>{money.format(selectedItem.sellPrice)}</strong></div>
+                <div><span>Low stock level</span><strong>{selectedItem.reorderLevel}</strong></div>
+                <div><span>Minimum sell</span><strong>{money.format(selectedItem.minimumSellPrice || 0)}</strong></div>
+                <div><span>Source</span><strong>{selectedItem.source ? titleStatus(selectedItem.source) : 'Not recorded'}</strong></div>
+                <div><span>Created</span><strong>{selectedItem.createdAt ? dateText(selectedItem.createdAt) : 'Not recorded'}</strong></div>
               </div>
-            )}
+
+              <div className="detail-sections">
+                <article>
+                  <span className="eyebrow">Device</span>
+                  <p><strong>{[selectedItem.brand, selectedItem.model].filter(Boolean).join(' ') || selectedItem.name}</strong></p>
+                  <p>{[selectedItem.storage, selectedItem.ram && `${selectedItem.ram} RAM`, selectedItem.color, selectedItem.condition && titleStatus(selectedItem.condition)].filter(Boolean).join(' ') || 'No extra product details'}</p>
+                  <p>{selectedItem.batteryHealth !== undefined ? `Battery ${selectedItem.batteryHealth}%` : 'Battery not recorded'}</p>
+                </article>
+                <article>
+                  <span className="eyebrow">Identifiers</span>
+                  <p><strong>{selectedItem.imei1 || 'No IMEI 1'}</strong></p>
+                  <p>{selectedItem.imei2 || 'No IMEI 2'}</p>
+                  <p>{selectedItem.serialNumber || 'No serial number'}</p>
+                </article>
+                <article>
+                  <span className="eyebrow">Accessory info</span>
+                  <p><strong>{selectedItem.compatibleModels?.length ? selectedItem.compatibleModels.join(', ') : 'No compatible models recorded'}</strong></p>
+                  <p>{selectedItem.oemQuality || 'Quality not recorded'}</p>
+                  <p>{selectedItem.accessoriesIncluded?.length ? selectedItem.accessoriesIncluded.map(titleStatus).join(', ') : 'Included accessories not recorded'}</p>
+                </article>
+                <article>
+                  <span className="eyebrow">Picture</span>
+                  <p><strong>{selectedItem.imageUrl ? 'Photo URL saved' : 'No photo URL saved'}</strong></p>
+                  <p>{selectedItem.imageUrl || 'Add imageUrl through the inventory API or purchase payload to show the real product picture here.'}</p>
+                </article>
+              </div>
+
+              {editingPrice && <div className="inventory-price-editor">
+                <div className="inventory-price-heading"><span className="eyebrow">Inventory pricing</span><h4>Set selling price</h4><p>Changing these values does not modify the original purchase transaction.</p></div>
+                <label>Regular selling price<div className="input-prefix"><span>$</span><input autoFocus type="number" min="0" step="0.01" inputMode="decimal" placeholder="0.00" value={sellingPriceDraft} onChange={(event) => setSellingPriceDraft(event.target.value)} /></div></label>
+                <label>Discount / minimum price<div className="input-prefix"><span>$</span><input type="number" min="0" step="0.01" inputMode="decimal" placeholder="0.00" value={minimumPriceDraft} onChange={(event) => setMinimumPriceDraft(event.target.value)} /></div></label>
+                <div className="inventory-price-actions"><button className="ghost-button" onClick={() => setEditingPrice(false)}>Cancel</button><button className="primary-button" onClick={() => void saveSellingPrice()} disabled={savingPrice}>{savingPrice ? 'Saving...' : 'Save price'}</button></div>
+              </div>}
+
+              {selectedItem.notes && (
+                <div className="detail-note">
+                  <span className="eyebrow">Notes</span>
+                  <p>{selectedItem.notes}</p>
+                </div>
+              )}
+            </div>
 
             <footer className="detail-modal-footer">
               <label className={`secondary-button upload-photo-button ${savingPhoto ? 'disabled' : ''}`}>
@@ -1410,6 +1421,10 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
   const [marketPrice, setMarketPrice] = useState(500)
   const [ageMonths, setAgeMonths] = useState(12)
   const [condition, setCondition] = useState('good')
+  const [batteryHealth, setBatteryHealth] = useState(85)
+  const [lockStatus, setLockStatus] = useState('unlocked')
+  const [includedAccessories, setIncludedAccessories] = useState<string[]>(['BOX', 'CHARGER', 'CABLE'])
+  const [repairCost, setRepairCost] = useState(0)
   const [pawnRate, setPawnRate] = useState(45)
   const exchangeRate = useExchangeRate()
 
@@ -1418,23 +1433,63 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
       excellent: 0.05,
       good: 0.12,
       fair: 0.22,
-      damaged: 0.38,
+      damaged: 0.4,
     }
-    const ageDepreciation = Math.min(ageMonths * 0.0125, 0.45)
-    const conditionDepreciation = conditionRates[condition] ?? 0.12
-    const estimatedValue = Math.max(marketPrice * (1 - ageDepreciation) * (1 - conditionDepreciation), 0)
+    const ageRate = Math.min(Math.max(ageMonths, 0) * 0.0125, 0.5)
+    const conditionRate = conditionRates[condition] ?? 0.12
+    const batteryRate = batteryHealth >= 85 ? 0 : batteryHealth >= 80 ? 0.04 : batteryHealth >= 70 ? 0.08 : 0.12
+    const essentialAccessories = includedAccessories.filter((accessory) => ['BOX', 'CHARGER', 'CABLE'].includes(accessory))
+    const accessoryRate = essentialAccessories.length === 0
+      ? 0.05
+      : !includedAccessories.includes('CHARGER') || !includedAccessories.includes('CABLE')
+        ? 0.03
+        : !includedAccessories.includes('BOX') ? 0.01 : 0
+    const carrierLockRate = lockStatus === 'carrier_locked' ? 0.1 : 0
+    const eligible = lockStatus !== 'activation_locked'
+    const ageDeduction = marketPrice * ageRate
+    const conditionDeduction = marketPrice * conditionRate
+    const batteryDeduction = marketPrice * batteryRate
+    const accessoryDeduction = marketPrice * accessoryRate
+    const carrierLockDeduction = marketPrice * carrierLockRate
+    const estimatedValue = eligible
+      ? Math.max(marketPrice - ageDeduction - conditionDeduction - batteryDeduction - accessoryDeduction - carrierLockDeduction - Math.max(repairCost, 0), 0)
+      : 0
     const maximumPawn = estimatedValue * (pawnRate / 100)
-    return { ageDepreciation, conditionDepreciation, estimatedValue, maximumPawn }
-  }, [ageMonths, condition, marketPrice, pawnRate])
+    return {
+      eligible,
+      ageRate,
+      conditionRate,
+      batteryRate,
+      ageDeduction,
+      conditionDeduction,
+      batteryDeduction,
+      accessoryDeduction,
+      carrierLockDeduction,
+      estimatedValue,
+      maximumPawn,
+      riskReserve: estimatedValue - maximumPawn,
+    }
+  }, [ageMonths, batteryHealth, condition, includedAccessories, lockStatus, marketPrice, pawnRate, repairCost])
 
   function saveValuation() {
     const record = {
       id: `VAL-${Date.now()}`,
+      source: 'CALCULATOR',
       createdAt: new Date().toISOString(),
       marketPrice,
       ageMonths,
       condition,
+      batteryHealth,
+      lockStatus,
+      accessoriesIncluded: includedAccessories,
+      repairCost,
       pawnRate,
+      eligible: result.eligible,
+      ageDeduction: result.ageDeduction,
+      conditionDeduction: result.conditionDeduction,
+      batteryDeduction: result.batteryDeduction,
+      accessoryDeduction: result.accessoryDeduction,
+      carrierLockDeduction: result.carrierLockDeduction,
       estimatedValue: result.estimatedValue,
       maximumPawn: result.maximumPawn,
       usdKhrRate: exchangeRate?.usdKhr,
@@ -1446,70 +1501,106 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
   }
 
   function useForPawn() {
-    sessionStorage.setItem('phoneflow_last_valuation', JSON.stringify({
+    const valuation = {
+      id: `VAL-${Date.now()}`,
+      source: 'CALCULATOR',
+      createdAt: new Date().toISOString(),
       marketPrice,
       ageMonths,
       condition,
+      batteryHealth,
+      lockStatus,
+      accessoriesIncluded: includedAccessories,
+      repairCost,
       pawnRate,
+      eligible: result.eligible,
+      ageDeduction: result.ageDeduction,
+      conditionDeduction: result.conditionDeduction,
+      batteryDeduction: result.batteryDeduction,
+      accessoryDeduction: result.accessoryDeduction,
+      carrierLockDeduction: result.carrierLockDeduction,
       estimatedValue: result.estimatedValue,
       maximumPawn: result.maximumPawn,
       usdKhrRate: exchangeRate?.usdKhr,
       maximumPawnKhr: exchangeRate ? convertedKhr(result.maximumPawn, exchangeRate) : undefined,
-    }))
-    window.alert(`Valuation ready: estimated value ${currency.format(result.estimatedValue)}, max pawn ${currency.format(result.maximumPawn)}. Use these numbers in the new pawn form.`)
+    }
+    sessionStorage.setItem('phoneflow_last_valuation', JSON.stringify(valuation))
     goTo('pawn')
+    window.dispatchEvent(new CustomEvent('phoneflow:open-pawn', { detail: { valuationId: valuation.id } }))
   }
 
   return (
     <>
       <div className="depreciation-page-heading">
         <SectionHeader
-          eyebrow="Valuation"
-          title="Depreciation calculator"
-          description="Estimate second-hand value and calculate a safe 40–50% pawn amount. Managers can override the final offer with a reason."
+          eyebrow="Pawn valuation"
+          title="Phone pawn offer calculator"
+          description="Start with a verified resale price, deduct device risks and costs, then apply the shop's safe lending percentage."
         />
       </div>
       <section className="calculator-layout">
         <article className="surface-card calculator-card">
-          <div className="card-heading"><div><span className="eyebrow">Phone details</span><h3>Calculate value</h3></div><span className="calculator-mark"><Calculator size={20} /></span></div>
-          <div className="form-grid">
-            <label><span>Current market price</span><div className="input-prefix"><span>$</span><input type="number" min="0" value={marketPrice} onChange={(event) => setMarketPrice(Number(event.target.value))} /></div></label>
-            <label><span>Phone age</span><div className="input-suffix"><input type="number" min="0" value={ageMonths} onChange={(event) => setAgeMonths(Number(event.target.value))} /><span>months</span></div></label>
-            <label><span>Condition</span><select value={condition} onChange={(event) => setCondition(event.target.value)}><option value="excellent">Excellent / Like new</option><option value="good">Good / Minor wear</option><option value="fair">Fair / Visible wear</option><option value="damaged">Damaged / Repair needed</option></select></label>
-            <label><span>Pawn percentage</span><div className="range-label"><strong>{pawnRate}%</strong><small>Recommended range: 40–50%</small></div><input className="range-input" type="range" min="40" max="50" value={pawnRate} onChange={(event) => setPawnRate(Number(event.target.value))} /></label>
+          <div className="card-heading"><div><span className="eyebrow">Collateral assessment</span><h3>Assess the phone</h3></div><span className="calculator-mark"><Calculator size={20} /></span></div>
+
+          <div className="calculator-section">
+            <div className="calculator-section-heading"><strong>1. Resale value</strong><small>Use a recent second-hand selling price, not the original retail price.</small></div>
+            <div className="form-grid">
+              <label><span>Verified market price</span><div className="input-prefix"><span>$</span><input type="number" min="0" step="0.01" inputMode="decimal" value={marketPrice} onChange={(event) => setMarketPrice(Number(event.target.value))} /></div></label>
+              <label><span>Phone age</span><div className="input-suffix"><input type="number" min="0" max="120" value={ageMonths} onChange={(event) => setAgeMonths(Number(event.target.value))} /><span>months</span></div></label>
+              <label><span>Physical condition</span><select value={condition} onChange={(event) => setCondition(event.target.value)}><option value="excellent">Excellent / Like new</option><option value="good">Good / Minor wear</option><option value="fair">Fair / Visible wear</option><option value="damaged">Damaged / Repair needed</option></select></label>
+              <label><span>Battery health</span><div className="input-suffix"><input type="number" min="0" max="100" value={batteryHealth} onChange={(event) => setBatteryHealth(Math.min(100, Math.max(0, Number(event.target.value))))} /><span>%</span></div></label>
+            </div>
           </div>
-          <div className="notice-box"><AlertTriangle size={18} /><p><strong>Verify device and ID before approving</strong><span>Confirm IMEI, National ID, ownership, lock status, battery health, display, cameras, speakers, and repair cost.</span></p></div>
+
+          <div className="calculator-section">
+            <div className="calculator-section-heading"><strong>2. Risk and costs</strong><small>Locked devices and hidden repair costs can remove the shop's safety margin.</small></div>
+            <div className="form-grid calculator-risk-grid">
+              <label><span>Lock status</span><select value={lockStatus} onChange={(event) => setLockStatus(event.target.value)}><option value="unlocked">Unlocked / IMEI clear</option><option value="carrier_locked">Carrier locked (-10%)</option><option value="activation_locked">Activation or iCloud locked</option></select></label>
+              <fieldset className="calculator-accessories"><legend>Included accessories</legend><div>{['BOX', 'CHARGER', 'CABLE', 'CASE', 'EARPHONES'].map((accessory) => <label key={accessory}><input type="checkbox" checked={includedAccessories.includes(accessory)} onChange={(event) => setIncludedAccessories((current) => event.target.checked ? [...current, accessory] : current.filter((item) => item !== accessory))} />{accessory.charAt(0) + accessory.slice(1).toLowerCase()}</label>)}</div><small>{result.accessoryDeduction > 0 ? `${currency.format(result.accessoryDeduction)} accessory deduction` : 'No accessory deduction'}</small></fieldset>
+              <label><span>Estimated repair cost</span><div className="input-prefix"><span>$</span><input type="number" min="0" step="0.01" inputMode="decimal" value={repairCost} onChange={(event) => setRepairCost(Number(event.target.value))} /></div></label>
+            </div>
+          </div>
+
+          <div className="pawn-policy-control">
+            <div><strong>3. Shop lending policy</strong><small>Keep enough resale value in reserve for price changes, storage time, and collection risk.</small></div>
+            <label><div className="range-label"><div className="pawn-rate-value"><strong>{pawnRate}%</strong><span>Loan-to-value</span></div><small>Recommended: 40-50%</small></div><input className="range-input" type="range" min="40" max="50" value={pawnRate} onChange={(event) => setPawnRate(Number(event.target.value))} /></label>
+          </div>
+          <div className={`notice-box ${result.eligible ? '' : 'danger'}`}><AlertTriangle size={18} /><p><strong>{result.eligible ? 'Physical inspection is still required' : 'Do not accept this phone as collateral'}</strong><span>{result.eligible ? 'Confirm IMEI ownership, display, cameras, speakers, charging, Face ID or fingerprint, and repair estimate before approval.' : 'Activation-locked or iCloud-locked phones should have no pawn value until the owner removes the lock in front of staff.'}</span></p></div>
         </article>
 
-        <article className="surface-card valuation-result-card">
-          <span className="eyebrow">Calculated offer</span>
+        <article className={`surface-card valuation-result-card ${result.eligible ? '' : 'valuation-ineligible'}`}>
+          <div className="valuation-result-heading"><span className="eyebrow">Recommended offer</span><span className={`valuation-status ${result.eligible ? 'eligible' : 'blocked'}`}>{result.eligible ? 'Eligible' : 'Blocked'}</span></div>
           <div className="valuation-hero">
-            <small>Maximum pawn amount</small>
-            <strong>{currency.format(result.maximumPawn)}</strong>
+            <small>{result.eligible ? 'Maximum pawn principal' : 'Offer unavailable'}</small>
+            <strong>{result.eligible ? currency.format(result.maximumPawn) : '$0'}</strong>
             <div className="khr-equivalent">
-              {exchangeRate ? khrText(result.maximumPawn, exchangeRate) : 'Loading KHR rate…'}
+              {result.eligible ? exchangeRate ? khrText(result.maximumPawn, exchangeRate) : 'Loading KHR rate...' : 'Remove activation lock before valuation'}
             </div>
-            <span>{pawnRate}% of estimated resale value</span>
+            <span>{result.eligible ? `${pawnRate}% of adjusted resale value` : 'Activation lock failed the eligibility check'}</span>
             {exchangeRate && (
               <span className="exchange-rate-source">
-                1 USD = {riel.format(exchangeRate.usdKhr)} KHR · {exchangeRate.source === 'ABA PayWay' ? `ABA PayWay ${exchangeRate.side || 'bank'} rate` : 'ABA configured fallback'}
+                1 USD = {riel.format(exchangeRate.usdKhr)} KHR - {exchangeRate.source === 'ABA PayWay' ? `ABA PayWay ${exchangeRate.side || 'bank'} rate` : 'ABA configured fallback'}
               </span>
             )}
           </div>
           <div className="calculation-breakdown">
-            <div><span>Market price</span><strong>{currency.format(marketPrice)}</strong></div>
-            <div><span>Age deduction</span><strong>-{Math.round(result.ageDepreciation * 100)}%</strong></div>
-            <div><span>Condition deduction</span><strong>-{Math.round(result.conditionDepreciation * 100)}%</strong></div>
+            <div><span>Verified market price</span><strong>{currency.format(marketPrice)}</strong></div>
+            <div><span>Age ({Math.round(result.ageRate * 100)}%)</span><strong>-{currency.format(result.ageDeduction)}</strong></div>
+            <div><span>Condition ({Math.round(result.conditionRate * 100)}%)</span><strong>-{currency.format(result.conditionDeduction)}</strong></div>
+            <div><span>Battery ({Math.round(result.batteryRate * 100)}%)</span><strong>-{currency.format(result.batteryDeduction)}</strong></div>
+            <div><span>Lock and accessories</span><strong>-{currency.format(result.carrierLockDeduction + result.accessoryDeduction)}</strong></div>
+            <div><span>Repair cost</span><strong>-{currency.format(Math.max(repairCost, 0))}</strong></div>
             <div className="estimated-row"><span>Estimated resale value</span><strong>{currency.format(result.estimatedValue)}</strong></div>
+            <div className="reserve-row"><span>Shop risk reserve after loan</span><strong>{currency.format(result.riskReserve)}</strong></div>
           </div>
-          <button className="primary-button full-width" onClick={useForPawn}><HandCoins size={17} /> Use for new pawn</button>
-          <button className="ghost-button full-width" onClick={saveValuation}><FileText size={16} /> Save valuation record</button>
+          <button className="primary-button full-width" onClick={useForPawn} disabled={!result.eligible || result.maximumPawn <= 0}><HandCoins size={17} /> Start pawn with this offer</button>
+          <button className="ghost-button full-width" onClick={saveValuation}><FileText size={16} /> Save valuation only</button>
         </article>
       </section>
-      <section className="surface-card workflow-note">
+      <section className="surface-card workflow-note valuation-checklist">
         <span className="workflow-note-icon"><ScanLine /></span>
-        <div><span className="eyebrow">Required document</span><h3>National ID verification</h3><p>The pawn and phone-purchase workflows should require front/back ID images, ID number, expiry date, customer photo, and staff verification before money is released.</p></div>
-        <button className="secondary-button">Configure fields</button>
+        <div><span className="eyebrow">Before releasing money</span><h3>Complete the acceptance checklist</h3><p>The calculator recommends an amount; staff verification decides whether the phone can be accepted.</p></div>
+        <div className="verification-chips"><span>IMEI clear</span><span>Owner ID</span><span>Activation lock off</span><span>Hardware tested</span></div>
       </section>
     </>
   )

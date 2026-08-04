@@ -69,6 +69,65 @@ function makePaywayTransactionId() {
 const openPawnStatuses = ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED']
 const roundMoney = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100
 
+function calculatePawnOffer(input = {}) {
+  const marketPrice = Math.max(0, Number(input.marketPrice) || 0)
+  const ageMonths = Math.max(0, Number(input.ageMonths) || 0)
+  const condition = String(input.condition || 'good').toLowerCase()
+  const batteryHealth = Math.min(100, Math.max(0, Number(input.batteryHealth ?? 100)))
+  const lockStatus = String(input.lockStatus || 'unlocked').toLowerCase()
+  const accessoryState = String(input.accessoryState || 'complete').toLowerCase()
+  const accessoriesIncluded = Array.isArray(input.accessoriesIncluded)
+    ? input.accessoriesIncluded.map((accessory) => String(accessory).toUpperCase()).filter((accessory) => ['BOX', 'CHARGER', 'CABLE', 'CASE', 'EARPHONES'].includes(accessory))
+    : null
+  const repairCost = Math.max(0, Number(input.repairCost) || 0)
+  const pawnPercentage = Math.min(50, Math.max(40, Number(input.pawnRate ?? input.pawnPercentage ?? 45)))
+  const conditionRates = { new: 0, excellent: 0.05, like_new: 0.05, good: 0.12, fair: 0.22, damaged: 0.4 }
+  const accessoryRates = { complete: 0, missing_charger: 0.03, phone_only: 0.05 }
+  const ageRate = Math.min(ageMonths * 0.0125, 0.5)
+  const conditionRate = conditionRates[condition] ?? 0.12
+  const batteryRate = batteryHealth >= 85 ? 0 : batteryHealth >= 80 ? 0.04 : batteryHealth >= 70 ? 0.08 : 0.12
+  const essentialAccessories = accessoriesIncluded?.filter((accessory) => ['BOX', 'CHARGER', 'CABLE'].includes(accessory)) || []
+  const accessoryRate = accessoriesIncluded
+    ? essentialAccessories.length === 0
+      ? 0.05
+      : !accessoriesIncluded.includes('CHARGER') || !accessoriesIncluded.includes('CABLE')
+        ? 0.03
+        : !accessoriesIncluded.includes('BOX') ? 0.01 : 0
+    : input.missingAccessoriesPercent !== undefined
+    ? Math.min(0.2, Math.max(0, Number(input.missingAccessoriesPercent) / 100))
+    : accessoryRates[accessoryState] ?? 0
+  const carrierLockRate = lockStatus === 'carrier_locked' ? 0.1 : 0
+  const eligible = lockStatus !== 'activation_locked'
+  const ageDeduction = marketPrice * ageRate
+  const conditionDeduction = marketPrice * conditionRate
+  const batteryDeduction = marketPrice * batteryRate
+  const accessoryDeduction = marketPrice * accessoryRate
+  const carrierLockDeduction = marketPrice * carrierLockRate
+  const estimatedValue = eligible
+    ? Math.max(0, marketPrice - ageDeduction - conditionDeduction - batteryDeduction - accessoryDeduction - carrierLockDeduction - repairCost)
+    : 0
+
+  return {
+    eligible,
+    marketPrice: roundMoney(marketPrice),
+    ageMonths,
+    condition,
+    batteryHealth,
+    lockStatus,
+    accessoryState,
+    accessoriesIncluded: accessoriesIncluded || undefined,
+    repairCost: roundMoney(repairCost),
+    pawnPercentage,
+    ageDeduction: roundMoney(ageDeduction),
+    conditionDeduction: roundMoney(conditionDeduction),
+    batteryDeduction: roundMoney(batteryDeduction),
+    accessoryDeduction: roundMoney(accessoryDeduction),
+    carrierLockDeduction: roundMoney(carrierLockDeduction),
+    estimatedValue: roundMoney(estimatedValue),
+    maximumPawn: roundMoney(estimatedValue * pawnPercentage / 100),
+  }
+}
+
 function parsePawnDueDate(value) {
   const raw = clean(String(value || ''))
   const date = /^\d{4}-\d{2}-\d{2}$/.test(raw)
@@ -499,26 +558,7 @@ router.delete('/inventory/:id/photo', requireAuth, allowRoles('OWNER', 'MANAGER'
 }))
 
 router.post('/valuation/calculate', requireAuth, (req, res) => {
-  const marketPrice = Number(req.body.marketPrice || 0)
-  const ageMonths = Number(req.body.ageMonths || 0)
-  const condition = req.body.condition || 'GOOD'
-  const repairCost = Number(req.body.repairCost || 0)
-  const missingAccessoriesPercent = Number(req.body.missingAccessoriesPercent || 0)
-  const pawnPercentage = Math.min(50, Math.max(40, Number(req.body.pawnPercentage || 45)))
-  const conditionRates = { NEW: 0, LIKE_NEW: 0.05, GOOD: 0.12, FAIR: 0.22, DAMAGED: 0.4 }
-  const ageRate = Math.min(0.5, ageMonths * 0.0125)
-  const conditionDeduction = marketPrice * (conditionRates[condition] ?? 0.12)
-  const ageDeduction = marketPrice * ageRate
-  const accessoryDeduction = marketPrice * Math.min(0.2, Math.max(0, missingAccessoriesPercent / 100))
-  const estimatedValue = Math.max(0, marketPrice - ageDeduction - conditionDeduction - accessoryDeduction - repairCost)
-  const maximumPawn = estimatedValue * (pawnPercentage / 100)
-
-  res.json({
-    marketPrice, ageDeduction, conditionDeduction, accessoryDeduction, repairCost,
-    estimatedValue: Math.round(estimatedValue * 100) / 100,
-    pawnPercentage,
-    maximumPawn: Math.round(maximumPawn * 100) / 100,
-  })
+  res.json(calculatePawnOffer(req.body))
 })
 
 router.get('/exchange-rates', requireAuth, asyncRoute(async (_req, res) => {
@@ -571,7 +611,7 @@ router.get('/pawns', requireAuth, asyncRoute(async (req, res) => {
 }))
 
 router.post('/pawns', requireAuth, asyncRoute(async (req, res) => {
-  const { customer, customerDetails, itemSnapshot, estimatedValue, pawnPercentage, principal, interestRate, dueDate, identificationVerified, notes } = req.body
+  const { customer, customerDetails, itemSnapshot, estimatedValue, pawnPercentage, principal, interestRate, dueDate, identificationVerified, notes, valuationSnapshot } = req.body
   if ((!customer && !customerDetails) || !itemSnapshot?.name || !dueDate) return res.status(400).json({ message: 'Customer, item and due date are required' })
 
   let existingCustomer
@@ -586,9 +626,12 @@ router.post('/pawns', requireAuth, asyncRoute(async (req, res) => {
   if (!identificationVerified || !nationalIdNumber) {
     throw requestError(400, 'A recorded and verified National ID is required before releasing pawn money')
   }
-  const percentage = Math.min(50, Math.max(40, Number(pawnPercentage || 45)))
-  const valuation = roundMoney(estimatedValue)
-  const maxPrincipal = roundMoney(valuation * (percentage / 100))
+  const importedFromCalculator = valuationSnapshot?.source === 'CALCULATOR'
+  const verifiedOffer = importedFromCalculator ? calculatePawnOffer(valuationSnapshot) : null
+  if (verifiedOffer && !verifiedOffer.eligible) throw requestError(400, 'Activation-locked phones cannot be accepted as pawn collateral')
+  const percentage = verifiedOffer?.pawnPercentage ?? Math.min(50, Math.max(40, Number(pawnPercentage || 45)))
+  const valuation = verifiedOffer?.estimatedValue ?? roundMoney(estimatedValue)
+  const maxPrincipal = verifiedOffer?.maximumPawn ?? roundMoney(valuation * (percentage / 100))
   const requestedPrincipal = roundMoney(principal)
   const rate = roundMoney(interestRate === undefined ? 5 : interestRate)
   const maturityDate = parsePawnDueDate(dueDate)
@@ -636,6 +679,12 @@ router.post('/pawns', requireAuth, asyncRoute(async (req, res) => {
         accessoriesIncluded: Array.isArray(itemSnapshot.accessoriesIncluded) ? itemSnapshot.accessoriesIncluded : [],
       },
       estimatedValue: valuation, pawnPercentage: percentage, principal: requestedPrincipal,
+      valuationSnapshot: verifiedOffer ? {
+        source: 'CALCULATOR',
+        valuationId: clean(valuationSnapshot.id),
+        createdAt: valuationSnapshot.createdAt ? new Date(valuationSnapshot.createdAt) : new Date(),
+        ...verifiedOffer,
+      } : undefined,
       originalPrincipal: requestedPrincipal, remainingPrincipal: requestedPrincipal,
       interestRate: rate, interestPeriod: 'MONTHLY', accruedInterest: roundMoney(requestedPrincipal * rate / 100),
       fees: 0, amountPaid: 0, currency: 'USD', exchangeRate: 1,

@@ -125,6 +125,17 @@ body.operation-modal-open {
   font-weight: 600;
 }
 
+.operation-label-heading {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.operation-label-heading small {
+  font-size: 9px;
+  line-height: 1;
+}
+
 .operation-form label:has(> .optional-marker) {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
@@ -639,6 +650,13 @@ body.operation-modal-open {
 .pawn-device-heading strong { color: var(--text, #f4f6fb); font-size: 11px; }
 .pawn-device-heading small { margin-top: 4px; color: var(--muted, #8f9bb4); font-size: 9px; }
 .pawn-terms-card { margin-bottom: 1px; }
+.pawn-imported-valuation { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; padding: 12px 13px; border: 1px solid rgba(52,211,153,.2); border-radius: 11px; color: #34d399; background: rgba(52,211,153,.07); }
+.pawn-imported-valuation > svg { flex: 0 0 auto; }
+.pawn-imported-valuation > div { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.pawn-imported-valuation strong { color: var(--text, #f4f6fb); font-size: 10px; }
+.pawn-imported-valuation small { overflow: hidden; color: var(--muted, #8f9bb4); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.pawn-imported-valuation > span { flex: 0 0 auto; font-size: 10px; font-weight: 800; }
+.pawn-terms-card input[readonly] { color: #a78bfa; background: rgba(139,92,246,.07); cursor: default; }
 .barcode-label-preview-list { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; margin: 18px 0 0; }
 .barcode-label-preview-list .barcode-label-preview { width: 100%; margin: 0; padding: 12px; }
 .barcode-label-preview-list > p { grid-column: 1 / -1; margin: 0; color: var(--muted, #8f9bb4); font-size: 9px; text-align: center; }
