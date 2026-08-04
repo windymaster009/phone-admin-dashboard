@@ -8,8 +8,10 @@ import rateLimit from 'express-rate-limit'
 import helmet from 'helmet'
 import mongoose from 'mongoose'
 import morgan from 'morgan'
+import { requireAuth } from './auth.js'
 import backupRouter from './backupRoutes.js'
 import { startBackupScheduler, stopBackupScheduler } from './backupService.js'
+import { preventCustomerDeletionWithDocuments } from './documentGuards.js'
 import customerDocumentRouter from './documentRoutes.js'
 import loanDashboardRouter from './loanDashboardRoutes.js'
 import loanRouter from './loanRoutes.js'
@@ -131,6 +133,7 @@ app.use('/api/customer-documents', customerDocumentRouter)
 app.use('/api/loan-dashboard', loanDashboardRouter)
 app.use('/api/loans', loanRouter)
 app.use('/api/receipts', receiptRouter)
+app.delete('/api/customers/:id', requireAuth, preventCustomerDeletionWithDocuments)
 app.use('/api', router)
 
 if (process.env.NODE_ENV === 'production') {
