@@ -64,6 +64,7 @@ type SellerType = 'EXISTING_CUSTOMER' | 'EXISTING_SUPPLIER' | 'WALK_IN' | 'NEW_C
 type PurchaseCurrency = 'USD' | 'KHR'
 type PawnCustomerMode = 'EXISTING' | 'NEW'
 type SalePaymentMethod = 'CASH' | 'KHQR'
+type SalePaymentPhase = 'WAITING' | 'SCANNED' | 'APPROVED' | 'COMPLETED' | 'CANCELLING' | 'CANCELLED' | 'ERROR'
 
 type PawnValuationSnapshot = {
   id?: string
@@ -199,19 +200,20 @@ function parsePlaceholderAlert(message?: string): ModalKind | null {
   return null
 }
 
-function ModalShell({ kind, error, busy, onClose, compact = false, children }: {
+function ModalShell({ kind, error, busy, onClose, compact = false, dismissible = true, children }: {
   kind: ModalKind
   error: string
   busy: boolean
   onClose: () => void
   compact?: boolean
+  dismissible?: boolean
   children: ReactNode
 }) {
   const meta = modalMeta[kind]
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busy) onClose()
+      if (event.key === 'Escape' && !busy && dismissible) onClose()
     }
     document.addEventListener('keydown', closeOnEscape)
     document.body.classList.add('operation-modal-open')
@@ -219,11 +221,11 @@ function ModalShell({ kind, error, busy, onClose, compact = false, children }: {
       document.removeEventListener('keydown', closeOnEscape)
       document.body.classList.remove('operation-modal-open')
     }
-  }, [busy, onClose])
+  }, [busy, dismissible, onClose])
 
   return (
     <div className="operation-modal-backdrop" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget && !busy) onClose()
+      if (event.target === event.currentTarget && !busy && dismissible) onClose()
     }}>
       <section className={`operation-modal operation-modal-${kind}${compact ? ' operation-modal-compact' : ''}`} role="dialog" aria-modal="true" aria-label={meta.title}>
         <header className="operation-modal-header">
@@ -233,9 +235,9 @@ function ModalShell({ kind, error, busy, onClose, compact = false, children }: {
             <h2>{meta.title}</h2>
             <p>{meta.description}</p>
           </div>
-          <button type="button" className="operation-modal-close" onClick={onClose} disabled={busy} aria-label="Close">
+          {dismissible && <button type="button" className="operation-modal-close" onClick={onClose} disabled={busy} aria-label="Close">
             <X size={19} />
-          </button>
+          </button>}
         </header>
         {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
         {children}
@@ -373,9 +375,12 @@ export default function OperationModalBridge() {
   const [saleQrZoomed, setSaleQrZoomed] = useState(false)
   const [saleDraft, setSaleDraft] = useState<SaleDraft | null>(null)
   const [salePaymentStatus, setSalePaymentStatus] = useState('Waiting for payment')
+  const [salePaymentPhase, setSalePaymentPhase] = useState<SalePaymentPhase>('WAITING')
   const [paywayAvailable, setPaywayAvailable] = useState(false)
   const [saleInventoryLoading, setSaleInventoryLoading] = useState(false)
   const khqrFinalizing = useRef(false)
+  const khqrChecking = useRef(false)
+  const khqrCancellationRequested = useRef(false)
   const [sellerType, setSellerType] = useState<SellerType>('WALK_IN')
   const [supplierId, setSupplierId] = useState('')
   const [sellerCustomerId, setSellerCustomerId] = useState('')
@@ -561,9 +566,11 @@ export default function OperationModalBridge() {
     setSaleQrZoomed(false)
     setSaleDraft(null)
     setSalePaymentStatus('Waiting for payment')
+    setSalePaymentPhase('WAITING')
     setPaywayAvailable(false)
     setSaleInventoryLoading(false)
     khqrFinalizing.current = false
+    khqrChecking.current = false
     setSellerType('WALK_IN')
     setSupplierId('')
     setSellerCustomerId('')
@@ -588,6 +595,15 @@ export default function OperationModalBridge() {
       return
     }
     if (kind === 'sale' && saleKhqr) {
+      if (salePaymentPhase === 'COMPLETED') {
+        window.location.reload()
+        return
+      }
+      if (salePaymentPhase === 'CANCELLED') {
+        resetAndClose()
+        return
+      }
+      khqrCancellationRequested.current = true
       setBusy(true)
       setSalePaymentStatus('Closing payment request...')
       void api(`/payway/khqr/${encodeURIComponent(saleKhqr.transactionId)}/close`, { method: 'POST' })
@@ -849,6 +865,7 @@ export default function OperationModalBridge() {
     try {
       if (salePaymentMethod === 'KHQR') {
         if (!paywayAvailable) throw new Error('ABA PayWay sandbox is not available. Check the server configuration.')
+        khqrCancellationRequested.current = false
         const result = await api<SaleKhqr>('/payway/khqr', {
           method: 'POST',
           body: JSON.stringify({
@@ -862,6 +879,7 @@ export default function OperationModalBridge() {
         setSaleDraft(payload)
         setSaleKhqr(result)
         setSalePaymentStatus('Waiting for payment')
+        setSalePaymentPhase('WAITING')
       } else {
         if (payload.amountPaid > total) throw new Error('Amount paid cannot be greater than the sale total')
         await api('/trades', { method: 'POST', body: JSON.stringify(payload) })
@@ -876,18 +894,36 @@ export default function OperationModalBridge() {
   }
 
   const checkKhqrPayment = useCallback(async () => {
-    if (!saleKhqr || !saleDraft || khqrFinalizing.current) return
+    if (!saleKhqr || !saleDraft || khqrFinalizing.current || khqrChecking.current || khqrCancellationRequested.current) return
+    khqrChecking.current = true
     try {
       const status = await api<{
         approved: boolean
         paymentStatus: string
+        paymentStatusCode?: number
         amount?: number
         currency?: string
       }>(`/payway/khqr/${encodeURIComponent(saleKhqr.transactionId)}/status`)
-      setSalePaymentStatus(status.approved ? 'Payment approved' : status.paymentStatus || 'Waiting for payment')
+      if (khqrCancellationRequested.current) return
+      const normalizedStatus = String(status.paymentStatus || '').trim().toUpperCase()
+      if (/SCANNED|PROCESSING|AUTHORI[ZS]ING/.test(normalizedStatus)) {
+        setSalePaymentPhase('SCANNED')
+        setSalePaymentStatus('QR scanned successfully')
+      } else if (/CANCELLED|CANCELED|CLOSED/.test(normalizedStatus)) {
+        khqrCancellationRequested.current = true
+        setSalePaymentPhase('CANCELLED')
+        setSalePaymentStatus('Payment cancelled')
+      } else if (/DECLINED|FAILED|EXPIRED/.test(normalizedStatus)) {
+        setSalePaymentPhase('ERROR')
+        setSalePaymentStatus(normalizedStatus === 'EXPIRED' ? 'Payment request expired' : 'Payment was not completed')
+      } else {
+        setSalePaymentPhase(status.approved ? 'APPROVED' : 'WAITING')
+        setSalePaymentStatus(status.approved ? 'Payment approved' : normalizedStatus || 'Waiting for payment')
+      }
       if (!status.approved) return
 
       khqrFinalizing.current = true
+      setSalePaymentPhase('APPROVED')
       setBusy(true)
       await api('/trades', {
         method: 'POST',
@@ -898,39 +934,60 @@ export default function OperationModalBridge() {
           paywayTransactionId: saleKhqr.transactionId,
         }),
       })
-      window.location.reload()
+      setSalePaymentStatus('Payment successful')
+      setSalePaymentPhase('COMPLETED')
+      setBusy(false)
     } catch (reason) {
       if (khqrFinalizing.current) {
         khqrFinalizing.current = false
         setBusy(false)
+      }
+      if (!khqrCancellationRequested.current) {
+        setSalePaymentPhase('ERROR')
+        setSalePaymentStatus('Unable to verify payment')
         setError(reason instanceof Error ? reason.message : 'Unable to verify KHQR payment')
       }
+    } finally {
+      khqrChecking.current = false
     }
   }, [saleDraft, saleKhqr])
 
   useEffect(() => {
-    if (!saleKhqr || !saleDraft) return
+    if (!saleKhqr || !saleDraft || salePaymentPhase === 'COMPLETED' || salePaymentPhase === 'CANCELLED' || salePaymentPhase === 'CANCELLING') return
     void checkKhqrPayment()
     const timer = window.setInterval(() => void checkKhqrPayment(), 3000)
     return () => window.clearInterval(timer)
-  }, [checkKhqrPayment, saleDraft, saleKhqr])
+  }, [checkKhqrPayment, saleDraft, saleKhqr, salePaymentPhase])
 
   async function cancelKhqrPayment() {
     if (!saleKhqr || busy) return
+    khqrCancellationRequested.current = true
     setBusy(true)
     setError('')
     setSalePaymentStatus('Closing payment request...')
+    setSalePaymentPhase('CANCELLING')
     try {
       await api(`/payway/khqr/${encodeURIComponent(saleKhqr.transactionId)}/close`, { method: 'POST' })
-      setSaleKhqr(null)
-      setSaleDraft(null)
-      setSalePaymentStatus('Waiting for payment')
+      setSalePaymentStatus('Payment cancelled')
+      setSalePaymentPhase('CANCELLED')
       khqrFinalizing.current = false
     } catch (reason) {
+      khqrCancellationRequested.current = false
+      setSalePaymentStatus('Unable to cancel payment')
+      setSalePaymentPhase('ERROR')
       setError(reason instanceof Error ? reason.message : 'Unable to close this KHQR request')
     } finally {
       setBusy(false)
     }
+  }
+
+  function restartKhqrPayment() {
+    setSaleKhqr(null)
+    setSaleDraft(null)
+    setSaleQrZoomed(false)
+    setSalePaymentStatus('Waiting for payment')
+    setSalePaymentPhase('WAITING')
+    setError('')
   }
 
   async function submitPawn(event: FormEvent<HTMLFormElement>) {
@@ -985,7 +1042,7 @@ export default function OperationModalBridge() {
   if (!kind) return null
 
   return (
-    <ModalShell kind={kind} error={error} busy={busy} compact={kind === 'sale' && Boolean(saleKhqr)} onClose={close}>
+    <ModalShell kind={kind} error={error} busy={busy} compact={kind === 'sale' && Boolean(saleKhqr)} dismissible={!(kind === 'sale' && saleKhqr)} onClose={close}>
       {kind === 'stock' && <form className="operation-form" onSubmit={submitStock}>
         <div className="operation-category-tabs" role="tablist" aria-label="Stock category">
           <button type="button" className={category === 'PHONE' ? 'active' : ''} onClick={() => setCategory('PHONE')}><Smartphone size={18} /> Phone</button>
@@ -1260,13 +1317,18 @@ export default function OperationModalBridge() {
         <footer className="operation-modal-actions"><div className="sale-total"><span>Total</span><strong>${saleTotal.toFixed(2)}</strong></div><button type="button" className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={saleActionDisabled} title={!saleItemId ? 'Choose an inventory product before continuing' : undefined}>{busy || saleInventoryLoading ? <LoaderCircle className="spinning" size={17} /> : salePaymentMethod === 'KHQR' ? <img className="khqr-action-logo" src={khqrLogo} alt="" /> : <Banknote size={17} />}{saleActionLabel}</button></footer>
       </form>}
 
-      {kind === 'sale' && saleKhqr && <section className="sale-khqr-workflow">
+      {kind === 'sale' && saleKhqr && <section className={`sale-khqr-workflow payment-${salePaymentPhase.toLowerCase()}`}>
         <div className="khqr-heading">
           <span><img src={khqrLogo} alt="" /></span>
-          <div><span className="eyebrow">ABA KHQR</span><h3>Scan to pay ${saleKhqr.amount.toFixed(2)}</h3><p>Keep this window open. The sale completes automatically after PayWay approves the payment.</p></div>
+          <div><span className="eyebrow">ABA KHQR</span><h3>{salePaymentPhase === 'COMPLETED' ? 'Payment successful' : salePaymentPhase === 'CANCELLED' ? 'Payment cancelled' : `Scan to pay $${saleKhqr.amount.toFixed(2)}`}</h3>{salePaymentPhase !== 'COMPLETED' && <p>{salePaymentPhase === 'CANCELLED' ? 'This QR has been closed and can no longer accept payment.' : 'Keep this window open. The sale completes automatically after PayWay approves the payment.'}</p>}</div>
           <b>{saleKhqr.environment === 'sandbox' ? 'SANDBOX TEST' : 'LIVE'}</b>
         </div>
-        <div className="khqr-payment-card" role="button" tabIndex={0} aria-label="Enlarge ABA KHQR payment card" onClick={() => setSaleQrZoomed(true)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSaleQrZoomed(true) } }}>
+        {salePaymentPhase === 'COMPLETED' ? <div className="khqr-success-card" role="status">
+          <div className="khqr-success-confetti" aria-hidden="true">{Array.from({ length: 18 }, (_, index) => <i key={index} />)}</div>
+          <span className="khqr-success-check"><CheckCircle2 size={46} /></span>
+          <strong>Payment Successful</strong>
+          <p>Your payment of <b>${saleKhqr.amount.toFixed(2)}</b> has been confirmed through ABA PayWay.</p>
+        </div> : <div className={`khqr-payment-card ${salePaymentPhase === 'CANCELLED' ? 'is-cancelled' : ''}`} role="button" tabIndex={salePaymentPhase === 'CANCELLED' ? -1 : 0} aria-label="Enlarge ABA KHQR payment card" onClick={() => { if (salePaymentPhase !== 'CANCELLED') setSaleQrZoomed(true) }} onKeyDown={(event) => { if (salePaymentPhase !== 'CANCELLED' && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setSaleQrZoomed(true) } }}>
           <article className="khqr-native-card" aria-label={`KHQR payment for $${saleKhqr.amount.toFixed(2)}`}>
             {saleKhqr.qrImage
               ? <img className="khqr-official-image" src={paywayImageSource(saleKhqr.qrImage)} alt={`Official ABA PayWay KHQR for $${saleKhqr.amount.toFixed(2)}`} />
@@ -1282,10 +1344,10 @@ export default function OperationModalBridge() {
             <Maximize2 size={14} />
             Click to enlarge
           </span>
-        </div>
-        <div className="khqr-inline-status"><RefreshCw size={15} className={busy ? '' : 'spinning'} /><p><strong>{salePaymentStatus}</strong><small>Checking securely with ABA PayWay every 3 seconds</small></p></div>
-        <p className="khqr-security-note">Inventory will not be deducted until PayWay confirms payment.</p>
-        <footer className="operation-modal-actions"><button type="button" className="ghost-button" onClick={cancelKhqrPayment} disabled={busy}>Cancel payment</button>{saleKhqr.deeplink && <a className="primary-button khqr-mobile-link" href={saleKhqr.deeplink}>Open ABA Mobile</a>}<button type="button" className="secondary-button" onClick={() => void checkKhqrPayment()} disabled={busy}><RefreshCw size={16} /> Check now</button></footer>
+        </div>}
+        {salePaymentPhase !== 'COMPLETED' && <div className={`khqr-inline-status status-${salePaymentPhase.toLowerCase()}`}>{salePaymentPhase === 'SCANNED' || salePaymentPhase === 'APPROVED' ? <CheckCircle2 size={15} /> : salePaymentPhase === 'CANCELLED' ? <X size={15} /> : <RefreshCw size={15} className={busy || salePaymentPhase === 'ERROR' ? '' : 'spinning'} />}<p><strong>{salePaymentStatus}</strong><small>{salePaymentPhase === 'CANCELLED' ? 'The cashier cancelled this payment request' : salePaymentPhase === 'SCANNED' ? 'Waiting for PayWay to approve the payment' : salePaymentPhase === 'ERROR' ? 'Use Check now to retry verification' : 'Checking securely with ABA PayWay every 3 seconds'}</small></p></div>}
+        {salePaymentPhase !== 'COMPLETED' && <p className="khqr-security-note">{salePaymentPhase === 'CANCELLED' ? 'No sale was created and inventory was not deducted.' : 'Inventory will not be deducted until PayWay confirms payment.'}</p>}
+        <footer className="operation-modal-actions">{salePaymentPhase === 'COMPLETED' ? <button type="button" className="primary-button khqr-done-button" onClick={() => window.location.reload()}><CheckCircle2 size={16} /> Done</button> : salePaymentPhase === 'CANCELLED' ? <><button type="button" className="ghost-button" onClick={resetAndClose}>Close</button><button type="button" className="primary-button" onClick={restartKhqrPayment}>Start another payment</button></> : <><button type="button" className="ghost-button" onClick={cancelKhqrPayment} disabled={busy}>Cancel payment</button>{saleKhqr.deeplink && <a className="primary-button khqr-mobile-link" href={saleKhqr.deeplink}>Open ABA Mobile</a>}<button type="button" className="secondary-button" onClick={() => void checkKhqrPayment()} disabled={busy}><RefreshCw size={16} /> Check now</button></>}</footer>
         {saleQrZoomed && <div className="khqr-zoom-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSaleQrZoomed(false) }}>
           <section className="khqr-zoom-dialog" role="dialog" aria-modal="true" aria-label={`Enlarged KHQR payment for $${saleKhqr.amount.toFixed(2)}`}>
             <button type="button" className="khqr-zoom-close" onClick={() => setSaleQrZoomed(false)} aria-label="Close enlarged KHQR"><X size={20} /></button>
