@@ -10,6 +10,8 @@ import mongoose from 'mongoose'
 import morgan from 'morgan'
 import backupRouter from './backupRoutes.js'
 import { startBackupScheduler, stopBackupScheduler } from './backupService.js'
+import loanDashboardRouter from './loanDashboardRoutes.js'
+import loanRouter from './loanRoutes.js'
 import router from './routes.js'
 
 const app = express()
@@ -123,6 +125,8 @@ app.get('/api/health', async (_req, res) => {
 })
 
 app.use('/api/backups', backupRouter)
+app.use('/api/loan-dashboard', loanDashboardRouter)
+app.use('/api/loans', loanRouter)
 app.use('/api', router)
 
 if (process.env.NODE_ENV === 'production') {

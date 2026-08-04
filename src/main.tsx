@@ -6,6 +6,8 @@ import './backend.css'
 import './operation-modals.css'
 import './customer-workspace.css'
 import './activity-report.css'
+import './loan-workspace.css'
+import './loan-dashboard.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
