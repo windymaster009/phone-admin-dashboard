@@ -57,6 +57,18 @@ function backupConfig() {
   }
 }
 
+function isInside(parent, candidate) {
+  const relative = path.relative(parent, candidate)
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))
+}
+
+function assertPrivateBackupDirectory(config) {
+  const publicDirectories = [config.uploadsDirectory, path.join(appRoot, 'dist')]
+  if (publicDirectories.some((directory) => isInside(directory, config.directory))) {
+    throw new Error('BACKUP_DIR must not be inside uploads/ or dist/ because backup archives contain sensitive data')
+  }
+}
+
 function backupTimestamp(date = new Date()) {
   return date.toISOString().replaceAll(':', '-').replace('.', '-')
 }
@@ -66,6 +78,7 @@ function statePath(config = backupConfig()) {
 }
 
 async function ensureBackupDirectory(config = backupConfig()) {
+  assertPrivateBackupDirectory(config)
   await fs.mkdir(config.directory, { recursive: true })
 }
 
@@ -507,11 +520,18 @@ export async function resolveBackupArchive(filename) {
 }
 
 export async function deleteBackup(filename) {
+  const config = backupConfig()
   const filepath = await resolveBackupArchive(filename)
   await Promise.all([
     fs.rm(filepath, { force: true }),
     fs.rm(`${filepath}.meta.json`, { force: true }),
   ])
+
+  const remaining = await listBackupMetadata(config)
+  await updateState({
+    lastSuccessAt: remaining[0]?.completedAt || null,
+    lastSuccessfulFilename: remaining[0]?.filename || null,
+  }, config)
 }
 
 export async function readBackupArchive(filepath) {
@@ -524,5 +544,7 @@ export async function readBackupArchive(filepath) {
 }
 
 export function getBackupRuntimeConfig() {
-  return backupConfig()
+  const config = backupConfig()
+  assertPrivateBackupDirectory(config)
+  return config
 }
