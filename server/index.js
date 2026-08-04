@@ -102,8 +102,9 @@ app.use(cors({
   },
   credentials: true,
 }))
-app.use(express.json({ limit: '5mb' }))
-app.use(express.urlencoded({ extended: true, limit: '5mb' }))
+app.use(express.json({ limit: '8mb' }))
+app.use(express.urlencoded({ extended: true, limit: '8mb' }))
+app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')))
 morgan.token('request-id', (req) => req.id)
 app.use(morgan(process.env.NODE_ENV === 'production'
   ? ':remote-addr - :remote-user [:date[clf]] ":method :url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent" request=:request-id'
