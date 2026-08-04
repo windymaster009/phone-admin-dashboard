@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { motion } from 'framer-motion'
 import { AlertTriangle, BadgeCheck, Boxes, HandCoins, Smartphone } from 'lucide-react'
-import { api, setToken, type SessionUser } from './api'
+import { api, setToken, type SessionUser } from '../lib/api'
 
 function ErrorNotice({ message }: { message: string }) {
   return <div className="error-notice"><AlertTriangle size={16} /> {message}</div>

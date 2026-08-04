@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import QRCode from 'react-qr-code'
-import khqrLogo from '../server/integrations/payway/img/khqr.svg'
+import khqrLogo from '../../../server/integrations/payway/img/khqr.svg'
 import {
   AlertTriangle,
   Banknote,
@@ -24,8 +24,8 @@ import {
   Wrench,
   X,
 } from 'lucide-react'
-import { api } from './api'
-import { BarcodeGraphic, printInventoryLabels } from './barcode'
+import { api } from '../../lib/api'
+import { BarcodeGraphic, printInventoryLabels } from '../inventory/barcode'
 
 type ModalKind = 'stock' | 'purchase' | 'sale' | 'pawn' | 'scan' | 'label'
 type StockCategory = 'PHONE' | 'TABLET' | 'ACCESSORY' | 'SPARE_PART' | 'OTHER'

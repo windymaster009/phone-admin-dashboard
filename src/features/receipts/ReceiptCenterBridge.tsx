@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, Banknote, ChevronRight, HandCoins, Landmark, Printer, ReceiptText, RefreshCcw, Search, ShoppingCart, X } from 'lucide-react'
-import { api } from './api'
+import { api } from '../../lib/api'
 import ReceiptDocument, { receiptPrintStyles } from './ReceiptDocument'
 import type { ReceiptDocumentType, ReceiptLayout, ReceiptOption, ReceiptOptionResponse, ReceiptRecord, ReceiptSourceType } from './receipt-types'
 

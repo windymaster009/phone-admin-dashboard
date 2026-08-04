@@ -9,7 +9,7 @@ import {
   setToken,
   subscribeToTokenChanges,
   type SessionUser,
-} from './api'
+} from '../lib/api'
 
 const loadApp = () => import('./App')
 const loadAuthScreen = () => import('./AuthScreen')

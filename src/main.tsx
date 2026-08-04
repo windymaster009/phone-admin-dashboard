@@ -1,14 +1,14 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import AppWithBackend from './AppWithBackend'
-import './styles.css'
-import './backend.css'
-import './operation-modals.css'
-import './customer-workspace.css'
-import './activity-report.css'
-import './loan-workspace.css'
-import './loan-dashboard.css'
-import './receipt-center.css'
+import AppWithBackend from './app/AppWithBackend'
+import './styles/styles.css'
+import './styles/backend.css'
+import './features/operations/operation-modals.css'
+import './features/customers/customer-workspace.css'
+import './features/activity/activity-report.css'
+import './features/loans/loan-workspace.css'
+import './features/loans/loan-dashboard.css'
+import './features/receipts/receipt-center.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

@@ -9,7 +9,7 @@ import {
   RefreshCcw,
   TrendingUp,
 } from 'lucide-react'
-import { api } from './api'
+import { api } from '../../lib/api'
 
 type Currency = 'USD' | 'KHR'
 type LoanStatus = 'DUE_SOON' | 'OVERDUE'

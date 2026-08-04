@@ -13,7 +13,7 @@ import {
   Search,
   X,
 } from 'lucide-react'
-import { api, type SessionUser } from './api'
+import { api, type SessionUser } from '../../lib/api'
 
 type Currency = 'USD' | 'KHR'
 type LoanStatus = 'ACTIVE' | 'DUE_SOON' | 'OVERDUE' | 'PARTIALLY_PAID' | 'PAID' | 'CANCELLED'

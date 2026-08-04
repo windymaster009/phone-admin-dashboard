@@ -1,12 +1,12 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 
-const OperationModalBridge = lazy(() => import('./OperationModalBridge'))
-const CustomerWorkspaceBridge = lazy(() => import('./CustomerWorkspaceBridge'))
-const ActivityReportBridge = lazy(() => import('./ActivityReportBridge'))
-const LoanWorkspaceBridge = lazy(() => import('./LoanWorkspaceBridge'))
-const LoanDashboardBridge = lazy(() => import('./LoanDashboardBridge'))
-const LoanRouteCompatibility = lazy(() => import('./LoanRouteCompatibility'))
-const ReceiptCenterBridge = lazy(() => import('./ReceiptCenterBridge'))
+const OperationModalBridge = lazy(() => import('../features/operations/OperationModalBridge'))
+const CustomerWorkspaceBridge = lazy(() => import('../features/customers/CustomerWorkspaceBridge'))
+const ActivityReportBridge = lazy(() => import('../features/activity/ActivityReportBridge'))
+const LoanWorkspaceBridge = lazy(() => import('../features/loans/LoanWorkspaceBridge'))
+const LoanDashboardBridge = lazy(() => import('../features/loans/LoanDashboardBridge'))
+const LoanRouteCompatibility = lazy(() => import('../features/loans/LoanRouteCompatibility'))
+const ReceiptCenterBridge = lazy(() => import('../features/receipts/ReceiptCenterBridge'))
 
 export default function DeferredBridges() {
   const [operationsReady, setOperationsReady] = useState(false)
