@@ -202,10 +202,18 @@ export default function LoanDashboardBridge() {
 
   useEffect(() => {
     const locate = () => {
+      const normalizedPath = window.location.pathname.length > 1
+        ? window.location.pathname.replace(/\/+$/, '')
+        : window.location.pathname
+      const onDashboardPath = ['/', '/admin', '/dashboard'].includes(normalizedPath)
       const main = document.querySelector<HTMLElement>('.main-content')
-      const dashboardHeading = main && Array.from(main.querySelectorAll('h2')).find((heading) => heading.textContent?.trim() === 'Shop dashboard')
       const metrics = main?.querySelector<HTMLElement>('.metrics-grid')
-      const onDashboard = Boolean(main && dashboardHeading && metrics && !main.classList.contains('loan-route-active'))
+      const onDashboard = Boolean(
+        onDashboardPath
+        && main
+        && metrics
+        && !main.classList.contains('loan-route-active'),
+      )
 
       if (!onDashboard || !main || !metrics) {
         setTarget(null)
