@@ -8,6 +8,7 @@ import './customer-workspace.css'
 import './activity-report.css'
 import './loan-workspace.css'
 import './loan-dashboard.css'
+import './receipt-center.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
