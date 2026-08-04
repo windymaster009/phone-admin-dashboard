@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Smartphone } from 'lucide-react'
+import DeferredBridges from './DeferredBridges'
 import {
   api,
   getSessionUser,
@@ -92,6 +93,7 @@ export default function AppWithBackend() {
           setUser(null)
         }}
       />
+      <DeferredBridges />
     </Suspense>
   )
 }
