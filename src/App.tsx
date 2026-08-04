@@ -1977,7 +1977,7 @@ function App({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
         <div className="sidebar-footer">
           <div className="support-card">
             <span><BadgeCheck size={19} /></span>
-            <p><strong>Daily backup</strong><small>Last backup: 14:05</small></p>
+            <p><strong>Daily backup</strong><small>Checking status</small></p>
           </div>
           <div className="user-card">
             <span className="avatar large">WN</span>
