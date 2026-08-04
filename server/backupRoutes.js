@@ -33,7 +33,6 @@ router.post('/run', requireAuth, allowRoles('OWNER'), asyncRoute(async (req, res
     await writeActivity(req, {
       action: 'CREATE',
       entity: 'BACKUP',
-      entityId: backup.filename,
       details: {
         filename: backup.filename,
         compressedBytes: backup.compressedBytes,
@@ -62,7 +61,6 @@ router.get('/:filename/download', requireAuth, allowRoles('OWNER'), asyncRoute(a
   await writeActivity(req, {
     action: 'DOWNLOAD',
     entity: 'BACKUP',
-    entityId: req.params.filename,
     details: { filename: req.params.filename },
   })
   res.download(filepath, req.params.filename)
@@ -79,7 +77,6 @@ router.delete('/:filename', requireAuth, allowRoles('OWNER'), asyncRoute(async (
   await writeActivity(req, {
     action: 'DELETE',
     entity: 'BACKUP',
-    entityId: req.params.filename,
     details: { filename: req.params.filename },
   })
   res.status(204).end()
