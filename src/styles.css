@@ -510,12 +510,19 @@ td strong { color: var(--text); }
 .detail-line small { margin-top: 4px; color: var(--muted); font-size: 10px; }
 .detail-line > strong { color: var(--text); font-size: 12px; }
 .detail-note { margin: 0 18px 18px; }
-.inventory-price-editor { display: grid; grid-template-columns: minmax(0,1.1fr) repeat(2,minmax(0,.8fr)); align-items: end; gap: 12px; margin: 0 18px 18px; padding: 16px; border: 1px solid rgba(139,92,246,.24); border-radius: 13px; background: rgba(139,92,246,.07); }
-.inventory-price-editor h4 { margin: 4px 0; font: 800 14px Manrope, sans-serif; }
-.inventory-price-editor p { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
-.inventory-price-editor label { min-width: 0; display: flex; flex-direction: column; gap: 7px; color: var(--muted); font-size: 9px; font-weight: 700; }
-.inventory-price-editor .input-prefix { height: 40px; }
-.inventory-price-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 9px; }
+.inventory-price-editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 0 18px 18px; padding: 18px; border: 1px solid rgba(139,92,246,.32); border-radius: 14px; background: linear-gradient(135deg, rgba(139,92,246,.1), rgba(15,23,42,.28)); }
+.inventory-price-heading { grid-column: 1 / -1; padding-bottom: 13px; border-bottom: 1px solid var(--border); }
+.inventory-price-editor h4 { margin: 5px 0 4px; font: 800 15px Manrope, sans-serif; }
+.inventory-price-editor p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.inventory-price-editor label { min-width: 0; display: flex; flex-direction: column; gap: 8px; color: var(--muted); font-size: 10px; font-weight: 700; }
+.inventory-price-editor .input-prefix { width: 100%; height: 44px; transition: border-color .18s ease, box-shadow .18s ease, background .18s ease; }
+.inventory-price-editor .input-prefix:focus-within { border-color: var(--purple); background: var(--surface-solid); box-shadow: 0 0 0 3px rgba(139,92,246,.14); }
+.inventory-price-editor .input-prefix > span { flex: 0 0 auto; padding: 0 0 0 13px; color: var(--muted); font-size: 12px; font-weight: 800; }
+.inventory-price-editor .input-prefix input { min-width: 0; width: 100%; height: 100%; padding: 0 13px 0 8px; outline: 0; color: var(--text); font: 700 14px Manrope, sans-serif; appearance: textfield; }
+.inventory-price-editor .input-prefix input::placeholder { color: var(--muted-2); font-weight: 600; }
+.inventory-price-editor .input-prefix input::-webkit-inner-spin-button,
+.inventory-price-editor .input-prefix input::-webkit-outer-spin-button { margin: 0; appearance: none; }
+.inventory-price-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 9px; padding-top: 2px; }
 .detail-modal-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 18px 18px; border-top: 1px solid var(--border); }
 .pawn-action-form { display: grid; grid-template-columns: minmax(220px, .72fr) minmax(300px, 1.28fr); gap: 14px; margin: 0 18px 18px; padding: 18px; border: 1px solid rgba(139,92,246,.3); border-radius: 14px; background: linear-gradient(135deg, rgba(139,92,246,.1), rgba(15,23,42,.34)); }
 .pawn-action-header { grid-column: 1 / -1; display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }

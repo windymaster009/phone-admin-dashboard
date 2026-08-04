@@ -72,10 +72,8 @@
 .customer-row-actions { display: flex; justify-content: flex-end; gap: 7px; }
 .customer-row-actions .icon-button { width: 34px; height: 34px; }
 .customer-action-edit { border-color: rgba(59, 130, 246, .42) !important; color: #60a5fa !important; background: rgba(59, 130, 246, .1) !important; }
-.customer-action-status { border-color: rgba(245, 158, 11, .42) !important; color: #fbbf24 !important; background: rgba(245, 158, 11, .1) !important; }
 .customer-action-delete { border-color: rgba(239, 68, 68, .42) !important; color: #f87171 !important; background: rgba(239, 68, 68, .1) !important; }
 .customer-action-edit:hover { border-color: #3b82f6 !important; background: rgba(59, 130, 246, .2) !important; }
-.customer-action-status:hover { border-color: #f59e0b !important; background: rgba(245, 158, 11, .2) !important; }
 .customer-action-delete:hover { border-color: #ef4444 !important; background: rgba(239, 68, 68, .2) !important; }
 .customer-row-actions button:disabled { cursor: not-allowed; opacity: .55; }
 .customer-action-tooltip {
@@ -327,7 +325,7 @@
     white-space: nowrap;
   }
 
-  .customer-mobile-actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-top: 8px; }
+  .customer-mobile-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-top: 8px; }
   .customer-mobile-actions button { width: 100%; min-height: 34px; padding: 0 8px; font-size: 9px; }
 
   .customer-mobile-empty {

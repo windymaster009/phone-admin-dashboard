@@ -1234,9 +1234,9 @@ function InventoryView() {
             </div>
 
             {editingPrice && <div className="inventory-price-editor">
-              <div><span className="eyebrow">Inventory pricing</span><h4>Set selling price</h4><p>Changing these values does not modify the original purchase transaction.</p></div>
-              <label>Regular selling price<div className="input-prefix"><span>$</span><input autoFocus type="number" min="0" step="0.01" value={sellingPriceDraft} onChange={(event) => setSellingPriceDraft(event.target.value)} /></div></label>
-              <label>Discount / minimum price<div className="input-prefix"><span>$</span><input type="number" min="0" step="0.01" value={minimumPriceDraft} onChange={(event) => setMinimumPriceDraft(event.target.value)} /></div></label>
+              <div className="inventory-price-heading"><span className="eyebrow">Inventory pricing</span><h4>Set selling price</h4><p>Changing these values does not modify the original purchase transaction.</p></div>
+              <label>Regular selling price<div className="input-prefix"><span>$</span><input autoFocus type="number" min="0" step="0.01" inputMode="decimal" placeholder="0.00" value={sellingPriceDraft} onChange={(event) => setSellingPriceDraft(event.target.value)} /></div></label>
+              <label>Discount / minimum price<div className="input-prefix"><span>$</span><input type="number" min="0" step="0.01" inputMode="decimal" placeholder="0.00" value={minimumPriceDraft} onChange={(event) => setMinimumPriceDraft(event.target.value)} /></div></label>
               <div className="inventory-price-actions"><button className="ghost-button" onClick={() => setEditingPrice(false)}>Cancel</button><button className="primary-button" onClick={() => void saveSellingPrice()} disabled={savingPrice}>{savingPrice ? 'Saving...' : 'Save price'}</button></div>
             </div>}
 

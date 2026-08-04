@@ -224,21 +224,6 @@ function CustomerPage() {
     }
   }
 
-  async function toggleCustomer(customer: Customer) {
-    const active = customer.active !== false
-    setBusy(true)
-    setError('')
-    try {
-      await api(`/customers/${customer._id}`, { method: 'PATCH', body: JSON.stringify({ active: !active }) })
-      await loadCustomers()
-      window.dispatchEvent(new CustomEvent('phoneflow:customers-updated'))
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to update customer')
-    } finally {
-      setBusy(false)
-    }
-  }
-
   async function deleteCustomer() {
     if (!deleting) return
     const customer = deleting
@@ -299,7 +284,7 @@ function CustomerPage() {
                   <td>{customer.address ? <span className="customer-address"><MapPin size={14} /> {customer.address}</span> : '—'}</td>
                   <td>{formatDate(customer.createdAt)}</td>
                   <td>{customer.active === false ? <span className="unverified"><Power size={15} /> Inactive</span> : customer.nationalIdNumber ? <span className="verified"><BadgeCheck size={15} /> ID ready</span> : <span className="unverified"><AlertTriangle size={15} /> Basic profile</span>}</td>
-                  <td><div className="customer-row-actions"><CustomerActionButton className="icon-button customer-action-edit" onClick={() => openEdit(customer)} aria-label={`Edit ${customer.name}`} tooltip="Edit"><Pencil size={15} /></CustomerActionButton><CustomerActionButton className="icon-button customer-action-status" disabled={busy} onClick={() => void toggleCustomer(customer)} aria-label={`${customer.active === false ? 'Activate' : 'Deactivate'} ${customer.name}`} tooltip={customer.active === false ? 'Activate' : 'Deactivate'}><Power size={15} /></CustomerActionButton><CustomerActionButton className="icon-button customer-action-delete" disabled={busy} onClick={() => { setDeleteError(''); setDeleting(customer) }} aria-label={`Delete ${customer.name}`} tooltip="Delete"><Trash2 size={15} /></CustomerActionButton></div></td>
+                  <td><div className="customer-row-actions"><CustomerActionButton className="icon-button customer-action-edit" onClick={() => openEdit(customer)} aria-label={`Edit ${customer.name}`} tooltip="Edit"><Pencil size={15} /></CustomerActionButton><CustomerActionButton className="icon-button customer-action-delete" disabled={busy} onClick={() => { setDeleteError(''); setDeleting(customer) }} aria-label={`Delete ${customer.name}`} tooltip="Delete"><Trash2 size={15} /></CustomerActionButton></div></td>
                 </tr>
               ))}
               {!loading && filtered.length === 0 && <tr><td colSpan={7}><div className="customer-empty"><UserRound size={30} /><strong>{customers.length === 0 ? 'No customers yet' : 'No matching customers'}</strong><span>{customers.length === 0 ? 'Add the first customer so they can be selected in pawn, purchase, and sale forms.' : 'Try another search term.'}</span><button className="primary-button" onClick={openCreate}><Plus size={16} /> Add customer</button></div></td></tr>}
@@ -320,7 +305,7 @@ function CustomerPage() {
                 <div><span>Added</span><strong>{formatDate(customer.createdAt)}</strong></div>
               </div>
               {customer.address && <p className="customer-mobile-address"><MapPin size={13} /> {customer.address}</p>}
-              <footer className="customer-mobile-actions"><button className="ghost-button customer-action-edit" onClick={() => openEdit(customer)}><Pencil size={14} /> Edit</button><button className="ghost-button customer-action-status" disabled={busy} onClick={() => void toggleCustomer(customer)}><Power size={14} /> {customer.active === false ? 'Activate' : 'Deactivate'}</button><button className="ghost-button customer-action-delete" disabled={busy} onClick={() => { setDeleteError(''); setDeleting(customer) }}><Trash2 size={14} /> Delete</button></footer>
+              <footer className="customer-mobile-actions"><button className="ghost-button customer-action-edit" onClick={() => openEdit(customer)}><Pencil size={14} /> Edit</button><button className="ghost-button customer-action-delete" disabled={busy} onClick={() => { setDeleteError(''); setDeleting(customer) }}><Trash2 size={14} /> Delete</button></footer>
             </article>
           ))}
           {!loading && filtered.length === 0 && <div className="customer-mobile-empty">{customers.length === 0 ? 'No customers yet.' : 'No matching customers.'}</div>}
