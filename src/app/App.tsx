@@ -42,11 +42,11 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { api, type SessionUser } from './api'
-import { printInventoryLabel } from './barcode'
-import BackupStatusBridge from './BackupStatusBridge'
-import SupplierWorkspace from './SupplierWorkspace'
-import './backup-status.css'
+import { api, type SessionUser } from '../lib/api'
+import { printInventoryLabel } from '../features/inventory/barcode'
+import BackupStatusBridge from '../features/backup/BackupStatusBridge'
+import SupplierWorkspace from '../features/suppliers/SupplierWorkspace'
+import '../features/backup/backup-status.css'
 
 type NavKey =
   | 'dashboard'

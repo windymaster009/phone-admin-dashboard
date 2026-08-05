@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ButtonHTMLAttributes, type FormEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, BadgeCheck, Building2, Pencil, Phone, Plus, Power, Search, Trash2, X } from 'lucide-react'
-import { api } from './api'
+import { api } from '../../lib/api'
 import './supplier-workspace.css'
 
 type Supplier = {

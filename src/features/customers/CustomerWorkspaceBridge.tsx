@@ -14,7 +14,7 @@ import {
   Users,
   X,
 } from 'lucide-react'
-import { api } from './api'
+import { api } from '../../lib/api'
 
 type Customer = {
   _id: string

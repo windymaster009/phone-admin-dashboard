@@ -17,7 +17,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { api } from './api'
+import { api } from '../../lib/api'
 
 type ActivityUser = {
   _id: string

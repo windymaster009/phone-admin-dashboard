@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, BadgeCheck, Download, RefreshCcw, Trash2, X } from 'lucide-react'
-import { api, getToken } from './api'
+import { api, getToken } from '../../lib/api'
 
 type BackupMetadata = {
   filename: string
