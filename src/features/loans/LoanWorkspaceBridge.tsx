@@ -7,6 +7,7 @@ import {
   CircleDollarSign,
   Clock,
   FileText,
+  MoreHorizontal,
   Phone,
   Plus,
   RefreshCcw,
@@ -166,10 +167,17 @@ function CreateLoanModal({ busy, error, onClose, onSubmit }: {
         <label>Phone number<input name="borrowerPhone" required placeholder="012 345 678" /></label>
         <label>National ID<input name="nationalIdNumber" placeholder="Optional" /></label>
         <label>Address<input name="address" placeholder="Village, district, province" /></label>
-        <label>Loan amount<input name="principal" type="number" min="0.01" step={currency === 'KHR' ? '100' : '0.01'} required onChange={(event) => setPrincipal(Number(event.target.value) || 0)} /></label>
-        <label>Currency<select name="currency" value={currency} onChange={(event) => setCurrency(event.target.value as Currency)}><option value="USD">USD</option><option value="KHR">KHR</option></select></label>
+        <label>Loan amount<input name="principal" type="number" min={currency === 'KHR' ? '1' : '0.01'} step={currency === 'KHR' ? '1' : '0.01'} inputMode={currency === 'KHR' ? 'numeric' : 'decimal'} value={principal || ''} required onChange={(event) => setPrincipal(Number(event.target.value) || 0)} /></label>
+        <label>Currency<select name="currency" value={currency} onChange={(event) => {
+          const nextCurrency = event.target.value as Currency
+          setCurrency(nextCurrency)
+          if (nextCurrency === 'KHR') {
+            setPrincipal((value) => Math.round(value))
+            if (interestType === 'FIXED') setInterestValue((value) => Math.round(value))
+          }
+        }}><option value="USD">USD</option><option value="KHR">KHR</option></select></label>
         <label>Interest type<select name="interestType" value={interestType} onChange={(event) => setInterestType(event.target.value as 'NONE' | 'FIXED' | 'PERCENT')}><option value="NONE">No interest</option><option value="FIXED">Fixed amount</option><option value="PERCENT">Percentage</option></select></label>
-        <label>{interestType === 'PERCENT' ? 'Interest percent' : 'Interest amount'}<input name="interestValue" type="number" min="0" step={interestType === 'PERCENT' ? '0.01' : currency === 'KHR' ? '100' : '0.01'} value={interestValue} disabled={interestType === 'NONE'} onChange={(event) => setInterestValue(Number(event.target.value) || 0)} /></label>
+        <label>{interestType === 'PERCENT' ? 'Interest percent' : 'Interest amount'}<input name="interestValue" type="number" min="0" step={interestType === 'PERCENT' ? '0.01' : currency === 'KHR' ? '1' : '0.01'} inputMode={interestType === 'PERCENT' || currency === 'USD' ? 'decimal' : 'numeric'} value={interestValue} disabled={interestType === 'NONE'} onChange={(event) => setInterestValue(Number(event.target.value) || 0)} /></label>
         <label>Loan date<input name="loanDate" type="date" required defaultValue={dateInput(new Date())} /></label>
         <label>Due date<input name="dueDate" type="date" required defaultValue={dateInput(due)} /></label>
         <label>Remind before due<select name="reminderDays" defaultValue="3"><option value="0">On due date</option><option value="1">1 day before</option><option value="3">3 days before</option><option value="7">7 days before</option><option value="14">14 days before</option></select></label>
@@ -228,7 +236,7 @@ function LoanDetailModal({ detail, user, busy, error, onClose, onPayment, onDueD
         <article className="loan-detail-card">
           <div className="loan-card-heading"><div><span className="eyebrow">Repayment</span><h3>Record payment</h3></div><CircleDollarSign size={21} /></div>
           {canPay && open ? <form className="loan-payment-form" onSubmit={onPayment}>
-            <label>Amount<input name="amount" type="number" min="0.01" max={loan.remainingBalance} step={loan.currency === 'KHR' ? '100' : '0.01'} required placeholder={String(loan.remainingBalance)} /></label>
+            <label>Amount<input name="amount" type="number" min={loan.currency === 'KHR' ? '1' : '0.01'} max={loan.remainingBalance} step={loan.currency === 'KHR' ? '1' : '0.01'} inputMode={loan.currency === 'KHR' ? 'numeric' : 'decimal'} required placeholder={String(loan.remainingBalance)} /></label>
             <label>Payment method<select name="paymentMethod" defaultValue="CASH"><option value="CASH">Cash</option><option value="KHQR">KHQR</option><option value="BANK">Bank transfer</option><option value="CARD">Card</option><option value="OTHER">Other</option></select></label>
             <label>Payment date<input name="paidAt" type="date" required defaultValue={dateInput(new Date())} /></label>
             <label>Reference<input name="reference" placeholder="Optional receipt or transfer reference" /></label>
@@ -401,7 +409,7 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
           <td><strong>{money(loan.remainingBalance, loan.currency)}</strong><small className="cell-note">Paid {money(loan.amountPaid, loan.currency)}</small></td>
           <td>{dateText(loan.dueDate)}<small className={`cell-note loan-due-note ${loan.status === 'OVERDUE' ? 'danger' : ''}`}>{dueDescription(loan)}</small></td>
           <td><LoanStatusBadge status={loan.status} /></td>
-          <td><button className="ghost-button loan-view-button" onClick={() => void openDetail(loan)}>View</button></td>
+          <td><button className="icon-button loan-view-button" onClick={() => void openDetail(loan)} aria-label={`View ${loan.loanNo}`} title="View loan"><MoreHorizontal size={18} /></button></td>
         </tr>)}
         {!loading && loans.length === 0 && <tr><td colSpan={7}><div className="loan-empty"><Banknote size={31} /><strong>No loans found</strong><span>{search || status !== 'ALL' ? 'Try another search or status filter.' : 'Create the first loan record so due dates are never forgotten.'}</span></div></td></tr>}
         {loading && <tr><td colSpan={7}>Loading loans...</td></tr>}

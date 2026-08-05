@@ -1873,6 +1873,8 @@ function App({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
   const [profileOpen, setProfileOpen] = useState(false)
   const [sidebarCounts, setSidebarCounts] = useState({ pawns: 0, lowStock: 0 })
   const profileMenuRef = useRef<HTMLDivElement>(null)
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null)
+  const sidebarRef = useRef<HTMLElement>(null)
 
   const changePage = (key: NavKey) => {
     setActive(key)
@@ -1928,6 +1930,60 @@ function App({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
     }
   }, [profileOpen])
 
+  useEffect(() => {
+    if (!mobileOpen || !window.matchMedia('(max-width: 900px)').matches) return
+
+    const sidebar = sidebarRef.current
+    if (!sidebar) return
+    const focusableSelector = [
+      'a[href]',
+      'button:not([disabled])',
+      'input:not([disabled])',
+      'select:not([disabled])',
+      'textarea:not([disabled])',
+      '[tabindex]:not([tabindex="-1"])',
+    ].join(',')
+    const focusableElements = () => Array.from(sidebar.querySelectorAll<HTMLElement>(focusableSelector))
+      .filter((element) => element.getClientRects().length > 0)
+    const focusFrame = window.requestAnimationFrame(() => {
+      sidebar.querySelector<HTMLElement>('.mobile-close')?.focus()
+    })
+
+    const keepFocusInSidebar = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setMobileOpen(false)
+        return
+      }
+      if (event.key !== 'Tab') return
+
+      const elements = focusableElements()
+      if (elements.length === 0) {
+        event.preventDefault()
+        return
+      }
+      const first = elements[0]
+      const last = elements[elements.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      } else if (!sidebar.contains(document.activeElement)) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+
+    document.addEventListener('keydown', keepFocusInSidebar)
+    return () => {
+      window.cancelAnimationFrame(focusFrame)
+      document.removeEventListener('keydown', keepFocusInSidebar)
+      window.requestAnimationFrame(() => mobileMenuButtonRef.current?.focus())
+    }
+  }, [mobileOpen])
+
   const renderView = () => {
     switch (active) {
       case 'dashboard': return <DashboardView goTo={changePage} user={user} />
@@ -1945,15 +2001,15 @@ function App({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
 
   return (
     <div className="app" data-theme={darkMode ? 'dark' : 'light'}>
-      <div className={`mobile-overlay ${mobileOpen ? 'show' : ''}`} onClick={() => setMobileOpen(false)} />
-      <aside className={`sidebar ${mobileOpen ? 'mobile-open' : ''}`}>
+      <div className={`mobile-overlay ${mobileOpen ? 'show' : ''}`} onClick={() => setMobileOpen(false)} aria-hidden="true" />
+      <aside ref={sidebarRef} id="primary-sidebar" className={`sidebar ${mobileOpen ? 'mobile-open' : ''}`} aria-label="Primary navigation">
         <div className="brand">
           <span className="brand-mark"><Smartphone size={22} /></span>
           <div><strong>PhoneFlow</strong><small>Shop Management</small></div>
-          <button className="mobile-close" onClick={() => setMobileOpen(false)}><X size={20} /></button>
+          <button type="button" className="mobile-close" onClick={() => setMobileOpen(false)} aria-label="Close navigation menu" aria-controls="primary-sidebar"><X size={20} aria-hidden="true" /></button>
         </div>
 
-        <nav className="sidebar-nav">
+        <nav className="sidebar-nav" aria-label="Main menu">
           {navGroups.map((group) => (
             <div className="nav-group" key={group.label}>
               <span className="nav-group-label">{group.label}</span>
@@ -1991,7 +2047,7 @@ function App({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
 
       <div className="app-shell">
         <header className="topbar">
-          <button className="mobile-menu" onClick={() => setMobileOpen(true)}><Menu size={21} /></button>
+          <button ref={mobileMenuButtonRef} type="button" className="mobile-menu" onClick={() => setMobileOpen(true)} aria-label="Open navigation menu" aria-controls="primary-sidebar" aria-expanded={mobileOpen}><Menu size={21} aria-hidden="true" /></button>
           <div className="global-search"><Search size={18} /><input placeholder="Search pawn, customer, IMEI, product..." /><kbd>⌘ K</kbd></div>
           <div className="topbar-actions">
             <button className="icon-button theme-toggle" onClick={() => setDarkMode((current) => !current)} aria-label="Toggle theme">{darkMode ? <Sun size={18} /> : <Moon size={18} />}</button>

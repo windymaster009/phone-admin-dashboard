@@ -150,8 +150,10 @@
 .loan-status-cancelled { color: #cbd5e1; background: rgba(100, 116, 139, 0.17); }
 
 .loan-view-button {
-  min-height: 32px;
-  padding: 6px 10px;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
 }
 
 .loan-empty {

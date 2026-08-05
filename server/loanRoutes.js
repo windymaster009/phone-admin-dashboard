@@ -6,6 +6,8 @@ import { Loan, LoanPayment } from './loanModels.js'
 const router = Router()
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
 const roundMoney = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100
+const currencyCode = (value) => value === 'KHR' ? 'KHR' : 'USD'
+const roundCurrency = (value, currency) => currency === 'KHR' ? Math.round(Number(value)) : roundMoney(value)
 const clean = (value) => (typeof value === 'string' ? value.trim() : value)
 const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
@@ -13,6 +15,17 @@ function requestError(status, message) {
   const error = new Error(message)
   error.status = status
   return error
+}
+
+function currencyAmount(value, currency, fieldName, allowZero = false) {
+  const amount = Number(value)
+  if (!Number.isFinite(amount) || (allowZero ? amount < 0 : amount <= 0)) {
+    throw requestError(400, `${fieldName} must be ${allowZero ? 'zero or greater' : 'greater than zero'}`)
+  }
+  if (currency === 'KHR' && !Number.isInteger(amount)) {
+    throw requestError(400, `${fieldName} must be a whole riel amount without decimals`)
+  }
+  return roundCurrency(amount, currency)
 }
 
 function makeCode(prefix) {
@@ -30,17 +43,20 @@ function parseDate(value, fieldName) {
   return date
 }
 
-function calculateInterest(principal, interestType, interestValue) {
+function calculateInterest(principal, interestType, interestValue, currency) {
   const type = ['NONE', 'FIXED', 'PERCENT'].includes(String(interestType || '').toUpperCase())
     ? String(interestType).toUpperCase()
     : 'NONE'
-  const value = Math.max(0, Number(interestValue) || 0)
+  const rawValue = Math.max(0, Number(interestValue) || 0)
+  const value = type === 'FIXED'
+    ? currencyAmount(rawValue, currency, 'Fixed interest amount', true)
+    : roundMoney(rawValue)
   const amount = type === 'FIXED'
     ? value
     : type === 'PERCENT'
-      ? principal * value / 100
+      ? roundCurrency(principal * value / 100, currency)
       : 0
-  return { type, value: roundMoney(value), amount: roundMoney(amount) }
+  return { type, value, amount: roundCurrency(amount, currency) }
 }
 
 function startOfDay(value) {
@@ -103,12 +119,12 @@ async function buildSummary() {
   for (const loan of loans) {
     const currency = loan.currency === 'KHR' ? 'KHR' : 'USD'
     const bucket = byCurrency[currency]
-    bucket.lent = roundMoney(bucket.lent + Number(loan.principal || 0))
-    bucket.expected = roundMoney(bucket.expected + Number(loan.totalDue || 0))
-    bucket.paid = roundMoney(bucket.paid + Number(loan.amountPaid || 0))
-    bucket.outstanding = roundMoney(bucket.outstanding + Number(loan.remainingBalance || 0))
-    if (loan.status === 'DUE_SOON') bucket.dueSoon = roundMoney(bucket.dueSoon + Number(loan.remainingBalance || 0))
-    if (loan.status === 'OVERDUE') bucket.overdue = roundMoney(bucket.overdue + Number(loan.remainingBalance || 0))
+    bucket.lent = roundCurrency(bucket.lent + Number(loan.principal || 0), currency)
+    bucket.expected = roundCurrency(bucket.expected + Number(loan.totalDue || 0), currency)
+    bucket.paid = roundCurrency(bucket.paid + Number(loan.amountPaid || 0), currency)
+    bucket.outstanding = roundCurrency(bucket.outstanding + Number(loan.remainingBalance || 0), currency)
+    if (loan.status === 'DUE_SOON') bucket.dueSoon = roundCurrency(bucket.dueSoon + Number(loan.remainingBalance || 0), currency)
+    if (loan.status === 'OVERDUE') bucket.overdue = roundCurrency(bucket.overdue + Number(loan.remainingBalance || 0), currency)
 
     if (loan.status === 'PAID') counts.paid += 1
     else counts.open += 1
@@ -182,15 +198,15 @@ router.get('/:id', requireAuth, asyncRoute(async (req, res) => {
 
 router.post('/', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
   const borrower = borrowerFromBody(req.body)
-  const principal = roundMoney(req.body.principal)
-  if (!Number.isFinite(principal) || principal <= 0) throw requestError(400, 'Loan amount must be greater than zero')
+  const currency = currencyCode(req.body.currency)
+  const principal = currencyAmount(req.body.principal, currency, 'Loan amount')
 
   const loanDate = parseDate(req.body.loanDate || new Date(), 'Loan date')
   const dueDate = parseDate(req.body.dueDate, 'Due date')
   if (dueDate < loanDate) throw requestError(400, 'Due date cannot be before the loan date')
 
-  const interest = calculateInterest(principal, req.body.interestType, req.body.interestValue)
-  const totalDue = roundMoney(principal + interest.amount)
+  const interest = calculateInterest(principal, req.body.interestType, req.body.interestValue, currency)
+  const totalDue = roundCurrency(principal + interest.amount, currency)
   const reminderDays = Math.min(30, Math.max(0, Number(req.body.reminderDays ?? 3)))
   const draft = {
     status: 'ACTIVE',
@@ -211,7 +227,7 @@ router.post('/', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (
     totalDue,
     amountPaid: 0,
     remainingBalance: totalDue,
-    currency: req.body.currency === 'KHR' ? 'KHR' : 'USD',
+    currency,
     loanDate,
     dueDate,
     reminderDays,
@@ -257,20 +273,21 @@ router.patch('/:id', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(asy
   const financialKeys = ['principal', 'interestType', 'interestValue', 'currency']
   if (financialKeys.some((key) => req.body[key] !== undefined)) {
     if (loan.amountPaid > 0) throw requestError(409, 'Financial terms cannot be changed after a repayment')
-    const principal = req.body.principal === undefined ? loan.principal : roundMoney(req.body.principal)
-    if (!Number.isFinite(principal) || principal <= 0) throw requestError(400, 'Loan amount must be greater than zero')
+    const currency = req.body.currency === undefined ? loan.currency : currencyCode(req.body.currency)
+    const principal = currencyAmount(req.body.principal === undefined ? loan.principal : req.body.principal, currency, 'Loan amount')
     const interest = calculateInterest(
       principal,
       req.body.interestType === undefined ? loan.interestType : req.body.interestType,
       req.body.interestValue === undefined ? loan.interestValue : req.body.interestValue,
+      currency,
     )
     loan.principal = principal
     loan.interestType = interest.type
     loan.interestValue = interest.value
     loan.interestAmount = interest.amount
-    loan.totalDue = roundMoney(principal + interest.amount)
+    loan.totalDue = roundCurrency(principal + interest.amount, currency)
     loan.remainingBalance = loan.totalDue
-    if (req.body.currency !== undefined) loan.currency = req.body.currency === 'KHR' ? 'KHR' : 'USD'
+    loan.currency = currency
   }
 
   loan.status = statusForLoan(loan)
@@ -295,10 +312,11 @@ async function recordPaymentWithTransaction({ loanId, amount, paymentMethod, pai
       const loan = await Loan.findById(loanId).session(session)
       if (!loan) throw requestError(404, 'Loan not found')
       if (['PAID', 'CANCELLED'].includes(loan.status)) throw requestError(409, 'This loan no longer accepts repayments')
-      if (amount > loan.remainingBalance + 0.005) throw requestError(400, 'Payment cannot exceed the remaining balance')
+      const paymentAmount = currencyAmount(amount, loan.currency, 'Payment amount')
+      if (paymentAmount > loan.remainingBalance + 0.005) throw requestError(400, 'Payment cannot exceed the remaining balance')
 
-      loan.amountPaid = roundMoney(loan.amountPaid + amount)
-      loan.remainingBalance = roundMoney(Math.max(0, loan.totalDue - loan.amountPaid))
+      loan.amountPaid = roundCurrency(loan.amountPaid + paymentAmount, loan.currency)
+      loan.remainingBalance = roundCurrency(Math.max(0, loan.totalDue - loan.amountPaid), loan.currency)
       loan.status = statusForLoan(loan)
       loan.updatedBy = userId
       if (loan.status === 'PAID') loan.paidAt = paidAt
@@ -307,7 +325,7 @@ async function recordPaymentWithTransaction({ loanId, amount, paymentMethod, pai
       const [payment] = await LoanPayment.create([{
         paymentNo: makeCode('LP'),
         loan: loan._id,
-        amount,
+        amount: paymentAmount,
         paymentMethod,
         paidAt,
         reference,
@@ -326,10 +344,11 @@ async function recordPaymentFallback({ loanId, amount, paymentMethod, paidAt, re
   const current = await Loan.findById(loanId)
   if (!current) throw requestError(404, 'Loan not found')
   if (['PAID', 'CANCELLED'].includes(current.status)) throw requestError(409, 'This loan no longer accepts repayments')
-  if (amount > current.remainingBalance + 0.005) throw requestError(400, 'Payment cannot exceed the remaining balance')
+  const paymentAmount = currencyAmount(amount, current.currency, 'Payment amount')
+  if (paymentAmount > current.remainingBalance + 0.005) throw requestError(400, 'Payment cannot exceed the remaining balance')
 
-  const nextPaid = roundMoney(current.amountPaid + amount)
-  const nextRemaining = roundMoney(Math.max(0, current.totalDue - nextPaid))
+  const nextPaid = roundCurrency(current.amountPaid + paymentAmount, current.currency)
+  const nextRemaining = roundCurrency(Math.max(0, current.totalDue - nextPaid), current.currency)
   const candidate = {
     ...current.toObject(),
     amountPaid: nextPaid,
@@ -361,7 +380,7 @@ async function recordPaymentFallback({ loanId, amount, paymentMethod, paidAt, re
     const payment = await LoanPayment.create({
       paymentNo: makeCode('LP'),
       loan: loan._id,
-      amount,
+      amount: paymentAmount,
       paymentMethod,
       paidAt,
       reference,
@@ -387,7 +406,7 @@ async function recordPaymentFallback({ loanId, amount, paymentMethod, paidAt, re
 }
 
 router.post('/:id/payments', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
-  const amount = roundMoney(req.body.amount)
+  const amount = Number(req.body.amount)
   if (!Number.isFinite(amount) || amount <= 0) throw requestError(400, 'Payment amount must be greater than zero')
   const paymentMethod = ['CASH', 'KHQR', 'BANK', 'CARD', 'OTHER'].includes(String(req.body.paymentMethod || '').toUpperCase())
     ? String(req.body.paymentMethod).toUpperCase()

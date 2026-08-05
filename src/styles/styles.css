@@ -639,6 +639,13 @@ td strong { color: var(--text); }
 .danger-button { color: #fff; background: #be123c; }
 .mobile-overlay { display: none; }
 
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+
 @media (max-width: 1180px) {
   .metrics-grid, .mini-stats-grid { grid-template-columns: repeat(2, 1fr); }
   .dashboard-grid, .dashboard-lower-grid, .calculator-layout { grid-template-columns: minmax(0, 1fr); }
