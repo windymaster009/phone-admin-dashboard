@@ -1,0 +1,215 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/phoneflow_background"
+    android:fitsSystemWindows="true">
+
+    <ScrollView
+        android:id="@+id/setupPanel"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:orientation="vertical"
+            android:padding="28dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="PhoneFlow"
+                android:textColor="@color/phoneflow_primary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/setup_title"
+                android:textColor="@color/phoneflow_text"
+                android:textSize="28sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:lineSpacingExtra="3dp"
+                android:text="@string/setup_description"
+                android:textColor="@color/phoneflow_muted"
+                android:textSize="14sp" />
+
+            <EditText
+                android:id="@+id/serverUrlInput"
+                android:layout_width="match_parent"
+                android:layout_height="54dp"
+                android:layout_marginTop="28dp"
+                android:backgroundTint="@color/phoneflow_primary"
+                android:hint="@string/server_url_hint"
+                android:inputType="textUri"
+                android:singleLine="true"
+                android:textColor="@color/phoneflow_text"
+                android:textColorHint="@color/phoneflow_muted" />
+
+            <TextView
+                android:id="@+id/setupError"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:textColor="@color/phoneflow_error"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/connectButton"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="18dp"
+                android:backgroundTint="@color/phoneflow_primary"
+                android:text="@string/connect"
+                android:textAllCaps="false"
+                android:textColor="@color/phoneflow_text"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:text="Emulator: http://10.0.2.2:5000\nReal phone: http://YOUR_COMPUTER_LAN_IP:5000"
+                android:textColor="@color/phoneflow_muted"
+                android:textIsSelectable="true"
+                android:textSize="12sp" />
+        </LinearLayout>
+    </ScrollView>
+
+    <LinearLayout
+        android:id="@+id/browserPanel"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="58dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingStart="16dp"
+            android:paddingEnd="8dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/pageTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:text="PhoneFlow"
+                    android:textColor="@color/phoneflow_text"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/connectionLabel"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:ellipsize="middle"
+                    android:maxLines="1"
+                    android:textColor="@color/phoneflow_muted"
+                    android:textSize="10sp" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/settingsButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:backgroundTint="@color/phoneflow_surface_alt"
+                android:contentDescription="@string/settings"
+                android:text="⋮"
+                android:textColor="@color/phoneflow_text"
+                android:textSize="22sp" />
+        </LinearLayout>
+
+        <ProgressBar
+            android:id="@+id/pageProgress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="3dp"
+            android:indeterminateTint="@color/phoneflow_primary"
+            android:visibility="gone" />
+
+        <WebView
+            android:id="@+id/phoneFlowWebView"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:background="@color/phoneflow_background" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="62dp"
+            android:background="@color/phoneflow_surface"
+            android:orientation="horizontal"
+            android:padding="5dp">
+
+            <Button
+                android:id="@+id/dashboardButton"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:backgroundTint="@color/phoneflow_surface_alt"
+                android:text="@string/dashboard"
+                android:textAllCaps="false"
+                android:textColor="@color/phoneflow_text"
+                android:textSize="11sp" />
+
+            <Button
+                android:id="@+id/scanButton"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:backgroundTint="@color/phoneflow_primary"
+                android:text="@string/scan"
+                android:textAllCaps="false"
+                android:textColor="@color/phoneflow_text"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/backButton"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:backgroundTint="@color/phoneflow_surface_alt"
+                android:text="@string/back"
+                android:textAllCaps="false"
+                android:textColor="@color/phoneflow_text"
+                android:textSize="11sp" />
+
+            <Button
+                android:id="@+id/browserButton"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:backgroundTint="@color/phoneflow_surface_alt"
+                android:text="@string/browser"
+                android:textAllCaps="false"
+                android:textColor="@color/phoneflow_text"
+                android:textSize="11sp" />
+        </LinearLayout>
+    </LinearLayout>
+
+</FrameLayout>
