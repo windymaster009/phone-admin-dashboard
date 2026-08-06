@@ -3,7 +3,6 @@ import { Smartphone } from 'lucide-react'
 import DeferredBridges from './DeferredBridges'
 import {
   api,
-  getSessionUser,
   getToken,
   setSessionUser,
   setToken,
@@ -61,8 +60,8 @@ function StartupScreen({ message = 'Connecting to the shop...' }: { message?: st
 export default function AppWithBackend() {
   const [theme, setTheme] = useState<AppTheme>(getInitialTheme)
   const [fontSize, setFontSize] = useState<AppFontSize>(getInitialFontSize)
-  const [user, setUser] = useState<SessionUser | null>(() => getToken() ? getSessionUser() : null)
-  const [checking, setChecking] = useState(() => Boolean(getToken() && !getSessionUser()))
+  const [user, setUser] = useState<SessionUser | null>(null)
+  const [checking, setChecking] = useState(true)
 
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -91,26 +90,21 @@ export default function AppWithBackend() {
   }), [])
 
   useEffect(() => {
-    const token = getToken()
-    if (!token) {
-      void loadAuthScreen()
-      setChecking(false)
-      return
-    }
-
     let active = true
-    void loadApp()
 
     api<{ user: SessionUser }>('/auth/me')
       .then((result) => {
-        if (!active || !getToken()) return
+        if (!active) return
+        setToken(null)
         setSessionUser(result.user)
         setUser(result.user)
+        void loadApp()
       })
       .catch(() => {
         if (!active) return
         setToken(null)
         setUser(null)
+        void loadAuthScreen()
       })
       .finally(() => {
         if (active) setChecking(false)
@@ -146,8 +140,11 @@ export default function AppWithBackend() {
         onFontSizeChange={setFontSize}
         user={user}
         onLogout={() => {
-          setToken(null)
-          setUser(null)
+          void api('/auth/logout', { method: 'POST' }).catch(() => undefined).finally(() => {
+            setToken(null)
+            setSessionUser(null)
+            setUser(null)
+          })
         }}
       />
       <DeferredBridges />

@@ -61,7 +61,7 @@ export function setToken(token: string | null) {
     setSessionUser(null)
   }
 
-  if (previousToken !== token) {
+  if (!token || previousToken !== token) {
     tokenListeners.forEach((listener) => listener())
   }
 }
@@ -100,6 +100,7 @@ async function performRequest<T>(path: string, options: RequestInit, behavior: A
   if (!headers.has('Content-Type') && options.body) headers.set('Content-Type', 'application/json')
   if (token) headers.set('Authorization', `Bearer ${token}`)
   if (!headers.has('X-Request-ID')) headers.set('X-Request-ID', clientRequestId)
+  if (!headers.has('X-PhoneFlow-Request')) headers.set('X-PhoneFlow-Request', '1')
 
   const method = String(options.method || 'GET').toUpperCase()
   const canRetry = method === 'GET' || method === 'HEAD' || behavior.retryTransient === true
@@ -107,7 +108,11 @@ async function performRequest<T>(path: string, options: RequestInit, behavior: A
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      const response = await fetch(`/api${path}`, { ...options, headers })
+      const response = await fetch(`/api${path}`, {
+        ...options,
+        credentials: options.credentials || 'include',
+        headers,
+      })
       const payload = (await response.json().catch(() => ({}))) as { message?: string; requestId?: string; retryable?: boolean } & T
 
       if (response.status === 401) setToken(null)

@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { requireAuth } from './auth.js'
+import { allowRoles, requireAuth } from './auth.js'
 import { Loan } from './loanModels.js'
 
 const router = Router()
@@ -83,7 +83,7 @@ function buildSummary(loans) {
   return { byCurrency, counts }
 }
 
-router.get('/', requireAuth, asyncRoute(async (_req, res) => {
+router.get('/', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (_req, res) => {
   await refreshLoanStatuses()
 
   const [allLoans, urgentLoans] = await Promise.all([

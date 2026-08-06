@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import mongoose from 'mongoose'
-import { requireAuth, writeActivity } from './auth.js'
+import { allowRoles, requireAuth, writeActivity } from './auth.js'
 import { Loan, LoanPayment } from './loanModels.js'
 import { Pawn, Trade } from './models.js'
 import { Receipt } from './receiptModels.js'
@@ -409,7 +409,7 @@ function option(documentType, sourceSubId, label, issuedAt, amount, currency) {
   return { documentType, sourceSubId, label, issuedAt, amount: roundMoney(amount), currency }
 }
 
-router.get('/options', requireAuth, asyncRoute(async (req, res) => {
+router.get('/options', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
   const sourceType = String(req.query.sourceType || '').toUpperCase()
   const reference = clean(req.query.reference)
 
@@ -484,7 +484,7 @@ router.get('/options', requireAuth, asyncRoute(async (req, res) => {
   throw requestError(400, 'Source type must be TRADE, PAWN, or LOAN')
 }))
 
-router.post('/generate', requireAuth, asyncRoute(async (req, res) => {
+router.post('/generate', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
   const sourceType = String(req.body.sourceType || '').toUpperCase()
   const reference = clean(req.body.reference)
   const requestedType = String(req.body.documentType || '').toUpperCase()
@@ -539,7 +539,7 @@ router.post('/generate', requireAuth, asyncRoute(async (req, res) => {
   res.status(result.created ? 201 : 200).json(result)
 }))
 
-router.get('/', requireAuth, asyncRoute(async (req, res) => {
+router.get('/', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
   const query = {}
   const search = clean(req.query.search)
   const documentType = String(req.query.documentType || '').toUpperCase()
@@ -562,13 +562,13 @@ router.get('/', requireAuth, asyncRoute(async (req, res) => {
   res.json({ receipts })
 }))
 
-router.get('/:id', requireAuth, asyncRoute(async (req, res) => {
+router.get('/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
   const receipt = await Receipt.findById(req.params.id).populate('createdBy lastPrintedBy', 'name role')
   if (!receipt) throw requestError(404, 'Receipt not found')
   res.json({ receipt })
 }))
 
-router.post('/:id/printed', requireAuth, asyncRoute(async (req, res) => {
+router.post('/:id/printed', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
   const current = await Receipt.findById(req.params.id).select('printCount')
   if (!current) throw requestError(404, 'Receipt not found')
   const now = new Date()

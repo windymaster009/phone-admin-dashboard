@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, BadgeCheck, Download, RefreshCcw, Trash2, X } from 'lucide-react'
-import { api, getToken } from '../../lib/api'
+import { api } from '../../lib/api'
 
 type BackupMetadata = {
   filename: string
@@ -153,9 +153,8 @@ export default function BackupStatusBridge() {
     setDownloadBusy(backup.filename)
     setError('')
     try {
-      const token = getToken()
       const response = await fetch(`/api/backups/${encodeURIComponent(backup.filename)}/download`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: 'include',
       })
       if (!response.ok) {
         const payload = await response.json().catch(() => ({})) as { message?: string }

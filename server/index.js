@@ -8,6 +8,7 @@ import rateLimit from 'express-rate-limit'
 import helmet from 'helmet'
 import mongoose from 'mongoose'
 import morgan from 'morgan'
+import { requireAuth } from './auth.js'
 import backupRouter from './backupRoutes.js'
 import { startBackupScheduler, stopBackupScheduler } from './backupService.js'
 import loanDashboardRouter from './loanDashboardRoutes.js'
@@ -18,6 +19,14 @@ import router from './routes.js'
 const app = express()
 const port = Number(process.env.PORT || 5000)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+
+function trustProxySetting() {
+  const value = String(process.env.TRUST_PROXY || '').trim()
+  if (!value || value.toLowerCase() === 'false') return false
+  if (value.toLowerCase() === 'true') return true
+  if (/^\d+$/.test(value)) return Number(value)
+  return value.split(',').map((entry) => entry.trim()).filter(Boolean)
+}
 
 function positiveEnvNumber(name, fallback) {
   const value = Number(process.env[name])
@@ -41,6 +50,8 @@ function isTransientDatabaseError(error) {
 function validateEnv() {
   const mongoUri = process.env.MONGO_URI || ''
   const jwtSecret = process.env.JWT_SECRET || ''
+  const bootstrapToken = String(process.env.AUTH_BOOTSTRAP_TOKEN || '')
+  const trustProxy = String(process.env.TRUST_PROXY || '').trim().toLowerCase()
 
   if (!mongoUri) throw new Error('MONGO_URI is required in .env')
   if (mongoUri.includes('<db_password>')) {
@@ -56,6 +67,13 @@ function validateEnv() {
   }
   if (!jwtSecret || jwtSecret.length < 32) {
     throw new Error('JWT_SECRET must be at least 32 characters in .env')
+  }
+  if (process.env.NODE_ENV === 'production' && bootstrapToken
+    && (bootstrapToken.length < 32 || bootstrapToken.includes('GENERATE_'))) {
+    throw new Error('AUTH_BOOTSTRAP_TOKEN must be a random secret of at least 32 characters in production')
+  }
+  if (trustProxy === 'true') {
+    throw new Error('TRUST_PROXY=true trusts arbitrary forwarding headers. Use a proxy hop count or trusted proxy address instead.')
   }
 
   if (String(process.env.PAYWAY_ENABLED || '').toLowerCase() === 'true') {
@@ -89,7 +107,7 @@ try {
   process.exit(1)
 }
 
-app.set('trust proxy', 1)
+app.set('trust proxy', trustProxySetting())
 app.use((req, res, next) => {
   const suppliedId = String(req.get('x-request-id') || '')
   req.id = /^[a-zA-Z0-9_-]{8,80}$/.test(suppliedId) ? suppliedId : randomUUID()
@@ -103,18 +121,32 @@ app.use(cors({
       .split(',')
       .map((value) => value.trim())
     if (!origin || allowed.includes(origin)) return callback(null, true)
-    callback(new Error('Origin is not allowed by CORS'))
+    const error = new Error('Origin is not allowed by CORS')
+    error.status = 403
+    callback(error)
   },
   credentials: true,
 }))
 app.use(express.json({ limit: '8mb' }))
 app.use(express.urlencoded({ extended: true, limit: '8mb' }))
-app.use('/uploads', express.static(path.resolve(__dirname, '../uploads')))
+app.use('/uploads', requireAuth, express.static(path.resolve(__dirname, '../uploads'), {
+  dotfiles: 'deny',
+  index: false,
+  maxAge: '1h',
+}))
 morgan.token('request-id', (req) => req.id)
 app.use(morgan(process.env.NODE_ENV === 'production'
   ? ':remote-addr - :remote-user [:date[clf]] ":method :url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent" request=:request-id'
   : ':method :url :status :response-time ms request=:request-id'))
-app.use('/api/auth', rateLimit({ windowMs: 15 * 60 * 1000, limit: 100, standardHeaders: true, legacyHeaders: false }))
+const signInLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many sign-in attempts. Wait 15 minutes and try again.' },
+})
+app.use('/api/auth/login', signInLimiter)
+app.use('/api/auth/bootstrap', signInLimiter)
 
 app.get('/api/health', async (_req, res) => {
   res.json({

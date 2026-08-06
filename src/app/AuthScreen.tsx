@@ -111,11 +111,11 @@ export default function AuthScreen({
     }
 
     try {
-      const result = await api<{ token: string; user: SessionUser }>(setupRequired ? '/auth/bootstrap' : '/auth/login', {
+      const result = await api<{ user: SessionUser }>(setupRequired ? '/auth/bootstrap' : '/auth/login', {
         method: 'POST',
         body: JSON.stringify(payload),
       }, { retryTransient: setupRequired === false })
-      setToken(result.token)
+      setToken(null)
       onAuthenticated(result.user)
     } catch (reason) {
       setError(reason instanceof ApiError && reason.status === 401

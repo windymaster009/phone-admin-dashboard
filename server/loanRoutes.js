@@ -149,10 +149,12 @@ function borrowerFromBody(body) {
   }
 }
 
-async function getLoanDetail(id) {
-  const loan = await Loan.findById(id)
+async function getLoanDetail(id, viewerRole) {
+  const query = Loan.findById(id)
     .populate('createdBy', 'name role')
     .populate('updatedBy', 'name role')
+  if (viewerRole === 'CASHIER') query.select('-borrower.nationalIdNumber -borrower.address')
+  const loan = await query
   if (!loan) throw requestError(404, 'Loan not found')
   const payments = await LoanPayment.find({ loan: loan._id })
     .sort({ paidAt: -1, createdAt: -1 })
@@ -160,15 +162,15 @@ async function getLoanDetail(id) {
   return { loan, payments }
 }
 
-router.get('/summary', requireAuth, asyncRoute(async (_req, res) => {
+router.get('/summary', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (_req, res) => {
   await refreshLoanStatuses()
   res.json({ summary: await buildSummary() })
 }))
 
-router.get('/', requireAuth, asyncRoute(async (req, res) => {
+router.get('/', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
   await refreshLoanStatuses()
   const query = {}
-  const search = clean(req.query.search)
+  const search = String(req.query.search || '').trim().slice(0, 80)
   const status = clean(req.query.status)?.toUpperCase()
 
   if (search) {
@@ -183,17 +185,19 @@ router.get('/', requireAuth, asyncRoute(async (req, res) => {
   }
   if (status && status !== 'ALL') query.status = status
 
-  const loans = await Loan.find(query)
+  const loansQuery = Loan.find(query)
     .sort({ dueDate: 1, createdAt: -1 })
     .limit(500)
     .populate('createdBy', 'name role')
+  if (req.user.role === 'CASHIER') loansQuery.select('-borrower.nationalIdNumber -borrower.address')
+  const loans = await loansQuery
 
   res.json({ loans, summary: await buildSummary() })
 }))
 
-router.get('/:id', requireAuth, asyncRoute(async (req, res) => {
+router.get('/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
   await refreshLoanStatuses()
-  res.json(await getLoanDetail(req.params.id))
+  res.json(await getLoanDetail(req.params.id, req.user.role))
 }))
 
 router.post('/', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
@@ -445,7 +449,7 @@ router.post('/:id/payments', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIE
     },
   })
 
-  res.status(201).json(await getLoanDetail(result.loan._id))
+  res.status(201).json(await getLoanDetail(result.loan._id, req.user.role))
 }))
 
 router.post('/:id/cancel', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {

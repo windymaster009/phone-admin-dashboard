@@ -1,11 +1,18 @@
-import { randomUUID } from 'node:crypto'
+import { randomUUID, timingSafeEqual } from 'node:crypto'
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import mongoose from 'mongoose'
-import { allowRoles, requireAuth, signToken, writeActivity } from './auth.js'
+import {
+  allowRoles,
+  clearSessionCookie,
+  requireAuth,
+  setSessionCookie,
+  signToken,
+  writeActivity,
+} from './auth.js'
 import {
   checkPaywayTransaction,
   closePaywayTransaction,
@@ -14,15 +21,53 @@ import {
   paywayConfiguration,
   usdKhrFromPayway,
 } from './integrations/payway/index.js'
-import { ActivityLog, Customer, InventoryItem, Pawn, Supplier, Trade, User } from './models.js'
+import { ActivityLog, Customer, InventoryItem, Pawn, PaywayIntent, Supplier, Trade, User } from './models.js'
 
 const router = Router()
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const inventoryUploadDir = path.resolve(__dirname, '../uploads/inventory')
+const dummyPasswordHash = bcrypt.hashSync('phoneflow-invalid-password', 12)
 
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
 const clean = (value) => (typeof value === 'string' ? value.trim() : value)
 const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const searchText = (value) => String(value ?? '').trim().slice(0, 80)
+
+function secureEqual(left, right) {
+  const leftBuffer = Buffer.from(String(left || ''))
+  const rightBuffer = Buffer.from(String(right || ''))
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer)
+}
+
+function isLoopbackRequest(req) {
+  const address = String(req.socket?.remoteAddress || '')
+  return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1'
+}
+
+function allowTradeWrite(req, res, next) {
+  const type = String(req.body?.type || '').toUpperCase()
+  const roles = type === 'BUY'
+    ? ['OWNER', 'MANAGER', 'STOCK']
+    : type === 'SELL'
+      ? ['OWNER', 'MANAGER', 'CASHIER']
+      : []
+  if (!roles.includes(req.user?.role)) {
+    return res.status(403).json({ message: 'You do not have permission to perform this transaction' })
+  }
+  next()
+}
+
+async function authorizedPaywayIntent(req, transactionId) {
+  const normalizedId = String(transactionId || '').trim().toUpperCase()
+  if (!/^PF[A-Z0-9]{8,32}$/.test(normalizedId)) throw requestError(400, 'PayWay transaction ID is invalid')
+  const intent = await PaywayIntent.findOne({ transactionId: normalizedId })
+  if (!intent) throw requestError(404, 'Payment request was not found')
+  const ownsIntent = intent.createdBy.equals(req.user._id)
+  if (!ownsIntent && !['OWNER', 'MANAGER'].includes(req.user.role)) {
+    throw requestError(403, 'You do not have permission to access this payment request')
+  }
+  return intent
+}
 
 function normalizeGigabytes(value) {
   const raw = clean(String(value ?? '')).toUpperCase().replace(/\s+/g, '')
@@ -68,6 +113,72 @@ function makePaywayTransactionId() {
 
 const openPawnStatuses = ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED']
 const roundMoney = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100
+
+function salePricing(item, role) {
+  const unitPrice = roundMoney(item?.sellPrice)
+  if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+    throw requestError(409, `${item?.name || 'The selected item'} does not have a valid selling price`)
+  }
+  const configuredMinimum = roundMoney(item?.minimumSellPrice)
+  const minimumUnitPrice = Number.isFinite(configuredMinimum) && configuredMinimum > 0
+    ? configuredMinimum
+    : role === 'CASHIER'
+      ? unitPrice
+      : 0
+  if (minimumUnitPrice > unitPrice) {
+    throw requestError(409, `${item.name} has an invalid minimum selling price`)
+  }
+  return { unitPrice, minimumUnitPrice }
+}
+
+function saleDiscount(value, subtotal, minimumTotal) {
+  const discount = roundMoney(value || 0)
+  const maximumDiscount = roundMoney(Math.max(0, subtotal - minimumTotal))
+  if (!Number.isFinite(discount) || discount < 0) throw requestError(400, 'Discount is invalid')
+  if (discount > maximumDiscount + 0.001) {
+    throw requestError(400, `Discount cannot exceed ${maximumDiscount.toFixed(2)} without changing the minimum selling price`)
+  }
+  return discount
+}
+
+async function buildSaleQuote(lines, session, role) {
+  if (!Array.isArray(lines) || lines.length === 0 || lines.length > 100) {
+    throw requestError(400, 'Add between 1 and 100 sale items')
+  }
+  const inventoryIds = lines.map((line) => String(line.inventoryItem || ''))
+  if (inventoryIds.some((id) => !mongoose.isValidObjectId(id))) throw requestError(400, 'A sale item is invalid')
+  if (new Set(inventoryIds).size !== inventoryIds.length) throw requestError(400, 'Add each inventory item only once per sale')
+
+  const tradeItems = []
+  const inventoryUpdates = []
+  let subtotal = 0
+  let minimumTotal = 0
+  for (const line of lines) {
+    const quantity = Number(line.quantity || 1)
+    if (!Number.isInteger(quantity) || quantity < 1) throw requestError(400, 'Sale quantity must be a whole number greater than zero')
+    const query = InventoryItem.findById(line.inventoryItem)
+    if (session) query.session(session)
+    const item = await query
+    if (!item || item.status !== 'IN_STOCK' || item.quantity < quantity) {
+      throw requestError(409, `${line.name || 'Item'} does not have enough available stock`)
+    }
+    const { unitPrice, minimumUnitPrice } = salePricing(item, role)
+    if (line.unitPrice !== undefined && Math.abs(Number(line.unitPrice) - unitPrice) > 0.001) {
+      throw requestError(409, `${item.name} has a new selling price. Refresh and try again`)
+    }
+    subtotal = roundMoney(subtotal + quantity * unitPrice)
+    minimumTotal = roundMoney(minimumTotal + quantity * minimumUnitPrice)
+    inventoryUpdates.push({ item, quantity })
+    tradeItems.push({
+      inventoryItem: item._id,
+      name: item.name,
+      quantity,
+      unitPrice,
+      costPrice: Number(item.buyPrice) || 0,
+    })
+  }
+  return { tradeItems, inventoryUpdates, subtotal, minimumTotal }
+}
 
 function calculatePawnOffer(input = {}) {
   const marketPrice = Math.max(0, Number(input.marketPrice) || 0)
@@ -215,9 +326,16 @@ router.post('/auth/bootstrap', asyncRoute(async (req, res) => {
     return res.status(409).json({ message: 'The owner account has already been created' })
   }
 
+  const configuredToken = String(process.env.AUTH_BOOTSTRAP_TOKEN || '')
+  const suppliedToken = String(req.get('x-bootstrap-token') || req.body.setupToken || '')
+  const localDevelopmentSetup = process.env.NODE_ENV !== 'production' && isLoopbackRequest(req)
+  if (!localDevelopmentSetup && (!configuredToken || !secureEqual(configuredToken, suppliedToken))) {
+    return res.status(403).json({ message: 'Owner setup is not authorized on this server' })
+  }
+
   const name = clean(req.body.name)
-  const email = clean(req.body.email)?.toLowerCase()
-  const password = req.body.password
+  const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : ''
+  const password = typeof req.body.password === 'string' ? req.body.password : ''
 
   if (!name || !email || !password || password.length < 8) {
     return res.status(400).json({ message: 'Name, email and a password of at least 8 characters are required' })
@@ -230,26 +348,38 @@ router.post('/auth/bootstrap', asyncRoute(async (req, res) => {
     role: 'OWNER',
   })
 
-  res.status(201).json({ token: signToken(user), user: publicUser(user) })
+  setSessionCookie(res, signToken(user))
+  res.status(201).json({ user: publicUser(user) })
 }))
 
 router.post('/auth/login', asyncRoute(async (req, res) => {
-  const email = clean(req.body.email)?.toLowerCase()
-  const user = await User.findOne({ email })
+  const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : ''
+  const password = typeof req.body.password === 'string' ? req.body.password : ''
+  const user = email ? await User.findOne({ email }) : null
+  const passwordMatches = await bcrypt.compare(password, user?.passwordHash || dummyPasswordHash)
 
-  if (!user || !user.active || !(await bcrypt.compare(req.body.password || '', user.passwordHash))) {
+  if (!user || !user.active || !passwordMatches) {
     return res.status(401).json({ message: 'Invalid email or password' })
   }
 
   const token = signToken(user)
-  res.json({ token, user: publicUser(user) })
+  setSessionCookie(res, token)
+  res.json({ user: publicUser(user) })
 
   // Login history is useful but must never turn valid credentials into a 500.
   void User.updateOne({ _id: user._id }, { $set: { lastLoginAt: new Date() } })
     .catch((error) => console.error(`[request ${req.id || 'unknown'}] Last-login update failed:`, error.message))
 }))
 
-router.get('/auth/me', requireAuth, (req, res) => res.json({ user: publicUser(req.user) }))
+router.get('/auth/me', requireAuth, (req, res) => {
+  setSessionCookie(res, signToken(req.user))
+  res.json({ user: publicUser(req.user) })
+})
+
+router.post('/auth/logout', (_req, res) => {
+  clearSessionCookie(res)
+  res.json({ loggedOut: true })
+})
 
 router.get('/users', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (_req, res) => {
   const users = await User.find().select('-passwordHash').sort({ createdAt: -1 })
@@ -258,17 +388,22 @@ router.get('/users', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(asy
 
 router.post('/users', requireAuth, allowRoles('OWNER'), asyncRoute(async (req, res) => {
   const { name, email, password, role = 'CASHIER' } = req.body
-  if (!name || !email || !password || password.length < 8) {
+  const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : ''
+  const normalizedRole = String(role || '').toUpperCase()
+  if (!name || !normalizedEmail || typeof password !== 'string' || password.length < 8) {
     return res.status(400).json({ message: 'Valid name, email and password are required' })
+  }
+  if (!['OWNER', 'MANAGER', 'CASHIER', 'STOCK'].includes(normalizedRole)) {
+    return res.status(400).json({ message: 'Select a valid staff role' })
   }
 
   const user = await User.create({
     name: clean(name),
-    email: clean(email).toLowerCase(),
+    email: normalizedEmail,
     passwordHash: await bcrypt.hash(password, 12),
-    role,
+    role: normalizedRole,
   })
-  await writeActivity(req, { action: 'CREATE', entity: 'USER', entityId: user._id, details: { role } })
+  await writeActivity(req, { action: 'CREATE', entity: 'USER', entityId: user._id, details: { role: normalizedRole } })
   res.status(201).json({ user: publicUser(user) })
 }))
 
@@ -294,8 +429,8 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
   ])
 
   const [recentPawns, recentTrades, inventoryMix, monthPerformance, monthlyPerformance, dailyPerformance] = await Promise.all([
-    Pawn.find().populate('customer', 'name phone nationalIdNumber').sort({ createdAt: -1 }).limit(6),
-    Trade.find().populate('customer', 'name phone').populate('supplier', 'name phone nationalIdNumber').sort({ createdAt: -1 }).limit(6),
+    Pawn.find().populate('customer', 'name phone').sort({ createdAt: -1 }).limit(6),
+    Trade.find().populate('customer', 'name phone').populate('supplier', 'name phone').sort({ createdAt: -1 }).limit(6),
     InventoryItem.aggregate([
       { $match: { status: { $ne: 'ARCHIVED' } } },
       { $group: { _id: '$category', count: { $sum: '$quantity' }, value: { $sum: { $multiply: ['$quantity', '$buyPrice'] } } } },
@@ -346,28 +481,42 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
   })
 }))
 
-router.get('/customers', requireAuth, asyncRoute(async (req, res) => {
-  const q = clean(req.query.q || '')
+router.get('/customers', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
+  const q = searchText(req.query.q)
   const filter = req.query.includeInactive === 'true' ? {} : { active: { $ne: false } }
-  if (q) filter.$or = [{ name: { $regex: q, $options: 'i' } }, { phone: { $regex: q, $options: 'i' } }, { nationalIdNumber: { $regex: q, $options: 'i' } }]
-  const customers = await Customer.find(filter).sort({ createdAt: -1 }).limit(250)
+  if (q) {
+    const pattern = new RegExp(escapeRegex(q), 'i')
+    filter.$or = [{ name: pattern }, { phone: pattern }, { nationalIdNumber: pattern }]
+  }
+  const query = Customer.find(filter).sort({ createdAt: -1 }).limit(250)
+  if (req.user.role === 'CASHIER') query.select('name phone active createdAt updatedAt')
+  const customers = await query
   res.json({ customers })
 }))
 
-router.post('/customers', requireAuth, asyncRoute(async (req, res) => {
+router.post('/customers', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
   const { name, phone, nationalIdNumber, nationalIdFrontUrl, nationalIdBackUrl, address, notes } = req.body
   if (!name || !phone) return res.status(400).json({ message: 'Customer name and phone are required' })
+  const canManageIdentity = ['OWNER', 'MANAGER'].includes(req.user.role)
 
   const customer = await Customer.create({
-    name: clean(name), phone: clean(phone), nationalIdNumber: clean(nationalIdNumber),
-    nationalIdFrontUrl, nationalIdBackUrl, address: clean(address), notes: clean(notes), createdBy: req.user._id,
+    name: clean(name),
+    phone: clean(phone),
+    nationalIdNumber: canManageIdentity ? clean(nationalIdNumber) : undefined,
+    nationalIdFrontUrl: canManageIdentity ? clean(nationalIdFrontUrl) : undefined,
+    nationalIdBackUrl: canManageIdentity ? clean(nationalIdBackUrl) : undefined,
+    address: canManageIdentity ? clean(address) : undefined,
+    notes: canManageIdentity ? clean(notes) : undefined,
+    createdBy: req.user._id,
   })
   await writeActivity(req, { action: 'CREATE', entity: 'CUSTOMER', entityId: customer._id })
   res.status(201).json({ customer })
 }))
 
-router.patch('/customers/:id', requireAuth, asyncRoute(async (req, res) => {
-  const allowed = ['name', 'phone', 'nationalIdNumber', 'nationalIdFrontUrl', 'nationalIdBackUrl', 'address', 'notes', 'active']
+router.patch('/customers/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
+  const allowed = req.user.role === 'CASHIER'
+    ? ['name', 'phone']
+    : ['name', 'phone', 'nationalIdNumber', 'nationalIdFrontUrl', 'nationalIdBackUrl', 'address', 'notes', 'active']
   const update = Object.fromEntries(Object.entries(req.body).filter(([key]) => allowed.includes(key)))
   const customer = await Customer.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true })
   if (!customer) return res.status(404).json({ message: 'Customer not found' })
@@ -375,7 +524,7 @@ router.patch('/customers/:id', requireAuth, asyncRoute(async (req, res) => {
   res.json({ customer })
 }))
 
-router.delete('/customers/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
+router.delete('/customers/:id', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
   const [pawnExists, tradeExists] = await Promise.all([
     Pawn.exists({ customer: req.params.id }),
     Trade.exists({ customer: req.params.id }),
@@ -394,8 +543,8 @@ router.delete('/customers/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'STO
   res.json({ message: 'Customer deleted' })
 }))
 
-router.get('/suppliers', requireAuth, asyncRoute(async (req, res) => {
-  const q = clean(req.query.q || '')
+router.get('/suppliers', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
+  const q = searchText(req.query.q)
   const filter = req.query.includeInactive === 'true' ? {} : { active: { $ne: false } }
   if (q) filter.$or = [
     { name: { $regex: escapeRegex(q), $options: 'i' } },
@@ -406,7 +555,7 @@ router.get('/suppliers', requireAuth, asyncRoute(async (req, res) => {
   res.json({ suppliers })
 }))
 
-router.post('/suppliers', requireAuth, asyncRoute(async (req, res) => {
+router.post('/suppliers', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
   const name = clean(req.body.name)
   if (!name) return res.status(400).json({ message: 'Supplier name is required' })
   const supplier = await Supplier.create({
@@ -436,7 +585,7 @@ router.patch('/suppliers/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOC
   res.json({ supplier })
 }))
 
-router.delete('/suppliers/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
+router.delete('/suppliers/:id', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
   const supplier = await Supplier.findByIdAndDelete(req.params.id)
   if (!supplier) return res.status(404).json({ message: 'Supplier not found' })
   await writeActivity(req, {
@@ -449,17 +598,18 @@ router.delete('/suppliers/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'STO
 }))
 
 router.get('/inventory', requireAuth, asyncRoute(async (req, res) => {
-  const q = clean(req.query.q || '')
+  const q = searchText(req.query.q)
   const filter = {}
   if (req.query.category) filter.category = req.query.category
   if (req.query.status) filter.status = req.query.status
   if (req.query.lowStock === 'true') filter.$expr = { $lte: ['$quantity', '$reorderLevel'] }
-  if (q) filter.$or = [
-    { name: { $regex: q, $options: 'i' } }, { brand: { $regex: q, $options: 'i' } },
-    { model: { $regex: q, $options: 'i' } }, { sku: { $regex: q, $options: 'i' } },
-    { barcode: { $regex: q, $options: 'i' } },
-    { imei1: { $regex: q, $options: 'i' } }, { serialNumber: { $regex: q, $options: 'i' } },
-  ]
+  if (q) {
+    const pattern = new RegExp(escapeRegex(q), 'i')
+    filter.$or = [
+      { name: pattern }, { brand: pattern }, { model: pattern }, { sku: pattern },
+      { barcode: pattern }, { imei1: pattern }, { serialNumber: pattern },
+    ]
+  }
   const items = await InventoryItem.find(filter).sort({ createdAt: -1 }).limit(500)
   res.json({ items })
 }))
@@ -516,9 +666,11 @@ router.post('/inventory', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), 
 }))
 
 router.patch('/inventory/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
-  const forbidden = ['_id', 'createdAt', 'updatedAt', 'createdBy']
-  const update = Object.fromEntries(Object.entries(req.body).filter(([key]) => !forbidden.includes(key)))
-  if (update.imageUrl !== undefined) update.imageUrl = clean(update.imageUrl)
+  const allowed = ['sellPrice', 'minimumSellPrice']
+  const update = Object.fromEntries(Object.entries(req.body).filter(([key]) => allowed.includes(key)))
+  if (Object.keys(update).length === 0) {
+    return res.status(400).json({ message: 'Use the stock adjustment, photo, purchase, sale, or pawn workflow for this change' })
+  }
   const current = await InventoryItem.findById(req.params.id).select('sellPrice minimumSellPrice')
   if (!current) return res.status(404).json({ message: 'Inventory item not found' })
   const nextSellPrice = update.sellPrice === undefined ? current.sellPrice : Number(update.sellPrice)
@@ -672,18 +824,19 @@ router.get('/exchange-rates', requireAuth, asyncRoute(async (_req, res) => {
   }
 }))
 
-router.get('/pawns', requireAuth, asyncRoute(async (req, res) => {
+router.get('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
   await refreshPawnStatuses()
   const filter = req.query.status ? { status: req.query.status } : {}
+  const customerFields = req.user.role === 'CASHIER' ? 'name phone' : 'name phone nationalIdNumber'
   const pawns = await Pawn.find(filter)
-    .populate('customer', 'name phone nationalIdNumber')
+    .populate('customer', customerFields)
     .populate('inventoryItem', 'sku name imei1 status')
     .sort({ createdAt: -1 })
     .limit(300)
   res.json({ pawns })
 }))
 
-router.post('/pawns', requireAuth, asyncRoute(async (req, res) => {
+router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
   const { customer, customerDetails, itemSnapshot, estimatedValue, pawnPercentage, principal, interestRate, dueDate, identificationVerified, notes, valuationSnapshot } = req.body
   if ((!customer && !customerDetails) || !itemSnapshot?.name || !dueDate) return res.status(400).json({ message: 'Customer, item and due date are required' })
 
@@ -770,7 +923,7 @@ router.post('/pawns', requireAuth, asyncRoute(async (req, res) => {
   res.status(201).json({ pawn: await pawn.populate('customer', 'name phone nationalIdNumber') })
 }))
 
-router.post('/pawns/:id/payment', requireAuth, asyncRoute(async (req, res) => {
+router.post('/pawns/:id/payment', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
   const pawn = await Pawn.findById(req.params.id)
   if (!pawn) return res.status(404).json({ message: 'Pawn contract not found' })
   if (!openPawnStatuses.includes(pawn.status)) return res.status(409).json({ message: 'This pawn contract is closed' })
@@ -779,10 +932,11 @@ router.post('/pawns/:id/payment', requireAuth, asyncRoute(async (req, res) => {
   })
   await pawn.save()
   await writeActivity(req, { action: 'PAYMENT', entity: 'PAWN', entityId: pawn._id, details: allocation })
-  res.json({ pawn: await pawn.populate('customer', 'name phone nationalIdNumber') })
+  const customerFields = req.user.role === 'CASHIER' ? 'name phone' : 'name phone nationalIdNumber'
+  res.json({ pawn: await pawn.populate('customer', customerFields) })
 }))
 
-router.post('/pawns/:id/renew', requireAuth, asyncRoute(async (req, res) => {
+router.post('/pawns/:id/renew', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
   const pawn = await Pawn.findById(req.params.id)
   if (!pawn) return res.status(404).json({ message: 'Pawn contract not found' })
   if (!openPawnStatuses.includes(pawn.status)) return res.status(409).json({ message: 'This pawn contract is closed' })
@@ -811,10 +965,11 @@ router.post('/pawns/:id/renew', requireAuth, asyncRoute(async (req, res) => {
   if (paymentAmount > 0 && pawn.payments.length) pawn.payments[pawn.payments.length - 1].balanceAfter = pawnAmountDue(pawn)
   await pawn.save()
   await writeActivity(req, { action: 'RENEW', entity: 'PAWN', entityId: pawn._id, details: { ...allocation, newDueDate, nextInterest } })
-  res.json({ pawn: await pawn.populate('customer', 'name phone nationalIdNumber') })
+  const customerFields = req.user.role === 'CASHIER' ? 'name phone' : 'name phone nationalIdNumber'
+  res.json({ pawn: await pawn.populate('customer', customerFields) })
 }))
 
-router.post('/pawns/:id/redeem', requireAuth, asyncRoute(async (req, res) => {
+router.post('/pawns/:id/redeem', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
   let pawn
   let allocation
   await mongoose.connection.transaction(async (session) => {
@@ -833,7 +988,8 @@ router.post('/pawns/:id/redeem', requireAuth, asyncRoute(async (req, res) => {
     if (pawn.inventoryItem) await InventoryItem.findByIdAndUpdate(pawn.inventoryItem, { status: 'ARCHIVED', quantity: 0 }, { session })
   })
   await writeActivity(req, { action: 'REDEEM', entity: 'PAWN', entityId: pawn._id, details: allocation })
-  res.json({ pawn: await pawn.populate('customer', 'name phone nationalIdNumber') })
+  const customerFields = req.user.role === 'CASHIER' ? 'name phone' : 'name phone nationalIdNumber'
+  res.json({ pawn: await pawn.populate('customer', customerFields) })
 }))
 
 router.post('/pawns/:id/forfeit', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
@@ -1113,17 +1269,26 @@ async function createMultiDevicePurchase(req, res) {
     action: 'CREATE', entity: 'TRADE', entityId: trade._id,
     details: { tradeNo: trade.tradeNo, type: 'BUY', itemCount: items.length, unitCount: normalizedItems.reduce((sum, item) => sum + item.quantity, 0), currency, total: transactionTotal },
   })
-  await trade.populate('supplier', 'name phone nationalIdNumber')
-  await trade.populate('customer', 'name phone nationalIdNumber')
+  const identityFields = ['OWNER', 'MANAGER'].includes(req.user.role) ? 'name phone nationalIdNumber' : 'name phone'
+  await trade.populate('supplier', identityFields)
+  await trade.populate('customer', identityFields)
   await trade.populate('items.inventoryItem', 'sku barcode name category brand model imei1 storage ram color condition batteryHealth carrierLock accessoriesIncluded compatibleModels oemQuality imageUrl quantity buyPrice sellPrice status')
   res.status(201).json({ trade })
 }
 
 router.get('/trades', requireAuth, asyncRoute(async (req, res) => {
-  const filter = req.query.type ? { type: req.query.type } : {}
+  const requestedType = String(req.query.type || '').toUpperCase()
+  const filter = req.user.role === 'STOCK'
+    ? { type: 'BUY' }
+    : req.user.role === 'CASHIER'
+      ? { type: 'SELL' }
+      : ['BUY', 'SELL'].includes(requestedType)
+        ? { type: requestedType }
+        : {}
+  const supplierFields = ['OWNER', 'MANAGER'].includes(req.user.role) ? 'name phone nationalIdNumber' : 'name phone'
   const trades = await Trade.find(filter)
     .populate('customer', 'name phone')
-    .populate('supplier', 'name phone nationalIdNumber')
+    .populate('supplier', supplierFields)
     .sort({ createdAt: -1 })
     .limit(300)
   res.json({ trades })
@@ -1139,7 +1304,7 @@ router.get('/payway/config', requireAuth, asyncRoute(async (_req, res) => {
   })
 }))
 
-router.post('/payway/khqr', requireAuth, asyncRoute(async (req, res) => {
+router.post('/payway/khqr', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
   const {
     inventoryItem,
     customer,
@@ -1149,20 +1314,24 @@ router.post('/payway/khqr', requireAuth, asyncRoute(async (req, res) => {
   } = req.body
   const item = await InventoryItem.findById(inventoryItem)
   const quantity = item?.category === 'PHONE' ? 1 : Number(rawQuantity)
-  const unitPrice = Number(rawUnitPrice ?? item?.sellPrice)
-  const discount = Number(rawDiscount)
 
   if (!item || item.status !== 'IN_STOCK' || item.quantity < quantity) {
     throw requestError(409, 'The selected item is no longer available')
   }
   if (!Number.isInteger(quantity) || quantity < 1) throw requestError(400, 'Quantity must be a whole number greater than zero')
-  if (!Number.isFinite(unitPrice) || unitPrice < 0) throw requestError(400, 'Selling price is invalid')
-  if (!Number.isFinite(discount) || discount < 0) throw requestError(400, 'Discount is invalid')
+  const { unitPrice, minimumUnitPrice } = salePricing(item, req.user.role)
+  if (rawUnitPrice !== undefined && Math.abs(Number(rawUnitPrice) - unitPrice) > 0.001) {
+    throw requestError(409, 'The selling price changed. Refresh the product and try again')
+  }
 
-  const amount = roundMoney(Math.max(0, quantity * unitPrice - discount))
+  const subtotal = roundMoney(quantity * unitPrice)
+  const discount = saleDiscount(rawDiscount, subtotal, roundMoney(quantity * minimumUnitPrice))
+  const amount = roundMoney(subtotal - discount)
   if (amount < 0.01) throw requestError(400, 'KHQR total must be at least $0.01')
 
-  const customerRecord = customer ? await Customer.findById(customer) : null
+  if (customer && !mongoose.isValidObjectId(customer)) throw requestError(400, 'Customer is invalid')
+  const customerRecord = customer ? await Customer.findOne({ _id: customer, active: { $ne: false } }) : null
+  if (customer && !customerRecord) throw requestError(404, 'Customer was not found')
   const names = String(customerRecord?.name || 'Walk-in customer').trim().split(/\s+/)
   const transactionId = makePaywayTransactionId()
   const result = await generateKhqr({
@@ -1177,6 +1346,19 @@ router.post('/payway/khqr', requireAuth, asyncRoute(async (req, res) => {
     items: [{ name: item.name, quantity, price: unitPrice }],
   })
   const config = paywayConfiguration()
+  const expiresAt = new Date(Date.now() + config.qrLifetimeMinutes * 60_000)
+  await PaywayIntent.create({
+    transactionId,
+    createdBy: req.user._id,
+    inventoryItem: item._id,
+    customer: customerRecord?._id,
+    quantity,
+    unitPrice,
+    discount,
+    amount,
+    currency: 'USD',
+    expiresAt,
+  })
 
   res.status(201).json({
     transactionId,
@@ -1185,16 +1367,27 @@ router.post('/payway/khqr', requireAuth, asyncRoute(async (req, res) => {
     qrImage: result.qrImage,
     qrString: result.qrString,
     deeplink: result.abapay_deeplink,
-    expiresAt: new Date(Date.now() + config.qrLifetimeMinutes * 60_000).toISOString(),
+    expiresAt: expiresAt.toISOString(),
     environment: config.environment,
   })
 }))
 
-router.get('/payway/khqr/:transactionId/status', requireAuth, asyncRoute(async (req, res) => {
-  const payload = await checkPaywayTransaction(req.params.transactionId)
+router.get('/payway/khqr/:transactionId/status', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
+  const intent = await authorizedPaywayIntent(req, req.params.transactionId)
+  if (intent.status === 'COMPLETED') {
+    return res.json({ approved: true, paymentStatus: 'APPROVED', amount: intent.amount, currency: intent.currency })
+  }
+  if (intent.status === 'CANCELLED' || intent.expiresAt <= new Date()) {
+    if (intent.status !== 'CANCELLED') await PaywayIntent.updateOne({ _id: intent._id }, { $set: { status: 'EXPIRED' } })
+    return res.json({ approved: false, paymentStatus: intent.status === 'CANCELLED' ? 'CANCELLED' : 'EXPIRED', amount: intent.amount, currency: intent.currency })
+  }
+  const payload = await checkPaywayTransaction(intent.transactionId)
   const data = payload?.data || {}
   const approved = Number(data.payment_status_code) === 0
     && String(data.payment_status || '').toUpperCase() === 'APPROVED'
+  if (approved && intent.status !== 'APPROVED') {
+    await PaywayIntent.updateOne({ _id: intent._id, status: 'PENDING' }, { $set: { status: 'APPROVED' } })
+  }
   res.json({
     approved,
     paymentStatus: data.payment_status || payload?.status?.message || 'PENDING',
@@ -1204,12 +1397,15 @@ router.get('/payway/khqr/:transactionId/status', requireAuth, asyncRoute(async (
   })
 }))
 
-router.post('/payway/khqr/:transactionId/close', requireAuth, asyncRoute(async (req, res) => {
-  await closePaywayTransaction(req.params.transactionId)
+router.post('/payway/khqr/:transactionId/close', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
+  const intent = await authorizedPaywayIntent(req, req.params.transactionId)
+  if (intent.status === 'COMPLETED') throw requestError(409, 'A completed payment request cannot be cancelled')
+  await closePaywayTransaction(intent.transactionId)
+  await PaywayIntent.updateOne({ _id: intent._id }, { $set: { status: 'CANCELLED' } })
   res.json({ closed: true })
 }))
 
-router.post('/trades', requireAuth, asyncRoute(async (req, res) => {
+router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res) => {
   if (req.body.type === 'BUY' && (Array.isArray(req.body.items) || Array.isArray(req.body.devices))) return createMultiDevicePurchase(req, res)
   const {
     type,
@@ -1221,52 +1417,31 @@ router.post('/trades', requireAuth, asyncRoute(async (req, res) => {
     paywayTransactionId,
     notes,
   } = req.body
-  if (!['BUY', 'SELL'].includes(type) || items.length === 0) return res.status(400).json({ message: 'Trade type and items are required' })
+  if (type !== 'SELL') throw requestError(400, 'Use the purchase workflow to buy inventory')
   if (!['CASH', 'KHQR', 'BANK', 'CARD', 'OTHER'].includes(paymentMethod)) {
     throw requestError(400, 'Invalid payment method')
   }
-  if (paymentMethod === 'KHQR' && type !== 'SELL') throw requestError(400, 'KHQR is only available for sales')
   if (paymentMethod === 'KHQR' && !paywayTransactionId) throw requestError(400, 'PayWay transaction ID is required')
   if (paywayTransactionId && await Trade.exists({ paywayTransactionId })) {
     throw requestError(409, 'This KHQR payment has already been recorded')
   }
-
-  const tradeItems = []
-  const inventoryUpdates = []
-  for (const line of items) {
-    const quantity = Number(line.quantity || 1)
-    if (type === 'SELL') {
-      const item = await InventoryItem.findById(line.inventoryItem)
-      if (!item || item.status !== 'IN_STOCK' || item.quantity < quantity) {
-        return res.status(409).json({ message: `${line.name || 'Item'} does not have enough available stock` })
-      }
-      inventoryUpdates.push({ item, quantity })
-      tradeItems.push({ inventoryItem: item._id, name: item.name, quantity, unitPrice: Number(line.unitPrice ?? item.sellPrice), costPrice: item.buyPrice })
-    } else {
-      let item
-      if (line.inventoryItem) {
-        item = await InventoryItem.findById(line.inventoryItem)
-        if (!item) return res.status(404).json({ message: 'Inventory item not found' })
-        item.quantity += quantity
-        item.status = 'IN_STOCK'
-        await item.save()
-      } else {
-        item = await InventoryItem.create({
-          sku: clean(line.sku || makeCode('BUY')), category: line.category || 'PHONE',
-          barcode: clean(line.barcode || makeCode('PF')),
-          name: line.name, brand: line.brand, model: line.model, imei1: line.imei1 || undefined,
-          condition: line.condition || 'GOOD', quantity, buyPrice: Number(line.unitPrice || 0),
-          sellPrice: Number(line.sellPrice || 0), status: 'IN_STOCK', source: 'CUSTOMER', createdBy: req.user._id,
-        })
-      }
-      tradeItems.push({ inventoryItem: item._id, name: item.name, quantity, unitPrice: Number(line.unitPrice || item.buyPrice), costPrice: item.buyPrice })
-    }
-  }
-
-  const subtotal = tradeItems.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0)
-  const total = Math.max(0, subtotal - Number(discount || 0))
+  const initialQuote = await buildSaleQuote(items, undefined, req.user.role)
+  const verifiedDiscount = saleDiscount(discount, initialQuote.subtotal, initialQuote.minimumTotal)
+  const total = roundMoney(initialQuote.subtotal - verifiedDiscount)
+  if (total < 0.01) throw requestError(400, 'Sale total must be at least $0.01')
+  let paymentIntent
   if (paymentMethod === 'KHQR') {
-    const payment = await checkPaywayTransaction(paywayTransactionId)
+    paymentIntent = await authorizedPaywayIntent(req, paywayTransactionId)
+    if (paymentIntent.status === 'COMPLETED' || paymentIntent.status === 'CANCELLED' || paymentIntent.expiresAt <= new Date()) {
+      throw requestError(409, 'This KHQR payment request is no longer available')
+    }
+    if (items.length !== 1
+      || String(paymentIntent.inventoryItem) !== String(items[0].inventoryItem)
+      || Number(paymentIntent.quantity) !== Number(items[0].quantity || 1)
+      || Math.abs(Number(paymentIntent.amount) - total) > 0.001) {
+      throw requestError(409, 'KHQR payment request does not match this sale')
+    }
+    const payment = await checkPaywayTransaction(paymentIntent.transactionId)
     const paymentData = payment?.data || {}
     const approved = Number(paymentData.payment_status_code) === 0
       && String(paymentData.payment_status || '').toUpperCase() === 'APPROVED'
@@ -1278,26 +1453,67 @@ router.post('/trades', requireAuth, asyncRoute(async (req, res) => {
     }
   }
   const paid = paymentMethod === 'KHQR' ? total : amountPaid === undefined ? total : Number(amountPaid)
-
-  for (const { item, quantity } of inventoryUpdates) {
-    item.quantity -= quantity
-    if (item.quantity === 0) item.status = item.category === 'PHONE' ? 'SOLD' : 'ARCHIVED'
-    await item.save()
+  if (!Number.isFinite(paid) || paid < 0 || paid > total + 0.001) {
+    throw requestError(400, 'Amount paid must be between zero and the sale total')
   }
 
-  const trade = await Trade.create({
-    tradeNo: makeCode(type === 'SELL' ? 'SL' : 'BY'), type, customer: customer || undefined,
-    items: tradeItems, subtotal, discount: Number(discount || 0), total,
-    amountPaid: paid, balance: Math.max(0, total - paid), paymentMethod,
-    paywayTransactionId: paywayTransactionId || undefined,
-    notes, createdBy: req.user._id,
-  })
+  const session = await mongoose.startSession()
+  let trade
+  try {
+    await session.withTransaction(async () => {
+      if (customer) {
+        if (!mongoose.isValidObjectId(customer)) throw requestError(400, 'Customer is invalid')
+        const customerExists = await Customer.exists({ _id: customer, active: { $ne: false } }).session(session)
+        if (!customerExists) throw requestError(404, 'Customer was not found')
+      }
+      if (paywayTransactionId && await Trade.exists({ paywayTransactionId }).session(session)) {
+        throw requestError(409, 'This KHQR payment has already been recorded')
+      }
+
+      const quote = await buildSaleQuote(items, session, req.user.role)
+      const currentDiscount = saleDiscount(discount, quote.subtotal, quote.minimumTotal)
+      const currentTotal = roundMoney(quote.subtotal - currentDiscount)
+      if (Math.abs(currentTotal - total) > 0.001) throw requestError(409, 'Sale pricing changed. Refresh and try again')
+
+      for (const { item, quantity } of quote.inventoryUpdates) {
+        item.quantity -= quantity
+        if (item.quantity === 0) item.status = item.category === 'PHONE' ? 'SOLD' : 'ARCHIVED'
+        await item.save({ session })
+      }
+
+      ;[trade] = await Trade.create([{
+        tradeNo: makeCode('SL'),
+        type: 'SELL',
+        customer: customer || undefined,
+        items: quote.tradeItems,
+        subtotal: quote.subtotal,
+        discount: currentDiscount,
+        total: currentTotal,
+        amountPaid: roundMoney(paid),
+        balance: roundMoney(Math.max(0, currentTotal - paid)),
+        paymentMethod,
+        paywayTransactionId: paywayTransactionId || undefined,
+        notes: clean(notes),
+        createdBy: req.user._id,
+      }], { session })
+      if (paymentIntent) {
+        const completedIntent = await PaywayIntent.findOneAndUpdate(
+          { _id: paymentIntent._id, status: { $in: ['PENDING', 'APPROVED'] } },
+          { $set: { status: 'COMPLETED' } },
+          { new: true, session },
+        )
+        if (!completedIntent) throw requestError(409, 'This KHQR payment request was already finalized')
+      }
+    })
+  } finally {
+    await session.endSession()
+  }
   if (paymentMethod === 'KHQR') {
     await closePaywayTransaction(paywayTransactionId).catch((error) => {
       console.error(`Unable to close completed PayWay transaction ${paywayTransactionId}:`, error.message)
     })
   }
-  await writeActivity(req, { action: 'CREATE', entity: 'TRADE', entityId: trade._id, details: { tradeNo: trade.tradeNo, type, total } })
+  await writeActivity(req, { action: 'CREATE', entity: 'TRADE', entityId: trade._id, details: { tradeNo: trade.tradeNo, type: 'SELL', total } })
   await trade.populate('customer', 'name phone')
   await trade.populate('items.inventoryItem', 'sku barcode name category brand model imei1 condition quantity buyPrice sellPrice status')
   res.status(201).json({ trade })

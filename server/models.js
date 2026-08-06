@@ -259,6 +259,23 @@ const tradeSchema = new Schema(
   baseOptions,
 )
 
+const paywayIntentSchema = new Schema(
+  {
+    transactionId: { type: String, required: true, unique: true, index: true },
+    createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    inventoryItem: { type: Schema.Types.ObjectId, ref: 'InventoryItem', required: true },
+    customer: { type: Schema.Types.ObjectId, ref: 'Customer' },
+    quantity: { type: Number, min: 1, required: true },
+    unitPrice: { type: Number, min: 0, required: true },
+    discount: { type: Number, min: 0, default: 0 },
+    amount: { type: Number, min: 0.01, required: true },
+    currency: { type: String, enum: ['USD'], default: 'USD' },
+    expiresAt: { type: Date, required: true, index: true },
+    status: { type: String, enum: ['PENDING', 'APPROVED', 'COMPLETED', 'CANCELLED', 'EXPIRED'], default: 'PENDING', index: true },
+  },
+  baseOptions,
+)
+
 const activityLogSchema = new Schema(
   {
     user: { type: Schema.Types.ObjectId, ref: 'User' },
@@ -277,4 +294,5 @@ export const Supplier = model('Supplier', supplierSchema)
 export const InventoryItem = model('InventoryItem', inventoryItemSchema)
 export const Pawn = model('Pawn', pawnSchema)
 export const Trade = model('Trade', tradeSchema)
+export const PaywayIntent = model('PaywayIntent', paywayIntentSchema)
 export const ActivityLog = model('ActivityLog', activityLogSchema)
