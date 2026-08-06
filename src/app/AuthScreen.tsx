@@ -7,7 +7,7 @@ function ErrorNotice({ message }: { message: string }) {
   return <div className="error-notice"><AlertTriangle size={16} /> {message}</div>
 }
 
-function StardustBackground() {
+function StardustBackground({ theme }: { theme: 'dark' | 'light' }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -54,7 +54,7 @@ function StardustBackground() {
         return
       }
       lastFrame = time
-      context.fillStyle = '#000'
+      context.fillStyle = theme === 'light' ? '#eaf1eb' : '#000'
       context.fillRect(0, 0, window.innerWidth, window.innerHeight)
       for (const point of points) {
         if (!reducedMotion && point.blinking) {
@@ -62,7 +62,9 @@ function StardustBackground() {
           if (point.opacity >= 0.9) point.direction = -1
           if (point.opacity <= 0.1) point.direction = 1
         }
-        context.fillStyle = `rgba(255,255,255,${point.opacity})`
+        context.fillStyle = theme === 'light'
+          ? `rgba(31,73,48,${point.opacity * 0.34})`
+          : `rgba(255,255,255,${point.opacity})`
         context.fillRect(point.x, point.y, 2, 2)
       }
       if (!reducedMotion) frame = window.requestAnimationFrame(draw)
@@ -75,12 +77,18 @@ function StardustBackground() {
       window.removeEventListener('resize', resize)
       window.cancelAnimationFrame(frame)
     }
-  }, [])
+  }, [theme])
 
   return <canvas ref={canvasRef} className="auth-stardust" aria-hidden="true" />
 }
 
-export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: SessionUser) => void }) {
+export default function AuthScreen({
+  onAuthenticated,
+  theme,
+}: {
+  onAuthenticated: (user: SessionUser) => void
+  theme: 'dark' | 'light'
+}) {
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -118,7 +126,7 @@ export default function AuthScreen({ onAuthenticated }: { onAuthenticated: (user
 
   return (
     <main className="auth-page">
-      <StardustBackground />
+      <StardustBackground theme={theme} />
       <section className="auth-shell">
         <motion.div
           className="auth-brand"

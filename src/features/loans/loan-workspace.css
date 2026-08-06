@@ -100,6 +100,16 @@
   padding: 0 11px;
 }
 
+.loan-filter-row > select option {
+  color: var(--text-color, #f8fafc);
+  background: var(--surface-color, #151e34);
+}
+
+:root[data-theme='light'] .loan-filter-row > select {
+  color-scheme: light;
+  background: var(--surface-solid);
+}
+
 .loan-borrower-cell {
   display: flex;
   align-items: center;

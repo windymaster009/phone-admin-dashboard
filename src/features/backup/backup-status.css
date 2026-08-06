@@ -257,6 +257,34 @@
   font-size: 0.82rem;
 }
 
+:root[data-theme='light'] .backup-status-host {
+  color: #1f7a4b !important;
+  background: rgba(35, 139, 87, 0.11) !important;
+}
+
+:root[data-theme='light'] .backup-status-content:not(:disabled):hover {
+  background: rgba(35, 139, 87, 0.09);
+}
+
+:root[data-theme='light'] .backup-status-icon,
+:root[data-theme='light'] .backup-manager-row-icon {
+  color: #167348;
+  background: rgba(35, 139, 87, 0.15);
+}
+
+:root[data-theme='light'] .backup-manager-warning {
+  color: #704600;
+  background: rgba(245, 158, 11, 0.13);
+  border-color: rgba(180, 105, 0, 0.32);
+}
+
+:root[data-theme='light'] .backup-manager-summary .primary-button {
+  color: #fff;
+  border-color: var(--primary-strong);
+  background: linear-gradient(105deg, var(--primary-strong), var(--primary));
+  box-shadow: 0 9px 24px rgba(35, 115, 72, 0.18);
+}
+
 @keyframes backup-spin {
   to { transform: rotate(360deg); }
 }

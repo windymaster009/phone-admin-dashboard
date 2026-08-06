@@ -451,6 +451,52 @@ body.operation-modal-open {
   opacity: 0.64;
 }
 
+:root[data-theme='light'] .operation-modal-backdrop {
+  background: rgba(23, 37, 29, 0.48);
+}
+
+:root[data-theme='light'] .operation-modal {
+  box-shadow: 0 32px 90px rgba(23, 37, 29, 0.24);
+}
+
+:root[data-theme='light'] .operation-modal-header {
+  background: linear-gradient(120deg, rgba(47, 143, 91, 0.14), rgba(38, 143, 137, 0.06));
+}
+
+:root[data-theme='light'] .operation-modal-icon,
+:root[data-theme='light'] .imei-scanner-dialog > header > span,
+:root[data-theme='light'] .stock-photo-preview {
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+:root[data-theme='light'] .operation-form label small,
+:root[data-theme='light'] .operation-form .optional-marker,
+:root[data-theme='light'] .device-unit-input > span,
+:root[data-theme='light'] .imei-scanner-dialog header small,
+:root[data-theme='light'] .imei-scanner-dialog > form > div > svg {
+  color: var(--primary);
+}
+
+:root[data-theme='light'] .operation-form input:focus,
+:root[data-theme='light'] .operation-form select:focus,
+:root[data-theme='light'] .operation-form textarea:focus,
+:root[data-theme='light'] .device-unit-input:focus-within,
+:root[data-theme='light'] .imei-scanner-dialog > form input:focus {
+  border-color: color-mix(in srgb, var(--primary) 72%, transparent);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+:root[data-theme='light'] .imei-scanner-dialog > form input {
+  background: var(--surface-solid);
+}
+
+:root[data-theme='light'] .operation-category-tabs button.active {
+  border-color: color-mix(in srgb, var(--primary) 62%, transparent);
+  background: linear-gradient(105deg, var(--primary-strong), var(--primary));
+  box-shadow: 0 10px 24px rgba(35, 115, 72, 0.18);
+}
+
 .operation-modal-purchase,
 .operation-modal-pawn { width: min(1080px, 100%); }
 .operation-modal-sale { width: min(920px, 100%); }

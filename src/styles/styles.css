@@ -1,16 +1,70 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@600;700;800&display=swap');
 
-:root {
+:root,
+:root[data-theme='dark'] {
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #e8ecf6;
-  background: #0b1020;
+  --bg: #0b1020;
+  --bg-soft: #10172a;
+  --sidebar: #0d1425;
+  --surface: rgba(20, 29, 51, 0.84);
+  --surface-solid: #151e34;
+  --surface-hover: #1a2540;
+  --border: rgba(255, 255, 255, 0.075);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --text: #f4f6fb;
+  --muted: #8f9bb4;
+  --muted-2: #69748d;
+  --primary: #8b5cf6;
+  --primary-strong: #7c3aed;
+  --primary-soft: rgba(139, 92, 246, 0.14);
+  --blue: #38bdf8;
+  --orange: #fb923c;
+  --rose: #fb7185;
+  --green: #34d399;
+  --surface-color: var(--surface-solid);
+  --text-color: var(--text);
+  --muted-text: var(--muted);
+  --border-color: var(--border);
+  --input-bg: var(--bg-soft);
+  color-scheme: dark;
+  color: var(--text);
+  background: var(--bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
 
+:root[data-theme='light'] {
+  --bg: #eaf1eb;
+  --bg-soft: #e2ebe4;
+  --sidebar: #f3f7f3;
+  --surface: rgba(246, 250, 246, 0.88);
+  --surface-solid: #f5f9f5;
+  --surface-hover: #dce9df;
+  --border: rgba(31, 73, 48, 0.10);
+  --border-strong: rgba(31, 73, 48, 0.17);
+  --text: #17251d;
+  --muted: #5f7467;
+  --muted-2: #829388;
+  --primary: #2f8f5b;
+  --primary-strong: #237348;
+  --primary-soft: rgba(47, 143, 91, 0.12);
+  --blue: #268f89;
+  --orange: #d47a27;
+  --rose: #d9576d;
+  --green: #238b57;
+  --surface-color: var(--surface-solid);
+  --text-color: var(--text);
+  --muted-text: var(--muted);
+  --border-color: var(--border);
+  --input-bg: var(--bg-soft);
+  color-scheme: light;
+  color: var(--text);
+  background: var(--bg);
+}
+
 * { box-sizing: border-box; }
 html, body { width: 100%; min-height: 100%; }
-body { margin: 0; min-width: 320px; min-height: 100vh; overflow-x: hidden; }
+body { margin: 0; min-width: 320px; min-height: 100vh; overflow-x: hidden; color: var(--text); background: var(--bg); }
 button, input, select { font: inherit; }
 button { cursor: pointer; }
 

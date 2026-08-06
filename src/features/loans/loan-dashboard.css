@@ -78,7 +78,17 @@
 
 .loan-dashboard-metric.overdue {
   border-color: rgba(244, 63, 94, 0.26);
-  background: linear-gradient(145deg, rgba(244, 63, 94, 0.09), transparent 58%), var(--card-bg, rgba(15, 23, 42, 0.76));
+  background: linear-gradient(145deg, rgba(244, 63, 94, 0.09), transparent 58%), var(--surface, rgba(15, 23, 42, 0.76));
+}
+
+:root[data-theme='light'] .loan-dashboard-metric.overdue {
+  border-color: rgba(217, 87, 109, 0.24);
+  background: linear-gradient(145deg, rgba(217, 87, 109, 0.10), transparent 58%), var(--surface);
+}
+
+:root[data-theme='light'] .loan-dashboard-metric-icon.rose {
+  color: #c43f59;
+  background: rgba(217, 87, 109, 0.13);
 }
 
 .loan-dashboard-metric-icon {
