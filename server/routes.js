@@ -894,6 +894,7 @@ async function createMultiDevicePurchase(req, res) {
   const categories = ['PHONE', 'TABLET', 'ACCESSORY', 'SPARE_PART', 'OTHER']
   const normalizedItems = items.map((item, index) => {
     const category = categories.includes(item.category) ? item.category : 'PHONE'
+    const existingInventoryItem = clean(item.inventoryItem)
     const serialized = category === 'PHONE'
     const imei = clean(item.imei)?.replace(/[\s-]/g, '')
     const brand = clean(item.brand)
@@ -907,7 +908,10 @@ async function createMultiDevicePurchase(req, res) {
     const label = `Item ${index + 1}`
     let name = clean(item.name)
 
-    if (serialized) {
+    if (existingInventoryItem) {
+      if (!mongoose.isValidObjectId(existingInventoryItem)) throw requestError(400, `${label}: existing inventory product is invalid`)
+      if (!['ACCESSORY', 'SPARE_PART', 'OTHER'].includes(category)) throw requestError(400, `${label}: phones and tablets must be entered as new units`)
+    } else if (serialized) {
       if (!/^\d{15}$/.test(imei || '')) throw requestError(400, `${label}: IMEI must contain exactly 15 digits`)
       if (!brand || !model || !storage || !color) throw requestError(400, `${label}: brand, model, storage, and color are required`)
       name = `${brand} ${model} ${storage}`
@@ -934,7 +938,7 @@ async function createMultiDevicePurchase(req, res) {
       ? item.accessoriesIncluded.filter((value) => ['BOX', 'CHARGER', 'CABLE', 'CASE', 'EARPHONES'].includes(value))
       : []
     return {
-      category, name, sku, quantity, imei, brand, model, storage, color, purchasePrice, batteryHealth,
+      category, name, sku, quantity, imei, brand, model, storage, color, purchasePrice, batteryHealth, existingInventoryItem,
       ram,
       condition: ['NEW', 'LIKE_NEW', 'GOOD', 'FAIR', 'DAMAGED'].includes(item.condition) ? item.condition : 'GOOD',
       carrierLock: ['UNLOCKED', 'LOCKED', 'UNKNOWN'].includes(item.carrierLock) ? item.carrierLock : 'UNKNOWN',
@@ -946,14 +950,16 @@ async function createMultiDevicePurchase(req, res) {
     }
   })
 
-  const phones = normalizedItems.filter((item) => item.category === 'PHONE')
+  const phones = normalizedItems.filter((item) => item.category === 'PHONE' && !item.existingInventoryItem)
   const duplicateImei = phones.find((phone, index) => phones.findIndex((item) => item.imei === phone.imei) !== index)
   if (duplicateImei) throw requestError(409, `IMEI ${duplicateImei.imei} appears more than once in this purchase`)
   if (phones.length) {
     const existingImei = await InventoryItem.findOne({ imei1: { $in: phones.map((phone) => phone.imei) } }).select('imei1')
     if (existingImei) throw requestError(409, `IMEI ${existingImei.imei1} already exists in inventory`)
   }
-  const suppliedSkus = normalizedItems.map((item) => item.sku).filter(Boolean)
+  const existingInventoryIds = normalizedItems.map((item) => item.existingInventoryItem).filter(Boolean)
+  if (new Set(existingInventoryIds).size !== existingInventoryIds.length) throw requestError(409, 'Add each existing product only once per purchase')
+  const suppliedSkus = normalizedItems.filter((item) => !item.existingInventoryItem).map((item) => item.sku).filter(Boolean)
   if (new Set(suppliedSkus).size !== suppliedSkus.length) throw requestError(409, 'The same SKU appears more than once in this purchase')
   if (suppliedSkus.length) {
     const existingSku = await InventoryItem.findOne({ sku: { $in: suppliedSkus } }).select('sku')
@@ -1006,44 +1012,72 @@ async function createMultiDevicePurchase(req, res) {
       }
 
       const source = sellerType.endsWith('SUPPLIER') ? 'SUPPLIER' : 'CUSTOMER'
-      const inventoryDocuments = normalizedItems.map((item) => ({
-        sku: item.sku || makeCode('BUY'),
-        barcode: makeCode('PF'),
-        category: item.category,
-        name: item.name,
-        brand: item.brand,
-        model: item.model,
-        imei1: item.category === 'PHONE' ? item.imei : undefined,
-        storage: item.storage,
-        ram: item.ram,
-        color: item.color,
-        condition: item.condition,
-        batteryHealth: item.category === 'PHONE' ? item.batteryHealth : undefined,
-        carrierLock: item.category === 'PHONE' ? item.carrierLock : 'UNKNOWN',
-        accessoriesIncluded: item.category === 'PHONE' ? item.accessoriesIncluded : [],
-        compatibleModels: item.compatibleModels,
-        oemQuality: item.oemQuality,
-        imageUrl: item.imageUrl,
-        quantity: item.quantity,
-        reorderLevel: item.category === 'PHONE' ? 0 : 2,
-        buyPrice: toUsd(item.purchasePrice),
-        sellPrice: 0,
-        minimumSellPrice: 0,
-        status: 'IN_STOCK',
-        source,
-        notes: item.notes,
-        createdBy: req.user._id,
-      }))
-      const inventoryItems = await InventoryItem.create(inventoryDocuments, { session })
-      const tradeLines = inventoryItems.map((item, index) => ({
-        inventoryItem: item._id,
-        name: item.name,
-        quantity: normalizedItems[index].quantity,
-        unitPrice: toUsd(normalizedItems[index].purchasePrice),
-        costPrice: toUsd(normalizedItems[index].purchasePrice),
-        originalUnitPrice: normalizedItems[index].purchasePrice,
-        currency,
-      }))
+      const tradeLines = []
+      for (const purchaseItem of normalizedItems) {
+        const unitCostUsd = toUsd(purchaseItem.purchasePrice)
+        let inventoryItem
+
+        if (purchaseItem.existingInventoryItem) {
+          inventoryItem = await InventoryItem.findById(purchaseItem.existingInventoryItem).session(session)
+          if (!inventoryItem) throw requestError(404, 'An existing inventory product was not found')
+          if (!['ACCESSORY', 'SPARE_PART', 'OTHER'].includes(inventoryItem.category)) {
+            throw requestError(400, `${inventoryItem.name}: phones and tablets cannot be restocked as an existing product`)
+          }
+          if (inventoryItem.category !== purchaseItem.category) {
+            throw requestError(409, `${inventoryItem.name}: selected product category no longer matches this purchase item`)
+          }
+          if (['PAWNED', 'RESERVED'].includes(inventoryItem.status)) {
+            throw requestError(409, `${inventoryItem.name}: reserved or pawned stock cannot be restocked`)
+          }
+
+          const previousQuantity = Number(inventoryItem.quantity) || 0
+          const nextQuantity = previousQuantity + purchaseItem.quantity
+          const previousValue = (Number(inventoryItem.buyPrice) || 0) * previousQuantity
+          inventoryItem.quantity = nextQuantity
+          inventoryItem.buyPrice = (previousValue + unitCostUsd * purchaseItem.quantity) / nextQuantity
+          inventoryItem.status = 'IN_STOCK'
+          await inventoryItem.save({ session })
+        } else {
+          ;[inventoryItem] = await InventoryItem.create([{
+            sku: purchaseItem.sku || makeCode('BUY'),
+            barcode: makeCode('PF'),
+            category: purchaseItem.category,
+            name: purchaseItem.name,
+            brand: purchaseItem.brand,
+            model: purchaseItem.model,
+            imei1: purchaseItem.category === 'PHONE' ? purchaseItem.imei : undefined,
+            storage: purchaseItem.storage,
+            ram: purchaseItem.ram,
+            color: purchaseItem.color,
+            condition: purchaseItem.condition,
+            batteryHealth: purchaseItem.category === 'PHONE' ? purchaseItem.batteryHealth : undefined,
+            carrierLock: purchaseItem.category === 'PHONE' ? purchaseItem.carrierLock : 'UNKNOWN',
+            accessoriesIncluded: purchaseItem.category === 'PHONE' ? purchaseItem.accessoriesIncluded : [],
+            compatibleModels: purchaseItem.compatibleModels,
+            oemQuality: purchaseItem.oemQuality,
+            imageUrl: purchaseItem.imageUrl,
+            quantity: purchaseItem.quantity,
+            reorderLevel: purchaseItem.category === 'PHONE' ? 0 : 2,
+            buyPrice: unitCostUsd,
+            sellPrice: 0,
+            minimumSellPrice: 0,
+            status: 'IN_STOCK',
+            source,
+            notes: purchaseItem.notes,
+            createdBy: req.user._id,
+          }], { session })
+        }
+
+        tradeLines.push({
+          inventoryItem: inventoryItem._id,
+          name: inventoryItem.name,
+          quantity: purchaseItem.quantity,
+          unitPrice: unitCostUsd,
+          costPrice: unitCostUsd,
+          originalUnitPrice: purchaseItem.purchasePrice,
+          currency,
+        })
+      }
       ;[trade] = await Trade.create([{
         tradeNo: makeCode('BY'),
         type: 'BUY',
@@ -1059,7 +1093,7 @@ async function createMultiDevicePurchase(req, res) {
         transactionAmountPaid: transactionPaid,
         transactionBalance,
         paymentStatus: paymentState(transactionTotal, transactionPaid),
-        purchaseWorkflowVersion: 3,
+        purchaseWorkflowVersion: 4,
         items: tradeLines,
         subtotal: toUsd(transactionTotal),
         discount: 0,

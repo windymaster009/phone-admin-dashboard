@@ -63,6 +63,7 @@ type Supplier = {
 
 type SellerType = 'EXISTING_CUSTOMER' | 'EXISTING_SUPPLIER' | 'WALK_IN' | 'NEW_CUSTOMER' | 'NEW_SUPPLIER'
 type PurchaseCurrency = 'USD' | 'KHR'
+type PurchaseInventoryMode = 'NEW' | 'EXISTING'
 type PawnCustomerMode = 'EXISTING' | 'NEW'
 type SalePaymentMethod = 'CASH' | 'KHQR'
 type SalePaymentPhase = 'WAITING' | 'SCANNED' | 'APPROVED' | 'COMPLETED' | 'CANCELLING' | 'CANCELLED' | 'ERROR'
@@ -123,6 +124,8 @@ function paywayImageSource(value: string) {
 type PurchaseDevice = {
   id: string
   collapsed: boolean
+  inventoryMode: PurchaseInventoryMode
+  existingInventoryItem: string
   category: StockCategory
   name: string
   sku: string
@@ -145,9 +148,13 @@ type PurchaseDevice = {
 
 function newPurchaseDevice(): PurchaseDevice {
   return {
-    id: crypto.randomUUID(), collapsed: false, category: 'PHONE', name: '', sku: '', quantity: '1', imei: '', brand: '', model: '', storage: '', ram: '', color: '',
+    id: crypto.randomUUID(), collapsed: false, inventoryMode: 'NEW', existingInventoryItem: '', category: 'PHONE', name: '', sku: '', quantity: '1', imei: '', brand: '', model: '', storage: '', ram: '', color: '',
     condition: 'GOOD', batteryHealth: '', carrierLock: 'UNKNOWN', compatibleModels: '', oemQuality: '', purchasePrice: '', accessoriesIncluded: [], notes: '',
   }
+}
+
+function canRestockExisting(category: StockCategory) {
+  return category === 'ACCESSORY' || category === 'SPARE_PART' || category === 'OTHER'
 }
 
 function localDateValue() {
@@ -374,6 +381,7 @@ export default function OperationModalBridge() {
   const [purchaseDevices, setPurchaseDevices] = useState<PurchaseDevice[]>(() => [newPurchaseDevice()])
   const [purchaseStep, setPurchaseStep] = useState<1 | 2>(1)
   const [purchaseAttempted, setPurchaseAttempted] = useState(false)
+  const [purchaseInventoryLoading, setPurchaseInventoryLoading] = useState(false)
   const [usdKhrRate, setUsdKhrRate] = useState(4100)
   const [imeiScanDeviceId, setImeiScanDeviceId] = useState<string | null>(null)
   const [imeiScanError, setImeiScanError] = useState('')
@@ -507,6 +515,11 @@ export default function OperationModalBridge() {
       api<{ usdKhr: number }>('/exchange-rates')
         .then((result) => setUsdKhrRate(result.usdKhr))
         .catch(() => setUsdKhrRate(4100))
+      setPurchaseInventoryLoading(true)
+      api<{ items: InventoryItem[] }>('/inventory')
+        .then((result) => setInventory(result.items))
+        .catch((reason: Error) => setError(reason.message))
+        .finally(() => setPurchaseInventoryLoading(false))
     }
     if (kind === 'pawn') {
       const saved = sessionStorage.getItem('phoneflow_last_valuation')
@@ -603,6 +616,7 @@ export default function OperationModalBridge() {
     setPurchaseDevices([newPurchaseDevice()])
     setPurchaseStep(1)
     setPurchaseAttempted(false)
+    setPurchaseInventoryLoading(false)
     if (shouldRefresh) window.location.reload()
   }
 
@@ -698,6 +712,15 @@ export default function OperationModalBridge() {
     setPurchaseDevices((current) => current.map((device) => device.id === id ? { ...device, ...update } : device))
   }
 
+  function updatePurchaseCategory(id: string, category: StockCategory) {
+    updatePurchaseDevice(id, {
+      category,
+      quantity: '1',
+      inventoryMode: 'NEW',
+      existingInventoryItem: '',
+    })
+  }
+
   function openImeiScanner(deviceId: string) {
     setImeiScanDeviceId(deviceId)
     setImeiScanError('')
@@ -723,6 +746,11 @@ export default function OperationModalBridge() {
     const validGigabytes = (value: string) => Number.isFinite(Number(value)) && Number(value) > 0
     if (!Number.isFinite(price) || price < 0 || item.purchasePrice === '') errors.purchasePrice = 'Enter a valid unit purchase price'
     if (item.category !== 'PHONE' && (!Number.isInteger(quantity) || quantity < 1)) errors.quantity = 'Quantity must be at least 1'
+    if (item.inventoryMode === 'EXISTING') {
+      if (!canRestockExisting(item.category)) errors.existingInventoryItem = 'Phones and tablets must be entered as new units'
+      else if (!item.existingInventoryItem) errors.existingInventoryItem = 'Select an existing inventory product'
+      return errors
+    }
     if (item.category === 'PHONE') {
       if (!/^\d{15}$/.test(item.imei)) errors.imei = 'IMEI must contain exactly 15 digits'
       if (!item.brand.trim()) errors.brand = 'Brand is required'
@@ -750,7 +778,10 @@ export default function OperationModalBridge() {
     : sellerType === 'EXISTING_CUSTOMER'
       ? Boolean(sellerCustomerId)
       : Boolean(sellerName.trim()) && (sellerType !== 'NEW_CUSTOMER' || Boolean(sellerPhone.trim()))
-  const purchaseItemsValid = purchaseDevices.length > 0 && purchaseDevices.every((item) => Object.keys(purchaseItemErrors(item)).length === 0)
+  const existingPurchaseIds = purchaseDevices.filter((item) => item.inventoryMode === 'EXISTING').map((item) => item.existingInventoryItem).filter(Boolean)
+  const purchaseItemsValid = purchaseDevices.length > 0
+    && new Set(existingPurchaseIds).size === existingPurchaseIds.length
+    && purchaseDevices.every((item) => Object.keys(purchaseItemErrors(item)).length === 0)
 
   function openPurchaseItem(id: string) {
     setPurchaseDevices((current) => current.map((item) => ({ ...item, collapsed: item.id !== id })))
@@ -780,7 +811,11 @@ export default function OperationModalBridge() {
       const firstInvalid = purchaseDevices.find((item) => Object.keys(purchaseItemErrors(item)).length > 0)
       setPurchaseStep(2)
       if (firstInvalid) openPurchaseItem(firstInvalid.id)
-      setError(purchasePaid > purchaseTotal ? 'Amount paid cannot exceed the purchase total' : 'Complete the highlighted item fields')
+      setError(purchasePaid > purchaseTotal
+        ? 'Amount paid cannot exceed the purchase total'
+        : new Set(existingPurchaseIds).size !== existingPurchaseIds.length
+          ? 'Add each existing product only once per purchase'
+          : 'Complete the highlighted item fields')
       return
     }
     setBusy(true)
@@ -797,7 +832,10 @@ export default function OperationModalBridge() {
       exchangeRate: purchaseCurrency === 'KHR' ? usdKhrRate : 1,
       amountPaid: purchasePaid,
       notes: purchaseNotes,
-      items: purchaseDevices.map(({ id: _id, collapsed: _collapsed, ...item }) => item),
+      items: purchaseDevices.map(({ id: _id, collapsed: _collapsed, inventoryMode, existingInventoryItem, ...item }) => ({
+        ...item,
+        inventoryItem: inventoryMode === 'EXISTING' ? existingInventoryItem : undefined,
+      })),
     }
     try {
       const result = await api<{ trade: { items: { inventoryItem: InventoryItem }[] } }>('/trades', { method: 'POST', body: JSON.stringify(payload) })
@@ -1128,15 +1166,28 @@ export default function OperationModalBridge() {
           <div className="purchase-section-heading"><span>2</span><div><h3>Inventory items</h3><p>Choose a category for each item. The required fields adjust automatically.</p></div><b>{purchaseDevices.length} item{purchaseDevices.length === 1 ? '' : 's'}</b></div>
           <div className="purchase-device-list">
             {purchaseDevices.map((device, index) => {
-              const itemErrors = purchaseItemErrors(device)
+              const itemErrors = { ...purchaseItemErrors(device) }
+              if (device.existingInventoryItem && existingPurchaseIds.filter((id) => id === device.existingInventoryItem).length > 1) {
+                itemErrors.existingInventoryItem = 'This product is already included in the purchase'
+              }
               const itemComplete = Object.keys(itemErrors).length === 0
+              const existingOptions = inventory.filter((item) => item.category === device.category && canRestockExisting(item.category))
+              const existingItem = inventory.find((item) => item._id === device.existingInventoryItem)
               return <article className={`purchase-device-card ${device.collapsed ? 'collapsed' : ''} ${itemComplete ? 'complete' : purchaseAttempted ? 'invalid' : ''}`} key={device.id} onBlur={(event) => { if (itemComplete && !event.currentTarget.contains(event.relatedTarget as Node | null)) updatePurchaseDevice(device.id, { collapsed: true }) }}>
-              <header><button type="button" className="device-collapse-button" onClick={() => device.collapsed ? openPurchaseItem(device.id) : updatePurchaseDevice(device.id, { collapsed: true })}><span>{itemComplete ? <CheckCircle2 size={17} /> : index + 1}</span><p><strong>{device.category.replace('_', ' ')} {index + 1}</strong><small>{itemComplete ? 'Ready to save' : device.category === 'PHONE' ? ([device.brand, device.model, device.storage].filter(Boolean).join(' ') || 'Enter phone information') : (device.name || 'Enter item information')}{device.imei ? ` · ${device.imei}` : ''}</small></p>{device.collapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}</button><button type="button" className="device-remove-button" onClick={() => removePurchaseDevice(device.id)} disabled={purchaseDevices.length === 1} aria-label={`Remove item ${index + 1}`}><Trash2 size={16} /></button></header>
+              <header><button type="button" className="device-collapse-button" onClick={() => device.collapsed ? openPurchaseItem(device.id) : updatePurchaseDevice(device.id, { collapsed: true })}><span>{itemComplete ? <CheckCircle2 size={17} /> : index + 1}</span><p><strong>{device.inventoryMode === 'EXISTING' ? 'RESTOCK' : device.category.replace('_', ' ')} {index + 1}</strong><small>{itemComplete ? existingItem ? `${existingItem.name} · ${device.quantity} unit${device.quantity === '1' ? '' : 's'}` : 'Ready to save' : device.category === 'PHONE' ? ([device.brand, device.model, device.storage].filter(Boolean).join(' ') || 'Enter phone information') : device.inventoryMode === 'EXISTING' ? 'Select an existing product' : (device.name || 'Enter item information')}{device.imei ? ` · ${device.imei}` : ''}</small></p>{device.collapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}</button><button type="button" className="device-remove-button" onClick={() => removePurchaseDevice(device.id)} disabled={purchaseDevices.length === 1} aria-label={`Remove item ${index + 1}`}><Trash2 size={16} /></button></header>
               {!device.collapsed && <div className="device-fields-grid">
                 {purchaseAttempted && Object.keys(itemErrors).length > 0 && <div className="item-validation-summary"><AlertTriangle size={15} /><span>Complete {Object.keys(itemErrors).length} highlighted field{Object.keys(itemErrors).length === 1 ? '' : 's'}.</span></div>}
-                <label className="purchase-category-select">Category<select value={device.category} onChange={(event) => updatePurchaseDevice(device.id, { category: event.target.value as StockCategory, quantity: event.target.value === 'PHONE' ? '1' : device.quantity })}>{(['PHONE', 'TABLET', 'ACCESSORY', 'SPARE_PART', 'OTHER'] as StockCategory[]).map((value) => <option value={value} key={value}>{value.replace('_', ' ')}</option>)}</select></label>
-                <fieldset className="purchase-category-picker"><legend>Category</legend>{(['PHONE', 'TABLET', 'ACCESSORY', 'SPARE_PART', 'OTHER'] as StockCategory[]).map((value) => <button type="button" key={value} className={device.category === value ? 'active' : ''} onClick={() => updatePurchaseDevice(device.id, { category: value, quantity: value === 'PHONE' ? '1' : device.quantity })}>{value.replace('_', ' ')}</button>)}</fieldset>
+                <label className="purchase-category-select">Category<select value={device.category} onChange={(event) => updatePurchaseCategory(device.id, event.target.value as StockCategory)}>{(['PHONE', 'TABLET', 'ACCESSORY', 'SPARE_PART', 'OTHER'] as StockCategory[]).map((value) => <option value={value} key={value}>{value.replace('_', ' ')}</option>)}</select></label>
+                <fieldset className="purchase-category-picker"><legend>Category</legend>{(['PHONE', 'TABLET', 'ACCESSORY', 'SPARE_PART', 'OTHER'] as StockCategory[]).map((value) => <button type="button" key={value} className={device.category === value ? 'active' : ''} onClick={() => updatePurchaseCategory(device.id, value)}>{value.replace('_', ' ')}</button>)}</fieldset>
 
+                {canRestockExisting(device.category) && <fieldset className="purchase-inventory-mode"><legend>Product record</legend><button type="button" className={device.inventoryMode === 'NEW' ? 'active' : ''} onClick={() => updatePurchaseDevice(device.id, { inventoryMode: 'NEW', existingInventoryItem: '' })}><Plus size={16} /><span>New product<small>Create a new SKU</small></span>{device.inventoryMode === 'NEW' && <CheckCircle2 size={16} />}</button><button type="button" className={device.inventoryMode === 'EXISTING' ? 'active' : ''} onClick={() => updatePurchaseDevice(device.id, { inventoryMode: 'EXISTING', existingInventoryItem: '' })}><RefreshCw size={16} /><span>Existing product<small>Increase current quantity</small></span>{device.inventoryMode === 'EXISTING' && <CheckCircle2 size={16} />}</button></fieldset>}
+
+                {device.inventoryMode === 'EXISTING' ? <>
+                  <div className="device-group-label"><span>Existing inventory product</span><small>Only quantity-based products can be restocked</small></div>
+                  <label className={`device-existing-product ${purchaseAttempted && itemErrors.existingInventoryItem ? 'field-invalid' : ''}`}>Product<select required disabled={purchaseInventoryLoading || existingOptions.length === 0} value={device.existingInventoryItem} onChange={(event) => updatePurchaseDevice(device.id, { existingInventoryItem: event.target.value })}><option value="" disabled>{purchaseInventoryLoading ? 'Loading inventory...' : existingOptions.length === 0 ? `No existing ${device.category.replace('_', ' ').toLowerCase()} products` : 'Select an existing product'}</option>{existingOptions.map((item) => <option key={item._id} value={item._id}>{item.name} — {item.sku} — Qty {item.quantity}</option>)}</select>{purchaseAttempted && itemErrors.existingInventoryItem && <small>{itemErrors.existingInventoryItem}</small>}</label>
+                  {existingItem && <div className="purchase-existing-summary"><span className="stock-adjustment-result-icon"><Package size={19} /></span><p><strong>{existingItem.name}</strong><small>{existingItem.sku} · {existingItem.category.replace('_', ' ')}</small></p><div><span>Current stock</span><strong>{existingItem.quantity}</strong></div><div><span>After purchase</span><strong>{existingItem.quantity + Math.max(1, Number(device.quantity) || 1)}</strong></div></div>}
+                  <label className={purchaseAttempted && itemErrors.quantity ? 'field-invalid' : ''}>Quantity purchased<input required type="number" min="1" step="1" value={device.quantity} onChange={(event) => updatePurchaseDevice(device.id, { quantity: event.target.value })} />{purchaseAttempted && itemErrors.quantity && <small>{itemErrors.quantity}</small>}</label>
+                </> : <>
                 <div className="device-group-label"><span>Product identity</span><small>Required identification information</small></div>
                 {device.category === 'PHONE' ? <>
                   <label className={`device-imei-field ${purchaseAttempted && itemErrors.imei ? 'field-invalid' : ''}`}><span>IMEI</span><div><input ref={(node) => { if (node) imeiInputs.current.set(device.id, node); else imeiInputs.current.delete(device.id) }} required inputMode="numeric" pattern="[0-9]{15}" maxLength={15} value={device.imei} onChange={(event) => updatePurchaseDevice(device.id, { imei: event.target.value.replace(/\D/g, '').slice(0, 15) })} placeholder="15-digit IMEI" /><button type="button" className="secondary-button" onClick={() => openImeiScanner(device.id)}><ScanLine size={16} /> Scan IMEI</button></div><small>{purchaseAttempted && itemErrors.imei ? itemErrors.imei : 'Scan with a handheld scanner or this device camera.'}</small></label>
@@ -1163,10 +1214,11 @@ export default function OperationModalBridge() {
                   {device.category === 'SPARE_PART' && <><label className={purchaseAttempted && itemErrors.compatibleModels ? 'field-invalid' : ''}>Compatible models<input required value={device.compatibleModels} onChange={(event) => updatePurchaseDevice(device.id, { compatibleModels: event.target.value })} placeholder="iPhone 13, iPhone 13 Pro" />{purchaseAttempted && itemErrors.compatibleModels && <small>{itemErrors.compatibleModels}</small>}</label><label className={purchaseAttempted && itemErrors.oemQuality ? 'field-invalid' : ''}>OEM quality<select required value={device.oemQuality} onChange={(event) => updatePurchaseDevice(device.id, { oemQuality: event.target.value })}><option value="" disabled>Select quality</option><option value="OEM">OEM</option><option value="ORIGINAL">Original</option><option value="AFTERMARKET_PREMIUM">Aftermarket premium</option><option value="AFTERMARKET">Aftermarket</option></select>{purchaseAttempted && itemErrors.oemQuality && <small>{itemErrors.oemQuality}</small>}</label></>}
                   <label className={purchaseAttempted && itemErrors.quantity ? 'field-invalid' : ''}>Quantity<input required type="number" min="1" step="1" value={device.quantity} onChange={(event) => updatePurchaseDevice(device.id, { quantity: event.target.value })} />{purchaseAttempted && itemErrors.quantity && <small>{itemErrors.quantity}</small>}</label>
                 </>}
+                </>}
                 <div className="device-group-label"><span>Condition & purchase</span><small>Stock condition, cost, and optional notes</small></div>
-                <label>Condition<select value={device.condition} onChange={(event) => updatePurchaseDevice(device.id, { condition: event.target.value })}><option value="NEW">New</option><option value="LIKE_NEW">Like new</option><option value="GOOD">Good</option><option value="FAIR">Fair</option><option value="DAMAGED">Damaged</option></select></label>
+                {device.inventoryMode === 'NEW' && <label>Condition<select value={device.condition} onChange={(event) => updatePurchaseDevice(device.id, { condition: event.target.value })}><option value="NEW">New</option><option value="LIKE_NEW">Like new</option><option value="GOOD">Good</option><option value="FAIR">Fair</option><option value="DAMAGED">Damaged</option></select></label>}
                 <label className={purchaseAttempted && itemErrors.purchasePrice ? 'field-invalid' : ''}>Unit purchase price ({purchaseCurrency})<input required type="number" min="0" step={purchaseCurrency === 'KHR' ? '100' : '0.01'} value={device.purchasePrice} onChange={(event) => updatePurchaseDevice(device.id, { purchasePrice: event.target.value })} />{purchaseAttempted && itemErrors.purchasePrice && <small>{itemErrors.purchasePrice}</small>}</label>
-                <label className="device-notes-field">Item notes <small className="optional-marker">Optional</small><textarea rows={2} value={device.notes} onChange={(event) => updatePurchaseDevice(device.id, { notes: event.target.value })} /></label>
+                {device.inventoryMode === 'NEW' && <label className="device-notes-field">Item notes <small className="optional-marker">Optional</small><textarea rows={2} value={device.notes} onChange={(event) => updatePurchaseDevice(device.id, { notes: event.target.value })} /></label>}
               </div>}
             </article>})}
           </div>

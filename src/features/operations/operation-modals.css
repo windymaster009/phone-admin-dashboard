@@ -1064,6 +1064,26 @@ body.operation-modal-open {
 .purchase-category-picker legend { padding: 0 5px; color: var(--muted, #8f9bb4); font-size: 9px; font-weight: 800; }
 .purchase-category-picker button { min-height: 35px; padding: 6px 8px; border: 1px solid transparent; border-radius: 8px; color: var(--muted, #8f9bb4); background: rgba(255,255,255,.025); font-size: 9px; font-weight: 800; text-transform: capitalize; }
 .purchase-category-picker button.active { color: #fff; border-color: rgba(139,92,246,.5); background: linear-gradient(135deg,rgba(124,58,237,.75),rgba(139,92,246,.55)); }
+.purchase-inventory-mode { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin: 0; padding: 11px; border: 1px solid var(--border, rgba(255,255,255,.08)); border-radius: 11px; }
+.purchase-inventory-mode legend { padding: 0 5px; color: var(--muted,#8f9bb4); font-size: 9px; font-weight: 800; }
+.purchase-inventory-mode button { min-width: 0; min-height: 52px; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 9px; padding: 9px 11px; border: 1px solid var(--border,rgba(255,255,255,.08)); border-radius: 9px; color: var(--text,#f4f6fb); background: rgba(255,255,255,.025); text-align: left; }
+.purchase-inventory-mode button > span { min-width: 0; display: grid; gap: 3px; font-size: 10px; font-weight: 800; }
+.purchase-inventory-mode button small { overflow: hidden; color: var(--muted,#8f9bb4); font-size: 8px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
+.purchase-inventory-mode button > svg { color: #a78bfa; }
+.purchase-inventory-mode button.active { border-color: rgba(139,92,246,.58); background: rgba(139,92,246,.1); box-shadow: 0 0 0 2px rgba(139,92,246,.06); }
+.device-existing-product { grid-column: 1 / -1; }
+.purchase-existing-summary { grid-column: 1 / -1; min-width: 0; display: grid; grid-template-columns: auto minmax(0,1fr) auto auto; align-items: center; gap: 12px; padding: 12px; border: 1px solid rgba(52,211,153,.2); border-radius: 11px; background: rgba(52,211,153,.055); }
+.purchase-existing-summary > p { min-width: 0; display: grid; gap: 4px; margin: 0; }
+.purchase-existing-summary > p strong,.purchase-existing-summary > p small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.purchase-existing-summary > p strong { color: var(--text,#f4f6fb); font-size: 11px; }
+.purchase-existing-summary > p small { color: var(--muted,#8f9bb4); font-size: 8px; text-transform: capitalize; }
+.purchase-existing-summary > div { min-width: 90px; display: grid; gap: 4px; padding-left: 12px; border-left: 1px solid var(--border,rgba(255,255,255,.08)); }
+.purchase-existing-summary > div span { color: var(--muted,#8f9bb4); font-size: 8px; font-weight: 800; text-transform: uppercase; }
+.purchase-existing-summary > div strong { color: #34d399; font-size: 14px; }
+:root[data-theme='light'] .purchase-inventory-mode button.active { border-color: color-mix(in srgb,var(--primary) 58%,transparent); background: var(--primary-soft); box-shadow: 0 0 0 2px color-mix(in srgb,var(--primary) 6%,transparent); }
+:root[data-theme='light'] .purchase-inventory-mode button > svg { color: var(--primary); }
+:root[data-theme='light'] .purchase-existing-summary { border-color: color-mix(in srgb,var(--primary) 20%,transparent); background: color-mix(in srgb,var(--primary-soft) 72%,transparent); }
+:root[data-theme='light'] .purchase-existing-summary > div strong { color: var(--primary); }
 .device-group-label { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 8px; margin-top: 2px; padding-bottom: 7px; border-bottom: 1px solid var(--border, rgba(255,255,255,.08)); }
 .device-group-label span { color: var(--text, #f4f6fb); font-size: 10px; font-weight: 800; }
 .device-group-label small { color: var(--muted-2, #667085); font-size: 8px; }
@@ -1401,6 +1421,9 @@ body.operation-modal-open {
   .device-fields-grid { grid-template-columns: 1fr; padding: 14px; }
   .purchase-category-picker { display: none; }
   .purchase-category-select { grid-column: 1; display: flex !important; }
+  .purchase-inventory-mode { grid-template-columns: 1fr; }
+  .purchase-existing-summary { grid-template-columns: auto minmax(0,1fr); }
+  .purchase-existing-summary > div { grid-column: 2; min-width: 0; padding: 7px 0 0; border-top: 1px solid var(--border,rgba(255,255,255,.08)); border-left: 0; }
   .device-imei-field, .device-accessories, .device-notes-field { grid-column: 1; }
   .device-imei-field > div { grid-template-columns: 1fr; }
   .purchase-submit-summary { display: none; }
