@@ -720,7 +720,7 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
               <button className={`icon-button ${inventoryMenuOpen ? 'open' : ''}`} onClick={() => setInventoryMenuOpen((current) => !current)} aria-label="Inventory options" aria-expanded={inventoryMenuOpen}><MoreHorizontal size={19} /></button>
               {inventoryMenuOpen && <div className="card-options-menu surface-card" role="menu">
                 <button onClick={() => goTo('inventory')} role="menuitem"><Boxes size={16} />Open inventory</button>
-                <button onClick={() => { setInventoryMenuOpen(false); comingNext('Add stock') }} role="menuitem"><Plus size={16} />Add stock</button>
+                <button onClick={() => { setInventoryMenuOpen(false); comingNext('Adjust stock') }} role="menuitem"><Plus size={16} />Adjust stock</button>
                 <button onClick={() => { setInventoryMenuOpen(false); void loadDashboard(true) }} role="menuitem" disabled={refreshing}><RefreshCcw size={16} />{refreshing ? 'Refreshing…' : 'Refresh values'}</button>
               </div>}
             </div>
@@ -807,7 +807,7 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
             <button onClick={() => window.dispatchEvent(new Event('phoneflow:open-scanner'))}><span className="quick-icon blue"><ScanLine size={19} /></span><p>Scan product<small>Find stock and start a sale</small></p><ArrowUpRight size={17} /></button>
             <button onClick={() => comingNext('New pawn')}><span className="quick-icon violet"><HandCoins size={19} /></span><p>New pawn contract<small>Register ID and collateral</small></p><ArrowUpRight size={17} /></button>
             <button onClick={() => comingNext('New sale')}><span className="quick-icon blue"><ShoppingCart size={19} /></span><p>New sale<small>Phone or accessories</small></p><ArrowUpRight size={17} /></button>
-            <button onClick={() => comingNext('Add stock')}><span className="quick-icon orange"><Package size={19} /></span><p>Add stock<small>Phone, part or accessory</small></p><ArrowUpRight size={17} /></button>
+            <button onClick={() => comingNext('Adjust stock')}><span className="quick-icon orange"><Package size={19} /></span><p>Adjust stock<small>Correct count or status</small></p><ArrowUpRight size={17} /></button>
             <button onClick={() => goTo('depreciation')}><span className="quick-icon rose"><Calculator size={19} /></span><p>Value a phone<small>Calculate depreciation</small></p><ArrowUpRight size={17} /></button>
           </div>
         </article>
@@ -1242,7 +1242,7 @@ function InventoryView() {
           description={error || 'Manage serialized phones and quantity-based tablets, accessories, spare parts, and other stock.'}
           action={<div className="section-header-actions">
             <button className="secondary-button" onClick={() => window.dispatchEvent(new Event('phoneflow:open-scanner'))}><ScanLine size={17} /> Scan product</button>
-            <button className="primary-button" onClick={() => comingNext('Add stock')}><Plus size={17} /> Add stock</button>
+            <button className="primary-button" onClick={() => comingNext('Adjust stock')}><Plus size={17} /> Adjust stock</button>
           </div>}
         />
       </div>

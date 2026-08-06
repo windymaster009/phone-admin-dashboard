@@ -534,6 +534,79 @@ router.patch('/inventory/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOC
   res.json({ item })
 }))
 
+router.post('/inventory/:id/adjust', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
+  const mode = clean(req.body.mode)?.toUpperCase()
+  const reason = clean(req.body.reason)?.toUpperCase()
+  const notes = clean(req.body.notes || '')
+  const allowedReasons = ['COUNT_CORRECTION', 'DAMAGED', 'LOST', 'RETURNED', 'FOUND', 'OPENING_BALANCE', 'OTHER']
+
+  if (!allowedReasons.includes(reason)) throw requestError(400, 'Select a valid adjustment reason')
+  if (notes.length > 500) throw requestError(400, 'Adjustment note must be 500 characters or fewer')
+
+  const current = await InventoryItem.findById(req.params.id)
+  if (!current) throw requestError(404, 'Inventory item not found')
+
+  const previousQuantity = current.quantity
+  const previousStatus = current.status
+  let nextQuantity = previousQuantity
+  let nextStatus = previousStatus
+
+  if (current.category === 'PHONE') {
+    const requestedStatus = clean(req.body.status)?.toUpperCase()
+    if (mode !== 'STATUS' || !['IN_STOCK', 'REPAIR', 'ARCHIVED'].includes(requestedStatus)) {
+      throw requestError(400, 'Choose an available, repair, or archived status for this phone')
+    }
+    if (['PAWNED', 'RESERVED', 'SOLD'].includes(previousStatus)) {
+      throw requestError(409, `A ${previousStatus.toLowerCase()} phone must be updated through its related transaction`)
+    }
+    if (requestedStatus === previousStatus) throw requestError(400, 'Choose a status different from the current status')
+    nextStatus = requestedStatus
+    nextQuantity = 1
+  } else {
+    if (!['ADD', 'REMOVE', 'SET'].includes(mode)) throw requestError(400, 'Choose add, remove, or set count')
+    if (['PAWNED', 'RESERVED'].includes(previousStatus)) {
+      throw requestError(409, `Reserved or pawned stock must be updated through its related transaction`)
+    }
+
+    const quantity = Number(req.body.quantity)
+    const minimum = mode === 'SET' ? 0 : 1
+    if (!Number.isInteger(quantity) || quantity < minimum || quantity > 1_000_000) {
+      throw requestError(400, mode === 'SET' ? 'Count must be a whole number from 0 to 1,000,000' : 'Quantity must be a whole number from 1 to 1,000,000')
+    }
+
+    if (mode === 'ADD') nextQuantity = previousQuantity + quantity
+    if (mode === 'REMOVE') nextQuantity = previousQuantity - quantity
+    if (mode === 'SET') nextQuantity = quantity
+    if (nextQuantity < 0) throw requestError(400, 'The adjustment cannot reduce stock below zero')
+    if (nextQuantity === previousQuantity) throw requestError(400, 'The adjustment does not change the current quantity')
+    nextStatus = nextQuantity === 0 ? 'ARCHIVED' : 'IN_STOCK'
+  }
+
+  const item = await InventoryItem.findOneAndUpdate(
+    { _id: current._id, quantity: previousQuantity, status: previousStatus },
+    { quantity: nextQuantity, status: nextStatus },
+    { new: true, runValidators: true },
+  )
+  if (!item) throw requestError(409, 'Inventory changed while you were editing. Refresh and try again')
+
+  await writeActivity(req, {
+    action: 'ADJUST',
+    entity: 'INVENTORY',
+    entityId: item._id,
+    details: {
+      mode,
+      reason,
+      notes: notes || undefined,
+      previousQuantity,
+      quantity: nextQuantity,
+      previousStatus,
+      status: nextStatus,
+      sku: item.sku,
+    },
+  })
+  res.json({ item })
+}))
+
 router.post('/inventory/:id/photo', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
   const current = await InventoryItem.findById(req.params.id)
   if (!current) return res.status(404).json({ message: 'Inventory item not found' })

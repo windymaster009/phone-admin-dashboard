@@ -12,16 +12,17 @@ import {
   HandCoins,
   LoaderCircle,
   Maximize2,
+  Minus,
   Package,
   Plus,
   Printer,
   QrCode,
   RefreshCw,
   ScanLine,
+  Search,
   ShoppingCart,
   Smartphone,
   Trash2,
-  Wrench,
   X,
 } from 'lucide-react'
 import { api } from '../../lib/api'
@@ -65,6 +66,8 @@ type PurchaseCurrency = 'USD' | 'KHR'
 type PawnCustomerMode = 'EXISTING' | 'NEW'
 type SalePaymentMethod = 'CASH' | 'KHQR'
 type SalePaymentPhase = 'WAITING' | 'SCANNED' | 'APPROVED' | 'COMPLETED' | 'CANCELLING' | 'CANCELLED' | 'ERROR'
+type StockAdjustmentMode = 'ADD' | 'REMOVE' | 'SET'
+type StockAdjustmentStatus = 'IN_STOCK' | 'REPAIR' | 'ARCHIVED'
 
 type PawnValuationSnapshot = {
   id?: string
@@ -160,8 +163,8 @@ function futureDateValue(days: number) {
 
 const modalMeta: Record<ModalKind, { title: string; description: string; icon: ReactNode }> = {
   stock: {
-    title: 'Add stock',
-    description: 'Add any supported product category to inventory.',
+    title: 'Adjust stock',
+    description: 'Correct the count or status of an existing inventory item.',
     icon: <Package size={21} />,
   },
   purchase: {
@@ -193,7 +196,7 @@ const modalMeta: Record<ModalKind, { title: string; description: string; icon: R
 
 function parsePlaceholderAlert(message?: string): ModalKind | null {
   const value = String(message || '').toLowerCase()
-  if (value.startsWith('add stock')) return 'stock'
+  if (value.startsWith('add stock') || value.startsWith('adjust stock')) return 'stock'
   if (value.startsWith('new purchase')) return 'purchase'
   if (value.startsWith('new sale')) return 'sale'
   if (value.startsWith('new pawn')) return 'pawn'
@@ -243,35 +246,6 @@ function ModalShell({ kind, error, busy, onClose, compact = false, dismissible =
         {children}
       </section>
     </div>
-  )
-}
-
-function StockFields({ category }: { category: StockCategory }) {
-  const serialized = category === 'PHONE'
-  return (
-    <>
-      <label>{category === 'SPARE_PART' ? 'Part name' : 'Item name'}<input name="name" required placeholder={category === 'PHONE' ? 'iPhone 15 Pro Max' : category === 'ACCESSORY' ? 'USB-C 20W adapter' : category === 'SPARE_PART' ? 'iPhone 13 OLED LCD' : 'Product name'} /></label>
-      <label>SKU<input name="sku" required={category === 'ACCESSORY'} placeholder={category === 'ACCESSORY' ? 'Required SKU' : 'Leave empty to generate'} /></label>
-      {(category === 'PHONE' || category === 'TABLET' || category === 'ACCESSORY') && <label>Brand<input name="brand" required placeholder="Brand" /></label>}
-      {(category === 'PHONE' || category === 'TABLET') && <label>Model<input name="model" required placeholder="Model" /></label>}
-      {category === 'SPARE_PART' && <><label>Compatible models<input name="compatibleModels" required placeholder="iPhone 13, iPhone 13 Pro" /></label><label>OEM quality<select name="oemQuality" required defaultValue=""><option value="" disabled>Select quality</option><option value="OEM">OEM</option><option value="ORIGINAL">Original</option><option value="AFTERMARKET_PREMIUM">Aftermarket premium</option><option value="AFTERMARKET">Aftermarket</option></select></label></>}
-      {serialized && <>
-        <label>IMEI 1<input name="imei1" required placeholder="15-digit IMEI" inputMode="numeric" /></label>
-        <label>Serial number<input name="serialNumber" /></label>
-      </>}
-      {(category === 'PHONE' || category === 'TABLET') && <><label>Storage<div className="device-unit-input"><input name="storage" type="number" min="1" step="1" required placeholder="256" /><span>GB</span></div></label><label>Color<input name="color" required /></label></>}
-      <label>Condition<select name="condition" defaultValue={category === 'PHONE' ? 'GOOD' : 'NEW'}>
-        <option value="NEW">New</option>
-        <option value="LIKE_NEW">Like new</option>
-        <option value="GOOD">Good</option>
-        <option value="FAIR">Fair</option>
-        <option value="DAMAGED">Damaged</option>
-      </select></label>
-      <label>Quantity<input name="quantity" type="number" min="1" step="1" defaultValue="1" readOnly={serialized} /></label>
-      <label>Low-stock level<input name="reorderLevel" type="number" min="0" defaultValue={serialized ? '0' : '2'} /></label>
-      <label>Buy price<input name="buyPrice" type="number" min="0" step="0.01" required /></label>
-      <label>Sell price<input name="sellPrice" type="number" min="0" step="0.01" required /></label>
-    </>
   )
 }
 
@@ -332,9 +306,14 @@ function CameraBarcodeReader({ onScan, onError, readerId = 'phoneflow-barcode-re
 
 export default function OperationModalBridge() {
   const [kind, setKind] = useState<ModalKind | null>(null)
-  const [category, setCategory] = useState<StockCategory>('PHONE')
-  const [stockPhotoData, setStockPhotoData] = useState('')
-  const [stockPhotoName, setStockPhotoName] = useState('')
+  const [stockSearch, setStockSearch] = useState('')
+  const [selectedStockItem, setSelectedStockItem] = useState<InventoryItem | null>(null)
+  const [stockAdjustmentMode, setStockAdjustmentMode] = useState<StockAdjustmentMode>('ADD')
+  const [stockAdjustmentQuantity, setStockAdjustmentQuantity] = useState('1')
+  const [stockAdjustmentStatus, setStockAdjustmentStatus] = useState<StockAdjustmentStatus>('IN_STOCK')
+  const [stockAdjustmentReason, setStockAdjustmentReason] = useState('')
+  const [stockAdjustmentNotes, setStockAdjustmentNotes] = useState('')
+  const [stockInventoryLoading, setStockInventoryLoading] = useState(false)
   const [customers, setCustomers] = useState<Customer[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [inventory, setInventory] = useState<InventoryItem[]>([])
@@ -419,6 +398,33 @@ export default function OperationModalBridge() {
   const purchaseBalance = Math.max(0, purchaseTotal - purchasePaid)
   const purchasePaymentStatus = purchasePaid <= 0 ? 'UNPAID' : purchasePaid < purchaseTotal ? 'PARTIAL' : 'PAID'
   const selectedSaleItem = inventory.find((item) => item._id === saleItemId)
+  const stockMatches = useMemo(() => {
+    const search = stockSearch.trim().toLowerCase()
+    return inventory.filter((item) => !search || [item.name, item.sku, item.barcode, item.imei1, item.brand, item.model]
+      .some((value) => value?.toLowerCase().includes(search))).slice(0, 8)
+  }, [inventory, stockSearch])
+  const stockIsSerialized = selectedStockItem?.category === 'PHONE'
+  const stockAdjustmentLocked = Boolean(selectedStockItem && (stockIsSerialized
+    ? ['PAWNED', 'RESERVED', 'SOLD'].includes(selectedStockItem.status)
+    : ['PAWNED', 'RESERVED'].includes(selectedStockItem.status)))
+  const requestedStockQuantity = Number(stockAdjustmentQuantity)
+  const resultingStockQuantity = selectedStockItem && !stockIsSerialized && Number.isInteger(requestedStockQuantity)
+    ? stockAdjustmentMode === 'ADD'
+      ? selectedStockItem.quantity + requestedStockQuantity
+      : stockAdjustmentMode === 'REMOVE'
+        ? selectedStockItem.quantity - requestedStockQuantity
+        : requestedStockQuantity
+    : null
+  const stockAdjustmentValid = Boolean(
+    selectedStockItem
+    && stockAdjustmentReason
+    && !stockAdjustmentLocked
+    && (stockIsSerialized
+      ? selectedStockItem.status !== stockAdjustmentStatus
+      : Number.isInteger(requestedStockQuantity)
+        && requestedStockQuantity >= (stockAdjustmentMode === 'SET' ? 0 : 1)
+        && Number(resultingStockQuantity) >= 0),
+  )
   const effectiveSaleQuantity = selectedSaleItem?.category === 'PHONE' ? 1 : Math.max(1, Number(saleQuantity) || 1)
   const saleTotal = Math.max(0, effectiveSaleQuantity * (Number(saleUnitPrice) || 0) - (Number(saleDiscount) || 0))
   const saleActionDisabled = busy || saleInventoryLoading || !saleItemId || (salePaymentMethod === 'KHQR' && saleTotal < 0.01)
@@ -472,6 +478,13 @@ export default function OperationModalBridge() {
 
   useEffect(() => {
     if (!kind) return
+    if (kind === 'stock') {
+      setStockInventoryLoading(true)
+      api<{ items: InventoryItem[] }>('/inventory')
+        .then((result) => setInventory(result.items))
+        .catch((reason: Error) => setError(reason.message))
+        .finally(() => setStockInventoryLoading(false))
+    }
     if (kind === 'sale' || kind === 'pawn' || kind === 'purchase') {
       api<{ customers: Customer[] }>('/customers')
         .then((result) => setCustomers(result.customers))
@@ -528,9 +541,14 @@ export default function OperationModalBridge() {
     const shouldRefresh = kind === 'label' && labelItems.length > 0
     setKind(null)
     setError('')
-    setCategory('PHONE')
-    setStockPhotoData('')
-    setStockPhotoName('')
+    setStockSearch('')
+    setSelectedStockItem(null)
+    setStockAdjustmentMode('ADD')
+    setStockAdjustmentQuantity('1')
+    setStockAdjustmentStatus('IN_STOCK')
+    setStockAdjustmentReason('')
+    setStockAdjustmentNotes('')
+    setStockInventoryLoading(false)
     setEstimatedValue(0)
     setPawnPercentage(45)
     setPawnPrincipal('')
@@ -641,26 +659,6 @@ export default function OperationModalBridge() {
 
   const handleCameraError = useCallback((message: string) => setError(message), [])
 
-  function selectStockPhoto(file: File | undefined) {
-    if (!file) return
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      setError('Upload a JPEG, PNG, or WebP image')
-      return
-    }
-    if (file.size > 4 * 1024 * 1024) {
-      setError('Image must be 4MB or smaller')
-      return
-    }
-    const reader = new FileReader()
-    reader.onload = () => {
-      setStockPhotoData(String(reader.result || ''))
-      setStockPhotoName(file.name)
-      setError('')
-    }
-    reader.onerror = () => setError('Unable to read image file')
-    reader.readAsDataURL(file)
-  }
-
   function sellScannedProduct() {
     if (!scannedItem || scannedItem.status !== 'IN_STOCK' || scannedItem.quantity < 1 || scannedItem.sellPrice <= 0) return
     setInventory((current) => current.some((item) => item._id === scannedItem._id) ? current : [scannedItem, ...current])
@@ -672,36 +670,25 @@ export default function OperationModalBridge() {
 
   async function submitStock(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!selectedStockItem || !stockAdjustmentValid) {
+      setError('Select an item and complete the required adjustment details')
+      return
+    }
     setBusy(true)
     setError('')
-    const form = new FormData(event.currentTarget)
     const payload = {
-      category,
-      sku: String(form.get('sku') || ''),
-      name: String(form.get('name') || ''),
-      brand: String(form.get('brand') || ''),
-      model: String(form.get('model') || ''),
-      imei1: category === 'PHONE' ? String(form.get('imei1') || '') : undefined,
-      serialNumber: category === 'PHONE' ? String(form.get('serialNumber') || '') : undefined,
-      storage: category === 'PHONE' || category === 'TABLET' ? String(form.get('storage') || '') : undefined,
-      color: category === 'PHONE' || category === 'TABLET' ? String(form.get('color') || '') : undefined,
-      compatibleModels: category === 'SPARE_PART' ? String(form.get('compatibleModels') || '').split(',').map((value) => value.trim()).filter(Boolean) : undefined,
-      oemQuality: category === 'SPARE_PART' ? String(form.get('oemQuality') || '') : undefined,
-      condition: String(form.get('condition') || 'NEW'),
-      quantity: category === 'PHONE' ? 1 : Number(form.get('quantity') || 1),
-      reorderLevel: Number(form.get('reorderLevel') || 0),
-      buyPrice: Number(form.get('buyPrice') || 0),
-      sellPrice: Number(form.get('sellPrice') || 0),
-      status: 'IN_STOCK',
-      source: 'SUPPLIER',
-      imageData: stockPhotoData || undefined,
+      mode: stockIsSerialized ? 'STATUS' : stockAdjustmentMode,
+      quantity: stockIsSerialized ? undefined : requestedStockQuantity,
+      status: stockIsSerialized ? stockAdjustmentStatus : undefined,
+      reason: stockAdjustmentReason,
+      notes: stockAdjustmentNotes,
     }
     try {
-      await api('/inventory', { method: 'POST', body: JSON.stringify(payload) })
+      await api(`/inventory/${selectedStockItem._id}/adjust`, { method: 'POST', body: JSON.stringify(payload) })
       close()
       window.location.reload()
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to add stock')
+      setError(reason instanceof Error ? reason.message : 'Unable to adjust stock')
     } finally {
       setBusy(false)
     }
@@ -1043,31 +1030,61 @@ export default function OperationModalBridge() {
 
   return (
     <ModalShell kind={kind} error={error} busy={busy} compact={kind === 'sale' && Boolean(saleKhqr)} dismissible={!(kind === 'sale' && saleKhqr)} onClose={close}>
-      {kind === 'stock' && <form className="operation-form" onSubmit={submitStock}>
-        <div className="operation-category-tabs" role="tablist" aria-label="Stock category">
-          <button type="button" className={category === 'PHONE' ? 'active' : ''} onClick={() => setCategory('PHONE')}><Smartphone size={18} /> Phone</button>
-          <button type="button" className={category === 'TABLET' ? 'active' : ''} onClick={() => setCategory('TABLET')}><Smartphone size={18} /> Tablet</button>
-          <button type="button" className={category === 'ACCESSORY' ? 'active' : ''} onClick={() => setCategory('ACCESSORY')}><Package size={18} /> Accessory</button>
-          <button type="button" className={category === 'SPARE_PART' ? 'active' : ''} onClick={() => setCategory('SPARE_PART')}><Wrench size={18} /> Spare part</button>
-          <button type="button" className={category === 'OTHER' ? 'active' : ''} onClick={() => setCategory('OTHER')}><Package size={18} /> Other</button>
-        </div>
-        <section className="stock-photo-picker">
-          <div className={`stock-photo-preview ${stockPhotoData ? 'has-image' : ''}`}>
-            {stockPhotoData ? <img src={stockPhotoData} alt="Selected product preview" /> : <Camera size={24} />}
-          </div>
-          <div>
-            <span className="eyebrow">Product photo</span>
-            <strong>{stockPhotoName || 'No photo selected'}</strong>
-            <small>JPEG, PNG, or WebP. Max 4MB.</small>
-          </div>
-          <label className="secondary-button stock-photo-action">
-            <Camera size={16} /> {stockPhotoData ? 'Change photo' : 'Add photo'}
-            <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void selectStockPhoto(event.target.files?.[0])} />
+      {kind === 'stock' && <form className="operation-form stock-adjustment-form" onSubmit={submitStock}>
+        {!selectedStockItem ? <>
+          <section className="stock-adjustment-intro">
+            <span><Search size={19} /></span>
+            <div><h3>Find an existing product</h3><p>Search by product name, SKU, barcode, IMEI, or serial number. A USB scanner can type directly into this field.</p></div>
+          </section>
+          <label className="stock-adjustment-search">Search inventory
+            <div><Search size={17} /><input autoFocus value={stockSearch} onChange={(event) => setStockSearch(event.target.value)} placeholder="Search or scan a product code" /></div>
           </label>
-          {stockPhotoData && <button type="button" className="ghost-button" onClick={() => { setStockPhotoData(''); setStockPhotoName('') }}>Remove</button>}
-        </section>
-        <div className="operation-form-grid"><StockFields category={category} /></div>
-        <footer className="operation-modal-actions"><button type="button" className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={busy}>{busy ? 'Saving...' : `Add ${category === 'SPARE_PART' ? 'spare part' : category.toLowerCase()}`}</button></footer>
+          <div className="stock-adjustment-results" role="list" aria-label="Matching inventory items">
+            {stockInventoryLoading ? <div className="stock-adjustment-empty"><LoaderCircle className="spinning" size={19} /> Loading inventory...</div> : stockMatches.map((item) => <button type="button" role="listitem" key={item._id} onClick={() => {
+              setSelectedStockItem(item)
+              setStockAdjustmentMode('ADD')
+              setStockAdjustmentQuantity('1')
+              setStockAdjustmentStatus(item.status === 'REPAIR' || item.status === 'ARCHIVED' ? item.status : 'IN_STOCK')
+              setError('')
+            }}>
+              <span className={`stock-adjustment-result-icon ${item.category === 'PHONE' ? 'phone' : ''}`}>{item.category === 'PHONE' ? <Smartphone size={19} /> : <Package size={19} />}</span>
+              <p><strong>{item.name}</strong><small>{item.sku}{item.imei1 ? ` · IMEI ${item.imei1}` : ''}</small></p>
+              <span><small>{item.category.replaceAll('_', ' ')}</small><strong>{item.category === 'PHONE' ? item.status.replaceAll('_', ' ') : `${item.quantity} in stock`}</strong></span>
+            </button>)}
+            {!stockInventoryLoading && stockMatches.length === 0 && <div className="stock-adjustment-empty"><Package size={19} /> No matching inventory item</div>}
+          </div>
+        </> : <>
+          <section className="stock-adjustment-selected">
+            <span className={`stock-adjustment-result-icon ${selectedStockItem.category === 'PHONE' ? 'phone' : ''}`}>{selectedStockItem.category === 'PHONE' ? <Smartphone size={21} /> : <Package size={21} />}</span>
+            <div><span className="eyebrow">Selected inventory item</span><h3>{selectedStockItem.name}</h3><p>{selectedStockItem.sku}{selectedStockItem.imei1 ? ` · IMEI ${selectedStockItem.imei1}` : ''}</p></div>
+            <div className="stock-adjustment-current"><small>{stockIsSerialized ? 'Current status' : 'Current quantity'}</small><strong>{stockIsSerialized ? selectedStockItem.status.replaceAll('_', ' ') : selectedStockItem.quantity}</strong></div>
+            <button type="button" className="ghost-button" onClick={() => { setSelectedStockItem(null); setStockSearch(''); setStockAdjustmentReason(''); setError('') }}>Change item</button>
+          </section>
+
+          {stockAdjustmentLocked && <div className="stock-adjustment-lock"><AlertTriangle size={17} /><div><strong>This item is controlled by another workflow</strong><span>{selectedStockItem.status.replaceAll('_', ' ')} stock must be updated through its related sale, reservation, or pawn contract.</span></div></div>}
+
+          {stockIsSerialized ? <section className="stock-adjustment-panel">
+            <div className="stock-adjustment-section-heading"><div><span className="eyebrow">Serialized device</span><h3>Correct device status</h3><p>Phone quantity stays at one. Purchases, sales, and pawn contracts must use their own workflows.</p></div></div>
+            <div className="stock-adjustment-status-options" role="radiogroup" aria-label="New device status">
+              {(['IN_STOCK', 'REPAIR', 'ARCHIVED'] as StockAdjustmentStatus[]).map((status) => <button type="button" role="radio" aria-checked={stockAdjustmentStatus === status} disabled={stockAdjustmentLocked} className={stockAdjustmentStatus === status ? 'active' : ''} key={status} onClick={() => setStockAdjustmentStatus(status)}><span>{status === 'IN_STOCK' ? 'Available' : status === 'REPAIR' ? 'In repair' : 'Archived'}</span><small>{status === 'IN_STOCK' ? 'Ready to sell' : status === 'REPAIR' ? 'Temporarily unavailable' : 'Removed from active stock'}</small>{stockAdjustmentStatus === status && <CheckCircle2 size={17} />}</button>)}
+            </div>
+          </section> : <section className="stock-adjustment-panel">
+            <div className="stock-adjustment-section-heading"><div><span className="eyebrow">Quantity adjustment</span><h3>How should the count change?</h3></div>{resultingStockQuantity !== null && <p><small>New quantity</small><strong>{Math.max(0, resultingStockQuantity)}</strong></p>}</div>
+            <div className="stock-adjustment-mode-options" role="radiogroup" aria-label="Quantity adjustment method">
+              <button type="button" role="radio" aria-checked={stockAdjustmentMode === 'ADD'} disabled={stockAdjustmentLocked} className={stockAdjustmentMode === 'ADD' ? 'active' : ''} onClick={() => setStockAdjustmentMode('ADD')}><Plus size={17} /><span>Add</span><small>Increase count</small></button>
+              <button type="button" role="radio" aria-checked={stockAdjustmentMode === 'REMOVE'} disabled={stockAdjustmentLocked} className={stockAdjustmentMode === 'REMOVE' ? 'active' : ''} onClick={() => setStockAdjustmentMode('REMOVE')}><Minus size={17} /><span>Remove</span><small>Decrease count</small></button>
+              <button type="button" role="radio" aria-checked={stockAdjustmentMode === 'SET'} disabled={stockAdjustmentLocked} className={stockAdjustmentMode === 'SET' ? 'active' : ''} onClick={() => setStockAdjustmentMode('SET')}><RefreshCw size={17} /><span>Set count</span><small>Replace current count</small></button>
+            </div>
+            <label>Quantity<input type="number" min={stockAdjustmentMode === 'SET' ? '0' : '1'} step="1" required disabled={stockAdjustmentLocked} value={stockAdjustmentQuantity} onChange={(event) => setStockAdjustmentQuantity(event.target.value)} /></label>
+            {resultingStockQuantity !== null && resultingStockQuantity < 0 && <div className="stock-adjustment-warning"><AlertTriangle size={16} /> You cannot remove more than the current quantity.</div>}
+          </section>}
+
+          <div className="operation-form-grid stock-adjustment-details">
+            <label>Reason<select required value={stockAdjustmentReason} onChange={(event) => setStockAdjustmentReason(event.target.value)}><option value="" disabled>Select a reason</option><option value="COUNT_CORRECTION">Count correction</option><option value="DAMAGED">Damaged stock</option><option value="LOST">Lost stock</option><option value="RETURNED">Returned item</option><option value="FOUND">Found stock</option><option value="OPENING_BALANCE">Opening balance</option><option value="OTHER">Other</option></select></label>
+            <label>Note <small className="optional-marker">Optional</small><input maxLength={500} value={stockAdjustmentNotes} onChange={(event) => setStockAdjustmentNotes(event.target.value)} placeholder="Explain what was checked or corrected" /></label>
+          </div>
+        </>}
+        <footer className="operation-modal-actions"><button type="button" className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={busy || !stockAdjustmentValid}>{busy ? 'Saving adjustment...' : selectedStockItem ? 'Update stock' : 'Select an item first'}</button></footer>
       </form>}
 
       {kind === 'purchase' && <form className="operation-form purchase-workflow-form" onSubmit={submitPurchase}>
