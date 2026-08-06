@@ -15,6 +15,7 @@ import android.os.Message;
 import android.print.PrintAttributes;
 import android.print.PrintDocumentAdapter;
 import android.print.PrintManager;
+import android.util.Base64;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
@@ -288,7 +289,7 @@ public class MainActivity extends AppCompatActivity {
         PhoneFlowApi.lookupInventory(apiBaseUrl, cookie, code, new PhoneFlowApi.Callback() {
             @Override
             public void onSuccess(JSONObject item) {
-                showProductDialog(item);
+                openStockRecord(item);
             }
 
             @Override
@@ -296,6 +297,21 @@ public class MainActivity extends AppCompatActivity {
                 toast(message);
             }
         });
+    }
+
+    private void openStockRecord(JSONObject item) {
+        String payload = Base64.encodeToString(item.toString().getBytes(StandardCharsets.UTF_8), Base64.NO_WRAP);
+        String script = "(function(){"
+            + "try{"
+            + "var item=JSON.parse(atob('" + payload + "'));"
+            + "window.dispatchEvent(new CustomEvent('phoneflow:open-stock-item',{detail:{item:item}}));"
+            + "}catch(e){console.error(e);}"
+            + "})();";
+
+        webView.loadUrl(serverUrl + "/stock");
+        webView.postDelayed(() -> webView.evaluateJavascript(script, null), 700);
+        webView.postDelayed(() -> webView.evaluateJavascript(script, null), 1500);
+        toast("Opening stock record");
     }
 
     private void showProductDialog(JSONObject item) {

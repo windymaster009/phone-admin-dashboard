@@ -1143,6 +1143,25 @@ function InventoryView() {
       .catch((reason: Error) => setError(reason.message))
   }, [])
 
+  useEffect(() => {
+    function openScannedStock(event: Event) {
+      const detail = (event as CustomEvent<{ item?: InventoryItem }>).detail
+      const item = detail?.item
+      if (!item?._id) return
+      setItems((current) => current.some((row) => row._id === item._id)
+        ? current.map((row) => row._id === item._id ? item : row)
+        : [item, ...current])
+      setSearch('')
+      setCategoryFilter('ALL')
+      setStatusFilter('ALL')
+      setEditingPrice(false)
+      setSelectedItem(item)
+    }
+
+    window.addEventListener('phoneflow:open-stock-item', openScannedStock)
+    return () => window.removeEventListener('phoneflow:open-stock-item', openScannedStock)
+  }, [])
+
   const phoneCount = items.filter((item) => item.category === 'PHONE').reduce((sum, item) => sum + item.quantity, 0)
   const tabletCount = items.filter((item) => item.category === 'TABLET').reduce((sum, item) => sum + item.quantity, 0)
   const accessoryCount = items.filter((item) => item.category === 'ACCESSORY').reduce((sum, item) => sum + item.quantity, 0)
