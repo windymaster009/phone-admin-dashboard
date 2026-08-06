@@ -8,3 +8,12 @@ dist
 *.tsbuildinfo
 .vscode
 backups/
+
+# Android Studio and Gradle
+android-app/.gradle/
+android-app/.idea/
+android-app/local.properties
+android-app/**/build/
+android-app/.cxx/
+*.apk
+*.aab
