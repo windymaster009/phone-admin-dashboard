@@ -35,6 +35,7 @@ import {
   Sun,
   Trash2,
   TrendingDown,
+  Type,
   UserRound,
   Users,
   WalletCards,
@@ -65,6 +66,8 @@ type NavItem = {
   icon: LucideIcon
   badge?: string
 }
+
+type AppFontSize = 'default' | 'comfortable' | 'large'
 
 const viewPaths: Record<NavKey, string> = {
   dashboard: '/dashboard',
@@ -1772,8 +1775,28 @@ function ReportsView() {
   )
 }
 
-function SettingsView({ user, onLogout }: { user: SessionUser; onLogout: () => void }) {
+function SettingsView({
+  user,
+  onLogout,
+  fontSize,
+  onFontSizeChange,
+}: {
+  user: SessionUser
+  onLogout: () => void
+  fontSize: AppFontSize
+  onFontSizeChange: (fontSize: AppFontSize) => void
+}) {
   const savedValuations = JSON.parse(localStorage.getItem('phoneflow_valuations') || '[]') as unknown[]
+  const fontSizeOptions: Array<{
+    value: AppFontSize
+    label: string
+    percentage: string
+    description: string
+  }> = [
+    { value: 'default', label: 'Default', percentage: '100%', description: 'Standard dashboard size' },
+    { value: 'comfortable', label: 'Comfortable', percentage: '110%', description: 'Larger text and controls' },
+    { value: 'large', label: 'Large', percentage: '120%', description: 'Maximum readable size' },
+  ]
 
   return (
     <>
@@ -1791,18 +1814,20 @@ function SettingsView({ user, onLogout }: { user: SessionUser; onLogout: () => v
             </span>
           </div>
 
-          <div className="account-profile">
-            <div className="settings-avatar">{user.name.slice(0, 2).toUpperCase()}</div>
-            <div className="account-identity">
-              <h4>{user.name}</h4>
-              <span>{user.email}</span>
+          <div className="account-settings-body">
+            <div className="account-profile">
+              <div className="settings-avatar">{user.name.slice(0, 2).toUpperCase()}</div>
+              <div className="account-identity">
+                <h4>{user.name}</h4>
+                <span>{user.email}</span>
+              </div>
             </div>
-          </div>
 
-          <div className="account-details">
-            <div><span>Role</span><strong>{titleStatus(user.role)}</strong></div>
-            <div><span>Access level</span><strong>{user.role === 'OWNER' ? 'Full access' : 'Role based'}</strong></div>
-            <div><span>Authentication</span><strong>Password protected</strong></div>
+            <div className="account-details">
+              <div><span>Role</span><strong>{titleStatus(user.role)}</strong></div>
+              <div><span>Access level</span><strong>{user.role === 'OWNER' ? 'Full access' : 'Role based'}</strong></div>
+              <div><span>Authentication</span><strong>Password protected</strong></div>
+            </div>
           </div>
 
           <div className="settings-card-footer">
@@ -1861,6 +1886,39 @@ function SettingsView({ user, onLogout }: { user: SessionUser; onLogout: () => v
             </button>
           </div>
         </article>
+
+        <article className="surface-card settings-card font-size-settings-card">
+          <div className="settings-card-heading">
+            <span className="settings-icon violet"><Type size={20} /></span>
+            <div>
+              <h3>Display size</h3>
+              <p>Make text and controls easier to read.</p>
+            </div>
+          </div>
+          <div className="font-size-options" role="radiogroup" aria-label="Display size">
+            {fontSizeOptions.map((option) => {
+              const selected = option.value === fontSize
+              return (
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  className={`font-size-option ${selected ? 'active' : ''}`}
+                  key={option.value}
+                  onClick={() => onFontSizeChange(option.value)}
+                >
+                  <span className="font-size-preview" data-size={option.value} aria-hidden="true">Aa</span>
+                  <span className="font-size-option-copy">
+                    <span><strong>{option.label}</strong><b>{option.percentage}</b></span>
+                    <small>{option.description}</small>
+                  </span>
+                  {selected && <BadgeCheck size={18} aria-hidden="true" />}
+                </button>
+              )
+            })}
+          </div>
+          <p className="font-size-setting-note">Saved on this browser and applied immediately.</p>
+        </article>
       </section>
     </>
   )
@@ -1871,11 +1929,15 @@ function App({
   onLogout,
   theme,
   onToggleTheme,
+  fontSize,
+  onFontSizeChange,
 }: {
   user: SessionUser
   onLogout: () => void
   theme: 'dark' | 'light'
   onToggleTheme: () => void
+  fontSize: AppFontSize
+  onFontSizeChange: (fontSize: AppFontSize) => void
 }) {
   const [active, setActive] = useState<NavKey>(() => viewFromPath(window.location.pathname))
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -2003,13 +2065,17 @@ function App({
       case 'suppliers': return <SupplierWorkspace />
       case 'depreciation': return <DepreciationView goTo={changePage} />
       case 'reports': return <ReportsView />
-      case 'settings': return <SettingsView user={user} onLogout={onLogout} />
+      case 'settings': return <SettingsView user={user} onLogout={onLogout} fontSize={fontSize} onFontSizeChange={onFontSizeChange} />
       default: return <DashboardView goTo={changePage} user={user} />
     }
   }
 
   return (
-    <div className="app" data-theme={theme}>
+    <div
+      className="app"
+      data-theme={theme}
+      data-font-size={fontSize}
+    >
       <div className={`mobile-overlay ${mobileOpen ? 'show' : ''}`} onClick={() => setMobileOpen(false)} aria-hidden="true" />
       <aside ref={sidebarRef} id="primary-sidebar" className={`sidebar ${mobileOpen ? 'mobile-open' : ''}`} aria-label="Primary navigation">
         <div className="brand">

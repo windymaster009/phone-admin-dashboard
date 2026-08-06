@@ -17,7 +17,9 @@ const App = lazy(loadApp)
 const AuthScreen = lazy(loadAuthScreen)
 
 type AppTheme = 'dark' | 'light'
+type AppFontSize = 'default' | 'comfortable' | 'large'
 const THEME_STORAGE_KEY = 'phoneflow_theme'
+const FONT_SIZE_STORAGE_KEY = 'phoneflow_font_size'
 
 function getInitialTheme(): AppTheme {
   const renderedTheme = document.querySelector<HTMLElement>('.app')?.dataset.theme
@@ -33,6 +35,19 @@ function getInitialTheme(): AppTheme {
   return window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'
 }
 
+function getInitialFontSize(): AppFontSize {
+  try {
+    const storedFontSize = localStorage.getItem(FONT_SIZE_STORAGE_KEY)
+    if (storedFontSize === 'default' || storedFontSize === 'comfortable' || storedFontSize === 'large') {
+      return storedFontSize
+    }
+  } catch {
+    // Use the standard size when storage is unavailable.
+  }
+
+  return 'default'
+}
+
 function StartupScreen({ message = 'Connecting to the shop...' }: { message?: string }) {
   return (
     <div className="startup-screen">
@@ -45,6 +60,7 @@ function StartupScreen({ message = 'Connecting to the shop...' }: { message?: st
 
 export default function AppWithBackend() {
   const [theme, setTheme] = useState<AppTheme>(getInitialTheme)
+  const [fontSize, setFontSize] = useState<AppFontSize>(getInitialFontSize)
   const [user, setUser] = useState<SessionUser | null>(() => getToken() ? getSessionUser() : null)
   const [checking, setChecking] = useState(() => Boolean(getToken() && !getSessionUser()))
 
@@ -57,6 +73,15 @@ export default function AppWithBackend() {
       // The active page still receives the theme when storage is unavailable.
     }
   }, [theme])
+
+  useLayoutEffect(() => {
+    document.documentElement.dataset.fontSize = fontSize
+    try {
+      localStorage.setItem(FONT_SIZE_STORAGE_KEY, fontSize)
+    } catch {
+      // The active page still receives the display size when storage is unavailable.
+    }
+  }, [fontSize])
 
   useEffect(() => subscribeToTokenChanges(() => {
     if (!getToken()) {
@@ -117,6 +142,8 @@ export default function AppWithBackend() {
       <App
         theme={theme}
         onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
+        fontSize={fontSize}
+        onFontSizeChange={setFontSize}
         user={user}
         onLogout={() => {
           setToken(null)
