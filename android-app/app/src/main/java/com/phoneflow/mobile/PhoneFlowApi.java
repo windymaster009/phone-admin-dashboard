@@ -27,7 +27,7 @@ final class PhoneFlowApi {
     private PhoneFlowApi() {
     }
 
-    static void lookupInventory(String baseUrl, String token, String code, Callback callback) {
+    static void lookupInventory(String baseUrl, String sessionCookie, String code, Callback callback) {
         IO.execute(() -> {
             HttpURLConnection connection = null;
             try {
@@ -38,7 +38,7 @@ final class PhoneFlowApi {
                 connection.setConnectTimeout(12_000);
                 connection.setReadTimeout(12_000);
                 connection.setRequestProperty("Accept", "application/json");
-                connection.setRequestProperty("Authorization", "Bearer " + token);
+                connection.setRequestProperty("Cookie", sessionCookie);
 
                 int status = connection.getResponseCode();
                 InputStream stream = status >= 200 && status < 300

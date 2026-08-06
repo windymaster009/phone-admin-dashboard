@@ -44,7 +44,6 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 
 import org.json.JSONObject;
-import org.json.JSONTokener;
 
 import java.lang.ref.WeakReference;
 import java.net.URLEncoder;
@@ -278,37 +277,25 @@ public class MainActivity extends AppCompatActivity {
         }
 
         toast("Looking up " + code + "…");
-        webView.evaluateJavascript(
-            "(function(){try{return localStorage.getItem('phoneflow_token')||'';}catch(e){return '';}})()",
-            rawToken -> {
-                String token = decodeJavascriptString(rawToken);
-                if (token.isBlank()) {
-                    toast("Sign in to PhoneFlow before scanning");
-                    return;
-                }
-                PhoneFlowApi.lookupInventory(apiBaseUrl, token, code, new PhoneFlowApi.Callback() {
-                    @Override
-                    public void onSuccess(JSONObject item) {
-                        showProductDialog(item);
-                    }
-
-                    @Override
-                    public void onError(String message) {
-                        toast(message);
-                    }
-                });
-            }
-        );
-    }
-
-    private String decodeJavascriptString(String rawValue) {
-        if (rawValue == null || rawValue.equals("null")) return "";
-        try {
-            Object value = new JSONTokener(rawValue).nextValue();
-            return value instanceof String ? (String) value : "";
-        } catch (Exception ignored) {
-            return "";
+        String cookie = CookieManager.getInstance().getCookie(apiBaseUrl);
+        if (cookie == null || cookie.isBlank()) cookie = CookieManager.getInstance().getCookie(serverUrl);
+        if (cookie == null || cookie.isBlank()) {
+            toast("Opening PhoneFlow session. Try scan again in a moment.");
+            loadDashboard();
+            return;
         }
+
+        PhoneFlowApi.lookupInventory(apiBaseUrl, cookie, code, new PhoneFlowApi.Callback() {
+            @Override
+            public void onSuccess(JSONObject item) {
+                showProductDialog(item);
+            }
+
+            @Override
+            public void onError(String message) {
+                toast(message);
+            }
+        });
     }
 
     private void showProductDialog(JSONObject item) {
