@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.PhoneFlow" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/phoneflow_primary</item>
+        <item name="colorPrimaryDark">@color/phoneflow_primary_dark</item>
+        <item name="colorAccent">@color/phoneflow_primary</item>
+        <item name="android:windowBackground">@color/phoneflow_background</item>
+        <item name="android:navigationBarColor">@color/phoneflow_background</item>
+        <item name="android:statusBarColor">@color/phoneflow_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+</resources>

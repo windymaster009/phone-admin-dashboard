@@ -14,3 +14,7 @@ android-scanner/build/
 android-scanner/app/build/
 android-scanner/local.properties
 android-scanner/.android-sdk/
+android-app/.gradle/
+android-app/build/
+android-app/app/build/
+android-app/local.properties
