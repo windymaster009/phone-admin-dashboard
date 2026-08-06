@@ -8,3 +8,9 @@ dist
 *.tsbuildinfo
 .vscode
 backups/
+uploads/
+android-scanner/.gradle/
+android-scanner/build/
+android-scanner/app/build/
+android-scanner/local.properties
+android-scanner/.android-sdk/
