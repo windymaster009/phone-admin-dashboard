@@ -656,6 +656,12 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
   const accessoryValue = inventoryMix.find((item) => item._id === 'ACCESSORY')?.value || 0
   const phoneStop = totalInventoryValue ? (phoneValue / totalInventoryValue) * 100 : 0
   const accessoryStop = totalInventoryValue ? phoneStop + (accessoryValue / totalInventoryValue) * 100 : 0
+  const inventoryValueText = money.format(totalInventoryValue)
+  const inventoryValueSize = inventoryValueText.length > 10
+    ? 'long'
+    : inventoryValueText.length > 7
+      ? 'medium'
+      : 'short'
   const donutStyle = {
     background: totalInventoryValue
       ? `conic-gradient(#8b5cf6 0 ${phoneStop}%, #38bdf8 ${phoneStop}% ${accessoryStop}%, #fb923c ${accessoryStop}% 100%)`
@@ -726,7 +732,13 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
             </div>
           </div>
           <div className="donut-wrap">
-            <div className="donut-chart" style={donutStyle}><span>{money.format(totalInventoryValue)}{exchangeRate && <small className="donut-khr">{khrText(totalInventoryValue, exchangeRate)}</small>}<small>Total value</small></span></div>
+            <div className="donut-chart" style={donutStyle} aria-label={`Total inventory value ${inventoryValueText}`}>
+              <span className="donut-center">
+                <strong className={`donut-value donut-value-${inventoryValueSize}`}>{inventoryValueText}</strong>
+                {exchangeRate && <small className="donut-khr">{khrText(totalInventoryValue, exchangeRate)}</small>}
+                <small>Total value</small>
+              </span>
+            </div>
           </div>
           <div className="legend-list">
             {inventoryMix.map((item, index) => (

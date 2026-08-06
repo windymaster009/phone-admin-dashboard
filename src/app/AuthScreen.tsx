@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { motion } from 'framer-motion'
 import { AlertTriangle, BadgeCheck, Boxes, HandCoins, Smartphone } from 'lucide-react'
-import { api, setToken, type SessionUser } from '../lib/api'
+import { ApiError, api, setToken, type SessionUser } from '../lib/api'
 
 function ErrorNotice({ message }: { message: string }) {
   return <div className="error-notice"><AlertTriangle size={16} /> {message}</div>
@@ -118,7 +118,9 @@ export default function AuthScreen({
       setToken(result.token)
       onAuthenticated(result.user)
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to sign in')
+      setError(reason instanceof ApiError && reason.status === 401
+        ? 'Invalid email or password'
+        : reason instanceof Error ? reason.message : 'Unable to sign in')
     } finally {
       setBusy(false)
     }

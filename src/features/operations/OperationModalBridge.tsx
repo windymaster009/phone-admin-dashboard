@@ -94,6 +94,11 @@ type PawnValuationSnapshot = {
   usdKhrRate?: number
 }
 
+type CreatedPawn = {
+  pawnNo: string
+  principal: number
+}
+
 type SaleDraft = {
   type: 'SELL'
   customer?: string
@@ -331,6 +336,7 @@ export default function OperationModalBridge() {
   const [pawnPrincipal, setPawnPrincipal] = useState('')
   const [pawnInterestRate, setPawnInterestRate] = useState(5)
   const [pawnValuation, setPawnValuation] = useState<PawnValuationSnapshot | null>(null)
+  const [pawnCreated, setPawnCreated] = useState<CreatedPawn | null>(null)
   const [pawnCustomerId, setPawnCustomerId] = useState('')
   const [pawnIdConfirmed, setPawnIdConfirmed] = useState(false)
   const [pawnCustomerMode, setPawnCustomerMode] = useState<PawnCustomerMode>('EXISTING')
@@ -476,6 +482,7 @@ export default function OperationModalBridge() {
   useEffect(() => {
     const openPawn = () => {
       setError('')
+      setPawnCreated(null)
       setPawnAttempted(false)
       setPawnStep(1)
       setKind('pawn')
@@ -567,6 +574,7 @@ export default function OperationModalBridge() {
     setPawnPrincipal('')
     setPawnInterestRate(5)
     setPawnValuation(null)
+    setPawnCreated(null)
     setPawnCustomerId('')
     setPawnIdConfirmed(false)
     setPawnCustomerMode('EXISTING')
@@ -622,6 +630,10 @@ export default function OperationModalBridge() {
 
   const close = () => {
     if (busy) return
+    if (kind === 'pawn' && pawnCreated) {
+      window.location.reload()
+      return
+    }
     if (saleQrZoomed) {
       setSaleQrZoomed(false)
       return
@@ -1054,9 +1066,8 @@ export default function OperationModalBridge() {
       notes: String(form.get('notes') || ''),
     }
     try {
-      await api('/pawns', { method: 'POST', body: JSON.stringify(payload) })
-      close()
-      window.location.reload()
+      const result = await api<{ pawn: CreatedPawn }>('/pawns', { method: 'POST', body: JSON.stringify(payload) })
+      setPawnCreated({ pawnNo: result.pawn.pawnNo, principal: result.pawn.principal })
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to create pawn contract')
     } finally {
@@ -1067,7 +1078,7 @@ export default function OperationModalBridge() {
   if (!kind) return null
 
   return (
-    <ModalShell kind={kind} error={error} busy={busy} compact={kind === 'sale' && Boolean(saleKhqr)} dismissible={!(kind === 'sale' && saleKhqr)} onClose={close}>
+    <ModalShell kind={kind} error={error} busy={busy} compact={(kind === 'sale' && Boolean(saleKhqr)) || (kind === 'pawn' && Boolean(pawnCreated))} dismissible={!(kind === 'sale' && saleKhqr)} onClose={close}>
       {kind === 'stock' && <form className="operation-form stock-adjustment-form" onSubmit={submitStock}>
         {!selectedStockItem ? <>
           <section className="stock-adjustment-intro">
@@ -1277,7 +1288,23 @@ export default function OperationModalBridge() {
         <footer className="operation-modal-actions"><button type="button" className="ghost-button" onClick={close}>Print later</button><button type="button" className="primary-button" onClick={() => { printInventoryLabels(labelItems); close() }}><Printer size={17} /> Print labels</button></footer>
       </div>}
 
-      {kind === 'pawn' && <form className="operation-form purchase-workflow-form pawn-workflow-form" onSubmit={submitPawn}>
+      {kind === 'pawn' && pawnCreated && <section className="record-created-workflow" role="status" aria-live="polite">
+        <div className="record-created-card">
+          <span className="record-created-check"><CheckCircle2 size={38} /></span>
+          <div>
+            <span className="eyebrow">Contract saved</span>
+            <h3>Pawn contract created</h3>
+          </div>
+          <dl>
+            <div><dt>Pawn number</dt><dd>{pawnCreated.pawnNo}</dd></div>
+            <div><dt>Principal</dt><dd>${pawnCreated.principal.toFixed(2)}</dd></div>
+            <div><dt>Inventory status</dt><dd><span>PAWNED</span></dd></div>
+          </dl>
+        </div>
+        <footer className="operation-modal-actions"><button type="button" className="primary-button record-created-done" onClick={() => window.location.reload()}><CheckCircle2 size={16} /> Done</button></footer>
+      </section>}
+
+      {kind === 'pawn' && !pawnCreated && <form className="operation-form purchase-workflow-form pawn-workflow-form" onSubmit={submitPawn}>
         <nav className="purchase-stepper" aria-label="Pawn contract progress">
           <button type="button" className={pawnStep === 1 ? 'active' : pawnCustomerValid ? 'complete' : ''} onClick={() => setPawnStep(1)}><span>{pawnCustomerValid ? <CheckCircle2 size={15} /> : '1'}</span><p><strong>Customer verification</strong><small>Identity and ownership</small></p></button>
           <i />

@@ -189,6 +189,10 @@
   max-height: min(900px, calc(100vh - 28px));
 }
 
+.loan-modal.operation-modal-compact {
+  width: min(580px, calc(100vw - 28px));
+}
+
 .loan-create-form,
 .loan-detail-scroll {
   overflow-y: auto;

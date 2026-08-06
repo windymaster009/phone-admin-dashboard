@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   BadgeCheck,
   Banknote,
+  CheckCircle2,
   CircleDollarSign,
   Clock,
   FileText,
@@ -113,11 +114,12 @@ function DualAmount({ usd, khr }: { usd: number; khr: number }) {
   return <><strong>{money(usd, 'USD')}</strong><small>{money(khr, 'KHR')}</small></>
 }
 
-function Modal({ title, eyebrow, description, onClose, children }: {
+function Modal({ title, eyebrow, description, onClose, compact = false, children }: {
   title: string
   eyebrow: string
   description: string
   onClose: () => void
+  compact?: boolean
   children: ReactNode
 }) {
   useEffect(() => {
@@ -132,7 +134,7 @@ function Modal({ title, eyebrow, description, onClose, children }: {
 
   return createPortal(
     <div className="operation-modal-backdrop loan-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-      <section className="operation-modal loan-modal" role="dialog" aria-modal="true" aria-label={title}>
+      <section className={`operation-modal loan-modal${compact ? ' operation-modal-compact' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
         <header className="operation-modal-header">
           <span className="operation-modal-icon"><Banknote size={21} /></span>
           <div><span className="eyebrow">{eyebrow}</span><h2>{title}</h2><p>{description}</p></div>
@@ -145,9 +147,10 @@ function Modal({ title, eyebrow, description, onClose, children }: {
   )
 }
 
-function CreateLoanModal({ busy, error, onClose, onSubmit }: {
+function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
   busy: boolean
   error: string
+  createdLoan: Loan | null
   onClose: () => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }) {
@@ -159,7 +162,20 @@ function CreateLoanModal({ busy, error, onClose, onSubmit }: {
   due.setDate(due.getDate() + 30)
   const interestAmount = interestType === 'FIXED' ? interestValue : interestType === 'PERCENT' ? principal * interestValue / 100 : 0
 
-  return <Modal title="Create loan" eyebrow="Money lending" description="Record who borrowed money and when it must be repaid." onClose={onClose}>
+  return <Modal title="Create loan" eyebrow="Money lending" description="Record who borrowed money and when it must be repaid." compact={Boolean(createdLoan)} onClose={onClose}>
+    {createdLoan && <section className="record-created-workflow" role="status" aria-live="polite">
+      <div className="record-created-card">
+        <span className="record-created-check"><CheckCircle2 size={38} /></span>
+        <div><span className="eyebrow">Record saved</span><h3>Loan record created</h3></div>
+        <dl>
+          <div><dt>Loan number</dt><dd>{createdLoan.loanNo}</dd></div>
+          <div><dt>Principal</dt><dd>{money(createdLoan.principal, createdLoan.currency)}</dd></div>
+          <div><dt>Status</dt><dd><span>{statusLabel(createdLoan.status)}</span></dd></div>
+        </dl>
+      </div>
+      <footer className="operation-modal-actions"><button type="button" className="primary-button record-created-done" onClick={onClose}><CheckCircle2 size={16} /> Done</button></footer>
+    </section>}
+    {!createdLoan && <>
     {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
     <form className="operation-form loan-create-form" onSubmit={onSubmit}>
       <div className="operation-form-grid">
@@ -191,6 +207,7 @@ function CreateLoanModal({ busy, error, onClose, onSubmit }: {
       </div>
       <footer className="operation-modal-actions"><button type="button" className="ghost-button" onClick={onClose} disabled={busy}>Cancel</button><button className="primary-button" disabled={busy || principal <= 0}>{busy ? 'Creating...' : 'Create loan'}</button></footer>
     </form>
+    </>}
   </Modal>
 }
 
@@ -266,6 +283,7 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
   const [error, setError] = useState('')
   const [modalError, setModalError] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const [createdLoan, setCreatedLoan] = useState<Loan | null>(null)
   const [detail, setDetail] = useState<LoanDetail | null>(null)
 
   const loadLoans = useCallback(async () => {
@@ -294,7 +312,7 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
     setBusy(true)
     setModalError('')
     try {
-      await api('/loans', { method: 'POST', body: JSON.stringify({
+      const result = await api<{ loan: Loan }>('/loans', { method: 'POST', body: JSON.stringify({
         borrower: {
           name: String(form.get('borrowerName') || '').trim(),
           phone: String(form.get('borrowerPhone') || '').trim(),
@@ -311,8 +329,8 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
         reason: String(form.get('reason') || '').trim(),
         notes: String(form.get('notes') || '').trim(),
       }) })
-      setShowCreate(false)
       await loadLoans()
+      setCreatedLoan(result.loan)
     } catch (reason) {
       setModalError(reason instanceof Error ? reason.message : 'Unable to create loan')
     } finally {
@@ -384,7 +402,7 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
   return <div className="loan-workspace-bridge">
     <div className="section-header">
       <div><span className="eyebrow">Finance & control</span><h2>Loans</h2><p>Track money lent to people, upcoming due dates, overdue balances, and every repayment.</p></div>
-      {canCreate && <button className="primary-button" onClick={() => { setModalError(''); setShowCreate(true) }}><Plus size={17} /> New loan</button>}
+      {canCreate && <button className="primary-button" onClick={() => { setModalError(''); setCreatedLoan(null); setShowCreate(true) }}><Plus size={17} /> New loan</button>}
     </div>
     {error && <div className="loan-error"><AlertTriangle size={17} /> {error}</div>}
 
@@ -417,7 +435,7 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
       <div className="loan-mobile-list">{loans.map((loan) => <button className={`loan-mobile-card ${loan.status === 'OVERDUE' ? 'overdue' : ''}`} key={loan._id} onClick={() => void openDetail(loan)}><div><span className="avatar">{loan.borrower.name.slice(0, 2).toUpperCase()}</span><p><strong>{loan.borrower.name}</strong><small>{loan.loanNo} · {loan.borrower.phone}</small></p><LoanStatusBadge status={loan.status} /></div><section><span>Remaining<strong>{money(loan.remainingBalance, loan.currency)}</strong></span><span>Due<strong>{dateText(loan.dueDate)}</strong></span></section><footer>{dueDescription(loan)}</footer></button>)}</div>
     </article>
 
-    {showCreate && <CreateLoanModal busy={busy} error={modalError} onClose={() => { if (!busy) setShowCreate(false) }} onSubmit={createLoan} />}
+    {showCreate && <CreateLoanModal busy={busy} error={modalError} createdLoan={createdLoan} onClose={() => { if (!busy) { setShowCreate(false); setCreatedLoan(null) } }} onSubmit={createLoan} />}
     {detail && <LoanDetailModal detail={detail} user={user} busy={busy} error={modalError} onClose={() => { if (!busy) setDetail(null) }} onPayment={recordPayment} onDueDate={changeDueDate} onCancel={cancelLoan} />}
   </div>
 }

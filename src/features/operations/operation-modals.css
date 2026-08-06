@@ -1007,6 +1007,18 @@ body.operation-modal-open {
 @keyframes khqr-confetti-fall { 0% { opacity: 0; transform: translate3d(0,-8px,0) rotate(0); } 12% { opacity: 1; } 100% { opacity: .9; transform: translate3d(18px,350px,0) rotate(620deg); } }
 @keyframes khqr-spin { to { transform: rotate(360deg); } }
 .purchase-workflow-form { flex: 1; display: flex; flex-direction: column; gap: 0; overflow: hidden; padding: 0; }
+.record-created-workflow { min-height: 0; display: flex; flex: 1; flex-direction: column; }
+.record-created-card { width: min(470px,calc(100% - 36px)); display: grid; justify-items: center; gap: 18px; margin: 24px auto; padding: 28px; border: 1px solid rgba(52,211,153,.23); border-radius: 18px; background: linear-gradient(145deg,rgba(52,211,153,.1),rgba(52,211,153,.025)); text-align: center; }
+.record-created-check { width: 68px; height: 68px; display: grid; place-items: center; color: #ecfdf5; border-radius: 50%; background: #10b981; box-shadow: 0 14px 34px rgba(16,185,129,.2); animation: khqr-success-pop 520ms cubic-bezier(.18,.89,.32,1.28) both; }
+.record-created-card > div { display: grid; justify-items: center; gap: 6px; }
+.record-created-card h3 { margin: 0; font: 800 21px Manrope,sans-serif; letter-spacing: -.025em; }
+.record-created-card dl { width: 100%; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin: 2px 0 0; }
+.record-created-card dl > div { min-width: 0; display: grid; gap: 6px; padding: 11px; border: 1px solid var(--border,rgba(255,255,255,.08)); border-radius: 11px; background: var(--bg-soft,rgba(6,11,24,.34)); }
+.record-created-card dt { color: var(--muted-2,#667085); font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+.record-created-card dd { min-width: 0; margin: 0; overflow: hidden; font-size: 11px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
+.record-created-card dd span { color: #34d399; }
+.record-created-workflow > .operation-modal-actions { position: static; flex: 0 0 auto; margin: 0; padding: 12px 18px; }
+.record-created-done { min-width: 150px; margin-left: auto; }
 .purchase-stepper { width: min(560px, 100%); display: grid; grid-template-columns: max-content 64px max-content; align-items: center; justify-content: center; align-self: center; flex: 0 0 auto; padding: 18px 24px; }
 .purchase-step-content { min-height: 0; flex: 1; overflow-y: auto; display: grid; align-content: start; gap: 18px; padding: 0 24px 24px; scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: rgba(143,155,180,.38) transparent; }
 .purchase-step-content::-webkit-scrollbar { width: 8px; }
@@ -1324,6 +1336,7 @@ body.operation-modal-open {
   .sale-total { display: none; }
   .sale-form .operation-modal-actions button { flex: 1; min-width: 0; }
   .operation-modal-compact { width: 100%; height: min(100dvh,720px); max-height: 100dvh; border-radius: 16px 16px 0 0; }
+  .operation-modal-pawn.operation-modal-compact { height: auto; }
   .operation-modal-compact .operation-modal-header { padding: 10px 12px; }
   .operation-modal-compact .operation-modal-header .eyebrow { display: none; }
   .operation-modal-compact .operation-modal-header h2 { margin: 0; font-size: 16px; }
@@ -1349,6 +1362,8 @@ body.operation-modal-open {
   .khqr-security-note { display: none; }
   .sale-khqr-workflow .operation-modal-actions { margin-left: -10px; margin-right: -10px; }
   .sale-khqr-workflow .operation-modal-actions button { flex: 1; min-width: 0; }
+  .record-created-card { margin-block: 16px; padding: 22px 18px; }
+  .record-created-card dl { grid-template-columns: 1fr; }
 
   .operation-wide,
   .operation-checkbox {
@@ -1462,6 +1477,7 @@ body.operation-modal-open {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .record-created-check,
   .khqr-success-check,
   .khqr-success-check::after,
   .khqr-success-check svg,
