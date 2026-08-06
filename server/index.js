@@ -120,7 +120,11 @@ app.use(cors({
     const allowed = (process.env.CLIENT_ORIGIN || 'http://localhost:5173')
       .split(',')
       .map((value) => value.trim())
-    if (!origin || allowed.includes(origin)) return callback(null, true)
+    const localDevelopmentOrigin = process.env.NODE_ENV !== 'production'
+      && /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(origin || '')
+    const privateLanDevelopmentOrigin = process.env.NODE_ENV !== 'production'
+      && /^https?:\/\/(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)[^/]+(?::\d+)?$/.test(origin || '')
+    if (!origin || allowed.includes(origin) || localDevelopmentOrigin || privateLanDevelopmentOrigin) return callback(null, true)
     const error = new Error('Origin is not allowed by CORS')
     error.status = 403
     callback(error)

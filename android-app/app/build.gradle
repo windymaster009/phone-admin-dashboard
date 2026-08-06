@@ -20,6 +20,7 @@ android {
         debug {
             applicationIdSuffix ".debug"
             versionNameSuffix "-debug"
+            buildConfigField "String", "DEFAULT_SERVER_URL", '"http://127.0.0.1:5173"'
         }
         release {
             minifyEnabled false

@@ -44,6 +44,21 @@ function isLoopbackRequest(req) {
   return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1'
 }
 
+function isPrivateLanRequest(req) {
+  const address = String(req.socket?.remoteAddress || '').replace(/^::ffff:/, '')
+  if (isLoopbackRequest(req)) return true
+  if (address.startsWith('10.') || address.startsWith('192.168.')) return true
+  if (!address.startsWith('172.')) return false
+  const second = Number(address.split('.')[1])
+  return Number.isFinite(second) && second >= 16 && second <= 31
+}
+
+function androidLanAccessEnabled() {
+  const configured = String(process.env.ANDROID_LAN_ACCESS || '').trim().toLowerCase()
+  if (['1', 'true', 'yes', 'on'].includes(configured)) return true
+  return process.env.NODE_ENV !== 'production' && configured !== 'false'
+}
+
 function allowTradeWrite(req, res, next) {
   const type = String(req.body?.type || '').toUpperCase()
   const roles = type === 'BUY'
@@ -319,6 +334,27 @@ async function refreshPawnStatuses() {
 router.get('/auth/status', asyncRoute(async (_req, res) => {
   const setupRequired = (await User.estimatedDocumentCount()) === 0
   res.json({ setupRequired })
+}))
+
+router.get('/auth/android-lan-session', asyncRoute(async (req, res) => {
+  if (!androidLanAccessEnabled() || !isPrivateLanRequest(req)) {
+    return res.status(403).json({ message: 'Android LAN access is not allowed from this network' })
+  }
+
+  const role = String(process.env.ANDROID_LAN_ROLE || 'OWNER').toUpperCase()
+  const roles = ['OWNER', 'MANAGER', 'CASHIER', 'STOCK']
+  const preferredRole = roles.includes(role) ? role : 'OWNER'
+  const user = await User.findOne({ active: true, role: preferredRole }).sort({ createdAt: 1 })
+    || await User.findOne({ active: true }).sort({ createdAt: 1 })
+
+  if (!user) return res.status(409).json({ message: 'Create a PhoneFlow user before using Android LAN access' })
+
+  setSessionCookie(res, signToken(user))
+  const redirect = typeof req.query.redirect === 'string' ? req.query.redirect : ''
+  if (/^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\]|10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/i.test(redirect)) {
+    return res.redirect(302, redirect)
+  }
+  res.json({ user: publicUser(user) })
 }))
 
 router.post('/auth/bootstrap', asyncRoute(async (req, res) => {
