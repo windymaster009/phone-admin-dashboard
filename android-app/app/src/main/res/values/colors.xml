@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="phoneflow_background">#08101F</color>
+    <color name="phoneflow_surface">#111A2E</color>
+    <color name="phoneflow_surface_alt">#17213A</color>
+    <color name="phoneflow_primary">#8B5CF6</color>
+    <color name="phoneflow_primary_dark">#6D28D9</color>
+    <color name="phoneflow_text">#F8FAFC</color>
+    <color name="phoneflow_muted">#94A3B8</color>
+    <color name="phoneflow_border">#334155</color>
+    <color name="phoneflow_success">#34D399</color>
+    <color name="phoneflow_error">#FB7185</color>
+</resources>
