@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+set -eu
+
+APP_HOME=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+GRADLE_BIN="${GRADLE_BIN:-$HOME/.gradle/wrapper/dists/gradle-8.9-bin/90cnw93cvbtalezasaz0blq0a/gradle-8.9/bin/gradle}"
+
+if [ ! -x "$GRADLE_BIN" ]; then
+  echo "Gradle 8.9 was not found at: $GRADLE_BIN" >&2
+  echo "Open android-scanner in Android Studio once, or set GRADLE_BIN=/path/to/gradle." >&2
+  exit 1
+fi
+
+exec "$GRADLE_BIN" --project-dir "$APP_HOME" "$@"
