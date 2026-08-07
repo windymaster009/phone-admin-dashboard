@@ -62,6 +62,7 @@ const actionLabels: Record<string, string> = {
   CANCEL: 'Cancelled',
   DELETE: 'Deleted',
   LOGIN: 'Signed in to',
+  DUE_REMINDER: 'Due tomorrow:',
 }
 
 function titleCase(value: string) {
@@ -113,6 +114,7 @@ function activityTitle(log: ActivityLog) {
 
   if (log.entity === 'PAWN') {
     const reference = String(details.pawnNo || '').trim()
+    if (log.action === 'DUE_REMINDER') return `Pawn ${reference || 'contract'} is due tomorrow`
     return `${action} pawn contract${reference ? ` ${reference}` : ''}`
   }
 
@@ -141,6 +143,8 @@ function activitySummary(log: ActivityLog) {
   if (details.total !== undefined) parts.push(`Total ${formatMoney(details.total, currency)}`)
   if (details.principal !== undefined) parts.push(`Principal ${formatMoney(details.principal, currency)}`)
   if (details.amount !== undefined) parts.push(`Amount ${formatMoney(details.amount, currency)}`)
+  if (details.customer) parts.push(`Customer ${String(details.customer)}`)
+  if (details.fee !== undefined) parts.push(`Fee ${formatMoney(details.fee, currency)}`)
   if (details.role) parts.push(`Role ${titleCase(String(details.role))}`)
   if (details.phone) parts.push(String(details.phone))
 

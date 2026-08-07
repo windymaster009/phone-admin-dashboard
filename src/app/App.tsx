@@ -146,11 +146,39 @@ type Pawn = {
   remainingPrincipal?: number
   interestRate: number
   accruedInterest?: number
+  feeModel?: 'LEGACY_MONTHLY' | 'DAILY_SIMPLE'
+  dailyFeeRate?: number
+  termDays?: number
+  startDate?: string
+  currentTermStartDate?: string
+  accruedPawnFee?: number
+  pawnFeePaid?: number
+  feeSummary?: {
+    feeModel: 'LEGACY_MONTHLY' | 'DAILY_SIMPLE'
+    dailyFeeRate: number
+    termDays: number
+    accruedDays: number
+    accruedFee: number
+    feeAtDueDate: number
+    totalAtDueDate: number
+    redemptionTotal: number
+    remainingPrincipal: number
+  }
   fees?: number
   amountPaid?: number
   currency?: PawnCurrency
   exchangeRate?: number
-  renewals?: unknown[]
+  renewals?: Array<{
+    previousDueDate: string
+    newDueDate: string
+    paymentAmount: number
+    feePaid?: number
+    principalRemaining?: number
+    termDays?: number
+    renewedAt: string
+    note?: string
+    renewedBy?: { name?: string }
+  }>
   dueDate: string
   graceEndsAt?: string
   status: string
@@ -456,6 +484,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function pawnOutstanding(pawn: Pawn) {
+  if (pawn.feeModel === 'DAILY_SIMPLE' && pawn.feeSummary) return pawn.feeSummary.redemptionTotal
   return Math.max(0, (pawn.remainingPrincipal ?? pawn.principal) + (pawn.accruedInterest || 0) + (pawn.fees || 0))
 }
 
@@ -463,6 +492,7 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
   const [action, setAction] = useState<PawnAction | null>(null)
   const [amount, setAmount] = useState('')
   const [newDueDate, setNewDueDate] = useState('')
+  const [renewalTermDays, setRenewalTermDays] = useState('7')
   const [note, setNote] = useState('')
   const [actionError, setActionError] = useState('')
   const [actionBusy, setActionBusy] = useState(false)
@@ -476,7 +506,12 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
     setActionError('')
     setNote('')
     setNewDueDate('')
-    const suggestedAmount = nextAction === 'redeem' ? outstanding : nextAction === 'renew' ? (pawn.accruedInterest || 0) + (pawn.fees || 0) : null
+    setRenewalTermDays(String(pawn.termDays || 7))
+    const suggestedAmount = nextAction === 'redeem'
+      ? outstanding
+      : nextAction === 'renew'
+        ? pawn.feeModel === 'DAILY_SIMPLE' ? (pawn.feeSummary?.accruedFee || 0) + (pawn.fees || 0) : (pawn.accruedInterest || 0) + (pawn.fees || 0)
+        : null
     setAmount(suggestedAmount === null ? '' : pawnCurrency === 'KHR' ? String(Math.round(suggestedAmount)) : suggestedAmount.toFixed(2))
   }
 
@@ -488,7 +523,10 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
     try {
       const payload: Record<string, unknown> = { note }
       if (action !== 'forfeit') payload.amount = Number(amount)
-      if (action === 'renew') payload.newDueDate = newDueDate
+      if (action === 'renew') {
+        if (pawn.feeModel === 'DAILY_SIMPLE') payload.termDays = Number(renewalTermDays)
+        else payload.newDueDate = newDueDate
+      }
       if (action === 'forfeit' && amount) payload.sellPrice = Number(amount)
       await onAction(action, payload)
       setAction(null)
@@ -524,14 +562,20 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
           <div><span>Currency</span><strong>{pawnCurrency}</strong></div>
           <div><span>Estimated value</span><strong>{pawnMoney(pawn.estimatedValue, pawnCurrency)}</strong></div>
           <div><span>Remaining principal</span><strong>{pawnMoney(pawn.remainingPrincipal ?? pawn.principal, pawnCurrency)}</strong></div>
-          <div><span>Interest due</span><strong>{pawnMoney(pawn.accruedInterest || 0, pawnCurrency)}</strong></div>
-          <div><span>Total due</span><strong>{pawnMoney(outstanding, pawnCurrency)}</strong></div>
+          <div><span>{pawn.feeModel === 'DAILY_SIMPLE' ? 'Accrued pawn fee' : 'Interest due'}</span><strong>{pawnMoney(pawn.feeModel === 'DAILY_SIMPLE' ? pawn.feeSummary?.accruedFee || 0 : pawn.accruedInterest || 0, pawnCurrency)}</strong></div>
+          <div><span>Redeem today</span><strong>{pawnMoney(outstanding, pawnCurrency)}</strong></div>
           <div><span>Amount paid</span><strong>{pawnMoney(pawn.amountPaid || 0, pawnCurrency)}</strong></div>
           <div><span>Pawn percent</span><strong>{pawn.pawnPercentage}%</strong></div>
-          <div><span>Interest rate</span><strong>{pawn.interestRate}%</strong></div>
+          <div><span>{pawn.feeModel === 'DAILY_SIMPLE' ? 'Daily pawn fee' : 'Interest rate'}</span><strong>{pawn.feeModel === 'DAILY_SIMPLE' ? `${pawn.dailyFeeRate || 2.5}% / day` : `${pawn.interestRate}%`}</strong></div>
+          {pawn.feeModel === 'DAILY_SIMPLE' && <div><span>Pawn term</span><strong>{pawn.termDays} days</strong></div>}
+          {pawn.feeModel === 'DAILY_SIMPLE' && <div><span>Accrued days</span><strong>{pawn.feeSummary?.accruedDays || 0} days</strong></div>}
+          {pawn.feeModel === 'DAILY_SIMPLE' && <div><span>Fee at due date</span><strong>{pawnMoney(pawn.feeSummary?.feeAtDueDate || 0, pawnCurrency)}</strong></div>}
+          {pawn.feeModel === 'DAILY_SIMPLE' && <div><span>Total at due date</span><strong>{pawnMoney(pawn.feeSummary?.totalAtDueDate || 0, pawnCurrency)}</strong></div>}
+          {pawn.feeModel === 'DAILY_SIMPLE' && <div><span>Start date</span><strong>{dateText(pawn.startDate || pawn.createdAt)}</strong></div>}
           <div><span>Due date</span><strong>{dateText(pawn.dueDate)}</strong></div>
           <div><span>Created</span><strong>{dateText(pawn.createdAt)}</strong></div>
         </div>
+        {pawn.renewals && pawn.renewals.length > 0 && <div className="detail-note pawn-renewal-history"><span className="eyebrow">Renewal history</span>{pawn.renewals.map((renewal, index) => <p key={`${renewal.renewedAt}-${index}`}><strong>{dateText(renewal.renewedAt)}</strong> · {renewal.termDays ? `${renewal.termDays} days` : 'Legacy renewal'} · Fee paid {pawnMoney(renewal.feePaid ?? renewal.paymentAmount, pawnCurrency)} · Principal {pawnMoney(renewal.principalRemaining ?? pawn.remainingPrincipal ?? pawn.principal, pawnCurrency)} · New due {dateText(renewal.newDueDate)}{renewal.renewedBy?.name ? ` · ${renewal.renewedBy.name}` : ''}</p>)}</div>}
         <div className="detail-sections">
           <article>
             <span className="eyebrow">Customer</span>
@@ -558,7 +602,9 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
           {actionError && <p className="pawn-action-error">{actionError}</p>}
           {action !== 'forfeit' && <label>{action === 'redeem' ? 'Full amount due' : 'Payment amount'}<div className="input-prefix"><span>{currencyLabel}</span><input autoFocus type="text" inputMode={pawnCurrency === 'KHR' ? 'numeric' : 'decimal'} required readOnly={action === 'redeem'} value={amount} onChange={(event) => setAmount(event.target.value.replace(pawnCurrency === 'KHR' ? /\D/g : /[^0-9.]/g, ''))} placeholder={pawnCurrency === 'KHR' ? '0' : '0.00'} /></div></label>}
           {action === 'forfeit' && <label><span>Selling price <small>Optional</small></span><div className="input-prefix"><span>{currencyLabel}</span><input autoFocus type="text" inputMode={pawnCurrency === 'KHR' ? 'numeric' : 'decimal'} value={amount} onChange={(event) => setAmount(event.target.value.replace(pawnCurrency === 'KHR' ? /\D/g : /[^0-9.]/g, ''))} placeholder={String(pawn.estimatedValue)} /></div></label>}
-          {action === 'renew' && <label>New due date<input type="date" required value={newDueDate} onChange={(event) => setNewDueDate(event.target.value)} /></label>}
+          {action === 'renew' && (pawn.feeModel === 'DAILY_SIMPLE'
+            ? <label>Renewal term<select required value={renewalTermDays} onChange={(event) => setRenewalTermDays(event.target.value)}><option value="3">3 Days</option><option value="7">1 Week (7 days)</option><option value="15">Half Month (15 days)</option><option value="30">1 Month (30 days)</option></select></label>
+            : <label>New due date<input type="date" required value={newDueDate} onChange={(event) => setNewDueDate(event.target.value)} /></label>)}
           {action !== 'forfeit' && <label className="pawn-action-note"><span>Note <small>Optional</small></span><textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add a reference or payment note" /></label>}
           <div className="pawn-action-buttons">
             <button type="button" className="ghost-button" onClick={() => setAction(null)}>Cancel</button>
@@ -946,7 +992,7 @@ function PawnView() {
                   <td>{row.customer?.name || 'Unknown'}</td>
                   <td>{row.itemSnapshot.name}<small className="table-subtext">{row.itemSnapshot.imei || 'No IMEI'}</small></td>
                   <td>{pawnMoney(row.estimatedValue, row.currency)}</td>
-                  <td><strong>{pawnMoney(row.remainingPrincipal ?? row.principal, row.currency)}</strong></td>
+                  <td><strong>{pawnMoney(row.remainingPrincipal ?? row.principal, row.currency)}</strong>{row.feeModel === 'DAILY_SIMPLE' && <small className="table-subtext">Fee today {pawnMoney(row.feeSummary?.accruedFee || 0, row.currency)}</small>}</td>
                   <td>{row.identificationVerified ? <span className="verified"><BadgeCheck size={15} /> Verified</span> : <span className="pawn-id-optional">Not provided</span>}</td>
                   <td>{dateText(row.dueDate)}</td>
                   <td><StatusBadge status={row.status} /></td>

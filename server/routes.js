@@ -22,6 +22,17 @@ import {
   usdKhrFromPayway,
 } from './integrations/payway/index.js'
 import { ActivityLog, Customer, InventoryItem, Pawn, PaywayIntent, Supplier, Trade, User } from './models.js'
+import {
+  DAILY_PAWN_FEE_RATE,
+  addPawnDays,
+  calculateDailyPawnSummary,
+  isDailyPawn,
+  materializeDailyPawnFee,
+  pawnCurrencyCode,
+  roundPawnAmount,
+  validateMaximumPawnPrincipal,
+  validatePawnTermDays,
+} from './pawnFeeService.js'
 
 const router = Router()
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -128,8 +139,7 @@ function makePaywayTransactionId() {
 
 const openPawnStatuses = ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED']
 const roundMoney = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100
-const pawnCurrencyCode = (value) => String(value || '').toUpperCase() === 'KHR' ? 'KHR' : 'USD'
-const roundPawnCurrency = (value, currency) => currency === 'KHR' ? Math.round(Number(value) || 0) : roundMoney(value)
+const roundPawnCurrency = roundPawnAmount
 const pawnCurrencyTolerance = (currency) => currency === 'KHR' ? 0 : 0.01
 
 function pawnCurrencyAmount(value, currency, fieldName, allowZero = false) {
@@ -297,7 +307,28 @@ function pawnGraceEnd(dueDate, days = 3) {
   return new Date(dueDate.getTime() + Math.max(0, Number(days) || 0) * 86_400_000)
 }
 
-function pawnAmountDue(pawn) {
+function pawnFeeSummary(pawn, asOf = new Date()) {
+  if (isDailyPawn(pawn)) return calculateDailyPawnSummary(pawn, asOf)
+  const currency = pawnCurrencyCode(pawn.currency)
+  const remainingPrincipal = roundPawnCurrency(Math.max(0, Number(pawn.remainingPrincipal ?? pawn.principal) || 0), currency)
+  const accruedFee = roundPawnCurrency(Math.max(0, Number(pawn.accruedInterest) || 0), currency)
+  const otherFees = roundPawnCurrency(Math.max(0, Number(pawn.fees) || 0), currency)
+  return {
+    feeModel: 'LEGACY_MONTHLY', dailyFeeRate: 0, termDays: 0, accruedDays: 0,
+    accruedFee, feeAtDueDate: accruedFee,
+    totalAtDueDate: roundPawnCurrency(remainingPrincipal + accruedFee + otherFees, currency),
+    redemptionTotal: roundPawnCurrency(remainingPrincipal + accruedFee + otherFees, currency),
+    remainingPrincipal,
+  }
+}
+
+function pawnResponse(pawn, asOf = new Date()) {
+  const value = typeof pawn?.toObject === 'function' ? pawn.toObject() : { ...pawn }
+  return { ...value, feeSummary: pawnFeeSummary(value, asOf) }
+}
+
+function pawnAmountDue(pawn, asOf = new Date()) {
+  if (isDailyPawn(pawn)) return pawnFeeSummary(pawn, asOf).redemptionTotal
   return roundPawnCurrency(
     Math.max(0, Number(pawn.remainingPrincipal ?? pawn.principal) || 0)
     + Math.max(0, Number(pawn.accruedInterest) || 0)
@@ -308,26 +339,37 @@ function pawnAmountDue(pawn) {
 
 function applyPawnPayment(pawn, rawAmount, { type = 'PRINCIPAL', userId, note, paidAt } = {}) {
   const currency = pawnCurrencyCode(pawn.currency)
+  const paymentAt = paidAt ? new Date(paidAt) : new Date()
+  if (Number.isNaN(paymentAt.getTime()) || paymentAt > new Date()) throw requestError(400, 'Payment date is invalid')
+  materializeDailyPawnFee(pawn, paymentAt)
   const amount = pawnCurrencyAmount(rawAmount, currency, 'Payment amount')
-  const outstanding = pawnAmountDue(pawn)
+  const outstanding = pawnAmountDue(pawn, paymentAt)
   if (amount > outstanding + pawnCurrencyTolerance(currency)) throw requestError(400, `Payment cannot exceed the outstanding balance of ${outstanding}`)
 
   let unapplied = amount
   const feesApplied = Math.min(unapplied, Math.max(0, Number(pawn.fees) || 0))
   pawn.fees = roundPawnCurrency((Number(pawn.fees) || 0) - feesApplied, currency)
   unapplied = roundPawnCurrency(unapplied - feesApplied, currency)
+  const pawnFeeApplied = isDailyPawn(pawn)
+    ? Math.min(unapplied, Math.max(0, Number(pawn.accruedPawnFee) || 0))
+    : 0
+  if (isDailyPawn(pawn)) {
+    pawn.accruedPawnFee = roundPawnCurrency((Number(pawn.accruedPawnFee) || 0) - pawnFeeApplied, currency)
+    pawn.pawnFeePaid = roundPawnCurrency((Number(pawn.pawnFeePaid) || 0) + pawnFeeApplied, currency)
+    unapplied = roundPawnCurrency(unapplied - pawnFeeApplied, currency)
+  }
   const interestApplied = Math.min(unapplied, Math.max(0, Number(pawn.accruedInterest) || 0))
   pawn.accruedInterest = roundPawnCurrency((Number(pawn.accruedInterest) || 0) - interestApplied, currency)
   unapplied = roundPawnCurrency(unapplied - interestApplied, currency)
   const principalApplied = Math.min(unapplied, Math.max(0, Number(pawn.remainingPrincipal ?? pawn.principal) || 0))
   pawn.remainingPrincipal = roundPawnCurrency((Number(pawn.remainingPrincipal ?? pawn.principal) || 0) - principalApplied, currency)
   pawn.amountPaid = roundPawnCurrency((Number(pawn.amountPaid) || 0) + amount, currency)
-  const balanceAfter = pawnAmountDue(pawn)
+  const balanceAfter = pawnAmountDue(pawn, paymentAt)
   pawn.payments.push({
-    amount, type, feesApplied, interestApplied, principalApplied, balanceAfter,
-    paidAt: paidAt || new Date(), note: clean(note), receivedBy: userId,
+    amount, type, feesApplied, pawnFeeApplied, interestApplied, principalApplied, balanceAfter,
+    paidAt: paymentAt, note: clean(note), receivedBy: userId,
   })
-  return { amount, feesApplied, interestApplied, principalApplied, balanceAfter }
+  return { amount, feesApplied, pawnFeeApplied, interestApplied, principalApplied, balanceAfter }
 }
 
 function paymentState(total, paid) {
@@ -348,7 +390,7 @@ function publicUser(user) {
 
 async function refreshPawnStatuses() {
   const now = new Date()
-  const soon = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
+  const soon = new Date(now.getTime() + 24 * 60 * 60 * 1000)
   const open = ['ACTIVE', 'DUE_SOON', 'RENEWED']
 
   await Pawn.updateMany({ status: { $in: open }, dueDate: { $lt: now } }, { $set: { status: 'OVERDUE' } })
@@ -360,6 +402,33 @@ async function refreshPawnStatuses() {
     { status: { $in: ['DUE_SOON', 'RENEWED'] }, dueDate: { $gt: soon } },
     { $set: { status: 'ACTIVE' } },
   )
+
+  const reminders = await Pawn.find({
+    status: { $in: ['ACTIVE', 'DUE_SOON', 'RENEWED'] },
+    dueDate: { $gte: now, $lte: soon },
+  }).populate('customer', 'name')
+  for (const pawn of reminders) {
+    if (pawn.dueReminderFor && pawn.dueReminderFor.getTime() === pawn.dueDate.getTime()) continue
+    const updated = await Pawn.findOneAndUpdate(
+      { _id: pawn._id, $or: [{ dueReminderFor: { $exists: false } }, { dueReminderFor: { $ne: pawn.dueDate } }] },
+      { $set: { dueReminderFor: pawn.dueDate, dueReminderSentAt: now } },
+    )
+    if (!updated) continue
+    const summary = pawnFeeSummary(pawn, pawn.dueDate)
+    try {
+      await ActivityLog.create({
+        action: 'DUE_REMINDER', entity: 'PAWN', entityId: pawn._id,
+        details: {
+          pawnNo: pawn.pawnNo, customer: pawn.customer?.name || 'Unknown customer',
+          principal: summary.remainingPrincipal, fee: summary.accruedFee,
+          total: summary.redemptionTotal, currency: pawn.currency, dueDate: pawn.dueDate,
+        },
+      })
+    } catch (error) {
+      console.error(`Unable to create due reminder for ${pawn.pawnNo}:`, error.message)
+      await Pawn.updateOne({ _id: pawn._id, dueReminderFor: pawn.dueDate }, { $unset: { dueReminderFor: '', dueReminderSentAt: '' } })
+    }
+  }
 }
 
 router.get('/auth/status', asyncRoute(async (_req, res) => {
@@ -557,7 +626,7 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
       customerCount,
       pawnCount,
     },
-    recentPawns,
+    recentPawns: recentPawns.map((pawn) => pawnResponse(pawn, now)),
     recentTrades,
     inventoryMix,
     monthPerformance,
@@ -916,14 +985,16 @@ router.get('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asy
   const pawns = await Pawn.find(filter)
     .populate('customer', customerFields)
     .populate('inventoryItem', 'sku name imei1 status')
+    .populate('renewals.renewedBy', 'name role')
     .sort({ createdAt: -1 })
     .limit(300)
-  res.json({ pawns })
+  const asOf = new Date()
+  res.json({ pawns: pawns.map((pawn) => pawnResponse(pawn, asOf)) })
 }))
 
 router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
-  const { customer, customerDetails, itemSnapshot, estimatedValue, pawnPercentage, principal, interestRate, dueDate, identificationVerified, ownershipConfirmed, notes, valuationSnapshot } = req.body
-  if ((!customer && !customerDetails) || !itemSnapshot?.name || !dueDate) return res.status(400).json({ message: 'Customer, item and due date are required' })
+  const { customer, customerDetails, itemSnapshot, estimatedValue, pawnPercentage, principal, termDays, identificationVerified, ownershipConfirmed, notes, valuationSnapshot } = req.body
+  if ((!customer && !customerDetails) || !itemSnapshot?.name) return res.status(400).json({ message: 'Customer and item are required' })
 
   let existingCustomer
   if (customer) {
@@ -950,12 +1021,13 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
   const valuation = verifiedOffer?.estimatedValue ?? pawnCurrencyAmount(estimatedValue, currency, 'Estimated value')
   const maxPrincipal = verifiedOffer?.maximumPawn ?? roundPawnCurrency(valuation * (percentage / 100), currency)
   const requestedPrincipal = pawnCurrencyAmount(principal, currency, 'Principal')
-  const rate = roundMoney(interestRate === undefined ? 5 : interestRate)
-  const maturityDate = parsePawnDueDate(dueDate)
-  if (!Number.isFinite(rate) || rate < 0 || rate > 100) throw requestError(400, 'Interest rate must be between 0 and 100')
-  if (maturityDate <= new Date()) throw requestError(400, 'Due date must be in the future')
+  const selectedTermDays = validatePawnTermDays(termDays)
+  const startDate = new Date()
+  const maturityDate = addPawnDays(startDate, selectedTermDays)
   if (!/^\d{15}$/.test(clean(itemSnapshot.imei) || '')) throw requestError(400, 'IMEI must contain exactly 15 digits')
-  if (requestedPrincipal > maxPrincipal + pawnCurrencyTolerance(currency)) {
+  try {
+    validateMaximumPawnPrincipal(requestedPrincipal, maxPrincipal, currency)
+  } catch {
     return res.status(400).json({ message: `Principal cannot exceed the ${percentage}% valuation limit` })
   }
 
@@ -1003,17 +1075,23 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
         ...verifiedOffer,
       } : undefined,
       originalPrincipal: requestedPrincipal, remainingPrincipal: requestedPrincipal,
-      interestRate: rate, interestPeriod: 'MONTHLY', accruedInterest: roundPawnCurrency(requestedPrincipal * rate / 100, currency),
+      interestRate: 0, interestPeriod: 'TERM', accruedInterest: 0,
+      feeModel: 'DAILY_SIMPLE', dailyFeeRate: DAILY_PAWN_FEE_RATE, termDays: selectedTermDays,
+      startDate, currentTermStartDate: startDate, feeAccrualStartedAt: startDate,
+      accruedPawnFee: 0, pawnFeePaid: 0,
       fees: 0, amountPaid: 0, currency, exchangeRate: usdKhrRate,
+      issueDate: startDate,
       dueDate: maturityDate, gracePeriodDays, graceEndsAt: pawnGraceEnd(maturityDate, gracePeriodDays),
       identificationVerified: nationalIdVerified,
       ownershipConfirmed: true,
-      notes: clean(notes), createdBy: req.user._id, workflowVersion: 3,
+      notes: clean(notes), createdBy: req.user._id, workflowVersion: 4,
     }], { session })
     pawn = created[0]
   })
   await writeActivity(req, { action: 'CREATE', entity: 'PAWN', entityId: pawn._id, details: { pawnNo: pawn.pawnNo, principal: pawn.principal, currency: pawn.currency } })
-  res.status(201).json({ pawn: await pawn.populate('customer', 'name phone nationalIdNumber') })
+  await pawn.populate('customer', 'name phone nationalIdNumber')
+  await pawn.populate('renewals.renewedBy', 'name role')
+  res.status(201).json({ pawn: pawnResponse(pawn) })
 }))
 
 router.post('/pawns/:id/payment', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
@@ -1026,18 +1104,57 @@ router.post('/pawns/:id/payment', requireAuth, allowRoles('OWNER', 'MANAGER', 'C
   await pawn.save()
   await writeActivity(req, { action: 'PAYMENT', entity: 'PAWN', entityId: pawn._id, details: { ...allocation, currency: pawn.currency } })
   const customerFields = req.user.role === 'CASHIER' ? 'name phone' : 'name phone nationalIdNumber'
-  res.json({ pawn: await pawn.populate('customer', customerFields) })
+  await pawn.populate('customer', customerFields)
+  await pawn.populate('renewals.renewedBy', 'name role')
+  res.json({ pawn: pawnResponse(pawn) })
 }))
 
 router.post('/pawns/:id/renew', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
   const pawn = await Pawn.findById(req.params.id)
   if (!pawn) return res.status(404).json({ message: 'Pawn contract not found' })
   if (!openPawnStatuses.includes(pawn.status)) return res.status(409).json({ message: 'This pawn contract is closed' })
+  const currency = pawnCurrencyCode(pawn.currency)
+  if (isDailyPawn(pawn)) {
+    const renewalAt = new Date()
+    const selectedTermDays = validatePawnTermDays(req.body.termDays)
+    materializeDailyPawnFee(pawn, renewalAt)
+    const requiredFeeAndCharges = roundPawnCurrency((Number(pawn.accruedPawnFee) || 0) + (Number(pawn.fees) || 0), currency)
+    const paymentAmount = pawnCurrencyAmount(req.body.amount, currency, 'Renewal payment', true)
+    if (paymentAmount !== requiredFeeAndCharges) {
+      throw requestError(400, `Renewal requires the exact accrued fee and charges of ${requiredFeeAndCharges} ${currency}`)
+    }
+    const previousDueDate = pawn.dueDate
+    const allocation = paymentAmount > 0
+      ? applyPawnPayment(pawn, paymentAmount, { type: 'RENEWAL', userId: req.user._id, note: req.body.note, paidAt: renewalAt })
+      : { amount: 0, feesApplied: 0, pawnFeeApplied: 0, interestApplied: 0, principalApplied: 0, balanceAfter: pawnAmountDue(pawn, renewalAt) }
+    const newDueDate = addPawnDays(renewalAt, selectedTermDays)
+    pawn.termDays = selectedTermDays
+    pawn.currentTermStartDate = renewalAt
+    pawn.feeAccrualStartedAt = renewalAt
+    pawn.dueDate = newDueDate
+    pawn.graceEndsAt = pawnGraceEnd(newDueDate, pawn.gracePeriodDays)
+    pawn.dueReminderFor = undefined
+    pawn.dueReminderSentAt = undefined
+    pawn.status = 'ACTIVE'
+    pawn.renewals.push({
+      previousDueDate, newDueDate, paymentAmount, interestCharged: 0,
+      feePaid: allocation.pawnFeeApplied + allocation.feesApplied,
+      principalRemaining: pawn.remainingPrincipal, termDays: selectedTermDays,
+      renewedAt: renewalAt, renewedBy: req.user._id, note: clean(req.body.note),
+    })
+    if (paymentAmount > 0 && pawn.payments.length) pawn.payments[pawn.payments.length - 1].balanceAfter = pawnAmountDue(pawn, renewalAt)
+    await pawn.save()
+    await writeActivity(req, { action: 'RENEW', entity: 'PAWN', entityId: pawn._id, details: { ...allocation, pawnNo: pawn.pawnNo, termDays: selectedTermDays, newDueDate, currency } })
+    const customerFields = req.user.role === 'CASHIER' ? 'name phone' : 'name phone nationalIdNumber'
+    await pawn.populate('customer', customerFields)
+    await pawn.populate('renewals.renewedBy', 'name role')
+    return res.json({ pawn: pawnResponse(pawn, renewalAt) })
+  }
+
   const newDueDate = parsePawnDueDate(req.body.newDueDate)
   if (newDueDate <= new Date(pawn.dueDate) || newDueDate <= new Date()) {
     throw requestError(400, 'New due date must be later than the current due date')
   }
-  const currency = pawnCurrencyCode(pawn.currency)
   const requiredInterestAndFees = roundPawnCurrency((Number(pawn.accruedInterest) || 0) + (Number(pawn.fees) || 0), currency)
   const paymentAmount = pawnCurrencyAmount(req.body.amount, currency, 'Renewal payment', true)
   if (paymentAmount + pawnCurrencyTolerance(currency) < requiredInterestAndFees) {
@@ -1060,7 +1177,9 @@ router.post('/pawns/:id/renew', requireAuth, allowRoles('OWNER', 'MANAGER', 'CAS
   await pawn.save()
   await writeActivity(req, { action: 'RENEW', entity: 'PAWN', entityId: pawn._id, details: { ...allocation, newDueDate, nextInterest, currency } })
   const customerFields = req.user.role === 'CASHIER' ? 'name phone' : 'name phone nationalIdNumber'
-  res.json({ pawn: await pawn.populate('customer', customerFields) })
+  await pawn.populate('customer', customerFields)
+  await pawn.populate('renewals.renewedBy', 'name role')
+  res.json({ pawn: pawnResponse(pawn) })
 }))
 
 router.post('/pawns/:id/redeem', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
@@ -1071,20 +1190,24 @@ router.post('/pawns/:id/redeem', requireAuth, allowRoles('OWNER', 'MANAGER', 'CA
     if (!pawn) throw requestError(404, 'Pawn contract not found')
     if (!openPawnStatuses.includes(pawn.status)) throw requestError(409, 'This pawn contract is already closed')
     const currency = pawnCurrencyCode(pawn.currency)
-    const outstanding = pawnAmountDue(pawn)
+    const redemptionAt = new Date()
+    materializeDailyPawnFee(pawn, redemptionAt)
+    const outstanding = pawnAmountDue(pawn, redemptionAt)
     const amount = pawnCurrencyAmount(req.body.amount, currency, 'Redemption amount', true)
     if (Math.abs(amount - outstanding) > pawnCurrencyTolerance(currency)) throw requestError(400, `Redemption requires the full outstanding amount of ${outstanding} ${currency}`)
     allocation = outstanding > 0
-      ? applyPawnPayment(pawn, amount, { type: 'REDEMPTION', userId: req.user._id, note: req.body.note })
-      : { amount: 0, feesApplied: 0, interestApplied: 0, principalApplied: 0, balanceAfter: 0 }
+      ? applyPawnPayment(pawn, amount, { type: 'REDEMPTION', userId: req.user._id, note: req.body.note, paidAt: redemptionAt })
+      : { amount: 0, feesApplied: 0, pawnFeeApplied: 0, interestApplied: 0, principalApplied: 0, balanceAfter: 0 }
     pawn.status = 'REDEEMED'
-    pawn.redeemedAt = new Date()
+    pawn.redeemedAt = redemptionAt
     await pawn.save({ session })
     if (pawn.inventoryItem) await InventoryItem.findByIdAndUpdate(pawn.inventoryItem, { status: 'ARCHIVED', quantity: 0 }, { session })
   })
   await writeActivity(req, { action: 'REDEEM', entity: 'PAWN', entityId: pawn._id, details: { ...allocation, currency: pawn.currency } })
   const customerFields = req.user.role === 'CASHIER' ? 'name phone' : 'name phone nationalIdNumber'
-  res.json({ pawn: await pawn.populate('customer', customerFields) })
+  await pawn.populate('customer', customerFields)
+  await pawn.populate('renewals.renewedBy', 'name role')
+  res.json({ pawn: pawnResponse(pawn) })
 }))
 
 router.post('/pawns/:id/forfeit', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
@@ -1113,7 +1236,7 @@ router.post('/pawns/:id/forfeit', requireAuth, allowRoles('OWNER', 'MANAGER'), a
     }
   })
   await writeActivity(req, { action: 'FORFEIT', entity: 'PAWN', entityId: pawn._id })
-  res.json({ pawn })
+  res.json({ pawn: pawnResponse(pawn) })
 }))
 
 async function createMultiDevicePurchase(req, res) {
@@ -1620,6 +1743,7 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
 }))
 
 router.get('/activity-logs', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (_req, res) => {
+  await refreshPawnStatuses()
   const logs = await ActivityLog.find().populate('user', 'name email role').sort({ createdAt: -1 }).limit(300)
   res.json({ logs })
 }))

@@ -43,7 +43,13 @@ function ContractDetails({ snapshot }: { snapshot: ReceiptSnapshot }) {
           <Row label="Estimated value" value={money(snapshot.estimatedValue, snapshot.currency)} />
           <Row label="Principal" value={money(snapshot.principal, snapshot.currency)} />
           <Row label="Pawn percentage" value={`${Number(snapshot.pawnPercentage || 0)}%`} />
-          <Row label="Interest" value={`${Number(snapshot.interestRate || 0)}% ${title(snapshot.interestPeriod)}`} />
+          {snapshot.feeModel === 'DAILY_SIMPLE'
+            ? <Row label="Daily pawn fee" value={`${Number(snapshot.dailyFeeRate || 0)}% per day`} />
+            : <Row label="Interest" value={`${Number(snapshot.interestRate || 0)}% ${title(snapshot.interestPeriod)}`} />}
+          {snapshot.feeModel === 'DAILY_SIMPLE' && <Row label="Pawn term" value={`${Number(snapshot.termDays || 0)} days`} />}
+          {snapshot.feeModel === 'DAILY_SIMPLE' && <Row label="Start date" value={dateOnly(snapshot.startDate)} />}
+          {snapshot.feeModel === 'DAILY_SIMPLE' && <Row label="Fee at due date" value={money(snapshot.pawnFeeAtDue, snapshot.currency)} />}
+          {snapshot.feeModel === 'DAILY_SIMPLE' && <Row label="Total at due date" value={money(snapshot.total, snapshot.currency)} />}
           <Row label="Due date" value={dateOnly(snapshot.dueDate)} />
           <Row label="Grace ends" value={dateOnly(snapshot.graceEndsAt)} />
           <Row label="Ownership" value={snapshot.ownershipConfirmed ? 'Confirmed' : 'Legacy record'} />
@@ -61,6 +67,7 @@ function ContractDetails({ snapshot }: { snapshot: ReceiptSnapshot }) {
           <Row label="Payment type" value={title(snapshot.paymentType)} />
           <Row label="Principal applied" value={money(snapshot.allocation?.principal, snapshot.currency)} />
           <Row label="Interest applied" value={money(snapshot.allocation?.interest, snapshot.currency)} />
+          {Number(snapshot.allocation?.pawnFee || 0) > 0 && <Row label="Daily pawn fee applied" value={money(snapshot.allocation?.pawnFee, snapshot.currency)} />}
           <Row label="Fees applied" value={money(snapshot.allocation?.fees, snapshot.currency)} />
           <Row label="Remaining balance" value={money(snapshot.balance, snapshot.currency)} />
           <Row label="Contract due date" value={dateOnly(snapshot.dueDate)} />

@@ -90,6 +90,11 @@ export type ReceiptSnapshot = {
   interestAmount?: number
   interestRate?: number
   interestPeriod?: string
+  feeModel?: 'LEGACY_MONTHLY' | 'DAILY_SIMPLE'
+  dailyFeeRate?: number
+  termDays?: number
+  startDate?: string
+  pawnFeeAtDue?: number
   dueDate?: string
   graceEndsAt?: string
   identificationVerified?: boolean
@@ -99,6 +104,7 @@ export type ReceiptSnapshot = {
     principal?: number
     interest?: number
     fees?: number
+    pawnFee?: number
   }
   notes?: string
   staff?: { name: string; role?: string } | null

@@ -4,6 +4,7 @@ import { allowRoles, requireAuth, writeActivity } from './auth.js'
 import { Loan, LoanPayment } from './loanModels.js'
 import { Pawn, Trade } from './models.js'
 import { Receipt } from './receiptModels.js'
+import { calculateDailyPawnSummary, isDailyPawn } from './pawnFeeService.js'
 
 const router = Router()
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
@@ -195,6 +196,7 @@ function pawnItem(pawn) {
 }
 
 function buildPawnContractSnapshot(pawn) {
+  const dailySummary = isDailyPawn(pawn) ? calculateDailyPawnSummary(pawn, pawn.dueDate) : null
   return {
     schemaVersion: 1,
     documentType: 'PAWN_CONTRACT',
@@ -209,11 +211,16 @@ function buildPawnContractSnapshot(pawn) {
     estimatedValue: roundMoney(pawn.estimatedValue),
     pawnPercentage: Number(pawn.pawnPercentage || 0),
     principal: roundMoney(pawn.originalPrincipal ?? pawn.principal),
-    total: roundMoney(pawn.originalPrincipal ?? pawn.principal),
+    total: dailySummary?.totalAtDueDate ?? roundMoney(pawn.originalPrincipal ?? pawn.principal),
     amountPaid: 0,
     balance: roundMoney(pawn.remainingPrincipal ?? pawn.principal),
     interestRate: Number(pawn.interestRate || 0),
     interestPeriod: pawn.interestPeriod || 'MONTHLY',
+    feeModel: pawn.feeModel || 'LEGACY_MONTHLY',
+    dailyFeeRate: Number(pawn.dailyFeeRate || 0),
+    termDays: Number(pawn.termDays || 0),
+    startDate: pawn.startDate || pawn.issueDate || pawn.createdAt,
+    pawnFeeAtDue: dailySummary?.feeAtDueDate,
     dueDate: pawn.dueDate,
     graceEndsAt: pawn.graceEndsAt,
     identificationVerified: Boolean(pawn.identificationVerified),
@@ -264,7 +271,8 @@ function buildPawnPaymentSnapshot(pawn, payment, documentType) {
     allocation: {
       principal: roundMoney(payment.principalApplied),
       interest: roundMoney(payment.interestApplied),
-      fees: roundMoney(payment.feesApplied),
+      fees: roundMoney((payment.feesApplied || 0) + (payment.pawnFeeApplied || 0)),
+      pawnFee: roundMoney(payment.pawnFeeApplied),
     },
     contractPrincipal: roundMoney(pawn.originalPrincipal ?? pawn.principal),
     dueDate: pawn.dueDate,
