@@ -363,6 +363,7 @@ export default function OperationModalBridge() {
   const [pawnPercentage, setPawnPercentage] = useState(45)
   const [pawnPrincipal, setPawnPrincipal] = useState('')
   const [pawnTermDays, setPawnTermDays] = useState<3 | 7 | 15 | 30>(7)
+  const [pawnDailyFeeRate, setPawnDailyFeeRate] = useState('2.5')
   const [pawnValuation, setPawnValuation] = useState<PawnValuationSnapshot | null>(null)
   const [pawnCreated, setPawnCreated] = useState<CreatedPawn | null>(null)
   const [pawnCurrency, setPawnCurrency] = useState<PawnCurrency>('USD')
@@ -468,7 +469,7 @@ export default function OperationModalBridge() {
   const maximumPawn = pawnValuation
     ? roundPawnAmount(Math.max(0, estimatedValue * pawnPercentage / 100), pawnCurrency)
     : pawnAssessment.maximumPawn
-  const pawnTermFee = roundPawnAmount((Number(pawnPrincipal) || 0) * 0.025 * pawnTermDays, pawnCurrency)
+  const pawnTermFee = roundPawnAmount((Number(pawnPrincipal) || 0) * (Number(pawnDailyFeeRate) || 0) / 100 * pawnTermDays, pawnCurrency)
   const pawnTotalAtDue = roundPawnAmount((Number(pawnPrincipal) || 0) + pawnTermFee, pawnCurrency)
   const pawnCalculatedDueDate = useMemo(() => {
     const date = new Date(Date.now() + pawnTermDays * 86_400_000)
@@ -673,6 +674,7 @@ export default function OperationModalBridge() {
     setPawnPercentage(45)
     setPawnPrincipal('')
     setPawnTermDays(7)
+    setPawnDailyFeeRate('2.5')
     setPawnValuation(null)
     setPawnCreated(null)
     setPawnCurrency('USD')
@@ -1204,6 +1206,7 @@ export default function OperationModalBridge() {
       currency: pawnCurrency,
       exchangeRate: pawnCurrency === 'KHR' ? usdKhrRate : 1,
       termDays: pawnTermDays,
+      dailyFeeRate: Number(pawnDailyFeeRate),
       ownershipConfirmed: pawnOwnershipConfirmed,
       identificationVerified: Boolean(pawnCustomerHasId && pawnOwnershipConfirmed),
       notes: String(form.get('notes') || ''),
@@ -1550,7 +1553,7 @@ export default function OperationModalBridge() {
               <div className="pawn-contract-fields-heading"><span>3. Contract terms</span><small>The principal may be reduced, but cannot exceed the calculated maximum.</small></div>
               <div className="operation-form-grid purchase-fields-grid pawn-contract-fields">
                 <label><span className="operation-label-heading">Principal ({pawnCurrency}) <small>Maximum {pawnAmountText(maximumPawn, pawnCurrency)}</small></span><input name="principal" type="number" min={pawnCurrency === 'KHR' ? 1 : 0.01} max={maximumPawn || undefined} step={pawnCurrency === 'KHR' ? 100 : 0.01} required value={pawnPrincipal} onChange={(event) => setPawnPrincipal(event.target.value)} /></label>
-                <label>Daily pawn fee rate<div className="device-unit-input"><input readOnly value="2.5" aria-label="Daily pawn fee rate" /><span>% / day</span></div></label>
+                <label>Daily pawn fee rate<div className="device-unit-input"><input type="number" min="0" max="100" step="0.01" required value={pawnDailyFeeRate} onChange={(event) => setPawnDailyFeeRate(event.target.value)} aria-label="Daily pawn fee rate" /><span>% / day</span></div></label>
                 <fieldset className="pawn-term-selector operation-wide"><legend>Pawn term</legend><div role="radiogroup" aria-label="Pawn term">{([{ days: 3, label: '3 Days' }, { days: 7, label: '1 Week' }, { days: 15, label: 'Half Month' }, { days: 30, label: '1 Month' }] as const).map((term) => <button key={term.days} type="button" role="radio" aria-checked={pawnTermDays === term.days} className={pawnTermDays === term.days ? 'active' : ''} onClick={() => setPawnTermDays(term.days)}><strong>{term.label}</strong><small>{term.days} days</small></button>)}</div></fieldset>
                 <label className="operation-wide">Contract notes <small className="optional-marker">Optional</small><textarea name="notes" rows={2} /></label>
               </div>

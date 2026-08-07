@@ -31,6 +31,7 @@ import {
   pawnCurrencyCode,
   roundPawnAmount,
   validateMaximumPawnPrincipal,
+  validateDailyPawnFeeRate,
   validatePawnTermDays,
 } from './pawnFeeService.js'
 
@@ -993,7 +994,7 @@ router.get('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asy
 }))
 
 router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
-  const { customer, customerDetails, itemSnapshot, estimatedValue, pawnPercentage, principal, termDays, identificationVerified, ownershipConfirmed, notes, valuationSnapshot } = req.body
+  const { customer, customerDetails, itemSnapshot, estimatedValue, pawnPercentage, principal, termDays, dailyFeeRate, identificationVerified, ownershipConfirmed, notes, valuationSnapshot } = req.body
   if ((!customer && !customerDetails) || !itemSnapshot?.name) return res.status(400).json({ message: 'Customer and item are required' })
 
   let existingCustomer
@@ -1022,6 +1023,7 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
   const maxPrincipal = verifiedOffer?.maximumPawn ?? roundPawnCurrency(valuation * (percentage / 100), currency)
   const requestedPrincipal = pawnCurrencyAmount(principal, currency, 'Principal')
   const selectedTermDays = validatePawnTermDays(termDays)
+  const selectedDailyFeeRate = validateDailyPawnFeeRate(dailyFeeRate === undefined ? DAILY_PAWN_FEE_RATE : dailyFeeRate)
   const startDate = new Date()
   const maturityDate = addPawnDays(startDate, selectedTermDays)
   if (!/^\d{15}$/.test(clean(itemSnapshot.imei) || '')) throw requestError(400, 'IMEI must contain exactly 15 digits')
@@ -1076,7 +1078,7 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
       } : undefined,
       originalPrincipal: requestedPrincipal, remainingPrincipal: requestedPrincipal,
       interestRate: 0, interestPeriod: 'TERM', accruedInterest: 0,
-      feeModel: 'DAILY_SIMPLE', dailyFeeRate: DAILY_PAWN_FEE_RATE, termDays: selectedTermDays,
+      feeModel: 'DAILY_SIMPLE', dailyFeeRate: selectedDailyFeeRate, termDays: selectedTermDays,
       startDate, currentTermStartDate: startDate, feeAccrualStartedAt: startDate,
       accruedPawnFee: 0, pawnFeePaid: 0,
       fees: 0, amountPaid: 0, currency, exchangeRate: usdKhrRate,

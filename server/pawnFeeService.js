@@ -24,6 +24,16 @@ export function validatePawnTermDays(value) {
   return termDays
 }
 
+export function validateDailyPawnFeeRate(value) {
+  const rate = Number(value)
+  if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
+    const error = new Error('Daily pawn fee rate must be between 0 and 100')
+    error.status = 400
+    throw error
+  }
+  return Math.round((rate + Number.EPSILON) * 100) / 100
+}
+
 export function validateMaximumPawnPrincipal(principal, maximum, currency = 'USD') {
   const normalizedCurrency = pawnCurrencyCode(currency)
   const requested = roundPawnAmount(principal, normalizedCurrency)

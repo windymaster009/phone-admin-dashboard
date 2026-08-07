@@ -187,7 +187,7 @@ const pawnSchema = new Schema(
     interestPeriod: { type: String, enum: ['MONTHLY', 'TERM'], default: 'MONTHLY' },
     accruedInterest: { type: Number, min: 0, default: 0 },
     feeModel: { type: String, enum: ['LEGACY_MONTHLY', 'DAILY_SIMPLE'], default: 'LEGACY_MONTHLY', index: true },
-    dailyFeeRate: { type: Number, min: 0, default: 0 },
+    dailyFeeRate: { type: Number, min: 0, max: 100, default: 0 },
     termDays: { type: Number, enum: [0, 3, 7, 15, 30], default: 0 },
     startDate: Date,
     currentTermStartDate: Date,

@@ -6,6 +6,7 @@ import {
   calculateDailyPawnSummary,
   calculatePawnFee,
   validateMaximumPawnPrincipal,
+  validateDailyPawnFeeRate,
 } from './pawnFeeService.js'
 
 test('calculates the required simple daily fee examples', () => {
@@ -13,6 +14,13 @@ test('calculates the required simple daily fee examples', () => {
   assert.equal(calculatePawnFee(20, 7), 3.5)
   assert.equal(calculatePawnFee(20, 15), 7.5)
   assert.equal(calculatePawnFee(20, 30), 15)
+})
+
+test('validates an owner-entered daily fee rate', () => {
+  assert.equal(validateDailyPawnFeeRate(2.5), 2.5)
+  assert.equal(validateDailyPawnFeeRate('3.25'), 3.25)
+  assert.throws(() => validateDailyPawnFeeRate(-1), /between 0 and 100/)
+  assert.throws(() => validateDailyPawnFeeRate(101), /between 0 and 100/)
 })
 
 test('enforces the valuation maximum while allowing a smaller principal', () => {
