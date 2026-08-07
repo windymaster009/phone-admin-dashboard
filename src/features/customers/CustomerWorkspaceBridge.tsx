@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react'
 import { api } from '../../lib/api'
+import LoadingState from '../../components/LoadingState'
 
 type Customer = {
   _id: string
@@ -288,7 +289,7 @@ function CustomerPage() {
                 </tr>
               ))}
               {!loading && filtered.length === 0 && <tr><td colSpan={7}><div className="customer-empty"><UserRound size={30} /><strong>{customers.length === 0 ? 'No customers yet' : 'No matching customers'}</strong><span>{customers.length === 0 ? 'Add the first customer so they can be selected in pawn, purchase, and sale forms.' : 'Try another search term.'}</span><button className="primary-button" onClick={openCreate}><Plus size={16} /> Add customer</button></div></td></tr>}
-              {loading && <tr><td colSpan={7}>Loading customers...</td></tr>}
+              {loading && <tr><td colSpan={7}><LoadingState compact label="Loading customers" detail="Reading customer profiles…" /></td></tr>}
             </tbody>
           </table>
         </div>
@@ -309,7 +310,7 @@ function CustomerPage() {
             </article>
           ))}
           {!loading && filtered.length === 0 && <div className="customer-mobile-empty">{customers.length === 0 ? 'No customers yet.' : 'No matching customers.'}</div>}
-          {loading && <div className="customer-mobile-empty">Loading customers...</div>}
+          {loading && <LoadingState compact label="Loading customers" />}
         </div>
       </article>
 

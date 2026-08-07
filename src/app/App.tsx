@@ -44,6 +44,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { api, type SessionUser } from '../lib/api'
+import LoadingState from '../components/LoadingState'
 import { printInventoryLabel } from '../features/inventory/barcode'
 import BackupStatusBridge from '../features/backup/BackupStatusBridge'
 import SupplierWorkspace from '../features/suppliers/SupplierWorkspace'
@@ -675,6 +676,7 @@ function SectionHeader({
 
 function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: SessionUser }) {
   const [data, setData] = useState<DashboardData | null>(null)
+  const [loading, setLoading] = useState(true)
   const [selectedPawn, setSelectedPawn] = useState<Pawn | null>(null)
   const [performancePeriod, setPerformancePeriod] = useState<'month' | 'year'>('month')
   const [inventoryMenuOpen, setInventoryMenuOpen] = useState(false)
@@ -690,6 +692,7 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not load dashboard data')
     } finally {
+      setLoading(false)
       if (showRefresh) setRefreshing(false)
     }
   }
@@ -746,6 +749,20 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
     background: totalInventoryValue
       ? `conic-gradient(#8b5cf6 0 ${phoneStop}%, #38bdf8 ${phoneStop}% ${accessoryStop}%, #fb923c ${accessoryStop}% 100%)`
       : 'conic-gradient(rgba(139, 92, 246, 0.18) 0 100%)',
+  }
+
+  if (loading && !data) {
+    return (
+      <>
+        <SectionHeader
+          eyebrow="Live MongoDB dashboard"
+          title={`Good afternoon, ${user.name.split(' ')[0]}`}
+          description="Connecting to the shop and preparing today's overview."
+          action={<button className="primary-button" onClick={() => goTo('trade')}><Plus size={17} /> New transaction</button>}
+        />
+        <section className="surface-card"><LoadingState label="Loading dashboard" detail="Syncing sales, pawn, customer, and inventory totals…" /></section>
+      </>
+    )
   }
 
   return (
@@ -920,6 +937,7 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
 
 function PawnView() {
   const [pawns, setPawns] = useState<Pawn[]>([])
+  const [loading, setLoading] = useState(true)
   const [selectedPawn, setSelectedPawn] = useState<Pawn | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
@@ -931,6 +949,7 @@ function PawnView() {
     api<{ pawns: Pawn[] }>('/pawns')
       .then((result) => setPawns(result.pawns))
       .catch((reason: Error) => setError(reason.message))
+      .finally(() => setLoading(false))
   }, [])
 
   const visiblePawns = pawns
@@ -1001,7 +1020,8 @@ function PawnView() {
                   <td><button className="icon-button" onClick={() => setSelectedPawn(row)} aria-label={`View ${row.pawnNo}`}><MoreHorizontal size={18} /></button></td>
                 </tr>
               ))}
-              {visiblePawns.length === 0 && <tr><td colSpan={9}>No pawn contracts match these filters.</td></tr>}
+              {loading && <tr><td colSpan={9}><LoadingState compact label="Loading pawn contracts" detail="Checking balances, fees, and due dates…" /></td></tr>}
+              {!loading && visiblePawns.length === 0 && <tr><td colSpan={9}>No pawn contracts match these filters.</td></tr>}
             </tbody>
           </table>
         </div>
@@ -1020,7 +1040,8 @@ function PawnView() {
               </div>
             </article>
           ))}
-          {visiblePawns.length === 0 && <p className="mobile-contract-empty">No pawn contracts match these filters.</p>}
+          {loading && <LoadingState compact label="Loading pawn contracts" />}
+          {!loading && visiblePawns.length === 0 && <p className="mobile-contract-empty">No pawn contracts match these filters.</p>}
         </div>
       </article>
       {selectedPawn && <PawnDetailModal pawn={selectedPawn} onClose={() => setSelectedPawn(null)} onAction={updatePawn} />}
@@ -1030,6 +1051,7 @@ function PawnView() {
 
 function TradeView() {
   const [trades, setTrades] = useState<Trade[]>([])
+  const [loading, setLoading] = useState(true)
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null)
   const [error, setError] = useState('')
   const [transactionsCollapsed, setTransactionsCollapsed] = useState(() => window.matchMedia('(max-width: 640px)').matches)
@@ -1038,6 +1060,7 @@ function TradeView() {
     api<{ trades: Trade[] }>('/trades')
       .then((result) => setTrades(result.trades))
       .catch((reason: Error) => setError(reason.message))
+      .finally(() => setLoading(false))
   }, [])
 
   function exportTrades() {
@@ -1107,7 +1130,8 @@ function TradeView() {
               <button className="icon-button" onClick={() => setSelectedTrade(transaction)} aria-label={`View ${transaction.tradeNo}`}><MoreHorizontal size={18} /></button>
             </div>
           ))}
-          {trades.length === 0 && <div className="transaction-row"><p><strong>No transactions yet</strong><small>Create a buy or sell transaction to see it here.</small></p></div>}
+          {loading && <LoadingState compact label="Loading transactions" detail="Reading recent purchases and sales…" />}
+          {!loading && trades.length === 0 && <div className="transaction-row"><p><strong>No transactions yet</strong><small>Create a buy or sell transaction to see it here.</small></p></div>}
         </div>}
       </article>
       {selectedTrade && (
@@ -1206,6 +1230,7 @@ function InventoryPhoto({ item, size = 'normal' }: { item: InventoryItem; size?:
 
 function InventoryView() {
   const [items, setItems] = useState<InventoryItem[]>([])
+  const [loading, setLoading] = useState(true)
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
   const [editingPrice, setEditingPrice] = useState(false)
   const [sellingPriceDraft, setSellingPriceDraft] = useState('')
@@ -1222,6 +1247,7 @@ function InventoryView() {
     api<{ items: InventoryItem[] }>('/inventory')
       .then((result) => setItems(result.items))
       .catch((reason: Error) => setError(reason.message))
+      .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => {
@@ -1411,7 +1437,8 @@ function InventoryView() {
                 <footer><strong>{money.format(item.sellPrice || item.buyPrice)}</strong><small>{item.quantity} in stock</small></footer>
               </button>
             ))}
-            {filteredItems.length === 0 && <p className="mobile-record-empty">{items.length === 0 ? 'No inventory in the database yet.' : 'No matching inventory.'}</p>}
+            {loading && <LoadingState label="Loading inventory" detail="Reading stock counts and product records…" />}
+            {!loading && filteredItems.length === 0 && <p className="mobile-record-empty">{items.length === 0 ? 'No inventory in the database yet.' : 'No matching inventory.'}</p>}
           </div>
         ) : (
           <>
@@ -1431,7 +1458,8 @@ function InventoryView() {
                       <td><button className="icon-button" onClick={() => setSelectedItem(row)} aria-label={`View ${row.sku}`}><MoreHorizontal size={18} /></button></td>
                     </tr>
                   ))}
-                  {filteredItems.length === 0 && <tr><td colSpan={8}>{items.length === 0 ? 'No inventory in the database yet.' : 'No matching inventory.'}</td></tr>}
+                  {loading && <tr><td colSpan={8}><LoadingState compact label="Loading inventory" detail="Reading stock counts and product records…" /></td></tr>}
+                  {!loading && filteredItems.length === 0 && <tr><td colSpan={8}>{items.length === 0 ? 'No inventory in the database yet.' : 'No matching inventory.'}</td></tr>}
                 </tbody>
               </table>
             </div>
@@ -1445,7 +1473,8 @@ function InventoryView() {
                   </div>
                 </article>
               ))}
-              {filteredItems.length === 0 && <p className="mobile-record-empty">{items.length === 0 ? 'No inventory in the database yet.' : 'No matching inventory.'}</p>}
+              {loading && <LoadingState compact label="Loading inventory" />}
+              {!loading && filteredItems.length === 0 && <p className="mobile-record-empty">{items.length === 0 ? 'No inventory in the database yet.' : 'No matching inventory.'}</p>}
             </div>
           </>
         )}
@@ -1747,6 +1776,7 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
 
 function CustomersView() {
   const [customers, setCustomers] = useState<Customer[]>([])
+  const [loading, setLoading] = useState(true)
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [search, setSearch] = useState('')
   const [error, setError] = useState('')
@@ -1755,6 +1785,7 @@ function CustomersView() {
     api<{ customers: Customer[] }>('/customers')
       .then((result) => setCustomers(result.customers))
       .catch((reason: Error) => setError(reason.message))
+      .finally(() => setLoading(false))
   }, [])
 
   const filteredCustomers = customers.filter((customer) => {
@@ -1792,7 +1823,8 @@ function CustomersView() {
                   <td><button className="icon-button" onClick={() => setSelectedCustomer(customer)} aria-label={`View ${customer.name}`}><MoreHorizontal size={18} /></button></td>
                 </tr>
               ))}
-              {filteredCustomers.length === 0 && <tr><td colSpan={6}>{customers.length === 0 ? 'No customers in the database yet.' : 'No customers match this search.'}</td></tr>}
+              {loading && <tr><td colSpan={6}><LoadingState compact label="Loading customers" detail="Reading customer profiles…" /></td></tr>}
+              {!loading && filteredCustomers.length === 0 && <tr><td colSpan={6}>{customers.length === 0 ? 'No customers in the database yet.' : 'No customers match this search.'}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -1811,7 +1843,8 @@ function CustomersView() {
               </div>
             </article>
           ))}
-          {filteredCustomers.length === 0 && <p className="mobile-record-empty">{customers.length === 0 ? 'No customers in the database yet.' : 'No customers match this search.'}</p>}
+          {loading && <LoadingState compact label="Loading customers" />}
+          {!loading && filteredCustomers.length === 0 && <p className="mobile-record-empty">{customers.length === 0 ? 'No customers in the database yet.' : 'No customers match this search.'}</p>}
         </div>
       </article>
 
@@ -1855,14 +1888,26 @@ function CustomersView() {
 function ReportsView() {
   const [data, setData] = useState<DashboardData | null>(null)
   const [logs, setLogs] = useState<ActivityLog[]>([])
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    api<DashboardData>('/dashboard').then(setData).catch((reason: Error) => setError(reason.message))
-    api<{ logs: ActivityLog[] }>('/activity-logs').then((result) => setLogs(result.logs)).catch(() => setLogs([]))
+    void Promise.allSettled([
+      api<DashboardData>('/dashboard').then(setData).catch((reason: Error) => setError(reason.message)),
+      api<{ logs: ActivityLog[] }>('/activity-logs').then((result) => setLogs(result.logs)).catch(() => setLogs([])),
+    ]).finally(() => setLoading(false))
   }, [])
 
   const inventoryValue = data?.inventoryMix.reduce((sum, item) => sum + item.value, 0) || 0
+
+  if (loading) {
+    return (
+      <>
+        <SectionHeader eyebrow="Analytics" title="Reports and analytics" description="Preparing live sales, pawn, customer, stock, and audit snapshots." />
+        <section className="surface-card"><LoadingState label="Loading reports" detail="Calculating totals and reading recent activity…" /></section>
+      </>
+    )
+  }
 
   return (
     <>

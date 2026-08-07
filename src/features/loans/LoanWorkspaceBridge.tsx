@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react'
 import { api, type SessionUser } from '../../lib/api'
+import LoadingState from '../../components/LoadingState'
 
 type Currency = 'USD' | 'KHR'
 type LoanStatus = 'ACTIVE' | 'DUE_SOON' | 'OVERDUE' | 'PARTIALLY_PAID' | 'PAID' | 'CANCELLED'
@@ -430,9 +431,9 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
           <td><button className="icon-button loan-view-button" onClick={() => void openDetail(loan)} aria-label={`View ${loan.loanNo}`} title="View loan"><MoreHorizontal size={18} /></button></td>
         </tr>)}
         {!loading && loans.length === 0 && <tr><td colSpan={7}><div className="loan-empty"><Banknote size={31} /><strong>No loans found</strong><span>{search || status !== 'ALL' ? 'Try another search or status filter.' : 'Create the first loan record so due dates are never forgotten.'}</span></div></td></tr>}
-        {loading && <tr><td colSpan={7}>Loading loans...</td></tr>}
+        {loading && <tr><td colSpan={7}><LoadingState compact label="Loading loans" detail="Checking balances and due dates…" /></td></tr>}
       </tbody></table></div>
-      <div className="loan-mobile-list">{loans.map((loan) => <button className={`loan-mobile-card ${loan.status === 'OVERDUE' ? 'overdue' : ''}`} key={loan._id} onClick={() => void openDetail(loan)}><div><span className="avatar">{loan.borrower.name.slice(0, 2).toUpperCase()}</span><p><strong>{loan.borrower.name}</strong><small>{loan.loanNo} · {loan.borrower.phone}</small></p><LoanStatusBadge status={loan.status} /></div><section><span>Remaining<strong>{money(loan.remainingBalance, loan.currency)}</strong></span><span>Due<strong>{dateText(loan.dueDate)}</strong></span></section><footer>{dueDescription(loan)}</footer></button>)}</div>
+      <div className="loan-mobile-list">{loans.map((loan) => <button className={`loan-mobile-card ${loan.status === 'OVERDUE' ? 'overdue' : ''}`} key={loan._id} onClick={() => void openDetail(loan)}><div><span className="avatar">{loan.borrower.name.slice(0, 2).toUpperCase()}</span><p><strong>{loan.borrower.name}</strong><small>{loan.loanNo} · {loan.borrower.phone}</small></p><LoanStatusBadge status={loan.status} /></div><section><span>Remaining<strong>{money(loan.remainingBalance, loan.currency)}</strong></span><span>Due<strong>{dateText(loan.dueDate)}</strong></span></section><footer>{dueDescription(loan)}</footer></button>)}{loading && <LoadingState compact label="Loading loans" />}</div>
     </article>
 
     {showCreate && <CreateLoanModal busy={busy} error={modalError} createdLoan={createdLoan} onClose={() => { if (!busy) { setShowCreate(false); setCreatedLoan(null) } }} onSubmit={createLoan} />}

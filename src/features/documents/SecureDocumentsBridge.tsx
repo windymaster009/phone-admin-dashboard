@@ -19,6 +19,7 @@ import {
   Users,
 } from 'lucide-react'
 import { api, apiBlob, getSessionUser } from '../../lib/api'
+import LoadingState from '../../components/LoadingState'
 
 type Customer = {
   _id: string
@@ -297,7 +298,7 @@ function VaultWorkspace() {
             {customer.nationalIdNumber ? <IdCard size={16} /> : <AlertTriangle size={16} />}
           </button>)}
           {!loading && filteredCustomers.length === 0 && <div className="secure-empty">No matching customers.</div>}
-          {loading && <div className="secure-empty">Loading customers…</div>}
+          {loading && <LoadingState compact label="Loading customers" />}
         </div>
       </aside>
 
@@ -323,7 +324,7 @@ function VaultWorkspace() {
             </article>)}
             {!documentsLoading && selectedCustomer && documents.length === 0 && <div className="secure-empty"><FolderLock size={30} /><strong>No secure documents yet</strong><span>Upload the customer's National ID, photo, agreement, or transaction evidence.</span></div>}
             {!selectedCustomer && <div className="secure-empty">Select a customer to view private documents.</div>}
-            {documentsLoading && <div className="secure-empty">Decrypting document metadata…</div>}
+            {documentsLoading && <LoadingState compact label="Loading secure documents" detail="Reading encrypted file metadata…" />}
           </div>
         </article>
       </div>

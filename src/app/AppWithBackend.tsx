@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useState } from 'react'
-import { Smartphone } from 'lucide-react'
 import DeferredBridges from './DeferredBridges'
+import StartupScreen from './StartupScreen'
 import {
   api,
   getToken,
@@ -45,16 +45,6 @@ function getInitialFontSize(): AppFontSize {
   }
 
   return 'default'
-}
-
-function StartupScreen({ message = 'Connecting to the shop...' }: { message?: string }) {
-  return (
-    <div className="startup-screen">
-      <Smartphone size={35} />
-      <strong>PhoneFlow</strong>
-      <span>{message}</span>
-    </div>
-  )
 }
 
 export default function AppWithBackend() {
@@ -121,18 +111,18 @@ export default function AppWithBackend() {
     setChecking(false)
   }
 
-  if (checking) return <StartupScreen />
+  if (checking) return <StartupScreen stage="checking-session" />
 
   if (!user) {
     return (
-      <Suspense fallback={<StartupScreen message="Loading sign in..." />}>
+      <Suspense fallback={<StartupScreen stage="loading-sign-in" />}>
         <AuthScreen theme={theme} onAuthenticated={handleAuthenticated} />
       </Suspense>
     )
   }
 
   return (
-    <Suspense fallback={<StartupScreen message="Opening your workspace..." />}>
+    <Suspense fallback={<StartupScreen stage="opening-workspace" />}>
       <App
         theme={theme}
         onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
