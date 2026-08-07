@@ -15,6 +15,11 @@ android-scanner/app/build/
 android-scanner/local.properties
 android-scanner/.android-sdk/
 android-app/.gradle/
+android-app/.idea/
 android-app/build/
 android-app/app/build/
+android-app/**/build/
+android-app/.cxx/
 android-app/local.properties
+*.apk
+*.aab

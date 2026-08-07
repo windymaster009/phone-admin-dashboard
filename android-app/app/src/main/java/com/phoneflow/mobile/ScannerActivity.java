@@ -9,6 +9,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.OptIn;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.camera.core.Camera;
 import androidx.camera.core.CameraSelector;
@@ -81,6 +82,7 @@ public class ScannerActivity extends AppCompatActivity {
         }
     }
 
+    @OptIn(markerClass = ExperimentalGetImage.class)
     private void startCamera() {
         statusText.setText(R.string.scanner_hint);
         ListenableFuture<ProcessCameraProvider> future = ProcessCameraProvider.getInstance(this);
@@ -111,7 +113,7 @@ public class ScannerActivity extends AppCompatActivity {
         }, ContextCompat.getMainExecutor(this));
     }
 
-    @ExperimentalGetImage
+    @OptIn(markerClass = ExperimentalGetImage.class)
     private void analyzeImage(@NonNull ImageProxy proxy) {
         if (resolving.get() || proxy.getImage() == null) {
             proxy.close();

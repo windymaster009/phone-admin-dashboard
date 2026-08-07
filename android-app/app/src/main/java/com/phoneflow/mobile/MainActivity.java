@@ -47,7 +47,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import org.json.JSONObject;
 
 import java.lang.ref.WeakReference;
-import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.NumberFormat;
 import java.util.Locale;
@@ -226,7 +225,7 @@ public class MainActivity extends AppCompatActivity {
     private void loadDashboard() {
         if (serverUrl.isBlank()) return;
         String redirect = serverUrl + "/dashboard";
-        String encodedRedirect = URLEncoder.encode(redirect, StandardCharsets.UTF_8);
+        String encodedRedirect = Uri.encode(redirect);
         webView.loadUrl(apiBaseUrl + "/api/auth/android-lan-session?redirect=" + encodedRedirect);
     }
 

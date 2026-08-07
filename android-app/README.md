@@ -76,7 +76,7 @@ When the app URL uses port 5173, the native scanner automatically sends API look
 
 ## Build With Android Studio
 
-1. Install Android Studio with Android SDK Platform 34 and JDK 17.
+1. Install Android Studio with Android SDK Platform 36 and JDK 17.
 2. Open the `android-app` folder.
 3. Allow Gradle sync to finish.
 4. Select an emulator or USB-debugging device.
@@ -84,15 +84,15 @@ When the app URL uses port 5173, the native scanner automatically sends API look
 
 ## Command-Line Build
 
-This repo is pinned to the Android versions already working on this machine:
+This repo is pinned to these Android build versions:
 
-- Android Gradle Plugin 8.2.2
-- Gradle 8.9
-- Compile SDK 34
-- Target SDK 34
+- Android Gradle Plugin 8.13.2
+- Gradle 9.2 or newer
+- Compile SDK 36
+- Target SDK 35
 
 ```bash
-/home/kevin/.gradle/wrapper/dists/gradle-8.9-bin/90cnw93cvbtalezasaz0blq0a/gradle-8.9/bin/gradle --project-dir android-app :app:assembleDebug
+gradle -p android-app :app:lintDebug :app:assembleDebug
 ```
 
 APK output:
