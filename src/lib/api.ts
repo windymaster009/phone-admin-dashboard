@@ -179,3 +179,36 @@ export function api<T = any>(path: string, options: RequestInit = {}, behavior: 
 
   return request
 }
+
+export async function apiBlob(path: string, options: RequestInit = {}) {
+  const token = getToken()
+  const headers = new Headers(options.headers)
+  const clientRequestId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  if (token) headers.set('Authorization', `Bearer ${token}`)
+  if (!headers.has('X-Request-ID')) headers.set('X-Request-ID', clientRequestId)
+  if (!headers.has('X-PhoneFlow-Request')) headers.set('X-PhoneFlow-Request', '1')
+
+  let response: Response
+  try {
+    response = await fetch(`/api${path}`, {
+      ...options,
+      credentials: options.credentials || 'include',
+      headers,
+    })
+  } catch {
+    throw new ApiError('The API server is temporarily unavailable. Check the server terminal before trying again.', 0, undefined, true)
+  }
+
+  if (response.status === 401) setToken(null)
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({})) as { message?: string; requestId?: string }
+    const requestId = payload.requestId || response.headers.get('X-Request-ID') || undefined
+    throw new ApiError(payload.message || `Request failed (${response.status})`, response.status, requestId)
+  }
+
+  return {
+    blob: await response.blob(),
+    contentType: response.headers.get('Content-Type') || 'application/octet-stream',
+    disposition: response.headers.get('Content-Disposition') || '',
+  }
+}

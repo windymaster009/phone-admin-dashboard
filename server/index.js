@@ -11,6 +11,7 @@ import morgan from 'morgan'
 import { requireAuth } from './auth.js'
 import backupRouter from './backupRoutes.js'
 import { startBackupScheduler, stopBackupScheduler } from './backupService.js'
+import customerDocumentRouter from './documentRoutes.js'
 import loanDashboardRouter from './loanDashboardRoutes.js'
 import loanRouter from './loanRoutes.js'
 import receiptRouter from './receiptRoutes.js'
@@ -162,6 +163,7 @@ app.get('/api/health', async (_req, res) => {
 })
 
 app.use('/api/backups', backupRouter)
+app.use('/api/customer-documents', customerDocumentRouter)
 app.use('/api/loan-dashboard', loanDashboardRouter)
 app.use('/api/loans', loanRouter)
 app.use('/api/receipts', receiptRouter)

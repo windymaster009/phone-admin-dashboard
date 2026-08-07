@@ -22,6 +22,7 @@ import {
   usdKhrFromPayway,
 } from './integrations/payway/index.js'
 import { ActivityLog, Customer, InventoryItem, Pawn, PaywayIntent, Supplier, Trade, User } from './models.js'
+import { preventCustomerDeletionWithDocuments } from './documentGuards.js'
 import {
   DAILY_PAWN_FEE_RATE,
   addPawnDays,
@@ -679,7 +680,7 @@ router.patch('/customers/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASH
   res.json({ customer })
 }))
 
-router.delete('/customers/:id', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
+router.delete('/customers/:id', requireAuth, allowRoles('OWNER', 'MANAGER'), preventCustomerDeletionWithDocuments, asyncRoute(async (req, res) => {
   const [pawnExists, tradeExists] = await Promise.all([
     Pawn.exists({ customer: req.params.id }),
     Trade.exists({ customer: req.params.id }),
