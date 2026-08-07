@@ -132,6 +132,8 @@ type InventoryItem = {
   status: string
 }
 
+type PawnCurrency = 'USD' | 'KHR'
+
 type Pawn = {
   _id: string
   pawnNo: string
@@ -146,11 +148,14 @@ type Pawn = {
   accruedInterest?: number
   fees?: number
   amountPaid?: number
+  currency?: PawnCurrency
+  exchangeRate?: number
   renewals?: unknown[]
   dueDate: string
   graceEndsAt?: string
   status: string
   identificationVerified: boolean
+  ownershipConfirmed?: boolean
   notes?: string
   createdAt: string
 }
@@ -398,6 +403,28 @@ const tradeTransactionMoney = (trade: Trade, original: number | undefined, fallb
   : money.format(original ?? fallback)
 const riel = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
 
+function pawnMoney(amount: number, currencyCode: PawnCurrency = 'USD') {
+  return currencyCode === 'KHR'
+    ? `${riel.format(Math.round(Number(amount) || 0))} KHR`
+    : money.format(Number(amount) || 0)
+}
+
+function pawnEquivalentText(amount: number, currencyCode: PawnCurrency, exchangeRate: ExchangeRateData | null, storedRate?: number) {
+  if (!exchangeRate) return ''
+  const usdKhrRate = currencyCode === 'KHR' && Number(storedRate) > 0
+    ? Number(storedRate)
+    : exchangeRate.usdKhr
+  return currencyCode === 'KHR'
+    ? `≈ ${money.format((Number(amount) || 0) / usdKhrRate)}`
+    : khrText(amount, exchangeRate)
+}
+
+function pawnUsdValue(pawn: Pawn, amount: number) {
+  if (pawn.currency !== 'KHR') return Number(amount) || 0
+  const rate = Number(pawn.exchangeRate)
+  return rate > 0 ? (Number(amount) || 0) / rate : 0
+}
+
 function useExchangeRate() {
   const [exchangeRate, setExchangeRate] = useState<ExchangeRateData | null>(null)
 
@@ -440,6 +467,8 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
   const [actionError, setActionError] = useState('')
   const [actionBusy, setActionBusy] = useState(false)
   const outstanding = pawnOutstanding(pawn)
+  const pawnCurrency: PawnCurrency = pawn.currency === 'KHR' ? 'KHR' : 'USD'
+  const currencyLabel = pawnCurrency === 'KHR' ? 'KHR' : '$'
   const isOpen = ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED'].includes(pawn.status)
 
   function openAction(nextAction: PawnAction) {
@@ -447,7 +476,8 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
     setActionError('')
     setNote('')
     setNewDueDate('')
-    setAmount(nextAction === 'redeem' ? outstanding.toFixed(2) : nextAction === 'renew' ? ((pawn.accruedInterest || 0) + (pawn.fees || 0)).toFixed(2) : '')
+    const suggestedAmount = nextAction === 'redeem' ? outstanding : nextAction === 'renew' ? (pawn.accruedInterest || 0) + (pawn.fees || 0) : null
+    setAmount(suggestedAmount === null ? '' : pawnCurrency === 'KHR' ? String(Math.round(suggestedAmount)) : suggestedAmount.toFixed(2))
   }
 
   async function submitAction(event: FormEvent<HTMLFormElement>) {
@@ -489,12 +519,14 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
         </header>
         <div className="detail-grid">
           <div><span>Status</span><strong><StatusBadge status={pawn.status} /></strong></div>
-          <div><span>ID card</span><strong>{pawn.identificationVerified ? 'Verified' : 'Missing'}</strong></div>
-          <div><span>Estimated value</span><strong>{money.format(pawn.estimatedValue)}</strong></div>
-          <div><span>Remaining principal</span><strong>{money.format(pawn.remainingPrincipal ?? pawn.principal)}</strong></div>
-          <div><span>Interest due</span><strong>{money.format(pawn.accruedInterest || 0)}</strong></div>
-          <div><span>Total due</span><strong>{money.format(outstanding)}</strong></div>
-          <div><span>Amount paid</span><strong>{money.format(pawn.amountPaid || 0)}</strong></div>
+          <div><span>ID card</span><strong>{pawn.identificationVerified ? 'Verified' : 'Not provided (optional)'}</strong></div>
+          <div><span>Ownership</span><strong>{pawn.ownershipConfirmed || pawn.identificationVerified ? 'Confirmed' : 'Legacy record'}</strong></div>
+          <div><span>Currency</span><strong>{pawnCurrency}</strong></div>
+          <div><span>Estimated value</span><strong>{pawnMoney(pawn.estimatedValue, pawnCurrency)}</strong></div>
+          <div><span>Remaining principal</span><strong>{pawnMoney(pawn.remainingPrincipal ?? pawn.principal, pawnCurrency)}</strong></div>
+          <div><span>Interest due</span><strong>{pawnMoney(pawn.accruedInterest || 0, pawnCurrency)}</strong></div>
+          <div><span>Total due</span><strong>{pawnMoney(outstanding, pawnCurrency)}</strong></div>
+          <div><span>Amount paid</span><strong>{pawnMoney(pawn.amountPaid || 0, pawnCurrency)}</strong></div>
           <div><span>Pawn percent</span><strong>{pawn.pawnPercentage}%</strong></div>
           <div><span>Interest rate</span><strong>{pawn.interestRate}%</strong></div>
           <div><span>Due date</span><strong>{dateText(pawn.dueDate)}</strong></div>
@@ -519,13 +551,13 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
           <div className="pawn-action-header">
             <div>
               <span className="eyebrow">{action === 'payment' ? 'Record payment' : action === 'renew' ? 'Renew contract' : action === 'redeem' ? 'Redeem collateral' : 'Forfeit collateral'}</span>
-              <p>{action === 'payment' ? `Apply a payment to the ${money.format(outstanding)} outstanding balance.` : action === 'renew' ? 'Record the required payment and extend the contract due date.' : action === 'redeem' ? 'Collect the full balance and return the collateral to the customer.' : 'Close the contract and move the collateral into shop inventory.'}</p>
+              <p>{action === 'payment' ? `Apply a payment to the ${pawnMoney(outstanding, pawnCurrency)} outstanding balance.` : action === 'renew' ? 'Record the required payment and extend the contract due date.' : action === 'redeem' ? 'Collect the full balance and return the collateral to the customer.' : 'Close the contract and move the collateral into shop inventory.'}</p>
             </div>
             <button type="button" className="icon-button" onClick={() => setAction(null)} aria-label="Cancel action"><X size={15} /></button>
           </div>
           {actionError && <p className="pawn-action-error">{actionError}</p>}
-          {action !== 'forfeit' && <label>{action === 'redeem' ? 'Full amount due' : 'Payment amount'}<div className="input-prefix"><span>$</span><input autoFocus type="text" inputMode="decimal" required readOnly={action === 'redeem'} value={amount} onChange={(event) => setAmount(event.target.value.replace(/[^0-9.]/g, ''))} placeholder="0.00" /></div></label>}
-          {action === 'forfeit' && <label><span>Selling price <small>Optional</small></span><div className="input-prefix"><span>$</span><input autoFocus type="text" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value.replace(/[^0-9.]/g, ''))} placeholder={String(pawn.estimatedValue)} /></div></label>}
+          {action !== 'forfeit' && <label>{action === 'redeem' ? 'Full amount due' : 'Payment amount'}<div className="input-prefix"><span>{currencyLabel}</span><input autoFocus type="text" inputMode={pawnCurrency === 'KHR' ? 'numeric' : 'decimal'} required readOnly={action === 'redeem'} value={amount} onChange={(event) => setAmount(event.target.value.replace(pawnCurrency === 'KHR' ? /\D/g : /[^0-9.]/g, ''))} placeholder={pawnCurrency === 'KHR' ? '0' : '0.00'} /></div></label>}
+          {action === 'forfeit' && <label><span>Selling price <small>Optional</small></span><div className="input-prefix"><span>{currencyLabel}</span><input autoFocus type="text" inputMode={pawnCurrency === 'KHR' ? 'numeric' : 'decimal'} value={amount} onChange={(event) => setAmount(event.target.value.replace(pawnCurrency === 'KHR' ? /\D/g : /[^0-9.]/g, ''))} placeholder={String(pawn.estimatedValue)} /></div></label>}
           {action === 'renew' && <label>New due date<input type="date" required value={newDueDate} onChange={(event) => setNewDueDate(event.target.value)} /></label>}
           {action !== 'forfeit' && <label className="pawn-action-note"><span>Note <small>Optional</small></span><textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add a reference or payment note" /></label>}
           <div className="pawn-action-buttons">
@@ -779,7 +811,7 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
                         <p>{row.customer?.name || 'Unknown'}<small>{row.itemSnapshot.name}</small></p>
                       </div>
                     </td>
-                    <td><strong>{money.format(row.principal)}</strong>{exchangeRate && <small className="table-subtext khr-table-value">{khrText(row.principal, exchangeRate)}</small>}<small className="table-subtext">of {money.format(row.estimatedValue)}{exchangeRate ? ` / ${khrText(row.estimatedValue, exchangeRate)}` : ''}</small></td>
+                    <td><strong>{pawnMoney(row.principal, row.currency)}</strong>{exchangeRate && <small className="table-subtext khr-table-value">{pawnEquivalentText(row.principal, row.currency || 'USD', exchangeRate, row.exchangeRate)}</small>}<small className="table-subtext">of {pawnMoney(row.estimatedValue, row.currency)}</small></td>
                     <td>{dateText(row.dueDate)}</td>
                     <td><StatusBadge status={row.status} /></td>
                     <td><button className="icon-button" onClick={() => setSelectedPawn(row)} aria-label={`View contract ${row.pawnNo}`}><MoreHorizontal size={18} /></button></td>
@@ -798,7 +830,7 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
                   <StatusBadge status={row.status} />
                 </div>
                 <div className="mobile-contract-details">
-                  <div><span>Loan</span><strong>{money.format(row.principal)}</strong><small>{exchangeRate && khrText(row.principal, exchangeRate)}</small></div>
+                  <div><span>Loan</span><strong>{pawnMoney(row.principal, row.currency)}</strong><small>{exchangeRate && pawnEquivalentText(row.principal, row.currency || 'USD', exchangeRate, row.exchangeRate)}</small></div>
                   <div><span>Due date</span><strong>{dateText(row.dueDate)}</strong><small className="mono">{row.pawnNo}</small></div>
                   <button className="icon-button" onClick={() => setSelectedPawn(row)} aria-label={`View contract ${row.pawnNo}`}><MoreHorizontal size={18} /></button>
                 </div>
@@ -876,6 +908,7 @@ function PawnView() {
   }
 
   const openPawns = pawns.filter((pawn) => ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED'].includes(pawn.status))
+  const openPawnUsdTotal = openPawns.reduce((sum, pawn) => sum + pawnUsdValue(pawn, pawn.remainingPrincipal ?? pawn.principal), 0)
 
   return (
     <>
@@ -883,12 +916,12 @@ function PawnView() {
         <SectionHeader
           eyebrow="Operations"
           title="Pawn management"
-          description={error || 'Track collateral, National ID verification, repayments, renewals, and overdue contracts.'}
+          description={error || 'Track collateral, optional customer identification, repayments, renewals, and overdue contracts.'}
           action={<button className="primary-button" onClick={() => comingNext('New pawn')}><Plus size={17} /> New pawn</button>}
         />
       </div>
       <section className="mini-stats-grid pawn-stats-grid">
-        <div className="surface-card mini-stat"><HandCoins /><p>Open contracts<strong>{openPawns.length}</strong><small>{money.format(openPawns.reduce((sum, pawn) => sum + (pawn.remainingPrincipal ?? pawn.principal), 0))} remaining</small></p></div>
+        <div className="surface-card mini-stat"><HandCoins /><p>Open contracts<strong>{openPawns.length}</strong><small>{money.format(openPawnUsdTotal)} USD equivalent remaining</small></p></div>
         <div className="surface-card mini-stat"><Clock3 /><p>Due soon<strong>{pawns.filter((pawn) => pawn.status === 'DUE_SOON').length}</strong><small>needs follow-up</small></p></div>
         <div className="surface-card mini-stat"><AlertTriangle /><p>Overdue<strong>{pawns.filter((pawn) => pawn.status === 'OVERDUE').length}</strong><small>past due contracts</small></p></div>
         <div className="surface-card mini-stat"><RefreshCcw /><p>Renewed contracts<strong>{pawns.filter((pawn) => (pawn.renewals?.length || 0) > 0).length}</strong><small>contracts with renewal history</small></p></div>
@@ -912,9 +945,9 @@ function PawnView() {
                   <td><strong className="mono">{row.pawnNo}</strong></td>
                   <td>{row.customer?.name || 'Unknown'}</td>
                   <td>{row.itemSnapshot.name}<small className="table-subtext">{row.itemSnapshot.imei || 'No IMEI'}</small></td>
-                  <td>{money.format(row.estimatedValue)}</td>
-                  <td><strong>{money.format(row.remainingPrincipal ?? row.principal)}</strong></td>
-                  <td>{row.identificationVerified ? <span className="verified"><BadgeCheck size={15} /> Verified</span> : <span className="unverified"><AlertTriangle size={15} /> Missing</span>}</td>
+                  <td>{pawnMoney(row.estimatedValue, row.currency)}</td>
+                  <td><strong>{pawnMoney(row.remainingPrincipal ?? row.principal, row.currency)}</strong></td>
+                  <td>{row.identificationVerified ? <span className="verified"><BadgeCheck size={15} /> Verified</span> : <span className="pawn-id-optional">Not provided</span>}</td>
                   <td>{dateText(row.dueDate)}</td>
                   <td><StatusBadge status={row.status} /></td>
                   <td><button className="icon-button" onClick={() => setSelectedPawn(row)} aria-label={`View ${row.pawnNo}`}><MoreHorizontal size={18} /></button></td>
@@ -933,8 +966,8 @@ function PawnView() {
                 <StatusBadge status={row.status} />
               </div>
               <div className="mobile-contract-details">
-                <div><span>Due now</span><strong>{money.format(pawnOutstanding(row))}</strong><small>{exchangeRate && khrText(pawnOutstanding(row), exchangeRate)}</small></div>
-                <div><span>Due date</span><strong>{dateText(row.dueDate)}</strong><small className={row.identificationVerified ? 'verified' : 'unverified'}>{row.identificationVerified ? <><BadgeCheck size={11} /> ID verified</> : <><AlertTriangle size={11} /> ID missing</>}</small></div>
+                <div><span>Due now</span><strong>{pawnMoney(pawnOutstanding(row), row.currency)}</strong><small>{exchangeRate && pawnEquivalentText(pawnOutstanding(row), row.currency || 'USD', exchangeRate, row.exchangeRate)}</small></div>
+                <div><span>Due date</span><strong>{dateText(row.dueDate)}</strong><small className={row.identificationVerified ? 'verified' : 'pawn-id-optional'}>{row.identificationVerified ? <><BadgeCheck size={11} /> ID verified</> : 'ID not provided'}</small></div>
                 <button className="icon-button" onClick={() => setSelectedPawn(row)} aria-label={`View ${row.pawnNo}`}><MoreHorizontal size={18} /></button>
               </div>
             </article>
@@ -1454,6 +1487,7 @@ function InventoryView() {
 }
 
 function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
+  const [valuationCurrency, setValuationCurrency] = useState<PawnCurrency>('USD')
   const [marketPrice, setMarketPrice] = useState(500)
   const [ageMonths, setAgeMonths] = useState(12)
   const [condition, setCondition] = useState('good')
@@ -1463,6 +1497,16 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
   const [repairCost, setRepairCost] = useState(0)
   const [pawnRate, setPawnRate] = useState(45)
   const exchangeRate = useExchangeRate()
+
+  function changeValuationCurrency(nextCurrency: PawnCurrency) {
+    if (nextCurrency === valuationCurrency || !exchangeRate) return
+    const convert = (amount: number) => nextCurrency === 'KHR'
+      ? Math.round((amount * exchangeRate.usdKhr) / 100) * 100
+      : Math.round((amount / exchangeRate.usdKhr) * 100) / 100
+    setMarketPrice(convert(marketPrice))
+    setRepairCost(convert(repairCost))
+    setValuationCurrency(nextCurrency)
+  }
 
   const result = useMemo(() => {
     const conditionRates: Record<string, number> = {
@@ -1482,15 +1526,23 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
         : !includedAccessories.includes('BOX') ? 0.01 : 0
     const carrierLockRate = lockStatus === 'carrier_locked' ? 0.1 : 0
     const eligible = lockStatus !== 'activation_locked'
-    const ageDeduction = marketPrice * ageRate
-    const conditionDeduction = marketPrice * conditionRate
-    const batteryDeduction = marketPrice * batteryRate
-    const accessoryDeduction = marketPrice * accessoryRate
-    const carrierLockDeduction = marketPrice * carrierLockRate
-    const estimatedValue = eligible
-      ? Math.max(marketPrice - ageDeduction - conditionDeduction - batteryDeduction - accessoryDeduction - carrierLockDeduction - Math.max(repairCost, 0), 0)
-      : 0
-    const maximumPawn = estimatedValue * (pawnRate / 100)
+    const roundAmount = (amount: number) => valuationCurrency === 'KHR'
+      ? Math.round(amount)
+      : Math.round((amount + Number.EPSILON) * 100) / 100
+    const rawAgeDeduction = marketPrice * ageRate
+    const rawConditionDeduction = marketPrice * conditionRate
+    const rawBatteryDeduction = marketPrice * batteryRate
+    const rawAccessoryDeduction = marketPrice * accessoryRate
+    const rawCarrierLockDeduction = marketPrice * carrierLockRate
+    const ageDeduction = roundAmount(rawAgeDeduction)
+    const conditionDeduction = roundAmount(rawConditionDeduction)
+    const batteryDeduction = roundAmount(rawBatteryDeduction)
+    const accessoryDeduction = roundAmount(rawAccessoryDeduction)
+    const carrierLockDeduction = roundAmount(rawCarrierLockDeduction)
+    const estimatedValue = roundAmount(eligible
+      ? Math.max(marketPrice - rawAgeDeduction - rawConditionDeduction - rawBatteryDeduction - rawAccessoryDeduction - rawCarrierLockDeduction - Math.max(repairCost, 0), 0)
+      : 0)
+    const maximumPawn = roundAmount(estimatedValue * (pawnRate / 100))
     return {
       eligible,
       ageRate,
@@ -1503,15 +1555,17 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
       carrierLockDeduction,
       estimatedValue,
       maximumPawn,
-      riskReserve: estimatedValue - maximumPawn,
+      riskReserve: roundAmount(estimatedValue - maximumPawn),
     }
-  }, [ageMonths, batteryHealth, condition, includedAccessories, lockStatus, marketPrice, pawnRate, repairCost])
+  }, [ageMonths, batteryHealth, condition, includedAccessories, lockStatus, marketPrice, pawnRate, repairCost, valuationCurrency])
 
   function saveValuation() {
     const record = {
       id: `VAL-${Date.now()}`,
       source: 'CALCULATOR',
       createdAt: new Date().toISOString(),
+      currency: valuationCurrency,
+      exchangeRate: valuationCurrency === 'KHR' ? exchangeRate?.usdKhr : 1,
       marketPrice,
       ageMonths,
       condition,
@@ -1529,7 +1583,6 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
       estimatedValue: result.estimatedValue,
       maximumPawn: result.maximumPawn,
       usdKhrRate: exchangeRate?.usdKhr,
-      maximumPawnKhr: exchangeRate ? convertedKhr(result.maximumPawn, exchangeRate) : undefined,
     }
     const previous = JSON.parse(localStorage.getItem('phoneflow_valuations') || '[]') as unknown[]
     localStorage.setItem('phoneflow_valuations', JSON.stringify([record, ...previous].slice(0, 50)))
@@ -1541,6 +1594,8 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
       id: `VAL-${Date.now()}`,
       source: 'CALCULATOR',
       createdAt: new Date().toISOString(),
+      currency: valuationCurrency,
+      exchangeRate: valuationCurrency === 'KHR' ? exchangeRate?.usdKhr : 1,
       marketPrice,
       ageMonths,
       condition,
@@ -1558,7 +1613,6 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
       estimatedValue: result.estimatedValue,
       maximumPawn: result.maximumPawn,
       usdKhrRate: exchangeRate?.usdKhr,
-      maximumPawnKhr: exchangeRate ? convertedKhr(result.maximumPawn, exchangeRate) : undefined,
     }
     sessionStorage.setItem('phoneflow_last_valuation', JSON.stringify(valuation))
     goTo('pawn')
@@ -1581,7 +1635,8 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
           <div className="calculator-section">
             <div className="calculator-section-heading"><strong>1. Resale value</strong><small>Use a recent second-hand selling price, not the original retail price.</small></div>
             <div className="form-grid">
-              <label><span>Verified market price</span><div className="input-prefix"><span>$</span><input type="number" min="0" step="0.01" inputMode="decimal" value={marketPrice} onChange={(event) => setMarketPrice(Number(event.target.value))} /></div></label>
+              <label><span>Valuation currency</span><select value={valuationCurrency} onChange={(event) => changeValuationCurrency(event.target.value as PawnCurrency)}><option value="USD">USD — US Dollar</option><option value="KHR" disabled={!exchangeRate}>KHR — Cambodian Riel</option></select></label>
+              <label><span>Verified market price</span><div className="input-prefix"><span>{valuationCurrency}</span><input type="number" min="0" step={valuationCurrency === 'KHR' ? 100 : 0.01} inputMode={valuationCurrency === 'KHR' ? 'numeric' : 'decimal'} value={marketPrice} onChange={(event) => setMarketPrice(Number(event.target.value))} /></div></label>
               <label><span>Phone age</span><div className="input-suffix"><input type="number" min="0" max="120" value={ageMonths} onChange={(event) => setAgeMonths(Number(event.target.value))} /><span>months</span></div></label>
               <label><span>Physical condition</span><select value={condition} onChange={(event) => setCondition(event.target.value)}><option value="excellent">Excellent / Like new</option><option value="good">Good / Minor wear</option><option value="fair">Fair / Visible wear</option><option value="damaged">Damaged / Repair needed</option></select></label>
               <label><span>Battery health</span><div className="input-suffix"><input type="number" min="0" max="100" value={batteryHealth} onChange={(event) => setBatteryHealth(Math.min(100, Math.max(0, Number(event.target.value))))} /><span>%</span></div></label>
@@ -1592,8 +1647,8 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
             <div className="calculator-section-heading"><strong>2. Risk and costs</strong><small>Locked devices and hidden repair costs can remove the shop's safety margin.</small></div>
             <div className="form-grid calculator-risk-grid">
               <label><span>Lock status</span><select value={lockStatus} onChange={(event) => setLockStatus(event.target.value)}><option value="unlocked">Unlocked / IMEI clear</option><option value="carrier_locked">Carrier locked (-10%)</option><option value="activation_locked">Activation or iCloud locked</option></select></label>
-              <fieldset className="calculator-accessories"><legend>Included accessories</legend><div>{['BOX', 'CHARGER', 'CABLE', 'CASE', 'EARPHONES'].map((accessory) => <label key={accessory}><input type="checkbox" checked={includedAccessories.includes(accessory)} onChange={(event) => setIncludedAccessories((current) => event.target.checked ? [...current, accessory] : current.filter((item) => item !== accessory))} />{accessory.charAt(0) + accessory.slice(1).toLowerCase()}</label>)}</div><small>{result.accessoryDeduction > 0 ? `${currency.format(result.accessoryDeduction)} accessory deduction` : 'No accessory deduction'}</small></fieldset>
-              <label><span>Estimated repair cost</span><div className="input-prefix"><span>$</span><input type="number" min="0" step="0.01" inputMode="decimal" value={repairCost} onChange={(event) => setRepairCost(Number(event.target.value))} /></div></label>
+              <fieldset className="calculator-accessories"><legend>Included accessories</legend><div>{['BOX', 'CHARGER', 'CABLE', 'CASE', 'EARPHONES'].map((accessory) => <label key={accessory}><input type="checkbox" checked={includedAccessories.includes(accessory)} onChange={(event) => setIncludedAccessories((current) => event.target.checked ? [...current, accessory] : current.filter((item) => item !== accessory))} />{accessory.charAt(0) + accessory.slice(1).toLowerCase()}</label>)}</div><small>{result.accessoryDeduction > 0 ? `${pawnMoney(result.accessoryDeduction, valuationCurrency)} accessory deduction` : 'No accessory deduction'}</small></fieldset>
+              <label><span>Estimated repair cost</span><div className="input-prefix"><span>{valuationCurrency}</span><input type="number" min="0" step={valuationCurrency === 'KHR' ? 100 : 0.01} inputMode={valuationCurrency === 'KHR' ? 'numeric' : 'decimal'} value={repairCost} onChange={(event) => setRepairCost(Number(event.target.value))} /></div></label>
             </div>
           </div>
 
@@ -1608,9 +1663,9 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
           <div className="valuation-result-heading"><span className="eyebrow">Recommended offer</span><span className={`valuation-status ${result.eligible ? 'eligible' : 'blocked'}`}>{result.eligible ? 'Eligible' : 'Blocked'}</span></div>
           <div className="valuation-hero">
             <small>{result.eligible ? 'Maximum pawn principal' : 'Offer unavailable'}</small>
-            <strong>{result.eligible ? currency.format(result.maximumPawn) : '$0'}</strong>
+            <strong>{result.eligible ? pawnMoney(result.maximumPawn, valuationCurrency) : pawnMoney(0, valuationCurrency)}</strong>
             <div className="khr-equivalent">
-              {result.eligible ? exchangeRate ? khrText(result.maximumPawn, exchangeRate) : 'Loading KHR rate...' : 'Remove activation lock before valuation'}
+              {result.eligible ? exchangeRate ? pawnEquivalentText(result.maximumPawn, valuationCurrency, exchangeRate) : 'Loading exchange rate...' : 'Remove activation lock before valuation'}
             </div>
             <span>{result.eligible ? `${pawnRate}% of adjusted resale value` : 'Activation lock failed the eligibility check'}</span>
             {exchangeRate && (
@@ -1620,14 +1675,14 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
             )}
           </div>
           <div className="calculation-breakdown">
-            <div><span>Verified market price</span><strong>{currency.format(marketPrice)}</strong></div>
-            <div><span>Age ({Math.round(result.ageRate * 100)}%)</span><strong>-{currency.format(result.ageDeduction)}</strong></div>
-            <div><span>Condition ({Math.round(result.conditionRate * 100)}%)</span><strong>-{currency.format(result.conditionDeduction)}</strong></div>
-            <div><span>Battery ({Math.round(result.batteryRate * 100)}%)</span><strong>-{currency.format(result.batteryDeduction)}</strong></div>
-            <div><span>Lock and accessories</span><strong>-{currency.format(result.carrierLockDeduction + result.accessoryDeduction)}</strong></div>
-            <div><span>Repair cost</span><strong>-{currency.format(Math.max(repairCost, 0))}</strong></div>
-            <div className="estimated-row"><span>Estimated resale value</span><strong>{currency.format(result.estimatedValue)}</strong></div>
-            <div className="reserve-row"><span>Shop risk reserve after loan</span><strong>{currency.format(result.riskReserve)}</strong></div>
+            <div><span>Verified market price</span><strong>{pawnMoney(marketPrice, valuationCurrency)}</strong></div>
+            <div><span>Age ({Math.round(result.ageRate * 100)}%)</span><strong>-{pawnMoney(result.ageDeduction, valuationCurrency)}</strong></div>
+            <div><span>Condition ({Math.round(result.conditionRate * 100)}%)</span><strong>-{pawnMoney(result.conditionDeduction, valuationCurrency)}</strong></div>
+            <div><span>Battery ({Math.round(result.batteryRate * 100)}%)</span><strong>-{pawnMoney(result.batteryDeduction, valuationCurrency)}</strong></div>
+            <div><span>Lock and accessories</span><strong>-{pawnMoney(result.carrierLockDeduction + result.accessoryDeduction, valuationCurrency)}</strong></div>
+            <div><span>Repair cost</span><strong>-{pawnMoney(Math.max(repairCost, 0), valuationCurrency)}</strong></div>
+            <div className="estimated-row"><span>Estimated resale value</span><strong>{pawnMoney(result.estimatedValue, valuationCurrency)}</strong></div>
+            <div className="reserve-row"><span>Shop risk reserve after loan</span><strong>{pawnMoney(result.riskReserve, valuationCurrency)}</strong></div>
           </div>
           <button className="primary-button full-width" onClick={useForPawn} disabled={!result.eligible || result.maximumPawn <= 0}><HandCoins size={17} /> Start pawn with this offer</button>
           <button className="ghost-button full-width" onClick={saveValuation}><FileText size={16} /> Save valuation only</button>
@@ -1636,7 +1691,7 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
       <section className="surface-card workflow-note valuation-checklist">
         <span className="workflow-note-icon"><ScanLine /></span>
         <div><span className="eyebrow">Before releasing money</span><h3>Complete the acceptance checklist</h3><p>The calculator recommends an amount; staff verification decides whether the phone can be accepted.</p></div>
-        <div className="verification-chips"><span>IMEI clear</span><span>Owner ID</span><span>Activation lock off</span><span>Hardware tested</span></div>
+        <div className="verification-chips"><span>IMEI clear</span><span>Ownership confirmed</span><span>ID optional</span><span>Activation lock off</span><span>Hardware tested</span></div>
       </section>
     </>
   )

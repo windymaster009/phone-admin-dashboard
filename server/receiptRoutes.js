@@ -217,6 +217,7 @@ function buildPawnContractSnapshot(pawn) {
     dueDate: pawn.dueDate,
     graceEndsAt: pawn.graceEndsAt,
     identificationVerified: Boolean(pawn.identificationVerified),
+    ownershipConfirmed: Boolean(pawn.ownershipConfirmed || pawn.identificationVerified),
     status: pawn.status,
     notes: pawn.notes || '',
     staff: pawn.createdBy ? { name: pawn.createdBy.name, role: pawn.createdBy.role } : null,

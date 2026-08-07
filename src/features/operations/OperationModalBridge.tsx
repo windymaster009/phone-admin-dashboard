@@ -63,6 +63,7 @@ type Supplier = {
 
 type SellerType = 'EXISTING_CUSTOMER' | 'EXISTING_SUPPLIER' | 'WALK_IN' | 'NEW_CUSTOMER' | 'NEW_SUPPLIER'
 type PurchaseCurrency = 'USD' | 'KHR'
+type PawnCurrency = 'USD' | 'KHR'
 type PurchaseInventoryMode = 'NEW' | 'EXISTING'
 type PawnCustomerMode = 'EXISTING' | 'NEW'
 type SalePaymentMethod = 'CASH' | 'KHQR'
@@ -74,6 +75,8 @@ type PawnValuationSnapshot = {
   id?: string
   source?: string
   createdAt?: string
+  currency?: PawnCurrency
+  exchangeRate?: number
   marketPrice?: number
   ageMonths?: number
   condition?: string
@@ -97,6 +100,7 @@ type PawnValuationSnapshot = {
 type CreatedPawn = {
   pawnNo: string
   principal: number
+  currency: PawnCurrency
 }
 
 type SaleDraft = {
@@ -173,6 +177,18 @@ function futureDateValue(days: number) {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 10)
 }
 
+function roundPawnAmount(value: number, currency: PawnCurrency) {
+  return currency === 'KHR'
+    ? Math.round(Number(value) || 0)
+    : Math.round(((Number(value) || 0) + Number.EPSILON) * 100) / 100
+}
+
+function pawnAmountText(value: number, currency: PawnCurrency) {
+  return currency === 'KHR'
+    ? `${Math.round(Number(value) || 0).toLocaleString()} KHR`
+    : `$${(Number(value) || 0).toFixed(2)}`
+}
+
 const modalMeta: Record<ModalKind, { title: string; description: string; icon: ReactNode }> = {
   stock: {
     title: 'Adjust stock',
@@ -215,20 +231,32 @@ function parsePlaceholderAlert(message?: string): ModalKind | null {
   return null
 }
 
-function ModalShell({ kind, error, busy, onClose, compact = false, dismissible = true, children }: {
+function ModalShell({
+  kind,
+  error,
+  busy,
+  onClose,
+  compact = false,
+  dismissible = true,
+  dismissOnBackdrop = true,
+  dismissOnEscape = true,
+  children,
+}: {
   kind: ModalKind
   error: string
   busy: boolean
   onClose: () => void
   compact?: boolean
   dismissible?: boolean
+  dismissOnBackdrop?: boolean
+  dismissOnEscape?: boolean
   children: ReactNode
 }) {
   const meta = modalMeta[kind]
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busy && dismissible) onClose()
+      if (event.key === 'Escape' && !busy && dismissible && dismissOnEscape) onClose()
     }
     document.addEventListener('keydown', closeOnEscape)
     document.body.classList.add('operation-modal-open')
@@ -236,11 +264,11 @@ function ModalShell({ kind, error, busy, onClose, compact = false, dismissible =
       document.removeEventListener('keydown', closeOnEscape)
       document.body.classList.remove('operation-modal-open')
     }
-  }, [busy, dismissible, onClose])
+  }, [busy, dismissible, dismissOnEscape, onClose])
 
   return (
     <div className="operation-modal-backdrop" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget && !busy && dismissible) onClose()
+      if (event.target === event.currentTarget && !busy && dismissible && dismissOnBackdrop) onClose()
     }}>
       <section className={`operation-modal operation-modal-${kind}${compact ? ' operation-modal-compact' : ''}`} role="dialog" aria-modal="true" aria-label={meta.title}>
         <header className="operation-modal-header">
@@ -337,8 +365,9 @@ export default function OperationModalBridge() {
   const [pawnInterestRate, setPawnInterestRate] = useState(5)
   const [pawnValuation, setPawnValuation] = useState<PawnValuationSnapshot | null>(null)
   const [pawnCreated, setPawnCreated] = useState<CreatedPawn | null>(null)
+  const [pawnCurrency, setPawnCurrency] = useState<PawnCurrency>('USD')
   const [pawnCustomerId, setPawnCustomerId] = useState('')
-  const [pawnIdConfirmed, setPawnIdConfirmed] = useState(false)
+  const [pawnOwnershipConfirmed, setPawnOwnershipConfirmed] = useState(false)
   const [pawnCustomerMode, setPawnCustomerMode] = useState<PawnCustomerMode>('EXISTING')
   const [pawnWalkInName, setPawnWalkInName] = useState('')
   const [pawnWalkInPhone, setPawnWalkInPhone] = useState('')
@@ -394,16 +423,16 @@ export default function OperationModalBridge() {
   const imeiInputs = useRef(new Map<string, HTMLInputElement>())
 
   const maximumPawn = useMemo(
-    () => Math.max(0, estimatedValue * pawnPercentage / 100),
-    [estimatedValue, pawnPercentage],
+    () => roundPawnAmount(Math.max(0, estimatedValue * pawnPercentage / 100), pawnCurrency),
+    [estimatedValue, pawnCurrency, pawnPercentage],
   )
   const selectedPawnCustomer = customers.find((customer) => customer._id === pawnCustomerId)
   const pawnCustomerHasId = pawnCustomerMode === 'EXISTING'
     ? Boolean(selectedPawnCustomer?.nationalIdNumber)
     : Boolean(pawnWalkInNationalId.trim())
   const pawnCustomerValid = pawnCustomerMode === 'EXISTING'
-    ? Boolean(selectedPawnCustomer?.nationalIdNumber && pawnIdConfirmed)
-    : Boolean(pawnWalkInName.trim() && pawnWalkInPhone.trim() && pawnWalkInNationalId.trim() && pawnIdConfirmed)
+    ? Boolean(selectedPawnCustomer && pawnOwnershipConfirmed)
+    : Boolean(pawnWalkInName.trim() && pawnWalkInPhone.trim() && pawnOwnershipConfirmed)
   const purchaseTotal = useMemo(
     () => purchaseDevices.reduce((sum, item) => sum + Math.max(0, Number(item.purchasePrice) || 0) * (item.category === 'PHONE' ? 1 : Math.max(1, Number(item.quantity) || 1)), 0),
     [purchaseDevices],
@@ -530,14 +559,25 @@ export default function OperationModalBridge() {
     }
     if (kind === 'pawn') {
       const saved = sessionStorage.getItem('phoneflow_last_valuation')
+      let importedExchangeRate = false
       if (saved) {
         try {
           const valuation = JSON.parse(saved) as PawnValuationSnapshot
           if (valuation.eligible === false) throw new Error('This valuation is not eligible for a pawn contract')
+          const valuationCurrency: PawnCurrency = valuation.currency === 'KHR' ? 'KHR' : 'USD'
+          const valuationExchangeRate = Number(valuation.exchangeRate)
+          if (valuationCurrency === 'KHR' && (valuationExchangeRate < 1000 || valuationExchangeRate > 10000)) {
+            throw new Error('This KHR valuation does not have a valid exchange rate')
+          }
           setPawnValuation(valuation)
+          setPawnCurrency(valuationCurrency)
+          if (valuationCurrency === 'KHR') {
+            setUsdKhrRate(valuationExchangeRate)
+            importedExchangeRate = true
+          }
           if (Number(valuation.estimatedValue) > 0) setEstimatedValue(Number(valuation.estimatedValue))
           if (Number(valuation.pawnRate) >= 40 && Number(valuation.pawnRate) <= 50) setPawnPercentage(Number(valuation.pawnRate))
-          if (Number(valuation.maximumPawn) > 0) setPawnPrincipal(String(Number(valuation.maximumPawn).toFixed(2)))
+          if (Number(valuation.maximumPawn) > 0) setPawnPrincipal(String(roundPawnAmount(Number(valuation.maximumPawn), valuationCurrency)))
           if (Number.isFinite(Number(valuation.batteryHealth))) setPawnBatteryHealth(String(Number(valuation.batteryHealth)))
           const conditionMap: Record<string, string> = { excellent: 'LIKE_NEW', good: 'GOOD', fair: 'FAIR', damaged: 'DAMAGED' }
           if (valuation.condition && conditionMap[valuation.condition]) setPawnCondition(conditionMap[valuation.condition])
@@ -553,6 +593,11 @@ export default function OperationModalBridge() {
         } finally {
           sessionStorage.removeItem('phoneflow_last_valuation')
         }
+      }
+      if (!importedExchangeRate) {
+        api<{ usdKhr: number }>('/exchange-rates')
+          .then((result) => setUsdKhrRate(result.usdKhr))
+          .catch(() => setUsdKhrRate(4100))
       }
     }
   }, [kind])
@@ -575,8 +620,9 @@ export default function OperationModalBridge() {
     setPawnInterestRate(5)
     setPawnValuation(null)
     setPawnCreated(null)
+    setPawnCurrency('USD')
     setPawnCustomerId('')
-    setPawnIdConfirmed(false)
+    setPawnOwnershipConfirmed(false)
     setPawnCustomerMode('EXISTING')
     setPawnWalkInName('')
     setPawnWalkInPhone('')
@@ -1027,6 +1073,16 @@ export default function OperationModalBridge() {
     setError('')
   }
 
+  function changePawnCurrency(nextCurrency: PawnCurrency) {
+    if (nextCurrency === pawnCurrency || pawnValuation) return
+    const convert = (amount: number) => nextCurrency === 'KHR'
+      ? Math.round((amount * usdKhrRate) / 100) * 100
+      : Math.round((amount / usdKhrRate) * 100) / 100
+    setEstimatedValue(convert(estimatedValue))
+    setPawnPrincipal(pawnPrincipal ? String(convert(Number(pawnPrincipal))) : '')
+    setPawnCurrency(nextCurrency)
+  }
+
   async function submitPawn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setBusy(true)
@@ -1060,14 +1116,17 @@ export default function OperationModalBridge() {
       pawnPercentage,
       valuationSnapshot: pawnValuation || undefined,
       principal: Number(form.get('principal') || 0),
+      currency: pawnCurrency,
+      exchangeRate: pawnCurrency === 'KHR' ? usdKhrRate : 1,
       interestRate: pawnInterestRate,
       dueDate: form.get('dueDate'),
-      identificationVerified: pawnIdConfirmed,
+      ownershipConfirmed: pawnOwnershipConfirmed,
+      identificationVerified: Boolean(pawnCustomerHasId && pawnOwnershipConfirmed),
       notes: String(form.get('notes') || ''),
     }
     try {
       const result = await api<{ pawn: CreatedPawn }>('/pawns', { method: 'POST', body: JSON.stringify(payload) })
-      setPawnCreated({ pawnNo: result.pawn.pawnNo, principal: result.pawn.principal })
+      setPawnCreated({ pawnNo: result.pawn.pawnNo, principal: result.pawn.principal, currency: result.pawn.currency })
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to create pawn contract')
     } finally {
@@ -1078,7 +1137,16 @@ export default function OperationModalBridge() {
   if (!kind) return null
 
   return (
-    <ModalShell kind={kind} error={error} busy={busy} compact={(kind === 'sale' && Boolean(saleKhqr)) || (kind === 'pawn' && Boolean(pawnCreated))} dismissible={!(kind === 'sale' && saleKhqr)} onClose={close}>
+    <ModalShell
+      kind={kind}
+      error={error}
+      busy={busy}
+      compact={(kind === 'sale' && Boolean(saleKhqr)) || (kind === 'pawn' && Boolean(pawnCreated))}
+      dismissible={!(kind === 'sale' && saleKhqr)}
+      dismissOnBackdrop={kind !== 'pawn'}
+      dismissOnEscape={kind !== 'pawn'}
+      onClose={close}
+    >
       {kind === 'stock' && <form className="operation-form stock-adjustment-form" onSubmit={submitStock}>
         {!selectedStockItem ? <>
           <section className="stock-adjustment-intro">
@@ -1297,7 +1365,7 @@ export default function OperationModalBridge() {
           </div>
           <dl>
             <div><dt>Pawn number</dt><dd>{pawnCreated.pawnNo}</dd></div>
-            <div><dt>Principal</dt><dd>${pawnCreated.principal.toFixed(2)}</dd></div>
+            <div><dt>Principal</dt><dd>{pawnAmountText(pawnCreated.principal, pawnCreated.currency)}</dd></div>
             <div><dt>Inventory status</dt><dd><span>PAWNED</span></dd></div>
           </dl>
         </div>
@@ -1314,27 +1382,27 @@ export default function OperationModalBridge() {
         {pawnStep === 1 && <>
           <div className="purchase-step-content">
             <section className="purchase-section-card">
-              <div className="purchase-section-heading"><span>1</span><div><h3>Customer verification</h3><p>Choose the collateral owner and confirm their National ID before releasing money.</p></div></div>
+              <div className="purchase-section-heading"><span>1</span><div><h3>Customer verification</h3><p>Choose the collateral owner and confirm ownership. Recording a National ID is optional.</p></div></div>
               <div className="purchase-seller-tabs pawn-customer-tabs">
-                <button type="button" className={pawnCustomerMode === 'EXISTING' ? 'active' : ''} onClick={() => { setPawnCustomerMode('EXISTING'); setPawnIdConfirmed(false); setError('') }}>Existing customer</button>
-                <button type="button" className={pawnCustomerMode === 'NEW' ? 'active' : ''} onClick={() => { setPawnCustomerMode('NEW'); setPawnIdConfirmed(false); setError('') }}>New customer</button>
+                <button type="button" className={pawnCustomerMode === 'EXISTING' ? 'active' : ''} onClick={() => { setPawnCustomerMode('EXISTING'); setPawnOwnershipConfirmed(false); setError('') }}>Existing customer</button>
+                <button type="button" className={pawnCustomerMode === 'NEW' ? 'active' : ''} onClick={() => { setPawnCustomerMode('NEW'); setPawnOwnershipConfirmed(false); setError('') }}>New customer</button>
               </div>
               <div className="operation-form-grid purchase-fields-grid">
-                {pawnCustomerMode === 'EXISTING' ? <label className={`operation-wide ${pawnAttempted && !pawnCustomerId ? 'field-invalid' : ''}`}>Customer<select required value={pawnCustomerId} onChange={(event) => { setPawnCustomerId(event.target.value); setPawnIdConfirmed(false); setError('') }}><option value="" disabled>Select customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name} — {customer.phone}{customer.nationalIdNumber ? ' — ID recorded' : ' — ID missing'}</option>)}</select>{pawnAttempted && !pawnCustomerId && <small>Select a customer</small>}</label> : <>
+                {pawnCustomerMode === 'EXISTING' ? <label className={`operation-wide ${pawnAttempted && !pawnCustomerId ? 'field-invalid' : ''}`}>Customer<select required value={pawnCustomerId} onChange={(event) => { setPawnCustomerId(event.target.value); setPawnOwnershipConfirmed(false); setError('') }}><option value="" disabled>Select customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name} — {customer.phone}{customer.nationalIdNumber ? ' — ID recorded' : ' — ID not provided'}</option>)}</select>{pawnAttempted && !pawnCustomerId && <small>Select a customer</small>}</label> : <>
                   <label className={pawnAttempted && !pawnWalkInName.trim() ? 'field-invalid' : ''}>Customer name<input required value={pawnWalkInName} onChange={(event) => setPawnWalkInName(event.target.value)} placeholder="Full name" />{pawnAttempted && !pawnWalkInName.trim() && <small>Name is required</small>}</label>
                   <label className={pawnAttempted && !pawnWalkInPhone.trim() ? 'field-invalid' : ''}>Phone number<input required value={pawnWalkInPhone} onChange={(event) => setPawnWalkInPhone(event.target.value)} placeholder="012 345 678" />{pawnAttempted && !pawnWalkInPhone.trim() && <small>Phone number is required</small>}</label>
-                  <label className={pawnAttempted && !pawnWalkInNationalId.trim() ? 'field-invalid' : ''}>National ID<input required value={pawnWalkInNationalId} onChange={(event) => { setPawnWalkInNationalId(event.target.value); setPawnIdConfirmed(false) }} placeholder="Khmer National ID number" />{pawnAttempted && !pawnWalkInNationalId.trim() && <small>National ID is required for a pawn</small>}</label>
+                  <label>National ID <small className="optional-marker">Optional</small><input value={pawnWalkInNationalId} onChange={(event) => { setPawnWalkInNationalId(event.target.value); setPawnOwnershipConfirmed(false) }} placeholder="Leave blank to protect privacy" /></label>
                   <label>Address <small className="optional-marker">Optional</small><input value={pawnWalkInAddress} onChange={(event) => setPawnWalkInAddress(event.target.value)} placeholder="Current address" /></label>
                 </>}
               </div>
               {pawnCustomerMode === 'EXISTING' && selectedPawnCustomer && <div className="pawn-customer-summary">
                 <div><span>Customer</span><strong>{selectedPawnCustomer.name}</strong></div>
                 <div><span>Phone</span><strong>{selectedPawnCustomer.phone || 'Not recorded'}</strong></div>
-                <div><span>National ID</span><strong className={selectedPawnCustomer.nationalIdNumber ? 'verified' : 'missing'}>{selectedPawnCustomer.nationalIdNumber || 'Missing'}</strong></div>
+                <div><span>National ID</span><strong className={selectedPawnCustomer.nationalIdNumber ? 'verified' : 'optional'}>{selectedPawnCustomer.nationalIdNumber || 'Not provided (optional)'}</strong></div>
               </div>}
               <label className={`pawn-verification-check ${pawnAttempted && !pawnCustomerValid ? 'field-invalid' : ''}`}>
-                <input type="checkbox" disabled={!pawnCustomerHasId} checked={pawnIdConfirmed} onChange={(event) => setPawnIdConfirmed(event.target.checked)} />
-                <span><strong>{pawnCustomerHasId ? 'National ID checked against the physical card' : 'A National ID is required'}</strong><small>{pawnCustomerHasId ? 'I confirmed the physical ID belongs to this customer.' : pawnCustomerMode === 'EXISTING' ? 'Update this customer before creating a pawn contract.' : 'Enter the new customer’s National ID first.'}</small></span>
+                <input type="checkbox" checked={pawnOwnershipConfirmed} onChange={(event) => setPawnOwnershipConfirmed(event.target.checked)} />
+                <span><strong>Customer identity and phone ownership confirmed</strong><small>{pawnCustomerHasId ? 'I checked the recorded National ID and confirmed this customer owns the phone.' : 'No National ID will be stored. I confirmed ownership using the information and evidence available to the shop.'}</small></span>
               </label>
             </section>
           </div>
@@ -1366,23 +1434,24 @@ export default function OperationModalBridge() {
 
             <section className="purchase-section-card pawn-terms-card">
               <div className="purchase-section-heading"><span><HandCoins size={17} /></span><div><h3>Valuation and contract terms</h3><p>Set the safe loan amount, monthly interest, and maturity date.</p></div></div>
-              {pawnValuation && <div className="pawn-imported-valuation"><CheckCircle2 size={18} /><div><strong>Calculator offer imported</strong><small>Valuation {pawnValuation.id || 'draft'} · Market ${Number(pawnValuation.marketPrice || 0).toFixed(2)} · Adjusted resale ${Number(pawnValuation.estimatedValue || 0).toFixed(2)}</small></div><span>Maximum ${Number(pawnValuation.maximumPawn || maximumPawn).toFixed(2)}</span></div>}
+              {pawnValuation && <div className="pawn-imported-valuation"><CheckCircle2 size={18} /><div><strong>Calculator offer imported</strong><small>Valuation {pawnValuation.id || 'draft'} · Market {pawnAmountText(Number(pawnValuation.marketPrice || 0), pawnCurrency)} · Adjusted resale {pawnAmountText(Number(pawnValuation.estimatedValue || 0), pawnCurrency)}</small></div><span>Maximum {pawnAmountText(Number(pawnValuation.maximumPawn || maximumPawn), pawnCurrency)}</span></div>}
               <div className="operation-form-grid purchase-fields-grid">
-                <label>Estimated resale value (USD)<input type="number" min="0.01" step="0.01" required readOnly={Boolean(pawnValuation)} value={estimatedValue || ''} onChange={(event) => { const value = Number(event.target.value); setEstimatedValue(value); setPawnPrincipal(value > 0 ? String((value * pawnPercentage / 100).toFixed(2)) : '') }} /></label>
-                <label>Pawn percentage<div className="device-unit-input"><input type="number" min="40" max="50" readOnly={Boolean(pawnValuation)} value={pawnPercentage} onChange={(event) => { const value = Number(event.target.value); setPawnPercentage(value); if (estimatedValue > 0) setPawnPrincipal(String((estimatedValue * value / 100).toFixed(2))) }} /><span>%</span></div></label>
-                <label><span className="operation-label-heading">Principal (USD) <small>Maximum ${maximumPawn.toFixed(2)}</small></span><input name="principal" type="number" min="0.01" max={maximumPawn || undefined} step="0.01" required value={pawnPrincipal} onChange={(event) => setPawnPrincipal(event.target.value)} /></label>
+                <label>Contract currency<select disabled={Boolean(pawnValuation)} value={pawnCurrency} onChange={(event) => changePawnCurrency(event.target.value as PawnCurrency)}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Cambodian Riel</option></select></label>
+                <label>Estimated resale value ({pawnCurrency})<input type="number" min={pawnCurrency === 'KHR' ? 1 : 0.01} step={pawnCurrency === 'KHR' ? 100 : 0.01} required readOnly={Boolean(pawnValuation)} value={estimatedValue || ''} onChange={(event) => { const value = Number(event.target.value); setEstimatedValue(value); setPawnPrincipal(value > 0 ? String(roundPawnAmount(value * pawnPercentage / 100, pawnCurrency)) : '') }} /></label>
+                <label>Pawn percentage<div className="device-unit-input"><input type="number" min="40" max="50" readOnly={Boolean(pawnValuation)} value={pawnPercentage} onChange={(event) => { const value = Number(event.target.value); setPawnPercentage(value); if (estimatedValue > 0) setPawnPrincipal(String(roundPawnAmount(estimatedValue * value / 100, pawnCurrency))) }} /><span>%</span></div></label>
+                <label><span className="operation-label-heading">Principal ({pawnCurrency}) <small>Maximum {pawnAmountText(maximumPawn, pawnCurrency)}</small></span><input name="principal" type="number" min={pawnCurrency === 'KHR' ? 1 : 0.01} max={maximumPawn || undefined} step={pawnCurrency === 'KHR' ? 100 : 0.01} required value={pawnPrincipal} onChange={(event) => setPawnPrincipal(event.target.value)} /></label>
                 <label>Monthly interest<div className="device-unit-input"><input type="number" min="0" max="100" step="0.01" value={pawnInterestRate} onChange={(event) => setPawnInterestRate(Number(event.target.value))} /><span>%</span></div></label>
                 <label>Due date<input name="dueDate" type="date" min={futureDateValue(1)} defaultValue={futureDateValue(30)} required /></label>
                 <label className="operation-wide">Contract notes <small className="optional-marker">Optional</small><textarea name="notes" rows={2} /></label>
               </div>
               <div className="pawn-contract-summary">
                 <div><span>Inventory status</span><strong>PAWNED</strong></div>
-                <div><span>Maximum principal</span><strong>${maximumPawn.toFixed(2)}</strong></div>
-                <div><span>Initial monthly interest</span><strong>${((Number(pawnPrincipal) || 0) * pawnInterestRate / 100).toFixed(2)}</strong></div>
+                <div><span>Maximum principal</span><strong>{pawnAmountText(maximumPawn, pawnCurrency)}</strong></div>
+                <div><span>Initial monthly interest</span><strong>{pawnAmountText(roundPawnAmount((Number(pawnPrincipal) || 0) * pawnInterestRate / 100, pawnCurrency), pawnCurrency)}</strong></div>
               </div>
             </section>
           </div>
-          <footer className="operation-modal-actions"><div className="purchase-submit-summary"><span>Step 2 of 2</span><strong>${Number(pawnPrincipal || 0).toFixed(2)} principal</strong></div><button type="button" className="ghost-button" onClick={() => { setError(''); setPawnStep(1) }}>Back</button><button className="primary-button" disabled={busy}>{busy ? 'Saving contract...' : 'Create pawn contract'}</button></footer>
+          <footer className="operation-modal-actions"><div className="purchase-submit-summary"><span>Step 2 of 2</span><strong>{pawnAmountText(Number(pawnPrincipal || 0), pawnCurrency)} principal</strong></div><button type="button" className="ghost-button" onClick={() => { setError(''); setPawnStep(1) }}>Back</button><button className="primary-button" disabled={busy}>{busy ? 'Saving contract...' : 'Create pawn contract'}</button></footer>
         </>}
       </form>}
 

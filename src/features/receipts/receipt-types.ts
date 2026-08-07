@@ -93,6 +93,7 @@ export type ReceiptSnapshot = {
   dueDate?: string
   graceEndsAt?: string
   identificationVerified?: boolean
+  ownershipConfirmed?: boolean
   status?: string
   allocation?: {
     principal?: number

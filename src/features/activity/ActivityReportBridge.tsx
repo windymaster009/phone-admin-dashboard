@@ -71,9 +71,10 @@ function titleCase(value: string) {
     .replace(/(^|\s)\S/g, (letter) => letter.toUpperCase())
 }
 
-function formatMoney(value: unknown) {
+function formatMoney(value: unknown, currency: unknown = 'USD') {
   const amount = Number(value)
   if (!Number.isFinite(amount)) return ''
+  if (String(currency).toUpperCase() === 'KHR') return `${Math.round(amount).toLocaleString()} KHR`
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -135,10 +136,11 @@ function activityTitle(log: ActivityLog) {
 function activitySummary(log: ActivityLog) {
   const details = log.details || {}
   const parts: string[] = []
+  const currency = details.currency || 'USD'
 
-  if (details.total !== undefined) parts.push(`Total ${formatMoney(details.total)}`)
-  if (details.principal !== undefined) parts.push(`Principal ${formatMoney(details.principal)}`)
-  if (details.amount !== undefined) parts.push(`Amount ${formatMoney(details.amount)}`)
+  if (details.total !== undefined) parts.push(`Total ${formatMoney(details.total, currency)}`)
+  if (details.principal !== undefined) parts.push(`Principal ${formatMoney(details.principal, currency)}`)
+  if (details.amount !== undefined) parts.push(`Amount ${formatMoney(details.amount, currency)}`)
   if (details.role) parts.push(`Role ${titleCase(String(details.role))}`)
   if (details.phone) parts.push(String(details.phone))
 

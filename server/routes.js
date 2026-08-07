@@ -128,6 +128,31 @@ function makePaywayTransactionId() {
 
 const openPawnStatuses = ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED']
 const roundMoney = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100
+const pawnCurrencyCode = (value) => String(value || '').toUpperCase() === 'KHR' ? 'KHR' : 'USD'
+const roundPawnCurrency = (value, currency) => currency === 'KHR' ? Math.round(Number(value) || 0) : roundMoney(value)
+const pawnCurrencyTolerance = (currency) => currency === 'KHR' ? 0 : 0.01
+
+function pawnCurrencyAmount(value, currency, fieldName, allowZero = false) {
+  const amount = Number(value)
+  if (!Number.isFinite(amount) || amount < 0 || (!allowZero && amount <= 0)) {
+    throw requestError(400, `${fieldName} must be ${allowZero ? 'zero or greater' : 'greater than zero'}`)
+  }
+  if (currency === 'KHR' && !Number.isInteger(amount)) {
+    throw requestError(400, `${fieldName} must be a whole KHR amount`)
+  }
+  return roundPawnCurrency(amount, currency)
+}
+
+function pawnExchangeRate(currency, value) {
+  if (currency !== 'KHR') return 1
+  const rate = Number(value || fallbackExchangeRate())
+  if (!Number.isFinite(rate) || rate < 1000 || rate > 10000) throw requestError(400, 'A valid USD/KHR exchange rate is required')
+  return rate
+}
+
+function pawnAmountToUsd(amount, currency, exchangeRate) {
+  return roundMoney(currency === 'KHR' ? Number(amount || 0) / exchangeRate : amount)
+}
 
 function salePricing(item, role) {
   const unitPrice = roundMoney(item?.sellPrice)
@@ -196,6 +221,8 @@ async function buildSaleQuote(lines, session, role) {
 }
 
 function calculatePawnOffer(input = {}) {
+  const currency = pawnCurrencyCode(input.currency)
+  const exchangeRate = pawnExchangeRate(currency, input.exchangeRate)
   const marketPrice = Math.max(0, Number(input.marketPrice) || 0)
   const ageMonths = Math.max(0, Number(input.ageMonths) || 0)
   const condition = String(input.condition || 'good').toLowerCase()
@@ -232,25 +259,28 @@ function calculatePawnOffer(input = {}) {
   const estimatedValue = eligible
     ? Math.max(0, marketPrice - ageDeduction - conditionDeduction - batteryDeduction - accessoryDeduction - carrierLockDeduction - repairCost)
     : 0
+  const roundedEstimatedValue = roundPawnCurrency(estimatedValue, currency)
 
   return {
     eligible,
-    marketPrice: roundMoney(marketPrice),
+    currency,
+    exchangeRate,
+    marketPrice: roundPawnCurrency(marketPrice, currency),
     ageMonths,
     condition,
     batteryHealth,
     lockStatus,
     accessoryState,
     accessoriesIncluded: accessoriesIncluded || undefined,
-    repairCost: roundMoney(repairCost),
+    repairCost: roundPawnCurrency(repairCost, currency),
     pawnPercentage,
-    ageDeduction: roundMoney(ageDeduction),
-    conditionDeduction: roundMoney(conditionDeduction),
-    batteryDeduction: roundMoney(batteryDeduction),
-    accessoryDeduction: roundMoney(accessoryDeduction),
-    carrierLockDeduction: roundMoney(carrierLockDeduction),
-    estimatedValue: roundMoney(estimatedValue),
-    maximumPawn: roundMoney(estimatedValue * pawnPercentage / 100),
+    ageDeduction: roundPawnCurrency(ageDeduction, currency),
+    conditionDeduction: roundPawnCurrency(conditionDeduction, currency),
+    batteryDeduction: roundPawnCurrency(batteryDeduction, currency),
+    accessoryDeduction: roundPawnCurrency(accessoryDeduction, currency),
+    carrierLockDeduction: roundPawnCurrency(carrierLockDeduction, currency),
+    estimatedValue: roundedEstimatedValue,
+    maximumPawn: roundPawnCurrency(roundedEstimatedValue * pawnPercentage / 100, currency),
   }
 }
 
@@ -268,29 +298,30 @@ function pawnGraceEnd(dueDate, days = 3) {
 }
 
 function pawnAmountDue(pawn) {
-  return roundMoney(
+  return roundPawnCurrency(
     Math.max(0, Number(pawn.remainingPrincipal ?? pawn.principal) || 0)
     + Math.max(0, Number(pawn.accruedInterest) || 0)
     + Math.max(0, Number(pawn.fees) || 0),
+    pawnCurrencyCode(pawn.currency),
   )
 }
 
 function applyPawnPayment(pawn, rawAmount, { type = 'PRINCIPAL', userId, note, paidAt } = {}) {
-  const amount = roundMoney(rawAmount)
+  const currency = pawnCurrencyCode(pawn.currency)
+  const amount = pawnCurrencyAmount(rawAmount, currency, 'Payment amount')
   const outstanding = pawnAmountDue(pawn)
-  if (!Number.isFinite(amount) || amount <= 0) throw requestError(400, 'Payment amount must be greater than zero')
-  if (amount > outstanding + 0.01) throw requestError(400, `Payment cannot exceed the outstanding balance of ${outstanding.toFixed(2)}`)
+  if (amount > outstanding + pawnCurrencyTolerance(currency)) throw requestError(400, `Payment cannot exceed the outstanding balance of ${outstanding}`)
 
   let unapplied = amount
   const feesApplied = Math.min(unapplied, Math.max(0, Number(pawn.fees) || 0))
-  pawn.fees = roundMoney((Number(pawn.fees) || 0) - feesApplied)
-  unapplied = roundMoney(unapplied - feesApplied)
+  pawn.fees = roundPawnCurrency((Number(pawn.fees) || 0) - feesApplied, currency)
+  unapplied = roundPawnCurrency(unapplied - feesApplied, currency)
   const interestApplied = Math.min(unapplied, Math.max(0, Number(pawn.accruedInterest) || 0))
-  pawn.accruedInterest = roundMoney((Number(pawn.accruedInterest) || 0) - interestApplied)
-  unapplied = roundMoney(unapplied - interestApplied)
+  pawn.accruedInterest = roundPawnCurrency((Number(pawn.accruedInterest) || 0) - interestApplied, currency)
+  unapplied = roundPawnCurrency(unapplied - interestApplied, currency)
   const principalApplied = Math.min(unapplied, Math.max(0, Number(pawn.remainingPrincipal ?? pawn.principal) || 0))
-  pawn.remainingPrincipal = roundMoney((Number(pawn.remainingPrincipal ?? pawn.principal) || 0) - principalApplied)
-  pawn.amountPaid = roundMoney((Number(pawn.amountPaid) || 0) + amount)
+  pawn.remainingPrincipal = roundPawnCurrency((Number(pawn.remainingPrincipal ?? pawn.principal) || 0) - principalApplied, currency)
+  pawn.amountPaid = roundPawnCurrency((Number(pawn.amountPaid) || 0) + amount, currency)
   const balanceAfter = pawnAmountDue(pawn)
   pawn.payments.push({
     amount, type, feesApplied, interestApplied, principalApplied, balanceAfter,
@@ -455,7 +486,25 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
     Trade.aggregate([{ $match: { type: 'BUY', status: 'COMPLETED', createdAt: { $gte: today } } }, { $group: { _id: null, total: { $sum: '$total' } } }]),
     Pawn.aggregate([
       { $match: { status: { $in: openPawnStatuses } } },
-      { $group: { _id: null, total: { $sum: { $ifNull: ['$remainingPrincipal', '$principal'] } } } },
+      {
+        $group: {
+          _id: null,
+          total: {
+            $sum: {
+              $cond: [
+                { $eq: ['$currency', 'KHR'] },
+                {
+                  $divide: [
+                    { $ifNull: ['$remainingPrincipal', '$principal'] },
+                    { $cond: [{ $gt: ['$exchangeRate', 0] }, '$exchangeRate', fallbackExchangeRate()] },
+                  ],
+                },
+                { $ifNull: ['$remainingPrincipal', '$principal'] },
+              ],
+            },
+          },
+        },
+      },
     ]),
     InventoryItem.countDocuments({ category: 'PHONE', status: 'IN_STOCK', quantity: { $gt: 0 } }),
     Pawn.countDocuments({ status: 'OVERDUE' }),
@@ -873,7 +922,7 @@ router.get('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asy
 }))
 
 router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
-  const { customer, customerDetails, itemSnapshot, estimatedValue, pawnPercentage, principal, interestRate, dueDate, identificationVerified, notes, valuationSnapshot } = req.body
+  const { customer, customerDetails, itemSnapshot, estimatedValue, pawnPercentage, principal, interestRate, dueDate, identificationVerified, ownershipConfirmed, notes, valuationSnapshot } = req.body
   if ((!customer && !customerDetails) || !itemSnapshot?.name || !dueDate) return res.status(400).json({ message: 'Customer, item and due date are required' })
 
   let existingCustomer
@@ -885,24 +934,28 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
     if (!clean(customerDetails?.phone)) throw requestError(400, 'New customer phone number is required')
   }
   const nationalIdNumber = clean(existingCustomer?.nationalIdNumber || customerDetails?.nationalIdNumber)
-  if (!identificationVerified || !nationalIdNumber) {
-    throw requestError(400, 'A recorded and verified National ID is required before releasing pawn money')
-  }
+  const confirmedOwnership = Boolean(ownershipConfirmed || (nationalIdNumber && identificationVerified))
+  if (!confirmedOwnership) throw requestError(400, 'Confirm the customer identity and phone ownership before releasing pawn money')
+  const nationalIdVerified = Boolean(nationalIdNumber && identificationVerified)
   const importedFromCalculator = valuationSnapshot?.source === 'CALCULATOR'
   const verifiedOffer = importedFromCalculator ? calculatePawnOffer(valuationSnapshot) : null
   if (verifiedOffer && !verifiedOffer.eligible) throw requestError(400, 'Activation-locked phones cannot be accepted as pawn collateral')
+  const rawCurrency = String(req.body.currency || 'USD').toUpperCase()
+  if (!['USD', 'KHR'].includes(rawCurrency)) throw requestError(400, 'Currency must be USD or KHR')
+  const requestedCurrency = pawnCurrencyCode(rawCurrency)
+  const currency = verifiedOffer?.currency || requestedCurrency
+  if (verifiedOffer && requestedCurrency !== currency) throw requestError(400, 'Contract currency must match the imported calculator offer')
+  const usdKhrRate = pawnExchangeRate(currency, verifiedOffer?.exchangeRate || req.body.exchangeRate)
   const percentage = verifiedOffer?.pawnPercentage ?? Math.min(50, Math.max(40, Number(pawnPercentage || 45)))
-  const valuation = verifiedOffer?.estimatedValue ?? roundMoney(estimatedValue)
-  const maxPrincipal = verifiedOffer?.maximumPawn ?? roundMoney(valuation * (percentage / 100))
-  const requestedPrincipal = roundMoney(principal)
+  const valuation = verifiedOffer?.estimatedValue ?? pawnCurrencyAmount(estimatedValue, currency, 'Estimated value')
+  const maxPrincipal = verifiedOffer?.maximumPawn ?? roundPawnCurrency(valuation * (percentage / 100), currency)
+  const requestedPrincipal = pawnCurrencyAmount(principal, currency, 'Principal')
   const rate = roundMoney(interestRate === undefined ? 5 : interestRate)
   const maturityDate = parsePawnDueDate(dueDate)
-  if (!Number.isFinite(valuation) || valuation <= 0) throw requestError(400, 'Estimated value must be greater than zero')
-  if (!Number.isFinite(requestedPrincipal) || requestedPrincipal <= 0) throw requestError(400, 'Principal must be greater than zero')
   if (!Number.isFinite(rate) || rate < 0 || rate > 100) throw requestError(400, 'Interest rate must be between 0 and 100')
   if (maturityDate <= new Date()) throw requestError(400, 'Due date must be in the future')
   if (!/^\d{15}$/.test(clean(itemSnapshot.imei) || '')) throw requestError(400, 'IMEI must contain exactly 15 digits')
-  if (requestedPrincipal > maxPrincipal + 0.01) {
+  if (requestedPrincipal > maxPrincipal + pawnCurrencyTolerance(currency)) {
     return res.status(400).json({ message: `Principal cannot exceed the ${percentage}% valuation limit` })
   }
 
@@ -928,7 +981,9 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
       ram: normalizeGigabytes(itemSnapshot.ram), batteryHealth: itemSnapshot.batteryHealth,
       carrierLock: itemSnapshot.carrierLock || 'UNKNOWN',
       accessoriesIncluded: Array.isArray(itemSnapshot.accessoriesIncluded) ? itemSnapshot.accessoriesIncluded : [],
-      quantity: 1, buyPrice: requestedPrincipal, sellPrice: valuation,
+      quantity: 1,
+      buyPrice: pawnAmountToUsd(requestedPrincipal, currency, usdKhrRate),
+      sellPrice: pawnAmountToUsd(valuation, currency, usdKhrRate),
       status: 'PAWNED', source: 'CUSTOMER', createdBy: req.user._id,
     }], { session })
     const created = await Pawn.create([{
@@ -948,14 +1003,16 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
         ...verifiedOffer,
       } : undefined,
       originalPrincipal: requestedPrincipal, remainingPrincipal: requestedPrincipal,
-      interestRate: rate, interestPeriod: 'MONTHLY', accruedInterest: roundMoney(requestedPrincipal * rate / 100),
-      fees: 0, amountPaid: 0, currency: 'USD', exchangeRate: 1,
+      interestRate: rate, interestPeriod: 'MONTHLY', accruedInterest: roundPawnCurrency(requestedPrincipal * rate / 100, currency),
+      fees: 0, amountPaid: 0, currency, exchangeRate: usdKhrRate,
       dueDate: maturityDate, gracePeriodDays, graceEndsAt: pawnGraceEnd(maturityDate, gracePeriodDays),
-      identificationVerified: true, notes: clean(notes), createdBy: req.user._id, workflowVersion: 2,
+      identificationVerified: nationalIdVerified,
+      ownershipConfirmed: true,
+      notes: clean(notes), createdBy: req.user._id, workflowVersion: 3,
     }], { session })
     pawn = created[0]
   })
-  await writeActivity(req, { action: 'CREATE', entity: 'PAWN', entityId: pawn._id, details: { pawnNo: pawn.pawnNo, principal: pawn.principal } })
+  await writeActivity(req, { action: 'CREATE', entity: 'PAWN', entityId: pawn._id, details: { pawnNo: pawn.pawnNo, principal: pawn.principal, currency: pawn.currency } })
   res.status(201).json({ pawn: await pawn.populate('customer', 'name phone nationalIdNumber') })
 }))
 
@@ -967,7 +1024,7 @@ router.post('/pawns/:id/payment', requireAuth, allowRoles('OWNER', 'MANAGER', 'C
     type: 'PRINCIPAL', userId: req.user._id, note: req.body.note, paidAt: req.body.paidAt,
   })
   await pawn.save()
-  await writeActivity(req, { action: 'PAYMENT', entity: 'PAWN', entityId: pawn._id, details: allocation })
+  await writeActivity(req, { action: 'PAYMENT', entity: 'PAWN', entityId: pawn._id, details: { ...allocation, currency: pawn.currency } })
   const customerFields = req.user.role === 'CASHIER' ? 'name phone' : 'name phone nationalIdNumber'
   res.json({ pawn: await pawn.populate('customer', customerFields) })
 }))
@@ -980,16 +1037,17 @@ router.post('/pawns/:id/renew', requireAuth, allowRoles('OWNER', 'MANAGER', 'CAS
   if (newDueDate <= new Date(pawn.dueDate) || newDueDate <= new Date()) {
     throw requestError(400, 'New due date must be later than the current due date')
   }
-  const requiredInterestAndFees = roundMoney((Number(pawn.accruedInterest) || 0) + (Number(pawn.fees) || 0))
-  const paymentAmount = roundMoney(req.body.amount)
-  if (paymentAmount + 0.01 < requiredInterestAndFees) {
-    throw requestError(400, `Renewal requires at least ${requiredInterestAndFees.toFixed(2)} to clear interest and fees`)
+  const currency = pawnCurrencyCode(pawn.currency)
+  const requiredInterestAndFees = roundPawnCurrency((Number(pawn.accruedInterest) || 0) + (Number(pawn.fees) || 0), currency)
+  const paymentAmount = pawnCurrencyAmount(req.body.amount, currency, 'Renewal payment', true)
+  if (paymentAmount + pawnCurrencyTolerance(currency) < requiredInterestAndFees) {
+    throw requestError(400, `Renewal requires at least ${requiredInterestAndFees} ${currency} to clear interest and fees`)
   }
   const previousDueDate = pawn.dueDate
   const allocation = paymentAmount > 0
     ? applyPawnPayment(pawn, paymentAmount, { type: 'RENEWAL', userId: req.user._id, note: req.body.note })
     : { amount: 0, feesApplied: 0, interestApplied: 0, principalApplied: 0, balanceAfter: pawnAmountDue(pawn) }
-  const nextInterest = roundMoney((Number(pawn.remainingPrincipal) || 0) * (Number(pawn.interestRate) || 0) / 100)
+  const nextInterest = roundPawnCurrency((Number(pawn.remainingPrincipal) || 0) * (Number(pawn.interestRate) || 0) / 100, currency)
   pawn.accruedInterest = nextInterest
   pawn.dueDate = newDueDate
   pawn.graceEndsAt = pawnGraceEnd(newDueDate, pawn.gracePeriodDays)
@@ -1000,7 +1058,7 @@ router.post('/pawns/:id/renew', requireAuth, allowRoles('OWNER', 'MANAGER', 'CAS
   })
   if (paymentAmount > 0 && pawn.payments.length) pawn.payments[pawn.payments.length - 1].balanceAfter = pawnAmountDue(pawn)
   await pawn.save()
-  await writeActivity(req, { action: 'RENEW', entity: 'PAWN', entityId: pawn._id, details: { ...allocation, newDueDate, nextInterest } })
+  await writeActivity(req, { action: 'RENEW', entity: 'PAWN', entityId: pawn._id, details: { ...allocation, newDueDate, nextInterest, currency } })
   const customerFields = req.user.role === 'CASHIER' ? 'name phone' : 'name phone nationalIdNumber'
   res.json({ pawn: await pawn.populate('customer', customerFields) })
 }))
@@ -1012,9 +1070,10 @@ router.post('/pawns/:id/redeem', requireAuth, allowRoles('OWNER', 'MANAGER', 'CA
     pawn = await Pawn.findById(req.params.id).session(session)
     if (!pawn) throw requestError(404, 'Pawn contract not found')
     if (!openPawnStatuses.includes(pawn.status)) throw requestError(409, 'This pawn contract is already closed')
+    const currency = pawnCurrencyCode(pawn.currency)
     const outstanding = pawnAmountDue(pawn)
-    const amount = roundMoney(req.body.amount)
-    if (Math.abs(amount - outstanding) > 0.01) throw requestError(400, `Redemption requires the full outstanding amount of ${outstanding.toFixed(2)}`)
+    const amount = pawnCurrencyAmount(req.body.amount, currency, 'Redemption amount', true)
+    if (Math.abs(amount - outstanding) > pawnCurrencyTolerance(currency)) throw requestError(400, `Redemption requires the full outstanding amount of ${outstanding} ${currency}`)
     allocation = outstanding > 0
       ? applyPawnPayment(pawn, amount, { type: 'REDEMPTION', userId: req.user._id, note: req.body.note })
       : { amount: 0, feesApplied: 0, interestApplied: 0, principalApplied: 0, balanceAfter: 0 }
@@ -1023,7 +1082,7 @@ router.post('/pawns/:id/redeem', requireAuth, allowRoles('OWNER', 'MANAGER', 'CA
     await pawn.save({ session })
     if (pawn.inventoryItem) await InventoryItem.findByIdAndUpdate(pawn.inventoryItem, { status: 'ARCHIVED', quantity: 0 }, { session })
   })
-  await writeActivity(req, { action: 'REDEEM', entity: 'PAWN', entityId: pawn._id, details: allocation })
+  await writeActivity(req, { action: 'REDEEM', entity: 'PAWN', entityId: pawn._id, details: { ...allocation, currency: pawn.currency } })
   const customerFields = req.user.role === 'CASHIER' ? 'name phone' : 'name phone nationalIdNumber'
   res.json({ pawn: await pawn.populate('customer', customerFields) })
 }))
@@ -1041,10 +1100,15 @@ router.post('/pawns/:id/forfeit', requireAuth, allowRoles('OWNER', 'MANAGER'), a
     pawn.forfeitedAt = new Date()
     await pawn.save({ session })
     if (pawn.inventoryItem) {
+      const currency = pawnCurrencyCode(pawn.currency)
+      const exchangeRate = pawnExchangeRate(currency, pawn.exchangeRate)
+      const sellPrice = req.body.sellPrice === undefined || req.body.sellPrice === ''
+        ? Number(pawn.estimatedValue) || 0
+        : pawnCurrencyAmount(req.body.sellPrice, currency, 'Selling price')
       await InventoryItem.findByIdAndUpdate(pawn.inventoryItem, {
         status: 'IN_STOCK', source: 'PAWN_FORFEIT', quantity: 1,
-        buyPrice: Number(pawn.originalPrincipal ?? pawn.principal) || 0,
-        sellPrice: Number(req.body.sellPrice || pawn.estimatedValue),
+        buyPrice: pawnAmountToUsd(pawn.originalPrincipal ?? pawn.principal, currency, exchangeRate),
+        sellPrice: pawnAmountToUsd(sellPrice, currency, exchangeRate),
       }, { session })
     }
   })

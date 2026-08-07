@@ -480,6 +480,7 @@ td strong { color: var(--text); }
 .form-grid label { display: flex; flex-direction: column; gap: 8px; color: var(--muted); font-size: 10px; font-weight: 700; }
 .form-grid input, .form-grid select { width: 100%; height: 43px; border: 1px solid var(--border-strong); border-radius: 10px; outline: 0; padding: 0 12px; color: var(--text); background: var(--bg-soft); }
 .form-grid input:focus, .form-grid select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px var(--primary-soft); }
+.pawn-id-optional { color: var(--muted); font-size: 10px; font-weight: 700; }
 .input-prefix, .input-suffix { display: flex; align-items: center; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--bg-soft); overflow: hidden; }
 .input-prefix span, .input-suffix span { padding: 0 12px; color: var(--muted); font-size: 11px; }
 .input-prefix input, .input-suffix input { border: 0; border-radius: 0; background: transparent; }
@@ -1048,7 +1049,8 @@ a:focus-visible,
   .calculator-card .card-heading h3 { margin: 0; font-size: 15px; }
   .calculator-card .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px 9px; margin-top: 14px; }
   .calculator-card .form-grid > label:nth-child(3),
-  .calculator-card .form-grid > label:nth-child(4) { grid-column: 1 / -1; }
+  .calculator-card .form-grid > label:nth-child(4),
+  .calculator-card .form-grid > label:nth-child(5) { grid-column: 1 / -1; }
   .calculator-card .calculator-risk-grid { grid-template-columns: 1fr; }
   .calculator-card .calculator-risk-grid > label { grid-column: 1 / -1; }
   .calculator-section { margin-top: 14px; padding-top: 13px; }

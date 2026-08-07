@@ -46,6 +46,8 @@ function ContractDetails({ snapshot }: { snapshot: ReceiptSnapshot }) {
           <Row label="Interest" value={`${Number(snapshot.interestRate || 0)}% ${title(snapshot.interestPeriod)}`} />
           <Row label="Due date" value={dateOnly(snapshot.dueDate)} />
           <Row label="Grace ends" value={dateOnly(snapshot.graceEndsAt)} />
+          <Row label="Ownership" value={snapshot.ownershipConfirmed ? 'Confirmed' : 'Legacy record'} />
+          <Row label="National ID" value={snapshot.identificationVerified ? 'Verified' : 'Not provided (optional)'} />
         </>}
         {loan && <>
           <Row label="Principal" value={money(snapshot.principal, snapshot.currency)} />
