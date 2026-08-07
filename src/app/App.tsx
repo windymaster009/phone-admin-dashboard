@@ -545,8 +545,8 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
   }, [onClose])
 
   return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
-      <section className="detail-modal pawn-detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="pawn-detail-title" onClick={(event) => event.stopPropagation()}>
+    <div className="modal-backdrop" role="presentation">
+      <section className="detail-modal pawn-detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="pawn-detail-title">
         <header className="detail-modal-header">
           <div>
             <span className="eyebrow">Pawn contract</span>
@@ -555,6 +555,7 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
           </div>
           <button className="icon-button" onClick={onClose} aria-label="Close details"><X size={18} /></button>
         </header>
+        <div className="pawn-detail-body">
         <div className="detail-grid">
           <div><span>Status</span><strong><StatusBadge status={pawn.status} /></strong></div>
           <div><span>ID card</span><strong>{pawn.identificationVerified ? 'Verified' : 'Not provided (optional)'}</strong></div>
@@ -611,6 +612,7 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
             <button className={`primary-button ${action === 'forfeit' ? 'danger-button' : ''}`} disabled={actionBusy}>{actionBusy ? 'Saving...' : action === 'payment' ? 'Save payment' : action === 'renew' ? 'Confirm renewal' : action === 'redeem' ? 'Confirm full redemption' : 'Confirm forfeiture'}</button>
           </div>
         </form>}
+        </div>
         {!action && <footer className="detail-modal-footer">
           {onAction && isOpen && !action && <><button className="secondary-button" onClick={() => openAction('payment')}>Payment</button><button className="secondary-button" onClick={() => openAction('renew')}>Renew</button><button className="primary-button" onClick={() => openAction('redeem')}>Redeem</button>{pawn.status === 'OVERDUE' && <button className="ghost-button danger-link" onClick={() => openAction('forfeit')}>Forfeit</button>}</>}
           {onOpenAll && <button className="secondary-button" onClick={onOpenAll}>Open pawn management <ArrowUpRight size={15} /></button>}

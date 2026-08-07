@@ -756,6 +756,12 @@ td strong { color: var(--text); }
 .inventory-detail-modal .detail-sections article { min-width: 0; padding: 13px; }
 .inventory-detail-modal .detail-sections p { overflow-wrap: anywhere; margin-top: 7px; font-size: 10px; line-height: 1.5; }
 .inventory-detail-modal .detail-modal-footer { flex: 0 0 auto; flex-wrap: wrap; padding: 13px 18px; background: var(--surface-solid); box-shadow: 0 -12px 30px rgba(3,7,18,.2); }
+.pawn-detail-modal { display: flex; flex-direction: column; overflow: hidden; }
+.pawn-detail-modal .detail-modal-header { flex: 0 0 auto; }
+.pawn-detail-body { min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+.pawn-detail-body::-webkit-scrollbar { width: 8px; }
+.pawn-detail-body::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: var(--border-strong); background-clip: padding-box; }
+.pawn-detail-modal .detail-modal-footer { position: relative; z-index: 2; flex: 0 0 auto; background: var(--surface-solid); box-shadow: 0 -12px 30px rgba(3,7,18,.2); }
 .detail-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; padding: 18px; border-bottom: 1px solid var(--border); }
 .detail-grid div { min-height: 78px; padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-soft); }
 .detail-grid span, .detail-sections p, .detail-note p { color: var(--muted); }
