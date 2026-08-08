@@ -481,7 +481,21 @@ const comingNext = (label: string) => window.alert(`${label} form is next. The t
 function StatusBadge({ status }: { status: string }) {
   const label = titleStatus(status)
   const slug = label.toLowerCase().replaceAll(' ', '-')
-  return <span className={`status-badge status-${slug}`}>{label}</span>
+  const Icon = status === 'IN_STOCK' || status === 'ACTIVE' || status === 'PAID'
+    ? BadgeCheck
+    : status === 'RESERVED' || status === 'DUE_SOON'
+      ? Clock3
+      : status === 'SOLD' || status === 'SALE'
+        ? ShoppingCart
+        : status === 'PAWNED'
+          ? HandCoins
+          : status === 'REPAIR'
+            ? Wrench
+            : status === 'ARCHIVED'
+              ? Boxes
+              : AlertTriangle
+
+  return <span className={`status-badge status-${slug}`}><Icon size={14} strokeWidth={2} aria-hidden="true" />{label}</span>
 }
 
 function pawnOutstanding(pawn: Pawn) {

@@ -143,21 +143,26 @@
 .loan-status {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  min-width: 88px;
-  padding: 5px 9px;
-  border-radius: 999px;
+  justify-content: flex-start;
+  gap: 6px;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   font-size: 0.68rem;
-  font-weight: 700;
+  font-weight: 800;
+  line-height: 1.3;
   white-space: nowrap;
 }
 
-.loan-status-active { color: #93c5fd; background: rgba(59, 130, 246, 0.14); }
-.loan-status-due-soon { color: #fdba74; background: rgba(249, 115, 22, 0.15); }
-.loan-status-overdue { color: #fda4af; background: rgba(244, 63, 94, 0.15); }
-.loan-status-partially-paid { color: #c4b5fd; background: rgba(139, 92, 246, 0.15); }
-.loan-status-paid { color: #86efac; background: rgba(34, 197, 94, 0.15); }
-.loan-status-cancelled { color: #cbd5e1; background: rgba(100, 116, 139, 0.17); }
+.loan-status svg { width: 15px; height: 15px; flex: 0 0 auto; }
+.loan-status-active { color: #20d9a0; }
+.loan-status-due-soon { color: #f5b942; }
+.loan-status-overdue { color: #fb6476; }
+.loan-status-partially-paid { color: #b48af4; }
+.loan-status-paid { color: #20d9a0; }
+.loan-status-cancelled { color: #929dad; }
 
 .loan-view-button {
   width: 34px;
