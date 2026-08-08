@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto'
 import { Router } from 'express'
 import rateLimit from 'express-rate-limit'
 import bcrypt from 'bcryptjs'
+import mongoose from 'mongoose'
 import { clearSessionCookie, requireAuth, setSessionCookie, signToken, writeActivity } from './auth.js'
 import { ActivityLog, User } from './models.js'
 import {
@@ -9,10 +10,22 @@ import {
   createAndroidPairing,
   createAuthSession,
   listUserSessions,
+  markSessionTwoFactorVerified,
   revokeAllSessions,
   revokeOtherSessions,
   revokeSession,
 } from './sessionService.js'
+import {
+  confirmTwoFactorSetup,
+  createLoginChallenge,
+  createTwoFactorSetup,
+  disableTwoFactor,
+  getTwoFactorStatus,
+  hasTwoFactor,
+  regenerateRecoveryCodes,
+  twoFactorServerStatus,
+  verifyLoginChallenge,
+} from './twoFactorService.js'
 
 const router = Router()
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
@@ -24,6 +37,14 @@ const pairingRedeemLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: 'Too many pairing attempts. Wait a few minutes and try again.' },
+})
+
+const twoFactorVerifyLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  limit: 15,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many two-factor attempts. Wait a few minutes and try again.' },
 })
 
 function clean(value) {
@@ -51,8 +72,8 @@ function isLoopbackRequest(req) {
   return address === '127.0.0.1' || address === '::1' || address === '::ffff:127.0.0.1'
 }
 
-async function issueSession(req, res, user, { kind = 'WEB', deviceName } = {}) {
-  const session = await createAuthSession({ user, req, kind, deviceName })
+async function issueSession(req, res, user, { kind = 'WEB', deviceName, twoFactorVerifiedAt = null } = {}) {
+  const session = await createAuthSession({ user, req, kind, deviceName, twoFactorVerifiedAt })
   const token = signToken(user, { sessionId: session.sessionId, expiresAt: session.expiresAt })
   setSessionCookie(res, token, { expiresAt: session.expiresAt })
   return session
@@ -133,6 +154,18 @@ router.post('/auth/login', asyncRoute(async (req, res) => {
     return res.status(401).json({ message: 'Invalid email or password' })
   }
 
+  if (await hasTwoFactor(user._id)) {
+    const challenge = await createLoginChallenge({ user, deviceName: clean(req.body.deviceName) })
+    await logSecurityEvent(req, user, 'TWO_FACTOR_CHALLENGE', { expiresAt: challenge.expiresAt })
+    res.setHeader('Cache-Control', 'no-store')
+    return res.json({
+      requiresTwoFactor: true,
+      challengeToken: challenge.token,
+      expiresAt: challenge.expiresAt,
+      account: { email: user.email, name: user.name },
+    })
+  }
+
   const session = await issueSession(req, res, user)
   req.user = user
   await Promise.all([
@@ -141,10 +174,48 @@ router.post('/auth/login', asyncRoute(async (req, res) => {
       action: 'LOGIN',
       entity: 'AUTH_SESSION',
       entityId: user._id,
-      details: { sessionId: session.sessionId, kind: session.kind, deviceName: session.deviceName },
+      details: { sessionId: session.sessionId, kind: session.kind, deviceName: session.deviceName, twoFactor: false },
     }),
   ])
   res.json({ user: publicUser(user) })
+}))
+
+router.post('/auth/2fa/verify-login', twoFactorVerifyLimiter, asyncRoute(async (req, res) => {
+  const verified = await verifyLoginChallenge({
+    token: req.body.challengeToken,
+    code: req.body.code,
+  })
+  const user = await User.findById(verified.userId).select('-passwordHash')
+  if (!user || !user.active) return res.status(401).json({ message: 'The staff account is unavailable' })
+
+  const verifiedAt = new Date()
+  const session = await issueSession(req, res, user, {
+    deviceName: verified.deviceName,
+    twoFactorVerifiedAt: verifiedAt,
+  })
+  req.user = user
+  await Promise.all([
+    User.updateOne({ _id: user._id }, { $set: { lastLoginAt: verifiedAt } }),
+    writeActivity(req, {
+      action: 'LOGIN',
+      entity: 'AUTH_SESSION',
+      entityId: user._id,
+      details: {
+        sessionId: session.sessionId,
+        kind: session.kind,
+        deviceName: session.deviceName,
+        twoFactor: true,
+        recoveryCode: verified.usedRecoveryCode,
+      },
+    }),
+    writeActivity(req, {
+      action: verified.usedRecoveryCode ? 'TWO_FACTOR_RECOVERY_USED' : 'TWO_FACTOR_VERIFIED',
+      entity: 'AUTH_SESSION',
+      entityId: user._id,
+      details: { sessionId: session.sessionId },
+    }),
+  ])
+  res.json({ user: publicUser(user), twoFactorVerified: true, recoveryCodeUsed: verified.usedRecoveryCode })
 }))
 
 router.get('/auth/me', requireAuth, (req, res) => {
@@ -170,15 +241,22 @@ router.post('/auth/pairing/redeem', pairingRedeemLimiter, asyncRoute(async (req,
 
   const user = await User.findById(pairing.user).select('-passwordHash')
   if (!user || !user.active) return res.status(401).json({ message: 'The paired staff account is unavailable' })
+  if (await hasTwoFactor(user._id) && !pairing.twoFactorVerifiedAt) {
+    return res.status(401).json({ message: 'This pairing code was not created from a two-factor verified session' })
+  }
 
   const deviceName = clean(req.body.deviceName) || 'PhoneFlow Android'
-  const session = await issueSession(req, res, user, { kind: 'ANDROID', deviceName })
+  const session = await issueSession(req, res, user, {
+    kind: 'ANDROID',
+    deviceName,
+    twoFactorVerifiedAt: pairing.twoFactorVerifiedAt,
+  })
   req.user = user
   await writeActivity(req, {
     action: 'ANDROID_PAIRED',
     entity: 'AUTH_SESSION',
     entityId: user._id,
-    details: { sessionId: session.sessionId, deviceName: session.deviceName },
+    details: { sessionId: session.sessionId, deviceName: session.deviceName, twoFactor: Boolean(pairing.twoFactorVerifiedAt) },
   })
   res.json({ user: publicUser(user), paired: true })
 }))
@@ -188,13 +266,98 @@ router.get('/security/sessions', requireAuth, asyncRoute(async (req, res) => {
   res.json({ sessions: await listUserSessions(req.user._id, req.authSession.sessionId) })
 }))
 
+router.get('/security/two-factor', requireAuth, asyncRoute(async (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-store')
+  res.json(await getTwoFactorStatus(req.user))
+}))
+
+router.post('/security/two-factor/setup', requireAuth, asyncRoute(async (req, res) => {
+  if (!twoFactorServerStatus().configured) {
+    return res.status(503).json({ message: 'Configure TWO_FACTOR_ENCRYPTION_KEY before enabling two-factor authentication' })
+  }
+  const status = await getTwoFactorStatus(req.user)
+  if (!status.eligible) return res.status(403).json({ message: 'Two-factor authentication is available for Owner and Manager accounts' })
+  if (status.enabled) return res.status(409).json({ message: 'Two-factor authentication is already enabled' })
+
+  const setup = await createTwoFactorSetup(req.user)
+  await writeActivity(req, {
+    action: 'TWO_FACTOR_SETUP_STARTED',
+    entity: 'AUTH_SESSION',
+    entityId: req.user._id,
+    details: { expiresAt: setup.expiresAt },
+  })
+  res.status(201).json(setup)
+}))
+
+router.post('/security/two-factor/enable', requireAuth, twoFactorVerifyLimiter, asyncRoute(async (req, res) => {
+  const setupId = String(req.body.setupId || '')
+  if (!mongoose.isValidObjectId(setupId)) return res.status(400).json({ message: 'Two-factor setup is invalid or expired' })
+
+  const enabled = await confirmTwoFactorSetup({ user: req.user, setupId, code: req.body.code })
+  const verifiedAt = new Date()
+  const [, revokedCount] = await Promise.all([
+    markSessionTwoFactorVerified({ userId: req.user._id, sessionId: req.authSession.sessionId, verifiedAt }),
+    revokeOtherSessions({
+      userId: req.user._id,
+      currentSessionId: req.authSession.sessionId,
+      reason: 'TWO_FACTOR_ENABLED',
+    }),
+  ])
+  req.authSession.twoFactorVerifiedAt = verifiedAt
+  await writeActivity(req, {
+    action: 'TWO_FACTOR_ENABLED',
+    entity: 'AUTH_SESSION',
+    entityId: req.user._id,
+    details: { revokedOtherSessions: revokedCount },
+  })
+  res.json({
+    enabled: true,
+    recoveryCodes: enabled.recoveryCodes,
+    recoveryCodesRemaining: enabled.recoveryCodes.length,
+  })
+}))
+
+router.post('/security/two-factor/recovery-codes', requireAuth, twoFactorVerifyLimiter, asyncRoute(async (req, res) => {
+  const result = await regenerateRecoveryCodes({ userId: req.user._id, code: req.body.code })
+  await writeActivity(req, {
+    action: 'TWO_FACTOR_RECOVERY_REGENERATED',
+    entity: 'AUTH_SESSION',
+    entityId: req.user._id,
+    details: { count: result.recoveryCodes.length },
+  })
+  res.json(result)
+}))
+
+router.post('/security/two-factor/disable', requireAuth, twoFactorVerifyLimiter, asyncRoute(async (req, res) => {
+  await disableTwoFactor({ userId: req.user._id, code: req.body.code })
+  const revokedCount = await revokeOtherSessions({
+    userId: req.user._id,
+    currentSessionId: req.authSession.sessionId,
+    reason: 'TWO_FACTOR_DISABLED',
+  })
+  await writeActivity(req, {
+    action: 'TWO_FACTOR_DISABLED',
+    entity: 'AUTH_SESSION',
+    entityId: req.user._id,
+    details: { revokedOtherSessions: revokedCount },
+  })
+  res.json({ disabled: true, revokedOtherSessions: revokedCount })
+}))
+
 router.post('/security/android-pairing', requireAuth, asyncRoute(async (req, res) => {
-  const pairing = await createAndroidPairing({ userId: req.user._id, sessionId: req.authSession.sessionId })
+  if (await hasTwoFactor(req.user._id) && !req.authSession.twoFactorVerifiedAt) {
+    return res.status(403).json({ message: 'Reauthenticate with two-factor authentication before pairing Android' })
+  }
+  const pairing = await createAndroidPairing({
+    userId: req.user._id,
+    sessionId: req.authSession.sessionId,
+    twoFactorVerifiedAt: req.authSession.twoFactorVerifiedAt,
+  })
   await writeActivity(req, {
     action: 'ANDROID_PAIRING_CREATED',
     entity: 'AUTH_SESSION',
     entityId: req.user._id,
-    details: { expiresAt: pairing.expiresAt },
+    details: { expiresAt: pairing.expiresAt, twoFactor: Boolean(req.authSession.twoFactorVerifiedAt) },
   })
   res.status(201).json(pairing)
 }))
