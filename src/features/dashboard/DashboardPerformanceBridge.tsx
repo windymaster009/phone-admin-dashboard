@@ -41,7 +41,7 @@ function valueForType(rows: Array<{ _id: 'BUY' | 'SELL'; total: number }>, type:
 
 function buildMonthPoints(rows: DashboardPerformanceData['dailyPerformance']) {
   const now = new Date()
-  const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
+  const days = now.getDate()
   return Array.from({ length: days }, (_, index): PerformancePoint => {
     const day = index + 1
     const sales = Number(rows.find((row) => row._id.day === day && row._id.type === 'SELL')?.total) || 0
@@ -58,7 +58,9 @@ function buildMonthPoints(rows: DashboardPerformanceData['dailyPerformance']) {
 }
 
 function buildYearPoints(rows: DashboardPerformanceData['monthlyPerformance']) {
-  return Array.from({ length: 12 }, (_, index): PerformancePoint => {
+  const now = new Date()
+  const monthCount = now.getMonth() + 1
+  return Array.from({ length: monthCount }, (_, index): PerformancePoint => {
     const month = index + 1
     const sales = Number(rows.find((row) => row._id.month === month && row._id.type === 'SELL')?.total) || 0
     const purchases = Number(rows.find((row) => row._id.month === month && row._id.type === 'BUY')?.total) || 0
@@ -118,6 +120,17 @@ function CashFlowCard() {
     return { sales, purchases, net: sales - purchases }
   }, [data, period, points])
 
+  const context = useMemo(() => {
+    const activePeriods = points.filter((point) => point.sales > 0 || point.purchases > 0)
+    const salesPeriods = points.filter((point) => point.sales > 0)
+    const averageSales = salesPeriods.length > 0 ? totals.sales / salesPeriods.length : 0
+    const biggestMovement = activePeriods.reduce<PerformancePoint | null>((biggest, point) => {
+      if (!biggest || Math.abs(point.net) > Math.abs(biggest.net)) return point
+      return biggest
+    }, null)
+    return { activePeriods: activePeriods.length, averageSales, biggestMovement }
+  }, [points, totals.sales])
+
   const maximum = Math.max(1, ...points.flatMap((point) => [point.sales, point.purchases]))
   const activePoint = activeKey === null ? null : points.find((point) => point.key === activeKey) || null
   const hasMovement = points.some((point) => point.sales > 0 || point.purchases > 0)
@@ -167,11 +180,17 @@ function CashFlowCard() {
           <div className="cashflow-legend" aria-hidden="true">
             <span><i className="income" />Sales · money in</span>
             <span><i className="expense" />Purchases · money out</span>
-            <small>{period === 'month' ? 'Daily movement' : 'Monthly movement'}</small>
+            <small>{period === 'month' ? `Day 1–${points.length}` : `${monthNames[0]}–${monthNames[points.length - 1]}`}</small>
+          </div>
+
+          <div className="cashflow-context">
+            <span><small>Active {period === 'month' ? 'days' : 'months'}</small><strong>{context.activePeriods} / {points.length}</strong></span>
+            <span><small>Avg sales / active {period === 'month' ? 'day' : 'month'}</small><strong>{money.format(context.averageSales)}</strong></span>
+            <span><small>Biggest net movement</small><strong className={context.biggestMovement ? metricTone(context.biggestMovement.net) : ''}>{context.biggestMovement ? `${context.biggestMovement.label} · ${money.format(context.biggestMovement.net)}` : '—'}</strong></span>
           </div>
 
           <div className={`cashflow-chart-scroll ${period}`}>
-            <div className="cashflow-chart" role="img" aria-label={`Sales above the zero line and purchases below the zero line for ${period === 'month' ? 'this month' : 'this year'}`}>
+            <div className="cashflow-chart" role="img" aria-label={`Sales above the zero line and purchases below the zero line for ${period === 'month' ? 'this month through today' : 'this year through the current month'}`}>
               <div className="cashflow-axis-label top">{compactMoney.format(maximum)}</div>
               <div className="cashflow-axis-label zero">$0</div>
               <div className="cashflow-axis-label bottom">-{compactMoney.format(maximum)}</div>
@@ -185,7 +204,7 @@ function CashFlowCard() {
                 {points.map((point) => {
                   const incomeHeight = point.sales > 0 ? Math.max(3, (point.sales / maximum) * 100) : 0
                   const expenseHeight = point.purchases > 0 ? Math.max(3, (point.purchases / maximum) * 100) : 0
-                  const showLabel = period === 'year' || point.key === 1 || point.key === points.length || point.key % 5 === 0
+                  const showLabel = period === 'year' || points.length <= 12 || point.key === 1 || point.key === points.length || point.key % 5 === 0
                   const selected = activePoint?.key === point.key
                   return (
                     <button
