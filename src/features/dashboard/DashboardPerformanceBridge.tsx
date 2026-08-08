@@ -1,14 +1,15 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowDownRight, ArrowUpRight, BarChart3, RefreshCcw, TrendingDown, TrendingUp } from 'lucide-react'
 import { api } from '../../lib/api'
 
-type PerformancePeriod = 'month' | 'year'
+type PerformancePeriod = 'week' | 'month' | 'year'
 
 type DashboardPerformanceData = {
   monthPerformance: Array<{ _id: 'BUY' | 'SELL'; total: number }>
   monthlyPerformance: Array<{ _id: { month: number; type: 'BUY' | 'SELL' }; total: number }>
   dailyPerformance: Array<{ _id: { day: number; type: 'BUY' | 'SELL' }; total: number }>
+  weekPerformance: Array<{ _id: { date: string; type: 'BUY' | 'SELL' }; total: number }>
 }
 
 type PerformancePoint = {
@@ -34,6 +35,8 @@ const compactMoney = new Intl.NumberFormat('en-US', {
 })
 
 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const weekNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+const CAMBODIA_OFFSET_MS = 7 * 60 * 60 * 1000
 
 function valueForType(rows: Array<{ _id: 'BUY' | 'SELL'; total: number }>, type: 'BUY' | 'SELL') {
   return Number(rows.find((row) => row._id === type)?.total) || 0
@@ -41,7 +44,7 @@ function valueForType(rows: Array<{ _id: 'BUY' | 'SELL'; total: number }>, type:
 
 function buildMonthPoints(rows: DashboardPerformanceData['dailyPerformance']) {
   const now = new Date()
-  const days = now.getDate()
+  const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
   return Array.from({ length: days }, (_, index): PerformancePoint => {
     const day = index + 1
     const sales = Number(rows.find((row) => row._id.day === day && row._id.type === 'SELL')?.total) || 0
@@ -50,6 +53,28 @@ function buildMonthPoints(rows: DashboardPerformanceData['dailyPerformance']) {
       key: day,
       label: new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(new Date(now.getFullYear(), now.getMonth(), day)),
       shortLabel: String(day),
+      sales,
+      purchases,
+      net: sales - purchases,
+    }
+  })
+}
+
+function buildWeekPoints(rows: DashboardPerformanceData['weekPerformance']) {
+  const cambodiaNow = new Date(Date.now() + CAMBODIA_OFFSET_MS)
+  const daysSinceMonday = (cambodiaNow.getUTCDay() + 6) % 7
+  const monday = new Date(Date.UTC(cambodiaNow.getUTCFullYear(), cambodiaNow.getUTCMonth(), cambodiaNow.getUTCDate() - daysSinceMonday))
+
+  return weekNames.map((shortLabel, index): PerformancePoint => {
+    const date = new Date(monday)
+    date.setUTCDate(monday.getUTCDate() + index)
+    const dateKey = date.toISOString().slice(0, 10)
+    const sales = Number(rows.find((row) => row._id.date === dateKey && row._id.type === 'SELL')?.total) || 0
+    const purchases = Number(rows.find((row) => row._id.date === dateKey && row._id.type === 'BUY')?.total) || 0
+    return {
+      key: index + 1,
+      label: new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(date),
+      shortLabel,
       sales,
       purchases,
       net: sales - purchases,
@@ -87,6 +112,7 @@ function CashFlowCard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [activeKey, setActiveKey] = useState<number | null>(null)
+  const chartScrollRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -105,6 +131,7 @@ function CashFlowCard() {
 
   const points = useMemo(() => {
     if (!data) return []
+    if (period === 'week') return buildWeekPoints(data.weekPerformance || [])
     return period === 'month' ? buildMonthPoints(data.dailyPerformance) : buildYearPoints(data.monthlyPerformance)
   }, [data, period])
 
@@ -136,6 +163,17 @@ function CashFlowCard() {
   const hasMovement = points.some((point) => point.sales > 0 || point.purchases > 0)
   const netTone = metricTone(totals.net)
 
+  useEffect(() => {
+    const chart = chartScrollRef.current
+    if (!chart || period !== 'month') return undefined
+    const handleWheel = (event: WheelEvent) => {
+      event.preventDefault()
+      chart.scrollLeft += event.deltaY || event.deltaX
+    }
+    chart.addEventListener('wheel', handleWheel, { passive: false })
+    return () => chart.removeEventListener('wheel', handleWheel)
+  }, [period, points.length])
+
   return (
     <section className="cashflow-performance" aria-label="Shop cash flow performance">
       <header className="cashflow-heading">
@@ -147,6 +185,7 @@ function CashFlowCard() {
         <div className="cashflow-heading-actions">
           <button type="button" className="cashflow-refresh" onClick={() => void load()} disabled={loading} aria-label="Refresh shop performance"><RefreshCcw size={15} /></button>
           <select value={period} onChange={(event) => { setPeriod(event.target.value as PerformancePeriod); setActiveKey(null) }} aria-label="Performance period">
+            <option value="week">This week</option>
             <option value="month">This month</option>
             <option value="year">This year</option>
           </select>
@@ -180,17 +219,17 @@ function CashFlowCard() {
           <div className="cashflow-legend" aria-hidden="true">
             <span><i className="income" />Sales · money in</span>
             <span><i className="expense" />Purchases · money out</span>
-            <small>{period === 'month' ? `Day 1–${points.length}` : `${monthNames[0]}–${monthNames[points.length - 1]}`}</small>
+            <small>{period === 'week' ? 'Mon–Sun' : period === 'month' ? `Day 1–${points.length} · Scroll for more days` : `${monthNames[0]}–${monthNames[points.length - 1]}`}</small>
           </div>
 
           <div className="cashflow-context">
-            <span><small>Active {period === 'month' ? 'days' : 'months'}</small><strong>{context.activePeriods} / {points.length}</strong></span>
-            <span><small>Avg sales / active {period === 'month' ? 'day' : 'month'}</small><strong>{money.format(context.averageSales)}</strong></span>
+            <span><small>Active {period === 'year' ? 'months' : 'days'}</small><strong>{context.activePeriods} / {points.length}</strong></span>
+            <span><small>Avg sales / active {period === 'year' ? 'month' : 'day'}</small><strong>{money.format(context.averageSales)}</strong></span>
             <span><small>Biggest net movement</small><strong className={context.biggestMovement ? metricTone(context.biggestMovement.net) : ''}>{context.biggestMovement ? `${context.biggestMovement.label} · ${money.format(context.biggestMovement.net)}` : '—'}</strong></span>
           </div>
 
-          <div className={`cashflow-chart-scroll ${period}`}>
-            <div className="cashflow-chart" role="img" aria-label={`Sales above the zero line and purchases below the zero line for ${period === 'month' ? 'this month through today' : 'this year through the current month'}`}>
+          <div ref={chartScrollRef} className={`cashflow-chart-scroll ${period}`}>
+            <div className="cashflow-chart" style={period === 'month' ? { minWidth: `${Math.max(100, (points.length / 10) * 100)}%` } : undefined} role="img" aria-label={`Sales above the zero line and purchases below the zero line for this ${period}`}>
               <div className="cashflow-axis-label top">{compactMoney.format(maximum)}</div>
               <div className="cashflow-axis-label zero">$0</div>
               <div className="cashflow-axis-label bottom">-{compactMoney.format(maximum)}</div>
@@ -202,9 +241,8 @@ function CashFlowCard() {
 
               <div className="cashflow-columns">
                 {points.map((point) => {
-                  const incomeHeight = point.sales > 0 ? Math.max(3, (point.sales / maximum) * 100) : 0
-                  const expenseHeight = point.purchases > 0 ? Math.max(3, (point.purchases / maximum) * 100) : 0
-                  const showLabel = period === 'year' || points.length <= 12 || point.key === 1 || point.key === points.length || point.key % 5 === 0
+                  const incomeHeight = point.sales > 0 ? Math.min(100, Math.max(3, (point.sales / maximum) * 100)) : 0
+                  const expenseHeight = point.purchases > 0 ? Math.min(100, Math.max(3, (point.purchases / maximum) * 100)) : 0
                   const selected = activePoint?.key === point.key
                   return (
                     <button
@@ -219,7 +257,7 @@ function CashFlowCard() {
                     >
                       <span className="cashflow-half income-half"><i style={{ height: `${incomeHeight}%` }} /></span>
                       <span className="cashflow-half expense-half"><i style={{ height: `${expenseHeight}%` }} /></span>
-                      <small className={showLabel ? '' : 'muted-label'}>{showLabel ? point.shortLabel : ''}</small>
+                      <small>{point.shortLabel}</small>
                     </button>
                   )
                 })}
