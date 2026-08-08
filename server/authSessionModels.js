@@ -11,6 +11,7 @@ const authSessionSchema = new Schema({
   ipAddress: { type: String, trim: true, maxlength: 128 },
   lastSeenAt: { type: Date, default: Date.now, index: true },
   expiresAt: { type: Date, required: true },
+  twoFactorVerifiedAt: { type: Date, default: null },
   revokedAt: { type: Date, default: null, index: true },
   revokedReason: { type: String, trim: true, maxlength: 120 },
 }, { timestamps: true, versionKey: false })
