@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { motion } from 'framer-motion'
-import { AlertTriangle, BadgeCheck, Boxes, HandCoins, KeyRound, Smartphone } from 'lucide-react'
+import { AlertTriangle, BadgeCheck, Boxes, HandCoins, KeyRound, ShieldCheck, Smartphone } from 'lucide-react'
 import { ApiError, api, setToken, type SessionUser } from '../lib/api'
 
 function ErrorNotice({ message }: { message: string }) {
@@ -82,6 +82,12 @@ function StardustBackground({ theme }: { theme: 'dark' | 'light' }) {
   return <canvas ref={canvasRef} className="auth-stardust" aria-hidden="true" />
 }
 
+type TwoFactorChallenge = {
+  token: string
+  expiresAt: string
+  accountName?: string
+}
+
 export default function AuthScreen({
   onAuthenticated,
   theme,
@@ -91,6 +97,7 @@ export default function AuthScreen({
 }) {
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null)
   const [pairMode, setPairMode] = useState(false)
+  const [twoFactor, setTwoFactor] = useState<TwoFactorChallenge | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -107,6 +114,19 @@ export default function AuthScreen({
     const form = new FormData(event.currentTarget)
 
     try {
+      if (twoFactor) {
+        const result = await api<{ user: SessionUser }>('/auth/2fa/verify-login', {
+          method: 'POST',
+          body: JSON.stringify({
+            challengeToken: twoFactor.token,
+            code: String(form.get('twoFactorCode') || ''),
+          }),
+        })
+        setToken(null)
+        onAuthenticated(result.user)
+        return
+      }
+
       if (pairMode && setupRequired === false) {
         const code = String(form.get('pairingCode') || '').replace(/\D/g, '')
         const result = await api<{ user: SessionUser }>('/auth/pairing/redeem', {
@@ -126,21 +146,53 @@ export default function AuthScreen({
         email: String(form.get('email') || ''),
         password: String(form.get('password') || ''),
       }
-      const result = await api<{ user: SessionUser }>(setupRequired ? '/auth/bootstrap' : '/auth/login', {
+      const result = await api<{
+        user?: SessionUser
+        requiresTwoFactor?: boolean
+        challengeToken?: string
+        expiresAt?: string
+        account?: { name?: string }
+      }>(setupRequired ? '/auth/bootstrap' : '/auth/login', {
         method: 'POST',
         body: JSON.stringify(payload),
       }, { retryTransient: setupRequired === false })
+
+      if (result.requiresTwoFactor && result.challengeToken && result.expiresAt) {
+        setTwoFactor({ token: result.challengeToken, expiresAt: result.expiresAt, accountName: result.account?.name })
+        return
+      }
+      if (!result.user) throw new Error('The server did not return a signed-in user')
       setToken(null)
       onAuthenticated(result.user)
     } catch (reason) {
-      if (pairMode && reason instanceof ApiError && reason.status === 401) setError('Pairing code is invalid or expired')
-      else setError(reason instanceof ApiError && reason.status === 401
-        ? 'Invalid email or password'
-        : reason instanceof Error ? reason.message : 'Unable to sign in')
+      if (twoFactor && reason instanceof ApiError && reason.status === 401) {
+        setError(reason.message || 'Authenticator or recovery code is invalid')
+      } else if (pairMode && reason instanceof ApiError && reason.status === 401) {
+        setError('Pairing code is invalid or expired')
+      } else {
+        setError(reason instanceof ApiError && reason.status === 401
+          ? 'Invalid email or password'
+          : reason instanceof Error ? reason.message : 'Unable to sign in')
+      }
     } finally {
       setBusy(false)
     }
   }
+
+  const heading = setupRequired
+    ? 'Create owner account'
+    : twoFactor
+      ? 'Verify it’s you'
+      : pairMode
+        ? 'Pair this device'
+        : 'Welcome back'
+  const description = setupRequired
+    ? 'Set up the owner account for this shop.'
+    : twoFactor
+      ? `Enter the code from your authenticator app${twoFactor.accountName ? ` for ${twoFactor.accountName}` : ''}, or use one saved recovery code.`
+      : pairMode
+        ? 'Enter the one-time code shown in PhoneFlow Security on an already signed-in device.'
+        : 'Sign in to your PhoneFlow account.'
 
   return (
     <main className="auth-page">
@@ -180,15 +232,8 @@ export default function AuthScreen({
             transition={{ delay: 0.12, duration: 0.55, ease: 'easeOut' }}
           >
             <header>
-              <div>
-                <h2>{setupRequired ? 'Create owner account' : pairMode ? 'Pair this device' : 'Welcome back'}</h2>
-                <p>{setupRequired
-                  ? 'Set up the owner account for this shop.'
-                  : pairMode
-                    ? 'Enter the one-time code shown in PhoneFlow Security on an already signed-in device.'
-                    : 'Sign in to your PhoneFlow account.'}</p>
-              </div>
-              <span className="auth-security-mark">{pairMode ? <KeyRound size={20} /> : <BadgeCheck size={20} />}</span>
+              <div><h2>{heading}</h2><p>{description}</p></div>
+              <span className="auth-security-mark">{twoFactor ? <ShieldCheck size={20} /> : pairMode ? <KeyRound size={20} /> : <BadgeCheck size={20} />}</span>
             </header>
             {error && <ErrorNotice message={error} />}
             {setupRequired === null ? (
@@ -196,7 +241,20 @@ export default function AuthScreen({
             ) : (
               <>
                 <form className="form-stack" onSubmit={submit}>
-                  {pairMode && !setupRequired ? (
+                  {twoFactor ? (
+                    <label>
+                      Authenticator or recovery code
+                      <input
+                        name="twoFactorCode"
+                        autoComplete="one-time-code"
+                        autoCapitalize="characters"
+                        spellCheck={false}
+                        required
+                        placeholder="123456 or PF2F-…"
+                        autoFocus
+                      />
+                    </label>
+                  ) : pairMode && !setupRequired ? (
                     <label>Pairing code<input name="pairingCode" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength={6} maxLength={6} required placeholder="000000" autoFocus /></label>
                   ) : (
                     <>
@@ -205,9 +263,11 @@ export default function AuthScreen({
                       <label>Password<input name="password" type="password" autoComplete={setupRequired ? 'new-password' : 'current-password'} minLength={8} required placeholder="Enter your password" /></label>
                     </>
                   )}
-                  <button className="primary-button full-width" disabled={busy}>{busy ? 'Please wait…' : setupRequired ? 'Create shop account' : pairMode ? 'Pair device' : 'Sign in'}</button>
+                  <button className="primary-button full-width" disabled={busy}>{busy ? 'Please wait…' : setupRequired ? 'Create shop account' : twoFactor ? 'Verify and sign in' : pairMode ? 'Pair device' : 'Sign in'}</button>
                 </form>
-                {!setupRequired && (
+                {twoFactor ? (
+                  <button type="button" className="secondary-button full-width" disabled={busy} onClick={() => { setTwoFactor(null); setError('') }}>Back to password</button>
+                ) : !setupRequired ? (
                   <button
                     type="button"
                     className="secondary-button full-width"
@@ -216,7 +276,7 @@ export default function AuthScreen({
                   >
                     {pairMode ? 'Use email and password' : 'Use one-time pairing code'}
                   </button>
-                )}
+                ) : null}
               </>
             )}
             <div className="auth-features" aria-label="PhoneFlow features">
