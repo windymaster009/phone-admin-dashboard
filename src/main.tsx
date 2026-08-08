@@ -12,6 +12,7 @@ import './features/loans/loan-dashboard.css'
 import './features/receipts/receipt-center.css'
 import './features/documents/secure-documents.css'
 import './features/security/security-workspace.css'
+import './features/security/two-factor.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
