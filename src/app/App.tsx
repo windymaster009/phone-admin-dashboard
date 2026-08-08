@@ -58,6 +58,7 @@ type NavKey =
   | 'customers'
   | 'suppliers'
   | 'depreciation'
+  | 'businessOverview'
   | 'reports'
   | 'settings'
 
@@ -78,6 +79,7 @@ const viewPaths: Record<NavKey, string> = {
   customers: '/customers',
   suppliers: '/suppliers',
   depreciation: '/depreciation',
+  businessOverview: '/business-overview',
   reports: '/reports',
   settings: '/settings',
 }
@@ -88,6 +90,7 @@ function viewFromPath(pathname: string): NavKey {
 
   // Both the site root and /admin open the main dashboard.
   if (normalizedPath === '/' || normalizedPath === '/admin') return 'dashboard'
+  if (normalizedPath.startsWith('/reports/')) return 'reports'
   return match?.[0] || 'dashboard'
 }
 
@@ -216,6 +219,13 @@ type Trade = {
   status: string
   notes?: string
   createdAt: string
+  createdBy?: { _id: string; name: string; email?: string; role?: string }
+  reportTotal?: number
+  reportCost?: number
+  reportGrossProfit?: number
+  reportItems?: number
+  reportPaid?: number
+  reportBalance?: number
 }
 
 type DashboardData = {
@@ -257,6 +267,157 @@ type ActivityLog = {
   entityId?: string
   createdAt: string
   user?: { name: string; email: string; role: string }
+  details?: Record<string, unknown>
+}
+
+type OverviewCurrencyTotals = { USD: number; KHR: number }
+
+type BusinessOverviewPeriod = 'today' | 'yesterday' | 'last_7_days' | 'last_30_days' | 'this_month' | 'last_month' | 'this_year' | 'custom'
+
+type BusinessOverviewData = {
+  period: {
+    key: BusinessOverviewPeriod
+    label: string
+    from: string
+    to: string
+    granularity: 'hour' | 'day' | 'month'
+  }
+  financial: {
+    salesRevenue: number
+    purchases: number
+    cogs: number
+    grossProfit: number
+  }
+  pawn: {
+    active: number
+    dueSoon: number
+    overdue: number
+    outstandingPrincipal: OverviewCurrencyTotals
+  }
+  loans: {
+    active: number
+    dueSoon: number
+    overdue: number
+    outstandingBalance: OverviewCurrencyTotals
+  }
+  inventory: {
+    inStockCount: number
+    productCount: number
+    phoneCount: number
+    tabletCount: number
+    accessoryCount: number
+    sparePartCount: number
+    otherCount: number
+    lowStockCount: number
+    costValue: number
+    retailValue: number
+    lowStockItems: Array<{
+      _id: string
+      sku: string
+      name: string
+      category: InventoryItem['category']
+      quantity: number
+      reorderLevel: number
+    }>
+  }
+  chart: Array<{
+    key: string
+    label: string
+    sales: number
+    purchases: number
+    grossProfit: number
+  }>
+  recentTransactions: Trade[]
+  recentActivity: ActivityLog[]
+}
+
+type SalesReportData = {
+  period: {
+    key: BusinessOverviewPeriod
+    label: string
+    from: string
+    to: string
+    granularity: 'hour' | 'day' | 'month'
+  }
+  filters: {
+    paymentMethod: string
+    status: string
+    staff: string
+  }
+  summary: {
+    salesRevenue: number
+    cogs: number
+    grossProfit: number
+    itemsSold: number
+    transactions: number
+    averageSale: number
+  }
+  chart: Array<{
+    key: string
+    label: string
+    sales: number
+    cogs: number
+    grossProfit: number
+  }>
+  transactions: Trade[]
+  products: Array<{
+    name: string
+    quantity: number
+    revenue: number
+    cogs: number
+    grossProfit: number
+  }>
+  payments: Array<{
+    method: string
+    amount: number
+    transactions: number
+  }>
+  staff: Array<{ _id: string; name: string; email?: string; role?: string }>
+  totalRecords: number
+  limited: boolean
+}
+
+type PurchaseReportData = {
+  period: SalesReportData['period']
+  filters: {
+    paymentMethod: string
+    paymentStatus: string
+    status: string
+    source: string
+    staff: string
+  }
+  summary: {
+    totalPurchases: number
+    amountPaid: number
+    outstandingBalance: number
+    itemsPurchased: number
+    transactions: number
+    averagePurchase: number
+  }
+  chart: Array<{
+    key: string
+    label: string
+    total: number
+    paid: number
+    balance: number
+  }>
+  transactions: Trade[]
+  products: Array<{
+    name: string
+    quantity: number
+    totalCost: number
+    averageUnitCost: number
+    transactions: number
+  }>
+  payments: SalesReportData['payments']
+  sources: Array<{
+    source: string
+    amount: number
+    transactions: number
+  }>
+  staff: SalesReportData['staff']
+  totalRecords: number
+  limited: boolean
 }
 
 const navGroups: { label: string; items: NavItem[] }[] = [
@@ -278,7 +439,8 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     label: 'Finance & Control',
     items: [
       { key: 'depreciation', label: 'Depreciation', icon: TrendingDown },
-      { key: 'reports', label: 'Reports', icon: BarChart3 },
+      { key: 'businessOverview', label: 'Business Overview', icon: BarChart3 },
+      { key: 'reports', label: 'Reports', icon: FileText },
       { key: 'settings', label: 'Settings', icon: Settings },
     ],
   },
@@ -427,6 +589,12 @@ const tradePartyName = (trade: Trade) => trade.type === 'BUY'
 const tradePartyPhone = (trade: Trade) => trade.type === 'BUY'
   ? trade.supplier?.phone || trade.sellerSnapshot?.phone || trade.customer?.phone
   : trade.customer?.phone
+const purchaseSourceLabel = (sellerType?: string) => {
+  if (sellerType?.includes('SUPPLIER')) return 'Supplier'
+  if (sellerType?.includes('CUSTOMER')) return 'Customer'
+  if (sellerType === 'WALK_IN') return 'Walk-in'
+  return 'Legacy'
+}
 const tradeTransactionMoney = (trade: Trade, original: number | undefined, fallback: number) => trade.type === 'BUY' && trade.currency === 'KHR' && original !== undefined
   ? `${Math.round(original).toLocaleString()} ៛`
   : money.format(original ?? fallback)
@@ -1899,73 +2067,480 @@ function CustomersView() {
   )
 }
 
-function ReportsView() {
-  const [data, setData] = useState<DashboardData | null>(null)
-  const [logs, setLogs] = useState<ActivityLog[]>([])
+function overviewKhr(amount: number) {
+  return `${riel.format(Math.round(Number(amount) || 0))} KHR`
+}
+
+function OverviewCurrencyValue({ totals }: { totals: OverviewCurrencyTotals }) {
+  return (
+    <span className="overview-currency-value">
+      <strong>{money.format(totals.USD)}</strong>
+      {totals.KHR > 0 && <small>{overviewKhr(totals.KHR)}</small>}
+    </span>
+  )
+}
+
+function overviewActivityLabel(log: ActivityLog) {
+  if (log.entity === 'TRADE' && log.action === 'CREATE') {
+    return String(log.details?.type || '').toUpperCase() === 'BUY' ? 'Purchase created' : 'Sale created'
+  }
+  if (log.entity === 'PAWN' && log.action === 'CREATE') return 'Pawn created'
+  if (log.entity === 'PAWN' && log.action === 'REDEEM') return 'Pawn redeemed'
+  if (log.entity === 'LOAN' && log.action === 'CREATE') return 'Loan created'
+  if (log.action.includes('PAYMENT')) return 'Payment received'
+  if (log.entity === 'INVENTORY' && log.action === 'UPDATE') return 'Inventory updated'
+  return `${titleStatus(log.entity)} ${titleStatus(log.action).toLowerCase()}`
+}
+
+function BusinessPerformanceChart({
+  points,
+  firstLabel = 'Sales',
+  secondLabel = 'Purchases',
+  thirdLabel = 'Gross profit',
+  ariaLabel = 'Sales, purchases, and gross profit over the selected period',
+  emptyTitle = 'No completed transactions',
+  emptyDescription = 'Sales and purchases will appear for this period once recorded.',
+}: {
+  points: BusinessOverviewData['chart']
+  firstLabel?: string
+  secondLabel?: string
+  thirdLabel?: string
+  ariaLabel?: string
+  emptyTitle?: string
+  emptyDescription?: string
+}) {
+  const width = 960
+  const height = 260
+  const padding = { top: 22, right: 18, bottom: 42, left: 64 }
+  const plotWidth = width - padding.left - padding.right
+  const plotHeight = height - padding.top - padding.bottom
+  const values = points.flatMap((point) => [point.sales, point.purchases, point.grossProfit])
+  const minimum = Math.min(0, ...values)
+  const maximum = Math.max(1, ...values)
+  const range = maximum - minimum || 1
+  const xAt = (index: number) => padding.left + (points.length <= 1 ? plotWidth / 2 : (index / (points.length - 1)) * plotWidth)
+  const yAt = (value: number) => padding.top + ((maximum - value) / range) * plotHeight
+  const polyline = (field: 'sales' | 'purchases' | 'grossProfit') => points.map((point, index) => `${xAt(index)},${yAt(point[field])}`).join(' ')
+  const labelEvery = Math.max(1, Math.ceil(points.length / 7))
+  const hasData = values.some((value) => value !== 0)
+
+  return (
+    <div className="overview-chart-wrap">
+      <div className="overview-chart-legend" aria-hidden="true">
+        <span className="sales">{firstLabel}</span>
+        <span className="purchases">{secondLabel}</span>
+        <span className="profit">{thirdLabel}</span>
+      </div>
+      <svg className="overview-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={ariaLabel}>
+        {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+          const value = maximum - ratio * range
+          const y = padding.top + ratio * plotHeight
+          return <g key={ratio}><line x1={padding.left} x2={width - padding.right} y1={y} y2={y} className="overview-chart-grid" /><text x={padding.left - 10} y={y + 4} textAnchor="end" className="overview-chart-axis">{money.format(value)}</text></g>
+        })}
+        {minimum < 0 && <line x1={padding.left} x2={width - padding.right} y1={yAt(0)} y2={yAt(0)} className="overview-chart-zero" />}
+        {points.map((point, index) => (index % labelEvery === 0 || index === points.length - 1) && <text key={point.key} x={xAt(index)} y={height - 14} textAnchor="middle" className="overview-chart-axis">{point.label}</text>)}
+        {hasData && <>
+          <polyline points={polyline('sales')} className="overview-chart-line sales" />
+          <polyline points={polyline('purchases')} className="overview-chart-line purchases" />
+          <polyline points={polyline('grossProfit')} className="overview-chart-line profit" />
+          {points.length <= 12 && points.map((point, index) => (
+            <g key={`markers-${point.key}`}>
+              <circle cx={xAt(index)} cy={yAt(point.sales)} r="3.5" className="overview-chart-marker sales"><title>{`${point.label}: ${firstLabel.toLowerCase()} ${money.format(point.sales)}`}</title></circle>
+              <circle cx={xAt(index)} cy={yAt(point.purchases)} r="3.5" className="overview-chart-marker purchases"><title>{`${point.label}: ${secondLabel.toLowerCase()} ${money.format(point.purchases)}`}</title></circle>
+              <circle cx={xAt(index)} cy={yAt(point.grossProfit)} r="3.5" className="overview-chart-marker profit"><title>{`${point.label}: ${thirdLabel.toLowerCase()} ${money.format(point.grossProfit)}`}</title></circle>
+            </g>
+          ))}
+        </>}
+      </svg>
+      {!hasData && <div className="overview-chart-empty"><BarChart3 size={23} /><strong>{emptyTitle}</strong><span>{emptyDescription}</span></div>}
+    </div>
+  )
+}
+
+function BusinessOverviewView() {
+  const now = new Date()
+  const todayInput = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const monthStartInput = `${todayInput.slice(0, 8)}01`
+  const [period, setPeriod] = useState<BusinessOverviewPeriod>('this_month')
+  const [customFrom, setCustomFrom] = useState(monthStartInput)
+  const [customTo, setCustomTo] = useState(todayInput)
+  const [data, setData] = useState<BusinessOverviewData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
-    void Promise.allSettled([
-      api<DashboardData>('/dashboard').then(setData).catch((reason: Error) => setError(reason.message)),
-      api<{ logs: ActivityLog[] }>('/activity-logs').then((result) => setLogs(result.logs)).catch(() => setLogs([])),
-    ]).finally(() => setLoading(false))
-  }, [])
+    if (period === 'custom' && (!customFrom || !customTo || customFrom > customTo)) return
+    const query = new URLSearchParams({ period })
+    if (period === 'custom') {
+      query.set('from', customFrom)
+      query.set('to', customTo)
+    }
+    setLoading(true)
+    setError('')
+    api<BusinessOverviewData>(`/business-overview?${query.toString()}`)
+      .then(setData)
+      .catch((reason: Error) => setError(reason.message))
+      .finally(() => setLoading(false))
+  }, [period, customFrom, customTo])
 
-  const inventoryValue = data?.inventoryMix.reduce((sum, item) => sum + item.value, 0) || 0
+  const periodLabel = data?.period.label || 'This Month'
+  const periodOptions: Array<{ value: BusinessOverviewPeriod; label: string }> = [
+    { value: 'today', label: 'Today' },
+    { value: 'yesterday', label: 'Yesterday' },
+    { value: 'last_7_days', label: 'Last 7 Days' },
+    { value: 'last_30_days', label: 'Last 30 Days' },
+    { value: 'this_month', label: 'This Month' },
+    { value: 'last_month', label: 'Last Month' },
+    { value: 'this_year', label: 'This Year' },
+    { value: 'custom', label: 'Custom Range' },
+  ]
 
-  if (loading) {
+  if (loading && !data) {
     return (
       <>
-        <SectionHeader eyebrow="Analytics" title="Reports and analytics" description="Preparing live sales, pawn, customer, stock, and audit snapshots." />
-        <section className="surface-card"><LoadingState label="Loading reports" detail="Calculating totals and reading recent activity…" /></section>
+        <SectionHeader eyebrow="Owner overview" title="Business Overview" description="Quick snapshot of sales, purchases, profit, pawn, loans, and inventory." />
+        <section className="surface-card"><LoadingState label="Loading business overview" detail="Calculating business totals and current snapshots…" /></section>
       </>
     )
   }
 
   return (
-    <>
-      <SectionHeader eyebrow="Analytics" title="Reports and analytics" description={error || 'Live sales, pawn, customer, stock, and audit snapshots.'} />
-      <section className="metrics-grid">
-        <MetricCard label="Sales today" value={money.format(data?.metrics.salesToday || 0)} change="completed sales" trend="up" icon={CircleDollarSign} tone="violet" />
-        <MetricCard label="Purchases today" value={money.format(data?.metrics.purchasesToday || 0)} change="cash out" trend="down" icon={Banknote} tone="orange" />
-        <MetricCard label="Pawn principal" value={money.format(data?.metrics.activePawnValue || 0)} change={`${data?.metrics.overdueContracts || 0} overdue`} trend={(data?.metrics.overdueContracts || 0) > 0 ? 'down' : 'up'} icon={HandCoins} tone="blue" />
-        <MetricCard label="Stock value" value={money.format(inventoryValue)} change={`${data?.metrics.lowStock || 0} low stock`} trend={(data?.metrics.lowStock || 0) > 0 ? 'down' : 'up'} icon={Boxes} tone="rose" />
+    <div className="business-overview-page">
+      <SectionHeader
+        eyebrow="Owner overview"
+        title="Business Overview"
+        description="Quick snapshot of sales, purchases, profit, pawn, loans, and inventory."
+        action={(
+          <div className="overview-period-controls">
+            <label><span>Period</span><select value={period} onChange={(event) => setPeriod(event.target.value as BusinessOverviewPeriod)}>{periodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+            {period === 'custom' && <><label><span>From</span><input type="date" value={customFrom} max={customTo || undefined} onChange={(event) => setCustomFrom(event.target.value)} /></label><label><span>To</span><input type="date" value={customTo} min={customFrom || undefined} onChange={(event) => setCustomTo(event.target.value)} /></label></>}
+          </div>
+        )}
+      />
+      {error && <p className="overview-error"><AlertTriangle size={16} />{error}</p>}
+
+      <section className="overview-kpi-grid" aria-label="Business summary">
+        <article className="surface-card overview-kpi-card"><span className="metric-icon tone-violet"><CircleDollarSign size={21} /></span><div><p>Sales Revenue</p><h3>{money.format(data?.financial.salesRevenue || 0)}</h3><small>{periodLabel}</small></div></article>
+        <article className="surface-card overview-kpi-card"><span className="metric-icon tone-orange"><Banknote size={21} /></span><div><p>Purchases</p><h3>{money.format(data?.financial.purchases || 0)}</h3><small>{periodLabel}</small></div></article>
+        <article className="surface-card overview-kpi-card"><span className="metric-icon tone-blue"><TrendingDown size={21} /></span><div><p>Gross Profit</p><h3 className={(data?.financial.grossProfit || 0) < 0 ? 'negative' : ''}>{money.format(data?.financial.grossProfit || 0)}</h3><small>{periodLabel} · after COGS</small></div></article>
+        <article className="surface-card overview-kpi-card"><span className="metric-icon tone-blue"><HandCoins size={21} /></span><div><p>Pawn Outstanding</p><OverviewCurrencyValue totals={data?.pawn.outstandingPrincipal || { USD: 0, KHR: 0 }} /><small>Current snapshot</small></div></article>
+        <article className="surface-card overview-kpi-card"><span className="metric-icon tone-rose"><Boxes size={21} /></span><div><p>Stock Value</p><h3>{money.format(data?.inventory.costValue || 0)}</h3><small>Current cost value</small></div></article>
       </section>
-      <section className="dashboard-lower-grid">
-        <article className="surface-card table-card">
-          <div className="card-heading table-heading"><div><span className="eyebrow">Recent trades</span><h3>Transaction report</h3></div></div>
-          <div className="table-scroll report-desktop-table"><table><thead><tr><th>Reference</th><th>Type</th><th>Customer</th><th>Total</th><th>Date</th></tr></thead><tbody>
-            {(data?.recentTrades || []).map((trade) => <tr key={trade._id}><td><strong className="mono">{trade.tradeNo}</strong></td><td><StatusBadge status={trade.type === 'SELL' ? 'Sale' : 'Purchase'} /></td><td>{tradePartyName(trade)}</td><td>{tradeTransactionMoney(trade, trade.transactionTotal, trade.total)}</td><td>{dateText(trade.purchaseDate || trade.createdAt)}</td></tr>)}
-            {data?.recentTrades.length === 0 && <tr><td colSpan={5}>No transactions yet.</td></tr>}
-          </tbody></table></div>
-          <div className="mobile-record-list report-mobile-list">
-            {(data?.recentTrades || []).map((trade) => (
-              <article className="mobile-record-card" key={trade._id}>
-                <div className="mobile-record-heading">
-                  <span className={`transaction-icon ${trade.type === 'SELL' ? 'sale' : 'purchase'}`}><Banknote size={17} /></span>
-                  <p><strong>{tradePartyName(trade)}</strong><small>{trade.tradeNo}</small></p>
-                  <StatusBadge status={trade.type === 'SELL' ? 'Sale' : 'Purchase'} />
-                </div>
-                <div className="mobile-record-details report-record-details">
-                  <div><span>Date</span><strong>{dateText(trade.createdAt)}</strong></div>
-                  <div><span>Total</span><strong>{tradeTransactionMoney(trade, trade.transactionTotal, trade.total)}</strong></div>
-                </div>
-              </article>
-            ))}
-            {data?.recentTrades.length === 0 && <p className="mobile-record-empty">No transactions yet.</p>}
+
+      <section className="surface-card overview-performance-card">
+        <div className="card-heading"><div><span className="eyebrow">{periodLabel}</span><h3>Business Performance</h3><p>Completed sales, purchases, and gross profit over time.</p></div>{loading && <RefreshCcw className="overview-refreshing" size={18} />}</div>
+        <BusinessPerformanceChart points={data?.chart || []} />
+      </section>
+
+      <section className="overview-snapshot-grid">
+        <article className="surface-card overview-snapshot-card">
+          <div className="card-heading"><div><span className="eyebrow">Current</span><h3>Pawn & Loan Snapshot</h3><p>Open contracts and remaining balances right now.</p></div><WalletCards size={20} /></div>
+          <div className="overview-finance-snapshots">
+            <div className="overview-snapshot-group"><div className="overview-snapshot-title"><span className="transaction-icon sale"><HandCoins size={17} /></span><strong>Pawn contracts</strong></div><dl><div><dt>Active</dt><dd>{data?.pawn.active || 0}</dd></div><div><dt>Due soon</dt><dd>{data?.pawn.dueSoon || 0}</dd></div><div><dt>Overdue</dt><dd className={(data?.pawn.overdue || 0) > 0 ? 'danger' : ''}>{data?.pawn.overdue || 0}</dd></div><div className="total"><dt>Outstanding principal</dt><dd><OverviewCurrencyValue totals={data?.pawn.outstandingPrincipal || { USD: 0, KHR: 0 }} /></dd></div></dl></div>
+            <div className="overview-snapshot-group"><div className="overview-snapshot-title"><span className="transaction-icon purchase"><Banknote size={17} /></span><strong>Money loans</strong></div><dl><div><dt>Active</dt><dd>{data?.loans.active || 0}</dd></div><div><dt>Due soon</dt><dd>{data?.loans.dueSoon || 0}</dd></div><div><dt>Overdue</dt><dd className={(data?.loans.overdue || 0) > 0 ? 'danger' : ''}>{data?.loans.overdue || 0}</dd></div><div className="total"><dt>Outstanding balance</dt><dd><OverviewCurrencyValue totals={data?.loans.outstandingBalance || { USD: 0, KHR: 0 }} /></dd></div></dl></div>
           </div>
         </article>
-        <article className="surface-card table-card">
-          <div className="card-heading table-heading"><div><span className="eyebrow">Audit</span><h3>Recent activity</h3></div></div>
-          <div className="transaction-list">
-            {logs.slice(0, 8).map((log) => <div className="transaction-row" key={log._id}><span className="transaction-icon sale"><FileText /></span><p><strong>{titleStatus(log.action)} {titleStatus(log.entity)}</strong><small>{log.user?.name || 'System'} - {dateText(log.createdAt)}</small></p></div>)}
-            {logs.length === 0 && <div className="transaction-row"><p><strong>No audit logs available</strong><small>Owner or manager access may be required.</small></p></div>}
+
+        <article className="surface-card overview-snapshot-card inventory-overview-card">
+          <div className="card-heading"><div><span className="eyebrow">Current</span><h3>Inventory Snapshot</h3><p>Shop-owned products that are available now.</p></div><Package size={20} /></div>
+          <div className="overview-inventory-stats">
+            <div><span>In-stock units</span><strong>{data?.inventory.inStockCount || 0}</strong><small>{data?.inventory.productCount || 0} product records</small></div>
+            <div><span>Phones / tablets</span><strong>{(data?.inventory.phoneCount || 0) + (data?.inventory.tabletCount || 0)}</strong><small>{data?.inventory.phoneCount || 0} phones</small></div>
+            <div><span>Accessories / parts</span><strong>{(data?.inventory.accessoryCount || 0) + (data?.inventory.sparePartCount || 0)}</strong><small>{data?.inventory.sparePartCount || 0} spare parts</small></div>
+            <div><span>Low stock</span><strong className={(data?.inventory.lowStockCount || 0) > 0 ? 'danger' : ''}>{data?.inventory.lowStockCount || 0}</strong><small>at or below reorder level</small></div>
+            <div><span>Cost value</span><strong>{money.format(data?.inventory.costValue || 0)}</strong><small>current stock cost</small></div>
+            <div><span>Potential retail</span><strong>{money.format(data?.inventory.retailValue || 0)}</strong><small>before discounts</small></div>
           </div>
+          {(data?.inventory.lowStockItems.length || 0) > 0 && <div className="overview-low-stock"><span className="eyebrow">Needs attention</span>{data?.inventory.lowStockItems.map((item) => <div key={item._id}><p><strong>{item.name}</strong><small>{item.sku} · {titleStatus(item.category)}</small></p><span>{item.quantity} / {item.reorderLevel}</span></div>)}</div>}
         </article>
       </section>
-    </>
+
+      <section className="overview-recent-grid">
+        <article className="surface-card table-card overview-transactions-card">
+          <div className="card-heading table-heading"><div><span className="eyebrow">{periodLabel}</span><h3>Recent Transactions</h3><p>Latest purchases and sales in the selected period.</p></div></div>
+          <div className="table-scroll report-desktop-table"><table><thead><tr><th>Reference</th><th>Type</th><th>Customer / Supplier</th><th>Amount</th><th>Payment</th><th>Status</th><th>Date</th></tr></thead><tbody>{(data?.recentTransactions || []).map((trade) => <tr key={trade._id}><td><strong className="mono">{trade.tradeNo}</strong></td><td><StatusBadge status={trade.type === 'SELL' ? 'Sale' : 'Purchase'} /></td><td>{tradePartyName(trade)}</td><td>{tradeTransactionMoney(trade, trade.transactionTotal, trade.total)}</td><td>{titleStatus(trade.paymentMethod)}</td><td><StatusBadge status={trade.status} /></td><td>{dateText(trade.purchaseDate || trade.createdAt)}</td></tr>)}{data?.recentTransactions.length === 0 && <tr><td colSpan={7}>No transactions in this period.</td></tr>}</tbody></table></div>
+          <div className="mobile-record-list report-mobile-list">{(data?.recentTransactions || []).map((trade) => <article className="mobile-record-card" key={trade._id}><div className="mobile-record-heading"><span className={`transaction-icon ${trade.type === 'SELL' ? 'sale' : 'purchase'}`}><Banknote size={17} /></span><p><strong>{tradePartyName(trade)}</strong><small>{trade.tradeNo}</small></p><StatusBadge status={trade.type === 'SELL' ? 'Sale' : 'Purchase'} /></div><div className="mobile-record-details overview-transaction-details"><div><span>Amount</span><strong>{tradeTransactionMoney(trade, trade.transactionTotal, trade.total)}</strong></div><div><span>Payment</span><strong>{titleStatus(trade.paymentMethod)}</strong></div><div><span>Date</span><strong>{dateText(trade.purchaseDate || trade.createdAt)}</strong></div><StatusBadge status={trade.status} /></div></article>)}{data?.recentTransactions.length === 0 && <p className="mobile-record-empty">No transactions in this period.</p>}</div>
+        </article>
+
+        <article className="surface-card table-card overview-activity-card">
+          <div className="card-heading table-heading"><div><span className="eyebrow">Latest changes</span><h3>Recent Activity</h3><p>Important shop actions recorded by staff.</p></div></div>
+          <div className="transaction-list">{(data?.recentActivity || []).map((log) => <div className="transaction-row" key={log._id}><span className="transaction-icon sale"><FileText /></span><p><strong>{overviewActivityLabel(log)}</strong><small>{log.user?.name || 'System'} · {dateText(log.createdAt)}</small></p></div>)}{data?.recentActivity.length === 0 && <div className="transaction-row"><p><strong>No recent activity</strong><small>Important actions will appear here.</small></p></div>}</div>
+        </article>
+      </section>
+    </div>
   )
+}
+
+const reportSections = [
+  { slug: 'sales', title: 'Sales', description: 'Revenue, COGS, gross profit, items sold', icon: CircleDollarSign, tone: 'violet' },
+  { slug: 'purchases', title: 'Purchases', description: 'Purchases from suppliers and customers, and total cost', icon: ShoppingCart, tone: 'orange' },
+  { slug: 'inventory', title: 'Inventory', description: 'Stock quantity, cost value, retail value, and low stock', icon: Boxes, tone: 'blue' },
+  { slug: 'pawns', title: 'Pawn', description: 'Outstanding principal, overdue, redeemed, and forfeited', icon: HandCoins, tone: 'violet' },
+  { slug: 'loans', title: 'Loans', description: 'Outstanding loans, repayments, and overdue balances', icon: WalletCards, tone: 'blue' },
+  { slug: 'payments', title: 'Payments', description: 'Cash, KHQR, bank, card, and daily closing', icon: Banknote, tone: 'rose' },
+  { slug: 'activity', title: 'Activity', description: 'Staff actions and audit history', icon: FileText, tone: 'orange' },
+] as const
+
+function ReportLanding({ navigate }: { navigate: (path: string) => void }) {
+  return (
+    <div className="reports-hub-page">
+      <SectionHeader eyebrow="Finance & control" title="Reports & Analytics" description="Choose a focused report to review business performance and operational history." />
+      <section className="report-hub-grid" aria-label="Available reports">
+        {reportSections.map(({ slug, title, description, icon: Icon, tone }) => (
+          <button type="button" className="surface-card report-hub-card" key={slug} onClick={() => navigate(`/reports/${slug}`)}>
+            <span className={`metric-icon tone-${tone}`}><Icon size={21} /></span>
+            <span className="report-hub-copy"><strong>{title}</strong><small>{description}</small>{['sales', 'purchases'].includes(slug) ? <em>Available now</em> : <em>Planned</em>}</span>
+            <ArrowUpRight size={18} />
+          </button>
+        ))}
+      </section>
+      <p className="report-hub-note"><AlertTriangle size={15} />Exports will be added only after all report calculations and workflows are verified.</p>
+    </div>
+  )
+}
+
+function UpcomingReportView({ slug, navigate }: { slug: string; navigate: (path: string) => void }) {
+  const report = reportSections.find((item) => item.slug === slug)
+  const Icon = report?.icon || FileText
+  return (
+    <div className="reports-placeholder-page">
+      <SectionHeader eyebrow="Reports & analytics" title={`${report?.title || 'Report'} Report`} description={report?.description || 'This report is planned for a later step.'} action={<button className="ghost-button" onClick={() => navigate('/reports')}>Back to reports</button>} />
+      <section className="surface-card report-placeholder-card"><span className="metric-icon tone-violet"><Icon size={24} /></span><h3>Planned report</h3><p>Sales and Purchases reports are available now. This page is reserved so its URL is ready without adding unverified calculations.</p></section>
+    </div>
+  )
+}
+
+function SalesReportView({ navigate }: { navigate: (path: string) => void }) {
+  const now = new Date()
+  const todayInput = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const [period, setPeriod] = useState<BusinessOverviewPeriod>('this_month')
+  const [customFrom, setCustomFrom] = useState(`${todayInput.slice(0, 8)}01`)
+  const [customTo, setCustomTo] = useState(todayInput)
+  const [paymentMethod, setPaymentMethod] = useState('ALL')
+  const [status, setStatus] = useState('COMPLETED')
+  const [staff, setStaff] = useState('ALL')
+  const [data, setData] = useState<SalesReportData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (period === 'custom' && (!customFrom || !customTo || customFrom > customTo)) return
+    const query = new URLSearchParams({ period, paymentMethod, status, staff })
+    if (period === 'custom') {
+      query.set('from', customFrom)
+      query.set('to', customTo)
+    }
+    setLoading(true)
+    setError('')
+    api<SalesReportData>(`/reports/sales?${query.toString()}`)
+      .then(setData)
+      .catch((reason: Error) => setError(reason.message))
+      .finally(() => setLoading(false))
+  }, [period, customFrom, customTo, paymentMethod, status, staff])
+
+  const periodOptions: Array<{ value: BusinessOverviewPeriod; label: string }> = [
+    { value: 'today', label: 'Today' },
+    { value: 'yesterday', label: 'Yesterday' },
+    { value: 'last_7_days', label: '7 Days' },
+    { value: 'last_30_days', label: '30 Days' },
+    { value: 'this_month', label: 'This Month' },
+    { value: 'last_month', label: 'Last Month' },
+    { value: 'this_year', label: 'This Year' },
+    { value: 'custom', label: 'Custom' },
+  ]
+  const chartPoints: BusinessOverviewData['chart'] = (data?.chart || []).map((point) => ({
+    key: point.key,
+    label: point.label,
+    sales: point.sales,
+    purchases: point.cogs,
+    grossProfit: point.grossProfit,
+  }))
+  const maxPayment = Math.max(1, ...(data?.payments || []).map((payment) => Math.abs(payment.amount)))
+  const salesKpis: Array<{ label: string; value: string; icon: LucideIcon; tone: string }> = [
+    { label: 'Sales Revenue', value: money.format(data?.summary.salesRevenue || 0), icon: CircleDollarSign, tone: 'violet' },
+    { label: 'Cost of Goods Sold', value: money.format(data?.summary.cogs || 0), icon: Boxes, tone: 'orange' },
+    { label: 'Gross Profit', value: money.format(data?.summary.grossProfit || 0), icon: BarChart3, tone: 'blue' },
+    { label: 'Items Sold', value: String(data?.summary.itemsSold || 0), icon: Package, tone: 'rose' },
+    { label: 'Transactions', value: String(data?.summary.transactions || 0), icon: FileText, tone: 'violet' },
+    { label: 'Average Sale', value: money.format(data?.summary.averageSale || 0), icon: Banknote, tone: 'blue' },
+  ]
+
+  if (loading && !data) {
+    return <><SectionHeader eyebrow="Reports & analytics" title="Sales Report" description="Calculating revenue, cost, profit, products, and payment performance." /><section className="surface-card"><LoadingState label="Loading sales report" detail="Reading completed sales and stored item costs…" /></section></>
+  }
+
+  return (
+    <div className="sales-report-page">
+      <SectionHeader eyebrow="Reports & analytics" title="Sales Report" description="Revenue, cost of goods sold, gross profit, products, and payment performance." action={<button className="ghost-button" onClick={() => navigate('/reports')}>Back to reports</button>} />
+
+      <section className="surface-card sales-report-filters" aria-label="Sales report filters">
+        <label><span>Period</span><select value={period} onChange={(event) => setPeriod(event.target.value as BusinessOverviewPeriod)}>{periodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+        {period === 'custom' && <><label><span>From</span><input type="date" value={customFrom} max={customTo || undefined} onChange={(event) => setCustomFrom(event.target.value)} /></label><label><span>To</span><input type="date" value={customTo} min={customFrom || undefined} onChange={(event) => setCustomTo(event.target.value)} /></label></>}
+        <label><span>Payment method</span><select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}><option value="ALL">All methods</option><option value="CASH">Cash</option><option value="KHQR">KHQR</option><option value="BANK">Bank</option><option value="CARD">Card</option></select></label>
+        <label><span>Status</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="COMPLETED">Completed</option><option value="RETURNED">Returned</option><option value="CANCELLED">Cancelled</option></select></label>
+        <label><span>Staff</span><select value={staff} onChange={(event) => setStaff(event.target.value)}><option value="ALL">All staff</option>{(data?.staff || []).map((person) => <option key={person._id} value={person._id}>{person.name}</option>)}</select></label>
+        {loading && <RefreshCcw className="overview-refreshing" size={17} aria-label="Refreshing report" />}
+      </section>
+      {error && <p className="overview-error"><AlertTriangle size={16} />{error}</p>}
+
+      <section className="sales-report-kpis" aria-label="Sales report summary">
+        {salesKpis.map(({ label, value, icon: Icon, tone }) => <article className="surface-card sales-report-kpi" key={label}><span className={`metric-icon tone-${tone}`}><Icon size={20} /></span><div><p>{label}</p><h3>{value}</h3><small>{data?.period.label || 'This Month'} · {titleStatus(status)}</small></div></article>)}
+      </section>
+
+      <section className="surface-card overview-performance-card sales-performance-card">
+        <div className="card-heading"><div><span className="eyebrow">{data?.period.label || 'This Month'}</span><h3>Sales & Profit</h3><p>Revenue, cost of goods sold, and gross profit over time.</p></div></div>
+        <BusinessPerformanceChart points={chartPoints} secondLabel="COGS" ariaLabel="Sales revenue, cost of goods sold, and gross profit over the selected period" />
+      </section>
+
+      <section className="surface-card table-card sales-report-table-card">
+        <div className="card-heading table-heading"><div><span className="eyebrow">Transaction detail</span><h3>Sales Transactions</h3><p>{data?.limited ? `Showing the latest 500 of ${data.totalRecords} matching sales.` : `${data?.totalRecords || 0} matching sales.`}</p></div></div>
+        <div className="table-scroll sales-report-desktop-table"><table><thead><tr><th>Date</th><th>Sale #</th><th>Customer</th><th>Items</th><th>Subtotal</th><th>Discount</th><th>Total</th><th>Cost</th><th>Gross Profit</th><th>Payment</th><th>Staff</th><th>Status</th></tr></thead><tbody>
+          {(data?.transactions || []).map((trade) => <tr key={trade._id}><td>{dateText(trade.createdAt)}</td><td><strong className="mono">{trade.tradeNo}</strong></td><td>{trade.customer?.name || 'Walk-in customer'}</td><td><span className="sales-items-cell">{trade.reportItems ?? trade.items.reduce((sum, item) => sum + item.quantity, 0)}<small>{trade.items.map((item) => `${item.name} ×${item.quantity}`).join(', ')}</small></span></td><td>{money.format(trade.subtotal)}</td><td>{money.format(trade.discount)}</td><td><strong>{money.format(trade.reportTotal ?? trade.total)}</strong></td><td>{money.format(trade.reportCost || 0)}</td><td className={(trade.reportGrossProfit || 0) < 0 ? 'report-negative' : 'report-positive'}>{money.format(trade.reportGrossProfit || 0)}</td><td>{titleStatus(trade.paymentMethod)}</td><td>{trade.createdBy?.name || 'Unknown'}</td><td><StatusBadge status={trade.status} /></td></tr>)}
+          {data?.transactions.length === 0 && <tr><td colSpan={12}>No sales match these filters.</td></tr>}
+        </tbody></table></div>
+        <div className="sales-report-mobile-list">{(data?.transactions || []).map((trade) => <article key={trade._id}><header><div><strong>{trade.tradeNo}</strong><small>{dateText(trade.createdAt)} · {trade.customer?.name || 'Walk-in customer'}</small></div><StatusBadge status={trade.status} /></header><div><span>Total<strong>{money.format(trade.reportTotal ?? trade.total)}</strong></span><span>Cost<strong>{money.format(trade.reportCost || 0)}</strong></span><span>Gross profit<strong className={(trade.reportGrossProfit || 0) < 0 ? 'report-negative' : 'report-positive'}>{money.format(trade.reportGrossProfit || 0)}</strong></span><span>Payment<strong>{titleStatus(trade.paymentMethod)}</strong></span></div><p>{trade.items.map((item) => `${item.name} ×${item.quantity}`).join(', ')}</p></article>)}{data?.transactions.length === 0 && <p className="mobile-record-empty">No sales match these filters.</p>}</div>
+      </section>
+
+      <section className="sales-report-lower-grid">
+        <article className="surface-card table-card product-performance-card"><div className="card-heading table-heading"><div><span className="eyebrow">Product performance</span><h3>Top Products</h3><p>Revenue is allocated after transaction discounts.</p></div></div><div className="table-scroll"><table><thead><tr><th>Product</th><th>Items</th><th>Revenue</th><th>Cost</th><th>Gross Profit</th></tr></thead><tbody>{(data?.products || []).map((product) => <tr key={product.name}><td><strong>{product.name}</strong></td><td>{product.quantity}</td><td>{money.format(product.revenue)}</td><td>{money.format(product.cogs)}</td><td className={product.grossProfit < 0 ? 'report-negative' : 'report-positive'}>{money.format(product.grossProfit)}</td></tr>)}{data?.products.length === 0 && <tr><td colSpan={5}>No product performance for these filters.</td></tr>}</tbody></table></div></article>
+        <article className="surface-card payment-breakdown-card"><div className="card-heading"><div><span className="eyebrow">Payment breakdown</span><h3>Payment Methods</h3><p>Transaction totals by recorded payment method.</p></div></div><div className="payment-breakdown-list">{(data?.payments || []).map((payment) => <div key={payment.method}><header><span>{titleStatus(payment.method)}<small>{payment.transactions} transactions</small></span><strong>{money.format(payment.amount)}</strong></header><i><span style={{ width: `${Math.max(3, (Math.abs(payment.amount) / maxPayment) * 100)}%` }} /></i></div>)}{data?.payments.length === 0 && <p>No payment data for these filters.</p>}</div></article>
+      </section>
+    </div>
+  )
+}
+
+function PurchasesReportView({ navigate }: { navigate: (path: string) => void }) {
+  const now = new Date()
+  const todayInput = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const [period, setPeriod] = useState<BusinessOverviewPeriod>('this_month')
+  const [customFrom, setCustomFrom] = useState(`${todayInput.slice(0, 8)}01`)
+  const [customTo, setCustomTo] = useState(todayInput)
+  const [source, setSource] = useState('ALL')
+  const [paymentMethod, setPaymentMethod] = useState('ALL')
+  const [paymentStatus, setPaymentStatus] = useState('ALL')
+  const [status, setStatus] = useState('COMPLETED')
+  const [staff, setStaff] = useState('ALL')
+  const [data, setData] = useState<PurchaseReportData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (period === 'custom' && (!customFrom || !customTo || customFrom > customTo)) return
+    const query = new URLSearchParams({ period, source, paymentMethod, paymentStatus, status, staff })
+    if (period === 'custom') {
+      query.set('from', customFrom)
+      query.set('to', customTo)
+    }
+    setLoading(true)
+    setError('')
+    api<PurchaseReportData>(`/reports/purchases?${query.toString()}`)
+      .then(setData)
+      .catch((reason: Error) => setError(reason.message))
+      .finally(() => setLoading(false))
+  }, [period, customFrom, customTo, source, paymentMethod, paymentStatus, status, staff])
+
+  const periodOptions: Array<{ value: BusinessOverviewPeriod; label: string }> = [
+    { value: 'today', label: 'Today' },
+    { value: 'yesterday', label: 'Yesterday' },
+    { value: 'last_7_days', label: '7 Days' },
+    { value: 'last_30_days', label: '30 Days' },
+    { value: 'this_month', label: 'This Month' },
+    { value: 'last_month', label: 'Last Month' },
+    { value: 'this_year', label: 'This Year' },
+    { value: 'custom', label: 'Custom' },
+  ]
+  const chartPoints: BusinessOverviewData['chart'] = (data?.chart || []).map((point) => ({
+    key: point.key,
+    label: point.label,
+    sales: point.total,
+    purchases: point.paid,
+    grossProfit: point.balance,
+  }))
+  const maxPayment = Math.max(1, ...(data?.payments || []).map((payment) => Math.abs(payment.amount)))
+  const maxSource = Math.max(1, ...(data?.sources || []).map((item) => Math.abs(item.amount)))
+  const purchaseKpis: Array<{ label: string; value: string; icon: LucideIcon; tone: string; detail: string }> = [
+    { label: 'Total Purchases', value: money.format(data?.summary.totalPurchases || 0), icon: ShoppingCart, tone: 'orange', detail: 'Normalized purchase cost' },
+    { label: 'Amount Paid', value: money.format(data?.summary.amountPaid || 0), icon: Banknote, tone: 'blue', detail: 'Paid to sellers' },
+    { label: 'Outstanding', value: money.format(data?.summary.outstandingBalance || 0), icon: WalletCards, tone: 'rose', detail: 'Still payable' },
+    { label: 'Items Purchased', value: String(data?.summary.itemsPurchased || 0), icon: Package, tone: 'violet', detail: 'Stock units acquired' },
+    { label: 'Transactions', value: String(data?.summary.transactions || 0), icon: FileText, tone: 'blue', detail: 'Matching purchases' },
+    { label: 'Average Purchase', value: money.format(data?.summary.averagePurchase || 0), icon: Calculator, tone: 'violet', detail: 'Per transaction' },
+  ]
+
+  if (loading && !data) {
+    return <><SectionHeader eyebrow="Reports & analytics" title="Purchases Report" description="Calculating purchase costs, payments, sellers, and product volume." /><section className="surface-card"><LoadingState label="Loading purchases report" detail="Reading purchase transactions and normalized currency totals…" /></section></>
+  }
+
+  return (
+    <div className="sales-report-page purchases-report-page">
+      <SectionHeader eyebrow="Reports & analytics" title="Purchases Report" description="Purchase cost, stock acquired, seller sources, balances, and payment performance." action={<button className="ghost-button" onClick={() => navigate('/reports')}>Back to reports</button>} />
+
+      <section className="surface-card sales-report-filters purchases-report-filters" aria-label="Purchases report filters">
+        <label><span>Period</span><select value={period} onChange={(event) => setPeriod(event.target.value as BusinessOverviewPeriod)}>{periodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+        {period === 'custom' && <><label><span>From</span><input type="date" value={customFrom} max={customTo || undefined} onChange={(event) => setCustomFrom(event.target.value)} /></label><label><span>To</span><input type="date" value={customTo} min={customFrom || undefined} onChange={(event) => setCustomTo(event.target.value)} /></label></>}
+        <label><span>Seller source</span><select value={source} onChange={(event) => setSource(event.target.value)}><option value="ALL">All sources</option><option value="SUPPLIER">Suppliers</option><option value="CUSTOMER">Customers</option><option value="WALK_IN">Walk-in sellers</option><option value="LEGACY">Legacy records</option></select></label>
+        <label><span>Payment method</span><select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}><option value="ALL">All methods</option><option value="CASH">Cash</option><option value="KHQR">KHQR</option><option value="BANK">Bank</option><option value="CARD">Card</option><option value="OTHER">Other</option></select></label>
+        <label><span>Payment status</span><select value={paymentStatus} onChange={(event) => setPaymentStatus(event.target.value)}><option value="ALL">All payment statuses</option><option value="PAID">Paid</option><option value="PARTIAL">Partially paid</option><option value="UNPAID">Unpaid</option></select></label>
+        <label><span>Purchase status</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="ALL">All statuses</option><option value="COMPLETED">Completed</option><option value="RETURNED">Returned</option><option value="CANCELLED">Cancelled</option></select></label>
+        <label><span>Staff</span><select value={staff} onChange={(event) => setStaff(event.target.value)}><option value="ALL">All staff</option>{(data?.staff || []).map((person) => <option key={person._id} value={person._id}>{person.name}</option>)}</select></label>
+        {loading && <RefreshCcw className="overview-refreshing" size={17} aria-label="Refreshing report" />}
+      </section>
+      {error && <p className="overview-error"><AlertTriangle size={16} />{error}</p>}
+
+      <section className="sales-report-kpis" aria-label="Purchases report summary">
+        {purchaseKpis.map(({ label, value, icon: Icon, tone, detail }) => <article className="surface-card sales-report-kpi" key={label}><span className={`metric-icon tone-${tone}`}><Icon size={20} /></span><div><p>{label}</p><h3>{value}</h3><small>{detail} · {data?.period.label || 'This Month'}</small></div></article>)}
+      </section>
+
+      <section className="surface-card overview-performance-card sales-performance-card">
+        <div className="card-heading"><div><span className="eyebrow">{data?.period.label || 'This Month'}</span><h3>Purchase Cost & Settlement</h3><p>Normalized USD cost, amount paid, and remaining seller balance over time.</p></div></div>
+        <BusinessPerformanceChart points={chartPoints} firstLabel="Purchase cost" secondLabel="Amount paid" thirdLabel="Balance" ariaLabel="Purchase cost, amount paid, and outstanding balance over the selected period" emptyTitle="No matching purchases" emptyDescription="Purchase activity will appear here once transactions match the selected filters." />
+      </section>
+
+      <section className="surface-card table-card sales-transactions-card">
+        <div className="card-heading table-heading"><div><span className="eyebrow">Transaction detail</span><h3>Purchase Transactions</h3><p>{data?.limited ? `Showing the latest 500 of ${data.totalRecords} matching purchases.` : `${data?.totalRecords || 0} matching purchases.`} USD columns use each transaction's stored exchange rate.</p></div></div>
+        <div className="table-scroll sales-report-desktop-table purchases-report-desktop-table"><table><thead><tr><th>Date</th><th>Purchase #</th><th>Seller</th><th>Source</th><th>Items</th><th>Original total</th><th>Total USD</th><th>Paid USD</th><th>Balance USD</th><th>Payment</th><th>Payment status</th><th>Staff</th><th>Status</th></tr></thead><tbody>
+          {(data?.transactions || []).map((trade) => <tr key={trade._id}><td>{dateText(trade.purchaseDate || trade.createdAt)}</td><td><strong className="mono">{trade.tradeNo}</strong></td><td>{tradePartyName(trade)}</td><td>{purchaseSourceLabel(trade.sellerType)}</td><td><span className="sales-items-cell">{trade.reportItems ?? trade.items.reduce((sum, item) => sum + item.quantity, 0)}<small>{trade.items.map((item) => `${item.name} ×${item.quantity}`).join(', ')}</small></span></td><td>{tradeTransactionMoney(trade, trade.transactionTotal, trade.total)}</td><td><strong>{money.format(trade.reportTotal ?? trade.total)}</strong></td><td>{money.format(trade.reportPaid ?? trade.amountPaid)}</td><td className={(trade.reportBalance || 0) > 0 ? 'report-negative' : ''}>{money.format(trade.reportBalance ?? trade.balance)}</td><td>{titleStatus(trade.paymentMethod)}</td><td><StatusBadge status={trade.paymentStatus || 'Unknown'} /></td><td>{trade.createdBy?.name || 'Unknown'}</td><td><StatusBadge status={trade.status} /></td></tr>)}
+          {data?.transactions.length === 0 && <tr><td colSpan={13}>No purchases match these filters.</td></tr>}
+        </tbody></table></div>
+        <div className="sales-report-mobile-list">{(data?.transactions || []).map((trade) => <article key={trade._id}><header><div><strong>{trade.tradeNo}</strong><small>{dateText(trade.purchaseDate || trade.createdAt)} · {tradePartyName(trade)}</small></div><StatusBadge status={trade.paymentStatus || trade.status} /></header><div><span>Total USD<strong>{money.format(trade.reportTotal ?? trade.total)}</strong></span><span>Paid<strong>{money.format(trade.reportPaid ?? trade.amountPaid)}</strong></span><span>Balance<strong className={(trade.reportBalance || 0) > 0 ? 'report-negative' : ''}>{money.format(trade.reportBalance ?? trade.balance)}</strong></span><span>Source<strong>{purchaseSourceLabel(trade.sellerType)}</strong></span></div><p>{trade.items.map((item) => `${item.name} ×${item.quantity}`).join(', ')}</p></article>)}{data?.transactions.length === 0 && <p className="mobile-record-empty">No purchases match these filters.</p>}</div>
+      </section>
+
+      <section className="sales-report-lower-grid purchases-report-lower-grid">
+        <article className="surface-card table-card product-performance-card"><div className="card-heading table-heading"><div><span className="eyebrow">Product performance</span><h3>Top Purchased Products</h3><p>Product costs are normalized to USD using the rate saved with each purchase.</p></div></div><div className="table-scroll"><table><thead><tr><th>Product</th><th>Items</th><th>Total Cost</th><th>Average Unit Cost</th><th>Purchase Lines</th></tr></thead><tbody>{(data?.products || []).map((product) => <tr key={product.name}><td><strong>{product.name}</strong></td><td>{product.quantity}</td><td>{money.format(product.totalCost)}</td><td>{money.format(product.averageUnitCost)}</td><td>{product.transactions}</td></tr>)}{data?.products.length === 0 && <tr><td colSpan={5}>No product performance for these filters.</td></tr>}</tbody></table></div></article>
+        <div className="purchase-breakdown-stack">
+          <article className="surface-card payment-breakdown-card"><div className="card-heading"><div><span className="eyebrow">Seller breakdown</span><h3>Purchase Sources</h3><p>Normalized purchase cost by seller relationship.</p></div></div><div className="payment-breakdown-list">{(data?.sources || []).map((item) => <div key={item.source}><header><span>{titleStatus(item.source)}<small>{item.transactions} transactions</small></span><strong>{money.format(item.amount)}</strong></header><i><span style={{ width: `${Math.max(3, (Math.abs(item.amount) / maxSource) * 100)}%` }} /></i></div>)}{data?.sources.length === 0 && <p>No seller-source data for these filters.</p>}</div></article>
+          <article className="surface-card payment-breakdown-card"><div className="card-heading"><div><span className="eyebrow">Payment breakdown</span><h3>Payment Methods</h3><p>Normalized purchase cost by recorded payment method.</p></div></div><div className="payment-breakdown-list">{(data?.payments || []).map((payment) => <div key={payment.method}><header><span>{titleStatus(payment.method)}<small>{payment.transactions} transactions</small></span><strong>{money.format(payment.amount)}</strong></header><i><span style={{ width: `${Math.max(3, (Math.abs(payment.amount) / maxPayment) * 100)}%` }} /></i></div>)}{data?.payments.length === 0 && <p>No payment data for these filters.</p>}</div></article>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function ReportsView() {
+  const [path, setPath] = useState(window.location.pathname.replace(/\/+$/, '') || '/reports')
+
+  useEffect(() => {
+    const handlePopState = () => setPath(window.location.pathname.replace(/\/+$/, '') || '/reports')
+    window.addEventListener('popstate', handlePopState)
+    return () => window.removeEventListener('popstate', handlePopState)
+  }, [])
+
+  useEffect(() => {
+    const slug = path.split('/')[2]
+    const report = reportSections.find((item) => item.slug === slug)
+    document.title = `${report ? `${report.title} Report` : 'Reports & Analytics'} · PhoneFlow`
+  }, [path])
+
+  const navigate = (nextPath: string) => {
+    if (window.location.pathname !== nextPath) window.history.pushState({ view: 'reports' }, '', nextPath)
+    setPath(nextPath)
+  }
+
+  if (path === '/reports/sales') return <SalesReportView navigate={navigate} />
+  if (path === '/reports/purchases') return <PurchasesReportView navigate={navigate} />
+  const slug = path.startsWith('/reports/') ? path.slice('/reports/'.length) : ''
+  if (slug && reportSections.some((item) => item.slug === slug)) return <UpcomingReportView slug={slug} navigate={navigate} />
+  return <ReportLanding navigate={navigate} />
 }
 
 function SettingsView({
@@ -2156,7 +2731,9 @@ function App({
 
   useEffect(() => {
     const currentView = viewFromPath(window.location.pathname)
-    const canonicalPath = viewPaths[currentView]
+    const canonicalPath = currentView === 'reports' && window.location.pathname.startsWith('/reports/')
+      ? window.location.pathname.replace(/\/+$/, '')
+      : viewPaths[currentView]
 
     if (window.location.pathname !== canonicalPath) {
       window.history.replaceState({ view: currentView }, '', canonicalPath)
@@ -2257,6 +2834,7 @@ function App({
       case 'customers': return <CustomersView />
       case 'suppliers': return <SupplierWorkspace />
       case 'depreciation': return <DepreciationView goTo={changePage} />
+      case 'businessOverview': return <BusinessOverviewView />
       case 'reports': return <ReportsView />
       case 'settings': return <SettingsView user={user} onLogout={onLogout} fontSize={fontSize} onFontSizeChange={onFontSizeChange} />
       default: return <DashboardView goTo={changePage} user={user} />

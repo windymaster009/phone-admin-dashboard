@@ -22,7 +22,7 @@ function statusForLoan(loan, now = new Date()) {
   return 'ACTIVE'
 }
 
-async function refreshLoanStatuses() {
+export async function refreshLoanStatuses() {
   const loans = await Loan.find({ status: { $nin: ['PAID', 'CANCELLED'] } })
     .select('_id status dueDate reminderDays amountPaid totalDue remainingBalance')
     .lean()
