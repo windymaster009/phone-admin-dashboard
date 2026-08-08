@@ -1222,6 +1222,262 @@ router.get('/reports/sales', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncR
   })
 }))
 
+router.get('/reports/purchases', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
+  const period = resolveOverviewPeriod(req.query)
+  const paymentMethod = String(req.query.paymentMethod || 'ALL').toUpperCase()
+  const paymentStatus = String(req.query.paymentStatus || 'ALL').toUpperCase()
+  const status = String(req.query.status || 'COMPLETED').toUpperCase()
+  const source = String(req.query.source || 'ALL').toUpperCase()
+  const staffId = String(req.query.staff || 'ALL')
+  const paymentMethods = ['ALL', 'CASH', 'KHQR', 'BANK', 'CARD', 'OTHER']
+  const paymentStatuses = ['ALL', 'PAID', 'PARTIAL', 'UNPAID']
+  const statuses = ['ALL', 'COMPLETED', 'RETURNED', 'CANCELLED']
+  const sources = ['ALL', 'SUPPLIER', 'CUSTOMER', 'WALK_IN', 'LEGACY']
+
+  if (!paymentMethods.includes(paymentMethod)) throw requestError(400, 'Select a valid payment method')
+  if (!paymentStatuses.includes(paymentStatus)) throw requestError(400, 'Select a valid payment status')
+  if (!statuses.includes(status)) throw requestError(400, 'Select a valid purchase status')
+  if (!sources.includes(source)) throw requestError(400, 'Select a valid purchase source')
+  if (staffId !== 'ALL' && !mongoose.isValidObjectId(staffId)) throw requestError(400, 'Select a valid staff member')
+
+  const sourceMatch = source === 'SUPPLIER'
+    ? { sellerType: { $in: ['EXISTING_SUPPLIER', 'NEW_SUPPLIER'] } }
+    : source === 'CUSTOMER'
+      ? { sellerType: { $in: ['EXISTING_CUSTOMER', 'NEW_CUSTOMER'] } }
+      : source === 'WALK_IN'
+        ? { sellerType: 'WALK_IN' }
+        : source === 'LEGACY'
+          ? { sellerType: 'LEGACY' }
+          : {}
+  const match = {
+    type: 'BUY',
+    $or: [
+      { purchaseDate: { $gte: period.from, $lt: period.to } },
+      { purchaseDate: null, createdAt: { $gte: period.from, $lt: period.to } },
+    ],
+    ...(status !== 'ALL' ? { status } : {}),
+    ...(paymentMethod !== 'ALL' ? { paymentMethod } : {}),
+    ...(paymentStatus !== 'ALL' ? { paymentStatus } : {}),
+    ...(staffId !== 'ALL' ? { createdBy: new mongoose.Types.ObjectId(staffId) } : {}),
+    ...sourceMatch,
+  }
+  const accountingSign = {
+    $switch: {
+      branches: [
+        { case: { $eq: ['$status', 'RETURNED'] }, then: -1 },
+        { case: { $eq: ['$status', 'CANCELLED'] }, then: 0 },
+      ],
+      default: 1,
+    },
+  }
+  const itemsPurchasedExpression = {
+    $sum: {
+      $map: {
+        input: { $ifNull: ['$items', []] },
+        as: 'item',
+        in: { $ifNull: ['$$item.quantity', 0] },
+      },
+    },
+  }
+  const sourceExpression = {
+    $switch: {
+      branches: [
+        { case: { $in: ['$sellerType', ['EXISTING_SUPPLIER', 'NEW_SUPPLIER']] }, then: 'SUPPLIER' },
+        { case: { $in: ['$sellerType', ['EXISTING_CUSTOMER', 'NEW_CUSTOMER']] }, then: 'CUSTOMER' },
+        { case: { $eq: ['$sellerType', 'WALK_IN'] }, then: 'WALK_IN' },
+      ],
+      default: 'LEGACY',
+    },
+  }
+  const bucketFormat = period.granularity === 'hour'
+    ? '%Y-%m-%dT%H'
+    : period.granularity === 'month'
+      ? '%Y-%m'
+      : '%Y-%m-%d'
+
+  const [summaryRows, chartRows, transactionDocs, productRows, paymentRows, sourceRows, staff] = await Promise.all([
+    Trade.aggregate([
+      { $match: match },
+      {
+        $project: {
+          total: { $multiply: [{ $ifNull: ['$total', 0] }, accountingSign] },
+          paid: { $multiply: [{ $ifNull: ['$amountPaid', 0] }, accountingSign] },
+          balance: { $multiply: [{ $ifNull: ['$balance', 0] }, accountingSign] },
+          items: { $multiply: [itemsPurchasedExpression, accountingSign] },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          totalPurchases: { $sum: '$total' },
+          amountPaid: { $sum: '$paid' },
+          outstandingBalance: { $sum: '$balance' },
+          itemsPurchased: { $sum: '$items' },
+          transactions: { $sum: 1 },
+        },
+      },
+    ]),
+    Trade.aggregate([
+      { $match: match },
+      {
+        $project: {
+          reportDate: { $ifNull: ['$purchaseDate', '$createdAt'] },
+          total: { $multiply: [{ $ifNull: ['$total', 0] }, accountingSign] },
+          paid: { $multiply: [{ $ifNull: ['$amountPaid', 0] }, accountingSign] },
+          balance: { $multiply: [{ $ifNull: ['$balance', 0] }, accountingSign] },
+        },
+      },
+      {
+        $project: {
+          bucket: { $dateToString: { format: bucketFormat, date: '$reportDate', timezone: overviewTimeZone } },
+          total: 1,
+          paid: 1,
+          balance: 1,
+        },
+      },
+      { $group: { _id: '$bucket', total: { $sum: '$total' }, paid: { $sum: '$paid' }, balance: { $sum: '$balance' } } },
+      { $sort: { _id: 1 } },
+    ]),
+    Trade.find(match)
+      .populate('customer', 'name phone')
+      .populate('supplier', 'name phone')
+      .populate('createdBy', 'name email role')
+      .sort({ purchaseDate: -1, createdAt: -1 })
+      .limit(500)
+      .lean(),
+    Trade.aggregate([
+      { $match: match },
+      { $unwind: '$items' },
+      {
+        $project: {
+          name: '$items.name',
+          quantity: { $multiply: [{ $ifNull: ['$items.quantity', 0] }, accountingSign] },
+          totalCost: {
+            $multiply: [
+              { $ifNull: ['$items.quantity', 0] },
+              { $ifNull: ['$items.unitPrice', 0] },
+              accountingSign,
+            ],
+          },
+        },
+      },
+      { $group: { _id: '$name', quantity: { $sum: '$quantity' }, totalCost: { $sum: '$totalCost' }, transactions: { $sum: 1 } } },
+      { $sort: { totalCost: -1, quantity: -1 } },
+      { $limit: 8 },
+    ]),
+    Trade.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: '$paymentMethod',
+          amount: { $sum: { $multiply: [{ $ifNull: ['$total', 0] }, accountingSign] } },
+          transactions: { $sum: 1 },
+        },
+      },
+      { $sort: { amount: -1 } },
+    ]),
+    Trade.aggregate([
+      { $match: match },
+      { $project: { source: sourceExpression, total: { $multiply: [{ $ifNull: ['$total', 0] }, accountingSign] } } },
+      { $group: { _id: '$source', amount: { $sum: '$total' }, transactions: { $sum: 1 } } },
+      { $sort: { amount: -1 } },
+    ]),
+    User.find({ role: { $in: ['OWNER', 'MANAGER', 'STOCK'] } })
+      .select('name email role')
+      .sort({ name: 1 })
+      .lean(),
+  ])
+
+  const summaryRow = summaryRows[0] || {}
+  const totalPurchases = roundMoney(summaryRow.totalPurchases || 0)
+  const transactionCount = Number(summaryRow.transactions) || 0
+  const chartByKey = new Map(chartRows.map((row) => [row._id, row]))
+  const chart = []
+
+  const appendChartPoint = (date) => {
+    const key = overviewDateKey(date, period.granularity)
+    const row = chartByKey.get(key)
+    chart.push({
+      key,
+      label: overviewBucketLabel(date, period.granularity),
+      total: roundMoney(row?.total || 0),
+      paid: roundMoney(row?.paid || 0),
+      balance: roundMoney(row?.balance || 0),
+    })
+  }
+
+  if (period.granularity === 'hour') {
+    for (let hour = 0; hour < 24; hour += 1) appendChartPoint(new Date(period.from.getTime() + hour * 3_600_000))
+  } else if (period.granularity === 'month') {
+    const start = cambodiaParts(period.from)
+    const end = cambodiaParts(addUtcDays(period.to, -1))
+    let cursorYear = start.year
+    let cursorMonth = start.month
+    while (cursorYear < end.year || (cursorYear === end.year && cursorMonth <= end.month)) {
+      appendChartPoint(cambodiaDate(cursorYear, cursorMonth, 1))
+      cursorMonth += 1
+      if (cursorMonth > 11) {
+        cursorMonth = 0
+        cursorYear += 1
+      }
+    }
+  } else {
+    for (let index = 0; index < period.dayCount; index += 1) appendChartPoint(addUtcDays(period.from, index))
+  }
+
+  const transactions = transactionDocs.map((trade) => {
+    const sign = trade.status === 'RETURNED' ? -1 : trade.status === 'CANCELLED' ? 0 : 1
+    return {
+      ...trade,
+      reportTotal: roundMoney((Number(trade.total) || 0) * sign),
+      reportPaid: roundMoney((Number(trade.amountPaid) || 0) * sign),
+      reportBalance: roundMoney((Number(trade.balance) || 0) * sign),
+      reportItems: trade.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) * sign,
+    }
+  })
+
+  res.json({
+    period: {
+      key: period.key,
+      label: period.label,
+      from: period.from.toISOString(),
+      to: addUtcDays(period.to, -1).toISOString(),
+      granularity: period.granularity,
+    },
+    filters: { paymentMethod, paymentStatus, status, source, staff: staffId },
+    summary: {
+      totalPurchases,
+      amountPaid: roundMoney(summaryRow.amountPaid || 0),
+      outstandingBalance: roundMoney(summaryRow.outstandingBalance || 0),
+      itemsPurchased: Number(summaryRow.itemsPurchased) || 0,
+      transactions: transactionCount,
+      averagePurchase: transactionCount > 0 ? roundMoney(totalPurchases / transactionCount) : 0,
+    },
+    chart,
+    transactions,
+    products: productRows.map((row) => ({
+      name: row._id,
+      quantity: Number(row.quantity) || 0,
+      totalCost: roundMoney(row.totalCost || 0),
+      averageUnitCost: Number(row.quantity) ? roundMoney(row.totalCost / row.quantity) : 0,
+      transactions: Number(row.transactions) || 0,
+    })),
+    payments: paymentRows.map((row) => ({
+      method: row._id || 'OTHER',
+      amount: roundMoney(row.amount || 0),
+      transactions: Number(row.transactions) || 0,
+    })),
+    sources: sourceRows.map((row) => ({
+      source: row._id,
+      amount: roundMoney(row.amount || 0),
+      transactions: Number(row.transactions) || 0,
+    })),
+    staff,
+    totalRecords: transactionCount,
+    limited: transactionCount > 500,
+  })
+}))
+
 router.get('/customers', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
   const q = searchText(req.query.q)
   const filter = req.query.includeInactive === 'true' ? {} : { active: { $ne: false } }

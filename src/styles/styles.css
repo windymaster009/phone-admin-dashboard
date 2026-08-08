@@ -906,7 +906,7 @@ td strong { color: var(--text); }
 .overview-activity-card .transaction-list { padding: 0 16px 10px; }
 .overview-transaction-details { grid-template-columns: repeat(3, minmax(0, 1fr)) auto; }
 
-/* Reports landing and Sales Report */
+/* Reports landing, Sales Report, and Purchases Report */
 .reports-hub-page,
 .reports-placeholder-page,
 .sales-report-page { display: grid; gap: 18px; }
@@ -921,7 +921,7 @@ td strong { color: var(--text); }
 .report-hub-copy strong { font: 800 15px Manrope, sans-serif; }
 .report-hub-copy small { min-height: 34px; margin-top: 7px; color: var(--muted); font-size: 9px; line-height: 1.55; }
 .report-hub-copy em { width: max-content; margin-top: 12px; padding: 4px 7px; border-radius: 999px; color: var(--muted); background: var(--bg-soft); font-size: 7px; font-style: normal; font-weight: 800; text-transform: uppercase; letter-spacing: .6px; }
-.report-hub-card:first-child .report-hub-copy em { color: var(--green); background: color-mix(in srgb, var(--green) 11%, var(--bg-soft)); }
+.report-hub-card:nth-child(-n + 2) .report-hub-copy em { color: var(--green); background: color-mix(in srgb, var(--green) 11%, var(--bg-soft)); }
 .report-hub-note { margin: 0; padding: 12px 14px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 11px; color: var(--muted); background: var(--surface); font-size: 9px; }
 .report-placeholder-card { min-height: 320px; padding: 32px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .report-placeholder-card h3 { margin: 16px 0 7px; font: 800 18px Manrope, sans-serif; }
@@ -944,6 +944,7 @@ td strong { color: var(--text); }
 .sales-report-table-card { min-width: 0; }
 .sales-report-table-card .table-heading { padding-bottom: 13px; }
 .sales-report-desktop-table table { min-width: 1480px; }
+.purchases-report-desktop-table table { min-width: 1660px; }
 .sales-report-desktop-table th,
 .sales-report-desktop-table td { padding-inline: 12px; white-space: nowrap; }
 .sales-items-cell { max-width: 210px; display: flex; flex-direction: column; }
@@ -952,6 +953,7 @@ td strong { color: var(--text); }
 .report-negative { color: var(--rose) !important; font-weight: 800; }
 .sales-report-mobile-list { display: none; }
 .sales-report-lower-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(300px, .6fr); gap: 14px; align-items: start; }
+.purchase-breakdown-stack { min-width: 0; display: grid; gap: 14px; }
 .product-performance-card,
 .payment-breakdown-card { min-width: 0; }
 .product-performance-card .table-heading { padding-bottom: 13px; }
