@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { motion } from 'framer-motion'
-import { AlertTriangle, BadgeCheck, Boxes, HandCoins, Smartphone } from 'lucide-react'
+import { AlertTriangle, BadgeCheck, Boxes, HandCoins, KeyRound, Smartphone } from 'lucide-react'
 import { ApiError, api, setToken, type SessionUser } from '../lib/api'
 
 function ErrorNotice({ message }: { message: string }) {
@@ -90,6 +90,7 @@ export default function AuthScreen({
   theme: 'dark' | 'light'
 }) {
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null)
+  const [pairMode, setPairMode] = useState(false)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -104,13 +105,27 @@ export default function AuthScreen({
     setBusy(true)
     setError('')
     const form = new FormData(event.currentTarget)
-    const payload = {
-      name: String(form.get('name') || ''),
-      email: String(form.get('email') || ''),
-      password: String(form.get('password') || ''),
-    }
 
     try {
+      if (pairMode && setupRequired === false) {
+        const code = String(form.get('pairingCode') || '').replace(/\D/g, '')
+        const result = await api<{ user: SessionUser }>('/auth/pairing/redeem', {
+          method: 'POST',
+          body: JSON.stringify({
+            code,
+            deviceName: /Android/i.test(navigator.userAgent) ? 'PhoneFlow Android' : 'Paired browser',
+          }),
+        })
+        setToken(null)
+        onAuthenticated(result.user)
+        return
+      }
+
+      const payload = {
+        name: String(form.get('name') || ''),
+        email: String(form.get('email') || ''),
+        password: String(form.get('password') || ''),
+      }
       const result = await api<{ user: SessionUser }>(setupRequired ? '/auth/bootstrap' : '/auth/login', {
         method: 'POST',
         body: JSON.stringify(payload),
@@ -118,7 +133,8 @@ export default function AuthScreen({
       setToken(null)
       onAuthenticated(result.user)
     } catch (reason) {
-      setError(reason instanceof ApiError && reason.status === 401
+      if (pairMode && reason instanceof ApiError && reason.status === 401) setError('Pairing code is invalid or expired')
+      else setError(reason instanceof ApiError && reason.status === 401
         ? 'Invalid email or password'
         : reason instanceof Error ? reason.message : 'Unable to sign in')
     } finally {
@@ -165,24 +181,46 @@ export default function AuthScreen({
           >
             <header>
               <div>
-                <h2>{setupRequired ? 'Create owner account' : 'Welcome back'}</h2>
-                <p>{setupRequired ? 'Set up the owner account for this shop.' : 'Sign in to your PhoneFlow account.'}</p>
+                <h2>{setupRequired ? 'Create owner account' : pairMode ? 'Pair this device' : 'Welcome back'}</h2>
+                <p>{setupRequired
+                  ? 'Set up the owner account for this shop.'
+                  : pairMode
+                    ? 'Enter the one-time code shown in PhoneFlow Security on an already signed-in device.'
+                    : 'Sign in to your PhoneFlow account.'}</p>
               </div>
-              <span className="auth-security-mark"><BadgeCheck size={20} /></span>
+              <span className="auth-security-mark">{pairMode ? <KeyRound size={20} /> : <BadgeCheck size={20} />}</span>
             </header>
             {error && <ErrorNotice message={error} />}
             {setupRequired === null ? (
               <div className="loading-line">Checking secure connection…</div>
             ) : (
-              <form className="form-stack" onSubmit={submit}>
-                {setupRequired && <label>Owner name<input name="name" autoComplete="name" required placeholder="Shop owner" /></label>}
-                <label>Email address<input name="email" type="email" autoComplete="email" required placeholder="owner@shop.com" /></label>
-                <label>Password<input name="password" type="password" autoComplete={setupRequired ? 'new-password' : 'current-password'} minLength={8} required placeholder="Enter your password" /></label>
-                <button className="primary-button full-width" disabled={busy}>{busy ? 'Signing in…' : setupRequired ? 'Create shop account' : 'Sign in'}</button>
-              </form>
+              <>
+                <form className="form-stack" onSubmit={submit}>
+                  {pairMode && !setupRequired ? (
+                    <label>Pairing code<input name="pairingCode" inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" minLength={6} maxLength={6} required placeholder="000000" autoFocus /></label>
+                  ) : (
+                    <>
+                      {setupRequired && <label>Owner name<input name="name" autoComplete="name" required placeholder="Shop owner" /></label>}
+                      <label>Email address<input name="email" type="email" autoComplete="email" required placeholder="owner@shop.com" /></label>
+                      <label>Password<input name="password" type="password" autoComplete={setupRequired ? 'new-password' : 'current-password'} minLength={8} required placeholder="Enter your password" /></label>
+                    </>
+                  )}
+                  <button className="primary-button full-width" disabled={busy}>{busy ? 'Please wait…' : setupRequired ? 'Create shop account' : pairMode ? 'Pair device' : 'Sign in'}</button>
+                </form>
+                {!setupRequired && (
+                  <button
+                    type="button"
+                    className="secondary-button full-width"
+                    onClick={() => { setPairMode((current) => !current); setError('') }}
+                    disabled={busy}
+                  >
+                    {pairMode ? 'Use email and password' : 'Use one-time pairing code'}
+                  </button>
+                )}
+              </>
             )}
             <div className="auth-features" aria-label="PhoneFlow features">
-              <span><BadgeCheck size={15} /> Encrypted staff access</span>
+              <span><BadgeCheck size={15} /> Revocable staff sessions</span>
               <span>PhoneFlow v0.2</span>
             </div>
           </motion.section>
