@@ -108,7 +108,19 @@ function statusLabel(status: LoanStatus) {
 }
 
 function LoanStatusBadge({ status }: { status: LoanStatus }) {
-  return <span className={`loan-status loan-status-${status.toLowerCase().replaceAll('_', '-')}`}>{statusLabel(status)}</span>
+  const Icon = status === 'ACTIVE'
+    ? BadgeCheck
+    : status === 'DUE_SOON'
+      ? Clock
+      : status === 'OVERDUE'
+        ? AlertTriangle
+        : status === 'PARTIALLY_PAID'
+          ? CircleDollarSign
+          : status === 'PAID'
+            ? CheckCircle2
+            : X
+
+  return <span className={`loan-status loan-status-${status.toLowerCase().replaceAll('_', '-')}`}><Icon size={15} strokeWidth={2} aria-hidden="true" />{statusLabel(status)}</span>
 }
 
 function DualAmount({ usd, khr }: { usd: number; khr: number }) {
@@ -171,7 +183,7 @@ function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
         <dl>
           <div><dt>Loan number</dt><dd>{createdLoan.loanNo}</dd></div>
           <div><dt>Principal</dt><dd>{money(createdLoan.principal, createdLoan.currency)}</dd></div>
-          <div><dt>Status</dt><dd><span>{statusLabel(createdLoan.status)}</span></dd></div>
+          <div><dt>Status</dt><dd><LoanStatusBadge status={createdLoan.status} /></dd></div>
         </dl>
       </div>
       <footer className="operation-modal-actions"><button type="button" className="primary-button record-created-done" onClick={onClose}><CheckCircle2 size={16} /> Done</button></footer>
