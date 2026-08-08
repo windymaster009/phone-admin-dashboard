@@ -23,6 +23,7 @@ const androidPairingSchema = new Schema({
   codeHash: { type: String, required: true, unique: true },
   user: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   createdBySessionId: { type: String, required: true, index: true },
+  twoFactorVerifiedAt: { type: Date, default: null },
   expiresAt: { type: Date, required: true },
   usedAt: { type: Date, default: null, index: true },
 }, { timestamps: true, versionKey: false })
