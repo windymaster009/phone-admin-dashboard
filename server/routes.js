@@ -22,6 +22,8 @@ import {
   usdKhrFromPayway,
 } from './integrations/payway/index.js'
 import { ActivityLog, Customer, InventoryItem, Pawn, PaywayIntent, Supplier, Trade, User } from './models.js'
+import { Loan } from './loanModels.js'
+import { refreshLoanStatuses } from './loanDashboardRoutes.js'
 import { preventCustomerDeletionWithDocuments } from './documentGuards.js'
 import {
   DAILY_PAWN_FEE_RATE,
@@ -40,9 +42,148 @@ const router = Router()
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const inventoryUploadDir = path.resolve(__dirname, '../uploads/inventory')
 const dummyPasswordHash = bcrypt.hashSync('phoneflow-invalid-password', 12)
+const overviewTimeZone = 'Asia/Phnom_Penh'
+const cambodiaOffsetMs = 7 * 60 * 60 * 1000
 
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
 const clean = (value) => (typeof value === 'string' ? value.trim() : value)
+
+function cambodiaParts(value = new Date()) {
+  const shifted = new Date(new Date(value).getTime() + cambodiaOffsetMs)
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth(),
+    day: shifted.getUTCDate(),
+    hour: shifted.getUTCHours(),
+  }
+}
+
+function cambodiaDate(year, month, day, hour = 0) {
+  return new Date(Date.UTC(year, month, day, hour) - cambodiaOffsetMs)
+}
+
+function cambodiaStartOfDay(value = new Date()) {
+  const { year, month, day } = cambodiaParts(value)
+  return cambodiaDate(year, month, day)
+}
+
+function addUtcDays(value, days) {
+  return new Date(value.getTime() + days * 86_400_000)
+}
+
+function parseOverviewDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''))
+  if (!match) return null
+  const year = Number(match[1])
+  const month = Number(match[2]) - 1
+  const day = Number(match[3])
+  const date = cambodiaDate(year, month, day)
+  const parts = cambodiaParts(date)
+  return parts.year === year && parts.month === month && parts.day === day ? date : null
+}
+
+function overviewDateKey(value, granularity) {
+  const { year, month, day, hour } = cambodiaParts(value)
+  const paddedMonth = String(month + 1).padStart(2, '0')
+  if (granularity === 'month') return `${year}-${paddedMonth}`
+  const paddedDay = String(day).padStart(2, '0')
+  if (granularity === 'hour') return `${year}-${paddedMonth}-${paddedDay}T${String(hour).padStart(2, '0')}`
+  return `${year}-${paddedMonth}-${paddedDay}`
+}
+
+function overviewBucketLabel(value, granularity) {
+  const shifted = new Date(value.getTime() + cambodiaOffsetMs)
+  if (granularity === 'hour') {
+    return new Intl.DateTimeFormat('en-US', { hour: 'numeric', timeZone: 'UTC' }).format(shifted)
+  }
+  if (granularity === 'month') {
+    return new Intl.DateTimeFormat('en-US', { month: 'short', timeZone: 'UTC' }).format(shifted)
+  }
+  return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', timeZone: 'UTC' }).format(shifted)
+}
+
+function resolveOverviewPeriod(query) {
+  const period = String(query.period || 'this_month').toLowerCase()
+  let key = period
+  const now = new Date()
+  const today = cambodiaStartOfDay(now)
+  const tomorrow = addUtcDays(today, 1)
+  const { year, month } = cambodiaParts(now)
+  let from
+  let to
+  let label
+
+  switch (period) {
+    case 'today':
+      from = today
+      to = tomorrow
+      label = 'Today'
+      break
+    case 'yesterday':
+      from = addUtcDays(today, -1)
+      to = today
+      label = 'Yesterday'
+      break
+    case 'last_7_days':
+      from = addUtcDays(today, -6)
+      to = tomorrow
+      label = 'Last 7 Days'
+      break
+    case 'last_30_days':
+      from = addUtcDays(today, -29)
+      to = tomorrow
+      label = 'Last 30 Days'
+      break
+    case 'last_month':
+      from = cambodiaDate(year, month - 1, 1)
+      to = cambodiaDate(year, month, 1)
+      label = 'Last Month'
+      break
+    case 'this_year':
+      from = cambodiaDate(year, 0, 1)
+      to = tomorrow
+      label = 'This Year'
+      break
+    case 'custom': {
+      const customFrom = parseOverviewDate(query.from)
+      const customTo = parseOverviewDate(query.to)
+      if (!customFrom || !customTo) throw requestError(400, 'Choose a valid From and To date')
+      if (customFrom > customTo) throw requestError(400, 'From date must be before or equal to To date')
+      from = customFrom
+      to = addUtcDays(customTo, 1)
+      label = 'Custom Range'
+      break
+    }
+    case 'this_month':
+    default:
+      key = 'this_month'
+      from = cambodiaDate(year, month, 1)
+      to = tomorrow
+      label = 'This Month'
+      break
+  }
+
+  const dayCount = Math.max(1, Math.ceil((to.getTime() - from.getTime()) / 86_400_000))
+  const granularity = ['today', 'yesterday'].includes(period)
+    ? 'hour'
+    : period === 'this_year' || dayCount > 92
+      ? 'month'
+      : 'day'
+
+  return { key, label, from, to, dayCount, granularity }
+}
+
+function emptyCurrencyTotals() {
+  return { USD: 0, KHR: 0 }
+}
+
+function currencyTotals(records, amountField) {
+  return records.reduce((totals, record) => {
+    const currency = record.currency === 'KHR' ? 'KHR' : 'USD'
+    totals[currency] = roundMoney(totals[currency] + Math.max(0, Number(record[amountField]) || 0))
+    return totals
+  }, emptyCurrencyTotals())
+}
 const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const searchText = (value) => String(value ?? '').trim().slice(0, 80)
 
@@ -634,6 +775,450 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
     monthPerformance,
     monthlyPerformance,
     dailyPerformance,
+  })
+}))
+
+router.get('/business-overview', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
+  const period = resolveOverviewPeriod(req.query)
+  await Promise.all([refreshPawnStatuses(), refreshLoanStatuses()])
+
+  const overviewTradeDateExpression = {
+    $cond: [
+      { $eq: ['$type', 'BUY'] },
+      { $ifNull: ['$purchaseDate', '$createdAt'] },
+      '$createdAt',
+    ],
+  }
+  const completedTradePeriodStages = [
+    { $match: { status: 'COMPLETED' } },
+    { $addFields: { overviewDate: overviewTradeDateExpression } },
+    { $match: { overviewDate: { $gte: period.from, $lt: period.to } } },
+  ]
+  const saleCogsExpression = {
+    $sum: {
+      $map: {
+        input: { $ifNull: ['$items', []] },
+        as: 'item',
+        in: {
+          $multiply: [
+            { $ifNull: ['$$item.quantity', 0] },
+            { $ifNull: ['$$item.costPrice', 0] },
+          ],
+        },
+      },
+    },
+  }
+  const bucketFormat = period.granularity === 'hour'
+    ? '%Y-%m-%dT%H'
+    : period.granularity === 'month'
+      ? '%Y-%m'
+      : '%Y-%m-%d'
+
+  const [financialRows, chartRows, recentTransactions, pawnRecords, loanRecords, inventoryRecords, recentActivity] = await Promise.all([
+    Trade.aggregate([
+      ...completedTradePeriodStages,
+      { $project: { type: 1, total: { $ifNull: ['$total', 0] }, saleCogs: saleCogsExpression } },
+      {
+        $group: {
+          _id: null,
+          salesRevenue: { $sum: { $cond: [{ $eq: ['$type', 'SELL'] }, '$total', 0] } },
+          purchases: { $sum: { $cond: [{ $eq: ['$type', 'BUY'] }, '$total', 0] } },
+          cogs: { $sum: { $cond: [{ $eq: ['$type', 'SELL'] }, '$saleCogs', 0] } },
+        },
+      },
+    ]),
+    Trade.aggregate([
+      ...completedTradePeriodStages,
+      {
+        $project: {
+          bucket: { $dateToString: { format: bucketFormat, date: '$overviewDate', timezone: overviewTimeZone } },
+          type: 1,
+          total: { $ifNull: ['$total', 0] },
+          saleCogs: saleCogsExpression,
+        },
+      },
+      {
+        $group: {
+          _id: '$bucket',
+          sales: { $sum: { $cond: [{ $eq: ['$type', 'SELL'] }, '$total', 0] } },
+          purchases: { $sum: { $cond: [{ $eq: ['$type', 'BUY'] }, '$total', 0] } },
+          cogs: { $sum: { $cond: [{ $eq: ['$type', 'SELL'] }, '$saleCogs', 0] } },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]),
+    Trade.find({
+      $expr: {
+        $and: [
+          { $gte: [overviewTradeDateExpression, period.from] },
+          { $lt: [overviewTradeDateExpression, period.to] },
+        ],
+      },
+    })
+      .populate('customer', 'name phone')
+      .populate('supplier', 'name phone')
+      .sort({ createdAt: -1 })
+      .limit(8)
+      .lean(),
+    Pawn.find({ status: { $in: openPawnStatuses } })
+      .select('status currency remainingPrincipal principal')
+      .lean(),
+    Loan.find({ status: { $in: ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'PARTIALLY_PAID'] } })
+      .select('status currency remainingBalance')
+      .lean(),
+    InventoryItem.find({ status: 'IN_STOCK', quantity: { $gt: 0 } })
+      .select('sku name category quantity reorderLevel buyPrice sellPrice')
+      .lean(),
+    ActivityLog.find({ entity: { $in: ['TRADE', 'PAWN', 'LOAN', 'INVENTORY'] } })
+      .populate('user', 'name email role')
+      .sort({ createdAt: -1 })
+      .limit(8)
+      .lean(),
+  ])
+
+  const financialRow = financialRows[0] || {}
+  const salesRevenue = roundMoney(financialRow.salesRevenue || 0)
+  const purchases = roundMoney(financialRow.purchases || 0)
+  const cogs = roundMoney(financialRow.cogs || 0)
+  const chartByKey = new Map(chartRows.map((row) => [row._id, row]))
+  const chart = []
+
+  if (period.granularity === 'hour') {
+    for (let hour = 0; hour < 24; hour += 1) {
+      const date = new Date(period.from.getTime() + hour * 3_600_000)
+      const key = overviewDateKey(date, 'hour')
+      const row = chartByKey.get(key)
+      const sales = roundMoney(row?.sales || 0)
+      const bucketCogs = roundMoney(row?.cogs || 0)
+      chart.push({ key, label: overviewBucketLabel(date, 'hour'), sales, purchases: roundMoney(row?.purchases || 0), grossProfit: roundMoney(sales - bucketCogs) })
+    }
+  } else if (period.granularity === 'month') {
+    const start = cambodiaParts(period.from)
+    const end = cambodiaParts(addUtcDays(period.to, -1))
+    let cursorYear = start.year
+    let cursorMonth = start.month
+    while (cursorYear < end.year || (cursorYear === end.year && cursorMonth <= end.month)) {
+      const date = cambodiaDate(cursorYear, cursorMonth, 1)
+      const key = overviewDateKey(date, 'month')
+      const row = chartByKey.get(key)
+      const sales = roundMoney(row?.sales || 0)
+      const bucketCogs = roundMoney(row?.cogs || 0)
+      chart.push({ key, label: overviewBucketLabel(date, 'month'), sales, purchases: roundMoney(row?.purchases || 0), grossProfit: roundMoney(sales - bucketCogs) })
+      cursorMonth += 1
+      if (cursorMonth > 11) {
+        cursorMonth = 0
+        cursorYear += 1
+      }
+    }
+  } else {
+    for (let index = 0; index < period.dayCount; index += 1) {
+      const date = addUtcDays(period.from, index)
+      const key = overviewDateKey(date, 'day')
+      const row = chartByKey.get(key)
+      const sales = roundMoney(row?.sales || 0)
+      const bucketCogs = roundMoney(row?.cogs || 0)
+      chart.push({ key, label: overviewBucketLabel(date, 'day'), sales, purchases: roundMoney(row?.purchases || 0), grossProfit: roundMoney(sales - bucketCogs) })
+    }
+  }
+
+  const pawnOutstandingRecords = pawnRecords.map((pawn) => ({
+    ...pawn,
+    outstanding: pawn.remainingPrincipal ?? pawn.principal,
+  }))
+  const pawnOutstanding = currencyTotals(pawnOutstandingRecords, 'outstanding')
+  const loanOutstanding = currencyTotals(loanRecords, 'remainingBalance')
+  const lowStockItems = inventoryRecords
+    .filter((item) => Number(item.quantity) <= Number(item.reorderLevel))
+    .sort((left, right) => Number(left.quantity) - Number(right.quantity) || left.name.localeCompare(right.name))
+  const inventory = inventoryRecords.reduce((summary, item) => {
+    const quantity = Math.max(0, Number(item.quantity) || 0)
+    summary.inStockCount += quantity
+    summary.productCount += 1
+    if (item.category === 'PHONE') summary.phoneCount += quantity
+    if (item.category === 'TABLET') summary.tabletCount += quantity
+    if (item.category === 'ACCESSORY') summary.accessoryCount += quantity
+    if (item.category === 'SPARE_PART') summary.sparePartCount += quantity
+    if (item.category === 'OTHER') summary.otherCount += quantity
+    summary.costValue = roundMoney(summary.costValue + quantity * (Number(item.buyPrice) || 0))
+    summary.retailValue = roundMoney(summary.retailValue + quantity * (Number(item.sellPrice) || 0))
+    return summary
+  }, {
+    inStockCount: 0,
+    productCount: 0,
+    phoneCount: 0,
+    tabletCount: 0,
+    accessoryCount: 0,
+    sparePartCount: 0,
+    otherCount: 0,
+    lowStockCount: lowStockItems.length,
+    costValue: 0,
+    retailValue: 0,
+  })
+
+  res.json({
+    period: {
+      key: period.key,
+      label: period.label,
+      from: period.from.toISOString(),
+      to: addUtcDays(period.to, -1).toISOString(),
+      granularity: period.granularity,
+    },
+    financial: {
+      salesRevenue,
+      purchases,
+      cogs,
+      grossProfit: roundMoney(salesRevenue - cogs),
+    },
+    pawn: {
+      active: pawnRecords.filter((pawn) => ['ACTIVE', 'RENEWED'].includes(pawn.status)).length,
+      dueSoon: pawnRecords.filter((pawn) => pawn.status === 'DUE_SOON').length,
+      overdue: pawnRecords.filter((pawn) => pawn.status === 'OVERDUE').length,
+      outstandingPrincipal: pawnOutstanding,
+    },
+    loans: {
+      active: loanRecords.filter((loan) => ['ACTIVE', 'PARTIALLY_PAID'].includes(loan.status)).length,
+      dueSoon: loanRecords.filter((loan) => loan.status === 'DUE_SOON').length,
+      overdue: loanRecords.filter((loan) => loan.status === 'OVERDUE').length,
+      outstandingBalance: loanOutstanding,
+    },
+    inventory: {
+      ...inventory,
+      lowStockItems: lowStockItems.slice(0, 5).map((item) => ({
+        _id: item._id,
+        sku: item.sku,
+        name: item.name,
+        category: item.category,
+        quantity: item.quantity,
+        reorderLevel: item.reorderLevel,
+      })),
+    },
+    chart,
+    recentTransactions,
+    recentActivity,
+  })
+}))
+
+router.get('/reports/sales', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
+  const period = resolveOverviewPeriod(req.query)
+  const paymentMethod = String(req.query.paymentMethod || 'ALL').toUpperCase()
+  const status = String(req.query.status || 'COMPLETED').toUpperCase()
+  const staffId = String(req.query.staff || 'ALL')
+  const paymentMethods = ['ALL', 'CASH', 'KHQR', 'BANK', 'CARD']
+  const statuses = ['COMPLETED', 'RETURNED', 'CANCELLED']
+
+  if (!paymentMethods.includes(paymentMethod)) throw requestError(400, 'Select a valid payment method')
+  if (!statuses.includes(status)) throw requestError(400, 'Select a valid sale status')
+  if (staffId !== 'ALL' && !mongoose.isValidObjectId(staffId)) throw requestError(400, 'Select a valid staff member')
+
+  const match = {
+    type: 'SELL',
+    status,
+    createdAt: { $gte: period.from, $lt: period.to },
+    ...(paymentMethod !== 'ALL' ? { paymentMethod } : {}),
+    ...(staffId !== 'ALL' ? { createdBy: new mongoose.Types.ObjectId(staffId) } : {}),
+  }
+  const saleCogsExpression = {
+    $sum: {
+      $map: {
+        input: { $ifNull: ['$items', []] },
+        as: 'item',
+        in: {
+          $multiply: [
+            { $ifNull: ['$$item.quantity', 0] },
+            { $ifNull: ['$$item.costPrice', 0] },
+          ],
+        },
+      },
+    },
+  }
+  const itemsSoldExpression = {
+    $sum: {
+      $map: {
+        input: { $ifNull: ['$items', []] },
+        as: 'item',
+        in: { $ifNull: ['$$item.quantity', 0] },
+      },
+    },
+  }
+  const accountingSign = status === 'RETURNED' ? -1 : status === 'CANCELLED' ? 0 : 1
+  const bucketFormat = period.granularity === 'hour'
+    ? '%Y-%m-%dT%H'
+    : period.granularity === 'month'
+      ? '%Y-%m'
+      : '%Y-%m-%d'
+
+  const [summaryRows, chartRows, transactionDocs, productRows, paymentRows, staff] = await Promise.all([
+    Trade.aggregate([
+      { $match: match },
+      { $project: { total: { $ifNull: ['$total', 0] }, cogs: saleCogsExpression, itemsSold: itemsSoldExpression } },
+      {
+        $group: {
+          _id: null,
+          salesRevenue: { $sum: { $multiply: ['$total', accountingSign] } },
+          cogs: { $sum: { $multiply: ['$cogs', accountingSign] } },
+          itemsSold: { $sum: { $multiply: ['$itemsSold', accountingSign] } },
+          transactions: { $sum: 1 },
+        },
+      },
+    ]),
+    Trade.aggregate([
+      { $match: match },
+      {
+        $project: {
+          bucket: { $dateToString: { format: bucketFormat, date: '$createdAt', timezone: overviewTimeZone } },
+          total: { $multiply: [{ $ifNull: ['$total', 0] }, accountingSign] },
+          cogs: { $multiply: [saleCogsExpression, accountingSign] },
+        },
+      },
+      { $group: { _id: '$bucket', sales: { $sum: '$total' }, cogs: { $sum: '$cogs' } } },
+      { $sort: { _id: 1 } },
+    ]),
+    Trade.find(match)
+      .populate('customer', 'name phone')
+      .populate('createdBy', 'name email role')
+      .sort({ createdAt: -1 })
+      .limit(500)
+      .lean(),
+    Trade.aggregate([
+      { $match: match },
+      { $unwind: '$items' },
+      {
+        $project: {
+          name: '$items.name',
+          quantity: { $multiply: [{ $ifNull: ['$items.quantity', 0] }, accountingSign] },
+          revenue: {
+            $multiply: [
+              {
+                $cond: [
+                  { $gt: ['$subtotal', 0] },
+                  {
+                    $multiply: [
+                      { $ifNull: ['$total', 0] },
+                      {
+                        $divide: [
+                          { $multiply: [{ $ifNull: ['$items.quantity', 0] }, { $ifNull: ['$items.unitPrice', 0] }] },
+                          '$subtotal',
+                        ],
+                      },
+                    ],
+                  },
+                  0,
+                ],
+              },
+              accountingSign,
+            ],
+          },
+          cogs: {
+            $multiply: [
+              { $ifNull: ['$items.quantity', 0] },
+              { $ifNull: ['$items.costPrice', 0] },
+              accountingSign,
+            ],
+          },
+        },
+      },
+      { $group: { _id: '$name', quantity: { $sum: '$quantity' }, revenue: { $sum: '$revenue' }, cogs: { $sum: '$cogs' } } },
+      { $addFields: { grossProfit: { $subtract: ['$revenue', '$cogs'] } } },
+      { $sort: { revenue: -1, quantity: -1 } },
+      { $limit: 8 },
+    ]),
+    Trade.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: '$paymentMethod',
+          amount: { $sum: { $multiply: [{ $ifNull: ['$total', 0] }, accountingSign] } },
+          transactions: { $sum: 1 },
+        },
+      },
+      { $sort: { amount: -1 } },
+    ]),
+    User.find({ role: { $in: ['OWNER', 'MANAGER', 'CASHIER'] } })
+      .select('name email role')
+      .sort({ name: 1 })
+      .lean(),
+  ])
+
+  const summaryRow = summaryRows[0] || {}
+  const salesRevenue = roundMoney(summaryRow.salesRevenue || 0)
+  const cogs = roundMoney(summaryRow.cogs || 0)
+  const transactionCount = Number(summaryRow.transactions) || 0
+  const chartByKey = new Map(chartRows.map((row) => [row._id, row]))
+  const chart = []
+
+  const appendChartPoint = (date) => {
+    const key = overviewDateKey(date, period.granularity)
+    const row = chartByKey.get(key)
+    const sales = roundMoney(row?.sales || 0)
+    const bucketCogs = roundMoney(row?.cogs || 0)
+    chart.push({ key, label: overviewBucketLabel(date, period.granularity), sales, cogs: bucketCogs, grossProfit: roundMoney(sales - bucketCogs) })
+  }
+
+  if (period.granularity === 'hour') {
+    for (let hour = 0; hour < 24; hour += 1) appendChartPoint(new Date(period.from.getTime() + hour * 3_600_000))
+  } else if (period.granularity === 'month') {
+    const start = cambodiaParts(period.from)
+    const end = cambodiaParts(addUtcDays(period.to, -1))
+    let cursorYear = start.year
+    let cursorMonth = start.month
+    while (cursorYear < end.year || (cursorYear === end.year && cursorMonth <= end.month)) {
+      appendChartPoint(cambodiaDate(cursorYear, cursorMonth, 1))
+      cursorMonth += 1
+      if (cursorMonth > 11) {
+        cursorMonth = 0
+        cursorYear += 1
+      }
+    }
+  } else {
+    for (let index = 0; index < period.dayCount; index += 1) appendChartPoint(addUtcDays(period.from, index))
+  }
+
+  const transactions = transactionDocs.map((trade) => {
+    const tradeCogs = roundMoney(trade.items.reduce((sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.costPrice) || 0), 0) * accountingSign)
+    const reportTotal = roundMoney((Number(trade.total) || 0) * accountingSign)
+    return {
+      ...trade,
+      reportTotal,
+      reportCost: tradeCogs,
+      reportGrossProfit: roundMoney(reportTotal - tradeCogs),
+      reportItems: trade.items.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0) * accountingSign,
+    }
+  })
+
+  res.json({
+    period: {
+      key: period.key,
+      label: period.label,
+      from: period.from.toISOString(),
+      to: addUtcDays(period.to, -1).toISOString(),
+      granularity: period.granularity,
+    },
+    filters: { paymentMethod, status, staff: staffId },
+    summary: {
+      salesRevenue,
+      cogs,
+      grossProfit: roundMoney(salesRevenue - cogs),
+      itemsSold: Number(summaryRow.itemsSold) || 0,
+      transactions: transactionCount,
+      averageSale: transactionCount > 0 ? roundMoney(salesRevenue / transactionCount) : 0,
+    },
+    chart,
+    transactions,
+    products: productRows.map((row) => ({
+      name: row._id,
+      quantity: Number(row.quantity) || 0,
+      revenue: roundMoney(row.revenue || 0),
+      cogs: roundMoney(row.cogs || 0),
+      grossProfit: roundMoney(row.grossProfit || 0),
+    })),
+    payments: paymentRows.map((row) => ({
+      method: row._id || 'OTHER',
+      amount: roundMoney(row.amount || 0),
+      transactions: Number(row.transactions) || 0,
+    })),
+    staff,
+    totalRecords: transactionCount,
+    limited: transactionCount > 500,
   })
 }))
 
