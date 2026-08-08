@@ -140,7 +140,7 @@ function pairingHash(code) {
   return createHmac('sha256', secret).update(`phoneflow-android-pairing:${code}`).digest('hex')
 }
 
-export async function createAndroidPairing({ userId, sessionId } = {}) {
+export async function createAndroidPairing({ userId, sessionId, twoFactorVerifiedAt = null } = {}) {
   const now = new Date()
   await AndroidPairing.deleteMany({ user: userId, usedAt: null })
 
@@ -152,6 +152,7 @@ export async function createAndroidPairing({ userId, sessionId } = {}) {
         codeHash: pairingHash(code),
         user: userId,
         createdBySessionId: sessionId,
+        twoFactorVerifiedAt: twoFactorVerifiedAt ? new Date(twoFactorVerifiedAt) : null,
         expiresAt,
       })
       return { code, expiresAt }
