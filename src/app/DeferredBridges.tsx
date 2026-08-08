@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 
 const DashboardPerformanceBridge = lazy(() => import('../features/dashboard/DashboardPerformanceBridge'))
+const InventoryInsightsBridge = lazy(() => import('../features/dashboard/InventoryInsightsBridge'))
 const OperationModalBridge = lazy(() => import('../features/operations/OperationModalBridge'))
 const CustomerWorkspaceBridge = lazy(() => import('../features/customers/CustomerWorkspaceBridge'))
 const ActivityReportBridge = lazy(() => import('../features/activity/ActivityReportBridge'))
@@ -65,7 +66,7 @@ export default function DeferredBridges() {
 
   return (
     <>
-      {dashboardReady && <Suspense fallback={null}><DashboardPerformanceBridge /></Suspense>}
+      {dashboardReady && <Suspense fallback={null}><DashboardPerformanceBridge /><InventoryInsightsBridge /></Suspense>}
       {operationsReady && <Suspense fallback={null}><OperationModalBridge /></Suspense>}
       {customersReady && <Suspense fallback={null}><CustomerWorkspaceBridge /></Suspense>}
       {activityReady && <Suspense fallback={null}><ActivityReportBridge /></Suspense>}
