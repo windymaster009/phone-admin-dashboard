@@ -5,6 +5,7 @@ import { InventoryItem, Trade } from './models.js'
 const DEMO_MARKER = '[PHONEFLOW_DASHBOARD_DEMO]'
 const INVENTORY_PREFIX = 'DEMO-DASH-SKU-'
 const TRADE_PREFIX = 'DEMO-DASH-TR-'
+const CAMBODIA_OFFSET_MS = 7 * 60 * 60 * 1000
 
 function seededRandom(seed = 20260809) {
   let value = seed >>> 0
@@ -21,10 +22,19 @@ const random = seededRandom()
 const pick = (values) => values[Math.floor(random() * values.length)]
 const roundMoney = (value) => Math.round(value * 100) / 100
 
+function cambodiaParts(now = new Date()) {
+  const shifted = new Date(now.getTime() + CAMBODIA_OFFSET_MS)
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth(),
+    day: shifted.getUTCDate(),
+  }
+}
+
 function demoDate(year, month, day, sequence = 0) {
-  const hour = 3 + ((sequence * 3) % 14)
+  const cambodiaHour = 10 + ((sequence * 3) % 9)
   const minute = (sequence * 17) % 60
-  return new Date(Date.UTC(year, month, day, hour, minute, 0))
+  return new Date(Date.UTC(year, month, day, cambodiaHour - 7, minute, 0))
 }
 
 function ensureAllowed() {
@@ -86,14 +96,11 @@ function inventoryFixtures() {
 
 function tradeRecord({ index, type, date, total, itemName }) {
   const paid = roundMoney(total)
-  const costPrice = type === 'SELL' ? roundMoney(total * (0.68 + random() * 0.12)) : roundMoney(total)
+  const costPrice = type === 'SELL' ? roundMoney(total * (0.68 + random() * 0.12)) : paid
   const paymentMethod = pick(['CASH', 'KHQR', 'BANK'])
-  return {
+  const record = {
     tradeNo: `${TRADE_PREFIX}${String(index).padStart(4, '0')}`,
     type,
-    sellerType: type === 'BUY' ? 'WALK_IN' : undefined,
-    sellerSnapshot: type === 'BUY' ? { name: `Demo walk-in seller ${index}` } : undefined,
-    purchaseDate: type === 'BUY' ? date : undefined,
     currency: 'USD',
     exchangeRate: 1,
     transactionSubtotal: paid,
@@ -120,19 +127,25 @@ function tradeRecord({ index, type, date, total, itemName }) {
     createdAt: date,
     updatedAt: date,
   }
+
+  if (type === 'BUY') {
+    record.sellerType = 'WALK_IN'
+    record.sellerSnapshot = { name: `Demo walk-in seller ${index}` }
+    record.purchaseDate = date
+  }
+
+  return record
 }
 
 function tradeFixtures(now = new Date()) {
-  const year = now.getFullYear()
-  const currentMonth = now.getMonth()
-  const currentDay = now.getDate()
+  const { year, month: currentMonth, day: currentDay } = cambodiaParts(now)
   const salesNames = ['Demo iPhone sale', 'Demo Samsung sale', 'Demo accessory bundle', 'Demo tablet sale', 'Demo used phone sale']
   const buyNames = ['Demo phone purchase', 'Demo supplier restock', 'Demo accessory restock', 'Demo tablet purchase']
   const trades = []
   let index = 1
 
   for (let month = 0; month < currentMonth; month += 1) {
-    const daysInMonth = new Date(year, month + 1, 0).getDate()
+    const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate()
     const transactionDays = [3, 7, 11, 16, 21, 26].filter((day) => day <= daysInMonth)
     transactionDays.forEach((day, sequence) => {
       const saleTotal = roundMoney(260 + random() * 1150)
@@ -167,7 +180,7 @@ async function seedDashboard() {
   const inventory = inventoryFixtures()
   const trades = tradeFixtures()
   await InventoryItem.insertMany(inventory)
-  await Trade.insertMany(trades)
+  await Trade.collection.insertMany(trades)
   return { removed, inventory: inventory.length, trades: trades.length }
 }
 
