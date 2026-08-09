@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { motion } from 'framer-motion'
-import { AlertTriangle, BadgeCheck, Boxes, HandCoins, KeyRound, ShieldCheck, Smartphone } from 'lucide-react'
+import { AlertTriangle, BadgeCheck, KeyRound, ShieldCheck, Smartphone } from 'lucide-react'
 import { ApiError, api, setToken, type SessionUser } from '../lib/api'
 
 function ErrorNotice({ message }: { message: string }) {
@@ -209,26 +209,10 @@ export default function AuthScreen({
         </motion.div>
 
         <div className="auth-layout">
-          <motion.aside
-            className="auth-overview"
-            initial={{ opacity: 0, x: -22 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.08, duration: 0.55, ease: 'easeOut' }}
-          >
-            <span className="eyebrow">Internal operations</span>
-            <h1>Everything your shop needs, in one place.</h1>
-            <p>Manage serialized stock, pawn contracts, purchases, sales and customer records from one secure workspace.</p>
-            <div className="auth-overview-list">
-              <span><HandCoins size={18} /><b>Pawn desk</b><small>Contracts and repayments</small></span>
-              <span><Boxes size={18} /><b>Live inventory</b><small>IMEI and stock tracking</small></span>
-              <span><BadgeCheck size={18} /><b>Protected access</b><small>Staff roles and audit history</small></span>
-            </div>
-          </motion.aside>
-
           <motion.section
             className="auth-card"
-            initial={{ opacity: 0, x: 22, scale: 0.98 }}
-            animate={{ opacity: 1, x: 0, scale: 1 }}
+            initial={{ opacity: 0, y: 14, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ delay: 0.12, duration: 0.55, ease: 'easeOut' }}
           >
             <header>

@@ -314,21 +314,35 @@ function SecurityWorkspace() {
       </section>
 
       <div className="security-grid">
-        <section className="card security-panel">
-          <div className="security-panel-title"><div><h2>Signed-in devices</h2><p>Revoking a session signs that device out on its next request.</p></div><button type="button" className="danger-button" disabled={busy || otherSessions.length === 0} onClick={() => void revokeOthers()}><LogOut size={15} /> Sign out others</button></div>
-          <div className="security-session-list">
-            {sessions.map((session) => <article key={session.id} className={session.revokedAt ? 'revoked' : ''}>
-              <span className="security-device-icon">{session.kind === 'ANDROID' ? <Smartphone size={19} /> : <Monitor size={19} />}</span>
-              <div className="security-session-info">
-                <div><strong>{session.deviceName}</strong>{session.current && <span className="security-current"><CheckCircle2 size={12} /> Current</span>}{session.twoFactorVerifiedAt && <span className="security-2fa-badge"><LockKeyhole size={11} /> 2FA</span>}{session.revokedAt && <span className="security-revoked">Revoked</span>}</div>
-                <span>{session.kind === 'ANDROID' ? 'PhoneFlow Android' : 'Web session'}{session.ipAddress ? ` · ${session.ipAddress}` : ''}</span>
-                <small>Last active {relativeTime(session.lastSeenAt)} · Created {dateTime(session.createdAt)}</small>
-              </div>
-              {!session.current && !session.revokedAt && <button type="button" className="icon-button danger" disabled={busy} onClick={() => void revokeSession(session)} aria-label={`Sign out ${session.deviceName}`}><Trash2 size={16} /></button>}
-            </article>)}
-            {sessions.length === 0 && <div className="security-empty">No sessions are recorded yet.</div>}
-          </div>
-        </section>
+        <div className="security-main-stack">
+          <section className="card security-panel">
+            <div className="security-panel-title"><div><h2>Signed-in devices</h2><p>Revoking a session signs that device out on its next request.</p></div><button type="button" className="danger-button" disabled={busy || otherSessions.length === 0} onClick={() => void revokeOthers()}><LogOut size={15} /> Sign out others</button></div>
+            <div className="security-session-list">
+              {sessions.map((session) => <article key={session.id} className={session.revokedAt ? 'revoked' : ''}>
+                <span className="security-device-icon">{session.kind === 'ANDROID' ? <Smartphone size={19} /> : <Monitor size={19} />}</span>
+                <div className="security-session-info">
+                  <div><strong>{session.deviceName}</strong>{session.current && <span className="security-current"><CheckCircle2 size={12} /> Current</span>}{session.twoFactorVerifiedAt && <span className="security-2fa-badge"><LockKeyhole size={11} /> 2FA</span>}{session.revokedAt && <span className="security-revoked">Revoked</span>}</div>
+                  <span>{session.kind === 'ANDROID' ? 'PhoneFlow Android' : 'Web session'}{session.ipAddress ? ` · ${session.ipAddress}` : ''}</span>
+                  <small>Last active {relativeTime(session.lastSeenAt)} · Created {dateTime(session.createdAt)}</small>
+                </div>
+                {!session.current && !session.revokedAt && <button type="button" className="icon-button danger" disabled={busy} onClick={() => void revokeSession(session)} aria-label={`Sign out ${session.deviceName}`}><Trash2 size={16} /></button>}
+              </article>)}
+              {sessions.length === 0 && <div className="security-empty">No sessions are recorded yet.</div>}
+            </div>
+          </section>
+
+          <section className="card security-panel security-events-panel">
+            <div className="security-panel-title"><div><h2>Recent security activity</h2><p>Sign-ins, 2FA, pairing, sign-outs, and session revocations for your account.</p></div></div>
+            <div className="security-event-list">
+              {events.map((event) => <article key={event._id}>
+                <span className={`security-event-dot ${event.action === 'LOGIN_FAILED' ? 'danger' : ''}`} />
+                <div><strong>{eventLabel(event.action)}</strong><span>{event.ipAddress || 'IP not recorded'}</span></div>
+                <time>{dateTime(event.createdAt)}</time>
+              </article>)}
+              {events.length === 0 && <div className="security-empty">No security activity has been recorded yet.</div>}
+            </div>
+          </section>
+        </div>
 
         <div className="security-side-stack">
           <section className="card security-panel security-two-factor-panel">
@@ -370,18 +384,6 @@ function SecurityWorkspace() {
           </section>
         </div>
       </div>
-
-      <section className="card security-panel security-events-panel">
-        <div className="security-panel-title"><div><h2>Recent security activity</h2><p>Sign-ins, 2FA, pairing, sign-outs, and session revocations for your account.</p></div></div>
-        <div className="security-event-list">
-          {events.map((event) => <article key={event._id}>
-            <span className={`security-event-dot ${event.action === 'LOGIN_FAILED' ? 'danger' : ''}`} />
-            <div><strong>{eventLabel(event.action)}</strong><span>{event.ipAddress || 'IP not recorded'}</span></div>
-            <time>{dateTime(event.createdAt)}</time>
-          </article>)}
-          {events.length === 0 && <div className="security-empty">No security activity has been recorded yet.</div>}
-        </div>
-      </section>
     </div>
   )
 }

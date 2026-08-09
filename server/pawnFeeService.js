@@ -31,7 +31,24 @@ export function validateDailyPawnFeeRate(value) {
     error.status = 400
     throw error
   }
-  return Math.round((rate + Number.EPSILON) * 100) / 100
+  return Math.round((rate + Number.EPSILON) * 100_000_000) / 100_000_000
+}
+
+export function dailyPawnFeeRateFromDueFee(principal, feeAtDue, termDays, currency = 'USD') {
+  const normalizedPrincipal = roundPawnAmount(Math.max(0, Number(principal) || 0), currency)
+  const normalizedFee = roundPawnAmount(Math.max(0, Number(feeAtDue) || 0), currency)
+  const normalizedTermDays = validatePawnTermDays(termDays)
+
+  if (normalizedPrincipal <= 0) {
+    if (normalizedFee > 0) {
+      const error = new Error('Enter a principal before setting the fee at due date')
+      error.status = 400
+      throw error
+    }
+    return 0
+  }
+
+  return validateDailyPawnFeeRate(normalizedFee / normalizedPrincipal / normalizedTermDays * 100)
 }
 
 export function validateMaximumPawnPrincipal(principal, maximum, currency = 'USD') {

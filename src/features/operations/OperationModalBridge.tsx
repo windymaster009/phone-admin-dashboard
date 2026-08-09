@@ -367,6 +367,7 @@ export default function OperationModalBridge() {
   const [pawnPrincipal, setPawnPrincipal] = useState('')
   const [pawnTermDays, setPawnTermDays] = useState<3 | 7 | 15 | 30>(7)
   const [pawnDailyFeeRate, setPawnDailyFeeRate] = useState('2.5')
+  const [pawnFeeAtDue, setPawnFeeAtDue] = useState('')
   const [pawnValuation, setPawnValuation] = useState<PawnValuationSnapshot | null>(null)
   const [pawnCreated, setPawnCreated] = useState<CreatedPawn | null>(null)
   const [pawnCurrency, setPawnCurrency] = useState<PawnCurrency>('USD')
@@ -480,7 +481,16 @@ export default function OperationModalBridge() {
   const maximumPawn = pawnValuation || !pawnAutoCalculate
     ? roundPawnAmount(Math.max(0, effectiveEstimatedValue * pawnPercentage / 100), pawnCurrency)
     : pawnAssessment.maximumPawn
-  const pawnTermFee = roundPawnAmount((Number(pawnPrincipal) || 0) * (Number(pawnDailyFeeRate) || 0) / 100 * pawnTermDays, pawnCurrency)
+  const pawnPrincipalAmount = Math.max(0, Number(pawnPrincipal) || 0)
+  const pawnAutomaticTermFee = roundPawnAmount(pawnPrincipalAmount * (Number(pawnDailyFeeRate) || 0) / 100 * pawnTermDays, pawnCurrency)
+  const pawnManualTermFee = roundPawnAmount(Math.max(0, Number(pawnFeeAtDue) || 0), pawnCurrency)
+  const pawnTermFee = pawnAutoCalculate ? pawnAutomaticTermFee : pawnManualTermFee
+  const pawnEffectiveDailyFeeRate = pawnAutoCalculate
+    ? Math.max(0, Number(pawnDailyFeeRate) || 0)
+    : pawnPrincipalAmount > 0
+      ? Math.round((pawnManualTermFee / pawnPrincipalAmount / pawnTermDays * 100 + Number.EPSILON) * 100_000_000) / 100_000_000
+      : 0
+  const pawnMaximumFeeAtDue = roundPawnAmount(pawnPrincipalAmount * pawnTermDays, pawnCurrency)
   const pawnTotalAtDue = roundPawnAmount((Number(pawnPrincipal) || 0) + pawnTermFee, pawnCurrency)
   const pawnCalculatedDueDate = useMemo(() => {
     const date = new Date(Date.now() + pawnTermDays * 86_400_000)
@@ -494,6 +504,17 @@ export default function OperationModalBridge() {
     }
     setPawnPrincipal(maximumPawn > 0 ? String(maximumPawn) : '')
   }, [kind, maximumPawn, pawnAutoCalculate, pawnStep, pawnValuation])
+
+  function togglePawnAutoCalculate() {
+    const nextValue = !pawnAutoCalculate
+    if (nextValue) {
+      if (pawnEffectiveDailyFeeRate > 0) setPawnDailyFeeRate(String(pawnEffectiveDailyFeeRate))
+    } else {
+      setPawnFeeAtDue(pawnAutomaticTermFee > 0 ? String(pawnAutomaticTermFee) : '')
+    }
+    savePawnAutoCalculatePreference(nextValue)
+  }
+
   const selectedPawnCustomer = customers.find((customer) => customer._id === pawnCustomerId)
   const pawnCustomerHasId = pawnCustomerMode === 'EXISTING'
     ? Boolean(selectedPawnCustomer?.nationalIdNumber)
@@ -692,6 +713,7 @@ export default function OperationModalBridge() {
     setPawnPrincipal('')
     setPawnTermDays(7)
     setPawnDailyFeeRate('2.5')
+    setPawnFeeAtDue('')
     setPawnValuation(null)
     setPawnCreated(null)
     setPawnCurrency('USD')
@@ -1157,6 +1179,7 @@ export default function OperationModalBridge() {
       : Math.round((amount / usdKhrRate) * 100) / 100
     setPawnMarketPrice(convert(pawnMarketPrice))
     setPawnRepairCost(convert(pawnRepairCost))
+    setPawnFeeAtDue((current) => current ? String(convert(Number(current))) : '')
     setPawnCurrency(nextCurrency)
   }
 
@@ -1224,7 +1247,8 @@ export default function OperationModalBridge() {
       currency: pawnCurrency,
       exchangeRate: pawnCurrency === 'KHR' ? usdKhrRate : 1,
       termDays: pawnTermDays,
-      dailyFeeRate: Number(pawnDailyFeeRate),
+      dailyFeeRate: pawnEffectiveDailyFeeRate,
+      feeAtDue: pawnAutoCalculate ? undefined : pawnManualTermFee,
       ownershipConfirmed: pawnOwnershipConfirmed,
       identificationVerified: Boolean(pawnCustomerHasId && pawnOwnershipConfirmed),
       notes: String(form.get('notes') || ''),
@@ -1537,7 +1561,7 @@ export default function OperationModalBridge() {
               {pawnValuation && <div className="pawn-imported-valuation"><CheckCircle2 size={18} /><div><strong>Standalone calculator offer imported</strong><small>Valuation {pawnValuation.id || 'draft'} · Values are locked to the verified assessment.</small></div><span>Maximum {pawnAmountText(maximumPawn, pawnCurrency)}</span></div>}
 
               <div className="pawn-inline-assessment">
-                <div className="pawn-assessment-heading"><div><span>1. Resale value and condition</span><small>Use a recent second-hand selling price and inspect the actual phone.</small></div>{pawnValuation ? <b>Imported</b> : <button type="button" className={`calculation-mode-toggle ${pawnAutoCalculate ? 'active' : ''}`} role="switch" aria-checked={pawnAutoCalculate} onClick={() => savePawnAutoCalculatePreference(!pawnAutoCalculate)}><span aria-hidden="true" /><strong>Auto calculate</strong><small>{pawnAutoCalculate ? 'On' : 'Off'}</small></button>}</div>
+                <div className="pawn-assessment-heading"><div><span>1. Resale value and condition</span><small>Use a recent second-hand selling price and inspect the actual phone.</small></div>{pawnValuation ? <b>Imported</b> : <button type="button" className={`calculation-mode-toggle ${pawnAutoCalculate ? 'active' : ''}`} role="switch" aria-checked={pawnAutoCalculate} onClick={togglePawnAutoCalculate}><span aria-hidden="true" /><strong>Auto calculate</strong><small>{pawnAutoCalculate ? 'On' : 'Off'}</small></button>}</div>
                 <div className="operation-form-grid pawn-assessment-grid">
                   <label>Valuation currency<select disabled={Boolean(pawnValuation)} value={pawnCurrency} onChange={(event) => changePawnCurrency(event.target.value as PawnCurrency)}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Cambodian Riel</option></select></label>
                   <label>Resale value ({pawnCurrency})<input type="number" min={pawnCurrency === 'KHR' ? 1 : 0.01} step={pawnCurrency === 'KHR' ? 100 : 0.01} required readOnly={Boolean(pawnValuation)} value={pawnMarketPrice || ''} onChange={(event) => setPawnMarketPrice(Math.max(0, Number(event.target.value)))} /></label>
@@ -1571,14 +1595,14 @@ export default function OperationModalBridge() {
               <div className="pawn-contract-fields-heading"><span>3. Contract terms</span><small>The principal may be reduced, but cannot exceed the calculated maximum.</small></div>
               <div className="operation-form-grid purchase-fields-grid pawn-contract-fields">
                 <label><span className="operation-label-heading">Principal ({pawnCurrency}) <small>Maximum {pawnAmountText(maximumPawn, pawnCurrency)}</small></span><input name="principal" type="number" min={pawnCurrency === 'KHR' ? 1 : 0.01} max={maximumPawn || undefined} step={pawnCurrency === 'KHR' ? 100 : 0.01} required value={pawnPrincipal} onChange={(event) => setPawnPrincipal(event.target.value)} /></label>
-                <label>Daily pawn fee rate<div className="device-unit-input"><input type="number" min="0" max="100" step="0.01" required value={pawnDailyFeeRate} onChange={(event) => setPawnDailyFeeRate(event.target.value)} aria-label="Daily pawn fee rate" /><span>% / day</span></div></label>
+                {pawnAutoCalculate ? <label>Daily pawn fee rate<div className="device-unit-input"><input type="number" min="0" max="100" step="0.01" required value={pawnDailyFeeRate} onChange={(event) => setPawnDailyFeeRate(event.target.value)} aria-label="Daily pawn fee rate" /><span>% / day</span></div></label> : <label><span className="operation-label-heading">Fee at due date ({pawnCurrency}) <small>Maximum {pawnAmountText(pawnMaximumFeeAtDue, pawnCurrency)}</small></span><input type="number" min="0" max={pawnMaximumFeeAtDue || undefined} step={pawnCurrency === 'KHR' ? 1 : 0.01} required value={pawnFeeAtDue} onChange={(event) => setPawnFeeAtDue(event.target.value)} aria-label="Fee at due date" placeholder={pawnPrincipalAmount > 0 ? 'Enter total fee' : 'Enter principal first'} /><small>Equivalent to {pawnEffectiveDailyFeeRate.toLocaleString(undefined, { maximumFractionDigits: 4 })}% per day.</small></label>}
                 <fieldset className="pawn-term-selector operation-wide"><legend>Pawn term</legend><div role="radiogroup" aria-label="Pawn term">{([{ days: 3, label: '3 Days' }, { days: 7, label: '1 Week' }, { days: 15, label: 'Half Month' }, { days: 30, label: '1 Month' }] as const).map((term) => <button key={term.days} type="button" role="radio" aria-checked={pawnTermDays === term.days} className={pawnTermDays === term.days ? 'active' : ''} onClick={() => setPawnTermDays(term.days)}><strong>{term.label}</strong><small>{term.days} days</small></button>)}</div></fieldset>
                 <label className="operation-wide">Contract notes <small className="optional-marker">Optional</small><textarea name="notes" rows={2} /></label>
               </div>
               <div className="pawn-contract-summary">
                 <div><span>Principal</span><strong>{pawnAmountText(Number(pawnPrincipal) || 0, pawnCurrency)}</strong></div>
                 <div><span>Calculated due date</span><strong>{pawnCalculatedDueDate}</strong></div>
-                <div><span>Fee at due date</span><strong>{pawnAmountText(pawnTermFee, pawnCurrency)}</strong></div>
+                <div><span>{pawnAutoCalculate ? 'Fee at due date' : 'Daily pawn fee rate'}</span><strong>{pawnAutoCalculate ? pawnAmountText(pawnTermFee, pawnCurrency) : `${pawnEffectiveDailyFeeRate.toLocaleString(undefined, { maximumFractionDigits: 4 })}% / day`}</strong></div>
                 <div><span>Total to redeem at due</span><strong>{pawnAmountText(pawnTotalAtDue, pawnCurrency)}</strong></div>
               </div>
             </section>

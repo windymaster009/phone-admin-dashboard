@@ -29,6 +29,7 @@ import {
   DAILY_PAWN_FEE_RATE,
   addPawnDays,
   calculateDailyPawnSummary,
+  dailyPawnFeeRateFromDueFee,
   isDailyPawn,
   materializeDailyPawnFee,
   pawnCurrencyCode,
@@ -1863,7 +1864,7 @@ router.get('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asy
 }))
 
 router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
-  const { customer, customerDetails, itemSnapshot, estimatedValue, pawnPercentage, principal, termDays, dailyFeeRate, identificationVerified, ownershipConfirmed, notes, valuationSnapshot } = req.body
+  const { customer, customerDetails, itemSnapshot, estimatedValue, pawnPercentage, principal, termDays, dailyFeeRate, feeAtDue, identificationVerified, ownershipConfirmed, notes, valuationSnapshot } = req.body
   if ((!customer && !customerDetails) || !itemSnapshot?.name) return res.status(400).json({ message: 'Customer and item are required' })
 
   let existingCustomer
@@ -1891,7 +1892,9 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
   const maxPrincipal = verifiedOffer?.maximumPawn ?? roundPawnCurrency(valuation * (percentage / 100), currency)
   const requestedPrincipal = pawnCurrencyAmount(principal, currency, 'Principal')
   const selectedTermDays = validatePawnTermDays(termDays)
-  const selectedDailyFeeRate = validateDailyPawnFeeRate(dailyFeeRate === undefined ? DAILY_PAWN_FEE_RATE : dailyFeeRate)
+  const selectedDailyFeeRate = verifiedOffer?.calculationMode === 'MANUAL' && feeAtDue !== undefined
+    ? dailyPawnFeeRateFromDueFee(requestedPrincipal, feeAtDue, selectedTermDays, currency)
+    : validateDailyPawnFeeRate(dailyFeeRate === undefined ? DAILY_PAWN_FEE_RATE : dailyFeeRate)
   const startDate = new Date()
   const maturityDate = addPawnDays(startDate, selectedTermDays)
   if (!/^\d{15}$/.test(clean(itemSnapshot.imei) || '')) throw requestError(400, 'IMEI must contain exactly 15 digits')

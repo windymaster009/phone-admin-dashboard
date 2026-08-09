@@ -1,1 +1,216 @@
-.security-summary{grid-template-columns:repeat(4,minmax(0,1fr))}.security-summary article:nth-child(4)>svg{color:#fcd34d;background:rgba(245,158,11,.14)}.security-side-stack{display:grid;align-self:start;gap:18px}.security-two-factor-panel{align-self:start}.security-2fa-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 6px;border-radius:999px;color:#c4b5fd;background:rgba(139,92,246,.14);font-size:.58rem;font-weight:800;white-space:nowrap}.security-2fa-warning{display:flex;align-items:flex-start;gap:9px;margin:4px 0;padding:12px;border:1px solid rgba(245,158,11,.28);border-radius:12px;color:#fde68a;background:rgba(120,53,15,.17);font-size:.68rem;line-height:1.5}.security-2fa-warning code{color:#fef3c7}.security-2fa-enabled{display:flex;align-items:flex-start;gap:11px;margin:4px 0 14px;padding:13px;border:1px solid rgba(16,185,129,.2);border-radius:13px;background:rgba(6,78,59,.12)}.security-2fa-enabled>svg{flex:0 0 auto;color:#34d399}.security-2fa-enabled>div{display:grid;gap:3px;min-width:0}.security-2fa-enabled strong{color:#d1fae5;font-size:.76rem}.security-2fa-enabled span,.security-2fa-enabled small{color:#94a3b8;font-size:.64rem;line-height:1.45}.security-code-field{display:grid;gap:6px;margin:12px 0;color:#94a3b8;font-size:.67rem;font-weight:700}.security-code-field input{width:100%;min-width:0;padding:10px 11px;border:1px solid rgba(148,163,184,.16);border-radius:10px;color:#e2e8f0;background:rgba(2,6,23,.44);font:inherit}.security-2fa-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px}.security-2fa-actions button{min-width:0}.security-2fa-setup{display:grid;gap:10px}.security-2fa-setup>p{margin:0;color:#94a3b8;font-size:.68rem;line-height:1.5}.security-secret{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:8px;padding:10px 11px;border:1px dashed rgba(139,92,246,.34);border-radius:11px;background:rgba(76,29,149,.12)}.security-secret code{overflow-wrap:anywhere;color:#ddd6fe;font-size:.7rem;letter-spacing:.08em}.security-recovery-box{display:grid;gap:10px;margin-top:14px;padding:13px;border:1px solid rgba(59,130,246,.22);border-radius:13px;background:rgba(30,64,175,.09)}.security-recovery-box>div:first-child{display:grid;gap:3px}.security-recovery-box strong{color:#dbeafe;font-size:.75rem}.security-recovery-box span{color:#94a3b8;font-size:.64rem;line-height:1.45}.security-recovery-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}.security-recovery-grid code{padding:7px;border-radius:8px;color:#bfdbfe;background:rgba(15,23,42,.56);font-size:.62rem;text-align:center}.security-code-field input:focus-visible,.security-secret button:focus-visible{outline:2px solid var(--primary);outline-offset:2px}@media(max-width:1200px){.security-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:680px){.security-summary{grid-template-columns:1fr}.security-2fa-actions,.security-recovery-grid{grid-template-columns:1fr}}:root[data-theme='light'] .security-2fa-warning{color:#92400e;background:#fffbeb}:root[data-theme='light'] .security-2fa-warning code{color:#78350f}:root[data-theme='light'] .security-2fa-enabled{background:#ecfdf5}:root[data-theme='light'] .security-2fa-enabled strong{color:#065f46}:root[data-theme='light'] .security-2fa-enabled span,:root[data-theme='light'] .security-2fa-enabled small,:root[data-theme='light'] .security-code-field,:root[data-theme='light'] .security-2fa-setup>p,:root[data-theme='light'] .security-recovery-box span{color:var(--muted)}:root[data-theme='light'] .security-code-field input{color:var(--text);background:var(--bg-soft);border-color:var(--border-strong)}:root[data-theme='light'] .security-secret{background:var(--primary-soft)}:root[data-theme='light'] .security-secret code{color:var(--text)}:root[data-theme='light'] .security-recovery-box{background:#eff6ff}:root[data-theme='light'] .security-recovery-box strong{color:#1e3a8a}:root[data-theme='light'] .security-recovery-grid code{color:#1e40af;background:#dbeafe}
+.security-two-factor-panel,
+.security-pairing-panel {
+  align-self: start;
+}
+
+.security-2fa-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: #c4b5fd;
+  background: color-mix(in srgb, #7c3aed 17%, transparent);
+  font-size: 9px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.security-2fa-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, #f59e0b 34%, transparent);
+  border-radius: 12px;
+  color: #fde68a;
+  background: color-mix(in srgb, #78350f 20%, var(--surface-solid));
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.security-2fa-warning svg {
+  flex: 0 0 auto;
+}
+
+.security-2fa-warning code {
+  overflow-wrap: anywhere;
+  color: #fef3c7;
+}
+
+.security-2fa-enabled {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, #10b981 25%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, #065f46 16%, transparent);
+}
+
+.security-2fa-enabled > svg {
+  flex: 0 0 auto;
+  color: #34d399;
+}
+
+.security-2fa-enabled > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.security-2fa-enabled strong {
+  color: #d1fae5;
+  font-size: 12px;
+}
+
+.security-2fa-enabled span,
+.security-2fa-enabled small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.security-code-field {
+  display: grid;
+  gap: 6px;
+  margin: 12px 0;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.security-code-field input {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  padding: 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--bg-soft);
+  font: inherit;
+}
+
+.security-2fa-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.security-2fa-actions button {
+  min-width: 0;
+}
+
+.security-2fa-setup {
+  display: grid;
+  gap: 10px;
+}
+
+.security-2fa-setup > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.security-secret {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 11px;
+  border: 1px dashed color-mix(in srgb, var(--primary) 38%, var(--border));
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--primary-soft) 62%, transparent);
+}
+
+.security-secret code {
+  overflow-wrap: anywhere;
+  color: #ddd6fe;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+}
+
+.security-recovery-box {
+  display: grid;
+  gap: 10px;
+  margin-top: 13px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, #3b82f6 26%, transparent);
+  border-radius: 12px;
+  background: color-mix(in srgb, #1e40af 13%, transparent);
+}
+
+.security-recovery-box > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.security-recovery-box strong {
+  color: #dbeafe;
+  font-size: 12px;
+}
+
+.security-recovery-box span {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.security-recovery-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.security-recovery-grid code {
+  padding: 7px;
+  border-radius: 8px;
+  color: #bfdbfe;
+  background: var(--bg-soft);
+  font-size: 10px;
+  text-align: center;
+}
+
+@media (max-width: 680px) {
+  .security-2fa-actions,
+  .security-recovery-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+:root[data-theme='light'] .security-2fa-warning {
+  color: #92400e;
+  background: #fffbeb;
+}
+
+:root[data-theme='light'] .security-2fa-warning code {
+  color: #78350f;
+}
+
+:root[data-theme='light'] .security-2fa-enabled {
+  background: #ecfdf5;
+}
+
+:root[data-theme='light'] .security-2fa-enabled strong {
+  color: #065f46;
+}
+
+:root[data-theme='light'] .security-secret code {
+  color: var(--text);
+}
+
+:root[data-theme='light'] .security-recovery-box {
+  background: #eff6ff;
+}
+
+:root[data-theme='light'] .security-recovery-box strong {
+  color: #1e3a8a;
+}
+
+:root[data-theme='light'] .security-recovery-grid code {
+  color: #1e40af;
+  background: #dbeafe;
+}

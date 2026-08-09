@@ -5,6 +5,7 @@ import {
   addPawnDays,
   calculateDailyPawnSummary,
   calculatePawnFee,
+  dailyPawnFeeRateFromDueFee,
   validateMaximumPawnPrincipal,
   validateDailyPawnFeeRate,
 } from './pawnFeeService.js'
@@ -21,6 +22,13 @@ test('validates an owner-entered daily fee rate', () => {
   assert.equal(validateDailyPawnFeeRate('3.25'), 3.25)
   assert.throws(() => validateDailyPawnFeeRate(-1), /between 0 and 100/)
   assert.throws(() => validateDailyPawnFeeRate(101), /between 0 and 100/)
+})
+
+test('derives the daily rate from an owner-entered fee at due date', () => {
+  const rate = dailyPawnFeeRateFromDueFee(100, 10, 7, 'USD')
+  assert.equal(rate, 1.42857143)
+  assert.equal(calculatePawnFee(100, 7, 'USD', rate), 10)
+  assert.throws(() => dailyPawnFeeRateFromDueFee(0, 10, 7, 'USD'), /principal/)
 })
 
 test('enforces the valuation maximum while allowing a smaller principal', () => {
