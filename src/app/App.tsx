@@ -420,6 +420,42 @@ type PurchaseReportData = {
   limited: boolean
 }
 
+type OperationalReportKind = 'inventory' | 'pawns' | 'loans' | 'payments' | 'activity'
+
+type OperationalReportData = {
+  title: string
+  description: string
+  meta: {
+    currency?: 'USD' | 'KHR'
+    period?: { key: string; label: string; from: string; to: string }
+    totalRecords: number
+    limited: boolean
+  }
+  filters: Record<string, string>
+  summary: Array<{
+    label: string
+    value: number
+    format: 'currency' | 'number'
+    detail: string
+    tone: string
+  }>
+  breakdowns: Array<{
+    title: string
+    description: string
+    format: 'currency' | 'number'
+    rows: Array<{ label: string; value: number; count: number }>
+  }>
+  columns: Array<{
+    key: string
+    label: string
+    format?: 'currency' | 'number' | 'date' | 'dateTime' | 'status'
+  }>
+  rows: Array<Record<string, string | number | null | undefined>>
+  staff?: Array<{ _id: string; name: string; email?: string; role?: string }>
+  filterOptions?: { actions?: string[]; entities?: string[] }
+  notes?: string[]
+}
+
 const navGroups: { label: string; items: NavItem[] }[] = [
   {
     label: 'Overview',
@@ -2289,7 +2325,7 @@ function ReportLanding({ navigate }: { navigate: (path: string) => void }) {
         {reportSections.map(({ slug, title, description, icon: Icon, tone }) => (
           <button type="button" className="surface-card report-hub-card" key={slug} onClick={() => navigate(`/reports/${slug}`)}>
             <span className={`metric-icon tone-${tone}`}><Icon size={21} /></span>
-            <span className="report-hub-copy"><strong>{title}</strong><small>{description}</small>{['sales', 'purchases'].includes(slug) ? <em>Available now</em> : <em>Planned</em>}</span>
+            <span className="report-hub-copy"><strong>{title}</strong><small>{description}</small></span>
             <ArrowUpRight size={18} />
           </button>
         ))}
@@ -2305,7 +2341,7 @@ function UpcomingReportView({ slug, navigate }: { slug: string; navigate: (path:
   return (
     <div className="reports-placeholder-page">
       <SectionHeader eyebrow="Reports & analytics" title={`${report?.title || 'Report'} Report`} description={report?.description || 'This report is planned for a later step.'} action={<button className="ghost-button" onClick={() => navigate('/reports')}>Back to reports</button>} />
-      <section className="surface-card report-placeholder-card"><span className="metric-icon tone-violet"><Icon size={24} /></span><h3>Planned report</h3><p>Sales and Purchases reports are available now. This page is reserved so its URL is ready without adding unverified calculations.</p></section>
+      <section className="surface-card report-placeholder-card"><span className="metric-icon tone-violet"><Icon size={24} /></span><h3>Report not found</h3><p>Return to Reports & Analytics and choose one of the available report cards.</p></section>
     </div>
   )
 }
@@ -2516,6 +2552,149 @@ function PurchasesReportView({ navigate }: { navigate: (path: string) => void })
   )
 }
 
+const operationalReportIcons: LucideIcon[] = [Boxes, Banknote, WalletCards, Package, FileText, BarChart3]
+
+function OperationalReportView({ kind, navigate }: { kind: OperationalReportKind; navigate: (path: string) => void }) {
+  const now = new Date()
+  const todayInput = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const [period, setPeriod] = useState<BusinessOverviewPeriod | 'all_time'>(['pawns', 'loans'].includes(kind) ? 'all_time' : 'this_month')
+  const [customFrom, setCustomFrom] = useState(`${todayInput.slice(0, 8)}01`)
+  const [customTo, setCustomTo] = useState(todayInput)
+  const [currencyCode, setCurrencyCode] = useState<'USD' | 'KHR'>('USD')
+  const [status, setStatus] = useState('ALL')
+  const [staff, setStaff] = useState('ALL')
+  const [category, setCategory] = useState('ALL')
+  const [source, setSource] = useState('ALL')
+  const [stock, setStock] = useState('ALL')
+  const [method, setMethod] = useState('ALL')
+  const [direction, setDirection] = useState('ALL')
+  const [action, setAction] = useState('ALL')
+  const [entity, setEntity] = useState('ALL')
+  const [data, setData] = useState<OperationalReportData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (period === 'custom' && (!customFrom || !customTo || customFrom > customTo)) return
+    const query = new URLSearchParams()
+    if (kind === 'inventory') {
+      query.set('category', category)
+      query.set('status', status)
+      query.set('source', source)
+      query.set('stock', stock)
+    } else {
+      query.set('period', period)
+      if (period === 'custom') {
+        query.set('from', customFrom)
+        query.set('to', customTo)
+      }
+      if (['pawns', 'loans'].includes(kind)) {
+        query.set('currency', currencyCode)
+        query.set('status', status)
+        query.set('staff', staff)
+      }
+      if (kind === 'payments') {
+        query.set('currency', currencyCode)
+        query.set('method', method)
+        query.set('direction', direction)
+      }
+      if (kind === 'activity') {
+        query.set('action', action)
+        query.set('entity', entity)
+        query.set('staff', staff)
+      }
+    }
+    setLoading(true)
+    setError('')
+    api<OperationalReportData>(`/reports/${kind}?${query.toString()}`)
+      .then(setData)
+      .catch((reason: Error) => setError(reason.message))
+      .finally(() => setLoading(false))
+  }, [kind, period, customFrom, customTo, currencyCode, status, staff, category, source, stock, method, direction, action, entity])
+
+  const periodOptions: Array<{ value: BusinessOverviewPeriod | 'all_time'; label: string }> = [
+    { value: 'all_time', label: 'All Time' }, { value: 'today', label: 'Today' }, { value: 'yesterday', label: 'Yesterday' },
+    { value: 'last_7_days', label: '7 Days' }, { value: 'last_30_days', label: '30 Days' },
+    { value: 'this_month', label: 'This Month' }, { value: 'last_month', label: 'Last Month' },
+    { value: 'this_year', label: 'This Year' }, { value: 'custom', label: 'Custom' },
+  ]
+  const statusOptions: Record<'inventory' | 'pawns' | 'loans', string[]> = {
+    inventory: ['ALL', 'IN_STOCK', 'RESERVED', 'SOLD', 'PAWNED', 'REPAIR', 'ARCHIVED'],
+    pawns: ['ALL', 'ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED', 'REDEEMED', 'FORFEITED', 'CANCELLED'],
+    loans: ['ALL', 'ACTIVE', 'DUE_SOON', 'OVERDUE', 'PARTIALLY_PAID', 'PAID', 'CANCELLED'],
+  }
+  const valueText = (value: number, format: 'currency' | 'number') => format === 'currency'
+    ? pawnMoney(value, data?.meta.currency || 'USD')
+    : Number(value || 0).toLocaleString()
+  const cellContent = (row: Record<string, string | number | null | undefined>, column: OperationalReportData['columns'][number]) => {
+    const value = row[column.key]
+    if (column.format === 'status') return <StatusBadge status={String(value || 'Unknown')} />
+    if (column.format === 'currency') return <strong>{pawnMoney(Number(value || 0), data?.meta.currency || 'USD')}</strong>
+    if (column.format === 'number') return Number(value || 0).toLocaleString()
+    if (column.format === 'dateTime') return value ? new Date(String(value)).toLocaleString() : '—'
+    if (column.format === 'date') return value ? dateText(String(value)) : '—'
+    return String(value ?? '—')
+  }
+
+  if (loading && !data) {
+    return <><SectionHeader eyebrow="Reports & analytics" title={`${titleStatus(kind)} Report`} description="Calculating verified report totals and operational details." /><section className="surface-card"><LoadingState label={`Loading ${kind} report`} detail="Reading current records and audit history…" /></section></>
+  }
+
+  return (
+    <div className="sales-report-page operational-report-page">
+      <SectionHeader eyebrow="Reports & analytics" title={data?.title || `${titleStatus(kind)} Report`} description={data?.description || 'Operational reporting.'} action={<button className="ghost-button" onClick={() => navigate('/reports')}>Back to reports</button>} />
+
+      <section className="surface-card sales-report-filters operational-report-filters" aria-label={`${kind} report filters`}>
+        {kind !== 'inventory' && <label><span>Period</span><select value={period} onChange={(event) => setPeriod(event.target.value as BusinessOverviewPeriod | 'all_time')}>{periodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>}
+        {period === 'custom' && kind !== 'inventory' && <><label><span>From</span><input type="date" value={customFrom} max={customTo || undefined} onChange={(event) => setCustomFrom(event.target.value)} /></label><label><span>To</span><input type="date" value={customTo} min={customFrom || undefined} onChange={(event) => setCustomTo(event.target.value)} /></label></>}
+        {kind === 'inventory' && <>
+          <label><span>Category</span><select value={category} onChange={(event) => setCategory(event.target.value)}>{['ALL', 'PHONE', 'TABLET', 'ACCESSORY', 'SPARE_PART', 'OTHER'].map((value) => <option key={value} value={value}>{value === 'ALL' ? 'All categories' : titleStatus(value)}</option>)}</select></label>
+          <label><span>Status</span><select value={status} onChange={(event) => setStatus(event.target.value)}>{statusOptions.inventory.map((value) => <option key={value} value={value}>{value === 'ALL' ? 'All statuses' : titleStatus(value)}</option>)}</select></label>
+          <label><span>Source</span><select value={source} onChange={(event) => setSource(event.target.value)}>{['ALL', 'SUPPLIER', 'CUSTOMER', 'PAWN_FORFEIT', 'OTHER'].map((value) => <option key={value} value={value}>{value === 'ALL' ? 'All sources' : titleStatus(value)}</option>)}</select></label>
+          <label><span>Stock level</span><select value={stock} onChange={(event) => setStock(event.target.value)}><option value="ALL">All stock levels</option><option value="AVAILABLE">Available</option><option value="LOW">Low stock</option><option value="OUT">Out of stock</option></select></label>
+        </>}
+        {['pawns', 'loans', 'payments'].includes(kind) && <label><span>Currency</span><select value={currencyCode} onChange={(event) => setCurrencyCode(event.target.value as 'USD' | 'KHR')}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Cambodian Riel</option></select></label>}
+        {['pawns', 'loans'].includes(kind) && <>
+          <label><span>Status</span><select value={status} onChange={(event) => setStatus(event.target.value)}>{statusOptions[kind as 'pawns' | 'loans'].map((value) => <option key={value} value={value}>{value === 'ALL' ? 'All statuses' : titleStatus(value)}</option>)}</select></label>
+          <label><span>Staff</span><select value={staff} onChange={(event) => setStaff(event.target.value)}><option value="ALL">All staff</option>{(data?.staff || []).map((person) => <option key={person._id} value={person._id}>{person.name}</option>)}</select></label>
+        </>}
+        {kind === 'payments' && <>
+          <label><span>Payment method</span><select value={method} onChange={(event) => setMethod(event.target.value)}>{['ALL', 'CASH', 'KHQR', 'BANK', 'CARD', 'OTHER'].map((value) => <option key={value} value={value}>{value === 'ALL' ? 'All methods' : titleStatus(value)}</option>)}</select></label>
+          <label><span>Direction</span><select value={direction} onChange={(event) => setDirection(event.target.value)}><option value="ALL">Money in & out</option><option value="IN">Money in</option><option value="OUT">Money out</option></select></label>
+        </>}
+        {kind === 'activity' && <>
+          <label><span>Action</span><select value={action} onChange={(event) => setAction(event.target.value)}><option value="ALL">All actions</option>{(data?.filterOptions?.actions || []).map((value) => <option key={value} value={value}>{titleStatus(value)}</option>)}</select></label>
+          <label><span>Entity</span><select value={entity} onChange={(event) => setEntity(event.target.value)}><option value="ALL">All entities</option>{(data?.filterOptions?.entities || []).map((value) => <option key={value} value={value}>{titleStatus(value)}</option>)}</select></label>
+          <label><span>Staff</span><select value={staff} onChange={(event) => setStaff(event.target.value)}><option value="ALL">All staff</option>{(data?.staff || []).map((person) => <option key={person._id} value={person._id}>{person.name}</option>)}</select></label>
+        </>}
+        {loading && <RefreshCcw className="overview-refreshing" size={17} aria-label="Refreshing report" />}
+      </section>
+      {error && <p className="overview-error"><AlertTriangle size={16} />{error}</p>}
+
+      <section className="sales-report-kpis" aria-label={`${kind} report summary`}>
+        {(data?.summary || []).map((item, index) => {
+          const Icon = operationalReportIcons[index % operationalReportIcons.length]
+          return <article className="surface-card sales-report-kpi" key={item.label}><span className={`metric-icon tone-${item.tone}`}><Icon size={20} /></span><div><p>{item.label}</p><h3>{valueText(item.value, item.format)}</h3><small>{item.detail}</small></div></article>
+        })}
+      </section>
+
+      <section className="operational-breakdown-grid">
+        {(data?.breakdowns || []).map((section) => {
+          const maximum = Math.max(1, ...section.rows.map((row) => Math.abs(row.value)))
+          return <article className="surface-card payment-breakdown-card" key={section.title}><div className="card-heading"><div><span className="eyebrow">Breakdown</span><h3>{section.title}</h3><p>{section.description}</p></div></div><div className="payment-breakdown-list">{section.rows.map((row) => <div key={row.label}><header><span>{titleStatus(row.label)}<small>{row.count} records</small></span><strong>{valueText(row.value, section.format)}</strong></header><i><span style={{ width: `${Math.max(3, (Math.abs(row.value) / maximum) * 100)}%` }} /></i></div>)}{section.rows.length === 0 && <p>No breakdown data matches these filters.</p>}</div></article>
+        })}
+      </section>
+
+      <section className="surface-card table-card operational-report-table-card">
+        <div className="card-heading table-heading"><div><span className="eyebrow">Report detail</span><h3>{data?.title || 'Report'} Records</h3><p>{data?.meta.limited ? `Showing the latest 500 of ${data.meta.totalRecords} records.` : `${data?.meta.totalRecords || 0} matching records.`}</p></div></div>
+        <div className="table-scroll operational-report-desktop-table"><table><thead><tr>{(data?.columns || []).map((column) => <th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{(data?.rows || []).map((row, rowIndex) => <tr key={String(row.id || rowIndex)}>{data?.columns.map((column) => <td key={column.key}>{cellContent(row, column)}</td>)}</tr>)}{data?.rows.length === 0 && <tr><td colSpan={data?.columns.length || 1}>No records match these filters.</td></tr>}</tbody></table></div>
+        <div className="operational-report-mobile-list">{(data?.rows || []).map((row, rowIndex) => <article key={String(row.id || rowIndex)}><header><strong>{String(row.reference || row.name || row.sku || `Record ${rowIndex + 1}`)}</strong>{row.status && <StatusBadge status={String(row.status)} />}</header><div>{data?.columns.slice(0, 6).map((column) => <span key={column.key}>{column.label}<strong>{cellContent(row, column)}</strong></span>)}</div></article>)}{data?.rows.length === 0 && <p className="mobile-record-empty">No records match these filters.</p>}</div>
+      </section>
+      {(data?.notes || []).map((note) => <p className="report-hub-note" key={note}><AlertTriangle size={15} />{note}</p>)}
+    </div>
+  )
+}
+
 function ReportsView() {
   const [path, setPath] = useState(window.location.pathname.replace(/\/+$/, '') || '/reports')
 
@@ -2538,6 +2717,11 @@ function ReportsView() {
 
   if (path === '/reports/sales') return <SalesReportView navigate={navigate} />
   if (path === '/reports/purchases') return <PurchasesReportView navigate={navigate} />
+  if (path === '/reports/inventory') return <OperationalReportView key={path} kind="inventory" navigate={navigate} />
+  if (path === '/reports/pawns') return <OperationalReportView key={path} kind="pawns" navigate={navigate} />
+  if (path === '/reports/loans') return <OperationalReportView key={path} kind="loans" navigate={navigate} />
+  if (path === '/reports/payments') return <OperationalReportView key={path} kind="payments" navigate={navigate} />
+  if (path === '/reports/activity') return <OperationalReportView key={path} kind="activity" navigate={navigate} />
   const slug = path.startsWith('/reports/') ? path.slice('/reports/'.length) : ''
   if (slug && reportSections.some((item) => item.slug === slug)) return <UpcomingReportView slug={slug} navigate={navigate} />
   return <ReportLanding navigate={navigate} />
@@ -2720,7 +2904,11 @@ function App({
     setMobileOpen(false)
     setProfileOpen(false)
     const nextPath = viewPaths[key]
-    if (window.location.pathname !== nextPath) window.history.pushState({ view: key }, '', nextPath)
+    if (window.location.pathname !== nextPath) {
+      const navigationState = { view: key }
+      window.history.pushState(navigationState, '', nextPath)
+      window.dispatchEvent(new PopStateEvent('popstate', { state: navigationState }))
+    }
   }
 
   useEffect(() => {

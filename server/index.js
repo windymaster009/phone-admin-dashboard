@@ -15,6 +15,7 @@ import customerDocumentRouter from './documentRoutes.js'
 import loanDashboardRouter from './loanDashboardRoutes.js'
 import loanRouter from './loanRoutes.js'
 import receiptRouter from './receiptRoutes.js'
+import reportRouter from './reportRoutes.js'
 import router from './routes.js'
 
 const app = express()
@@ -167,6 +168,7 @@ app.use('/api/customer-documents', customerDocumentRouter)
 app.use('/api/loan-dashboard', loanDashboardRouter)
 app.use('/api/loans', loanRouter)
 app.use('/api/receipts', receiptRouter)
+app.use('/api/reports', reportRouter)
 app.use('/api', router)
 
 if (process.env.NODE_ENV === 'production') {
