@@ -10,6 +10,7 @@ const LoanDashboardBridge = lazy(() => import('../features/loans/LoanDashboardBr
 const LoanRouteCompatibility = lazy(() => import('../features/loans/LoanRouteCompatibility'))
 const ReceiptCenterBridge = lazy(() => import('../features/receipts/ReceiptCenterBridge'))
 const SecureDocumentsBridge = lazy(() => import('../features/documents/SecureDocumentsBridge'))
+const SecurityWorkspaceBridge = lazy(() => import('../features/security/SecurityWorkspaceBridge'))
 
 export default function DeferredBridges() {
   const [dashboardReady, setDashboardReady] = useState(false)
@@ -19,6 +20,7 @@ export default function DeferredBridges() {
   const [loansReady, setLoansReady] = useState(false)
   const [receiptsReady, setReceiptsReady] = useState(false)
   const [documentsReady, setDocumentsReady] = useState(false)
+  const [securityReady, setSecurityReady] = useState(false)
 
   useEffect(() => {
     let dashboardTimer = 0
@@ -28,6 +30,7 @@ export default function DeferredBridges() {
     let loanTimer = 0
     let receiptTimer = 0
     let documentTimer = 0
+    let securityTimer = 0
 
     const frame = window.requestAnimationFrame(() => {
       const dashboardPath = ['/', '/admin', '/dashboard'].includes(window.location.pathname)
@@ -49,6 +52,10 @@ export default function DeferredBridges() {
         () => setDocumentsReady(true),
         window.location.pathname === '/secure-documents' ? 0 : 800,
       )
+      securityTimer = window.setTimeout(
+        () => setSecurityReady(true),
+        window.location.pathname === '/security' ? 0 : 700,
+      )
       activityTimer = window.setTimeout(() => setActivityReady(true), 900)
     })
 
@@ -61,6 +68,7 @@ export default function DeferredBridges() {
       window.clearTimeout(loanTimer)
       window.clearTimeout(receiptTimer)
       window.clearTimeout(documentTimer)
+      window.clearTimeout(securityTimer)
     }
   }, [])
 
@@ -73,6 +81,7 @@ export default function DeferredBridges() {
       {loansReady && <Suspense fallback={null}><LoanWorkspaceBridge /><LoanDashboardBridge /><LoanRouteCompatibility /></Suspense>}
       {receiptsReady && <Suspense fallback={null}><ReceiptCenterBridge /></Suspense>}
       {documentsReady && <Suspense fallback={null}><SecureDocumentsBridge /></Suspense>}
+      {securityReady && <Suspense fallback={null}><SecurityWorkspaceBridge /></Suspense>}
     </>
   )
 }

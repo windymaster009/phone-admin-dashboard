@@ -17,6 +17,7 @@ import loanRouter from './loanRoutes.js'
 import receiptRouter from './receiptRoutes.js'
 import reportRouter from './reportRoutes.js'
 import router from './routes.js'
+import sessionSecurityRouter from './sessionSecurityRoutes.js'
 
 const app = express()
 const port = Number(process.env.PORT || 5000)
@@ -163,6 +164,9 @@ app.get('/api/health', async (_req, res) => {
   })
 })
 
+// Hardened authentication and session endpoints intentionally run before the
+// legacy router so old stateless/Android auto-login handlers are unreachable.
+app.use('/api', sessionSecurityRouter)
 app.use('/api/backups', backupRouter)
 app.use('/api/customer-documents', customerDocumentRouter)
 app.use('/api/loan-dashboard', loanDashboardRouter)

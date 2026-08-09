@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken'
 import { ActivityLog, User } from './models.js'
+import { findActiveSession, sessionDurationMs, touchSession } from './sessionService.js'
 
 export const SESSION_COOKIE_NAME = 'phoneflow_session'
 
@@ -12,22 +13,22 @@ function cookieValue(req, name) {
   return null
 }
 
-function sessionMaxAge() {
-  const raw = String(process.env.JWT_EXPIRES_IN || '12h').trim().toLowerCase()
-  const match = /^(\d+)(m|h|d)$/.exec(raw)
-  if (!match) return 12 * 60 * 60 * 1000
-  const amount = Number(match[1])
-  const multiplier = match[2] === 'm' ? 60_000 : match[2] === 'd' ? 86_400_000 : 3_600_000
-  return amount * multiplier
+export function getRequestSessionToken(req) {
+  const header = req.headers.authorization || ''
+  const bearerToken = header.startsWith('Bearer ') ? header.slice(7) : null
+  const cookieToken = cookieValue(req, SESSION_COOKIE_NAME)
+  return { bearerToken, cookieToken, token: bearerToken || cookieToken }
 }
 
-export function setSessionCookie(res, token) {
+export function setSessionCookie(res, token, { expiresAt } = {}) {
+  const remainingMs = expiresAt ? Math.max(1_000, new Date(expiresAt).getTime() - Date.now()) : sessionDurationMs()
   res.cookie(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
     path: '/',
-    maxAge: sessionMaxAge(),
+    maxAge: remainingMs,
+    priority: 'high',
   })
 }
 
@@ -37,24 +38,26 @@ export function clearSessionCookie(res) {
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'strict',
     path: '/',
+    priority: 'high',
   })
 }
 
-export function signToken(user) {
+export function signToken(user, { sessionId, expiresAt } = {}) {
+  if (!sessionId) throw new Error('A server-side session ID is required to sign a PhoneFlow session')
+  const remainingSeconds = expiresAt
+    ? Math.max(1, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 1000))
+    : Math.ceil(sessionDurationMs() / 1000)
+
   return jwt.sign(
-    { sub: user._id.toString(), role: user.role, name: user.name },
+    { sub: user._id.toString(), sid: sessionId },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '12h' },
+    { expiresIn: remainingSeconds },
   )
 }
 
 export async function requireAuth(req, res, next) {
   try {
-    const header = req.headers.authorization || ''
-    const bearerToken = header.startsWith('Bearer ') ? header.slice(7) : null
-    const cookieToken = cookieValue(req, SESSION_COOKIE_NAME)
-    const token = bearerToken || cookieToken
-
+    const { bearerToken, cookieToken, token } = getRequestSessionToken(req)
     if (!token) return res.status(401).json({ message: 'Authentication required' })
 
     const unsafeMethod = !['GET', 'HEAD', 'OPTIONS'].includes(req.method)
@@ -63,13 +66,27 @@ export async function requireAuth(req, res, next) {
     }
 
     const payload = jwt.verify(token, process.env.JWT_SECRET)
-    const user = await User.findById(payload.sub).select('-passwordHash')
+    if (!payload?.sub || !payload?.sid) {
+      clearSessionCookie(res)
+      return res.status(401).json({ message: 'Your previous session has expired. Sign in again.' })
+    }
 
-    if (!user || !user.active) return res.status(401).json({ message: 'Account is unavailable' })
+    const [session, user] = await Promise.all([
+      findActiveSession(payload.sid, payload.sub),
+      User.findById(payload.sub).select('-passwordHash'),
+    ])
+
+    if (!session || !user || !user.active) {
+      clearSessionCookie(res)
+      return res.status(401).json({ message: 'Session is no longer active' })
+    }
 
     req.user = user
+    req.authSession = session
+    touchSession(session, req)
     next()
   } catch {
+    clearSessionCookie(res)
     return res.status(401).json({ message: 'Invalid or expired session' })
   }
 }
