@@ -44,6 +44,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { api, type SessionUser } from '../lib/api'
+import { getPawnAutoCalculatePreference, PAWN_AUTO_CALCULATE_EVENT, savePawnAutoCalculatePreference } from '../lib/pawnPreferences'
 import LoadingState from '../components/LoadingState'
 import { printInventoryLabel } from '../features/inventory/barcode'
 import BackupStatusBridge from '../features/backup/BackupStatusBridge'
@@ -1647,10 +1648,8 @@ function InventoryView() {
               <button className="inventory-product-card" key={item._id} onClick={() => setSelectedItem(item)}>
                 <InventoryPhoto item={item} size="large" />
                 <div>
-                  <span>{categoryMeta[item.category]?.label || titleStatus(item.category)}</span>
                   <strong>{item.name}</strong>
                   <small>{inventorySubtitle(item)}</small>
-                  <p>{inventoryDetails(item) || 'No extra information recorded'}</p>
                 </div>
                 <footer><strong>{money.format(item.sellPrice || item.buyPrice)}</strong><small>{item.quantity} in stock</small></footer>
               </button>
@@ -1782,6 +1781,7 @@ function InventoryView() {
 }
 
 function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
+  const [autoCalculate, setAutoCalculate] = useState(getPawnAutoCalculatePreference)
   const [valuationCurrency, setValuationCurrency] = useState<PawnCurrency>('USD')
   const [marketPrice, setMarketPrice] = useState(500)
   const [ageMonths, setAgeMonths] = useState(12)
@@ -1792,6 +1792,12 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
   const [repairCost, setRepairCost] = useState(0)
   const [pawnRate, setPawnRate] = useState(45)
   const exchangeRate = useExchangeRate()
+
+  useEffect(() => {
+    const syncPreference = (event: Event) => setAutoCalculate((event as CustomEvent<boolean>).detail)
+    window.addEventListener(PAWN_AUTO_CALCULATE_EVENT, syncPreference)
+    return () => window.removeEventListener(PAWN_AUTO_CALCULATE_EVENT, syncPreference)
+  }, [])
 
   function changeValuationCurrency(nextCurrency: PawnCurrency) {
     if (nextCurrency === valuationCurrency || !exchangeRate) return
@@ -1834,9 +1840,12 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
     const batteryDeduction = roundAmount(rawBatteryDeduction)
     const accessoryDeduction = roundAmount(rawAccessoryDeduction)
     const carrierLockDeduction = roundAmount(rawCarrierLockDeduction)
-    const estimatedValue = roundAmount(eligible
+    const calculatedEstimatedValue = roundAmount(eligible
       ? Math.max(marketPrice - rawAgeDeduction - rawConditionDeduction - rawBatteryDeduction - rawAccessoryDeduction - rawCarrierLockDeduction - Math.max(repairCost, 0), 0)
       : 0)
+    const estimatedValue = autoCalculate
+      ? calculatedEstimatedValue
+      : roundAmount(eligible ? Math.max(marketPrice, 0) : 0)
     const maximumPawn = roundAmount(estimatedValue * (pawnRate / 100))
     return {
       eligible,
@@ -1852,12 +1861,17 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
       maximumPawn,
       riskReserve: roundAmount(estimatedValue - maximumPawn),
     }
-  }, [ageMonths, batteryHealth, condition, includedAccessories, lockStatus, marketPrice, pawnRate, repairCost, valuationCurrency])
+  }, [ageMonths, autoCalculate, batteryHealth, condition, includedAccessories, lockStatus, marketPrice, pawnRate, repairCost, valuationCurrency])
+
+  function toggleAutoCalculate() {
+    savePawnAutoCalculatePreference(!autoCalculate)
+  }
 
   function saveValuation() {
     const record = {
       id: `VAL-${Date.now()}`,
       source: 'CALCULATOR',
+      calculationMode: autoCalculate ? 'AUTO' : 'MANUAL',
       createdAt: new Date().toISOString(),
       currency: valuationCurrency,
       exchangeRate: valuationCurrency === 'KHR' ? exchangeRate?.usdKhr : 1,
@@ -1888,6 +1902,7 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
     const valuation = {
       id: `VAL-${Date.now()}`,
       source: 'CALCULATOR',
+      calculationMode: autoCalculate ? 'AUTO' : 'MANUAL',
       createdAt: new Date().toISOString(),
       currency: valuationCurrency,
       exchangeRate: valuationCurrency === 'KHR' ? exchangeRate?.usdKhr : 1,
@@ -1925,13 +1940,13 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
       </div>
       <section className="calculator-layout">
         <article className="surface-card calculator-card">
-          <div className="card-heading"><div><span className="eyebrow">Collateral assessment</span><h3>Assess the phone</h3></div><span className="calculator-mark"><Calculator size={20} /></span></div>
+          <div className="card-heading"><div><span className="eyebrow">Collateral assessment</span><h3>Assess the phone</h3></div><div className="calculation-heading-actions"><button type="button" className={`calculation-mode-toggle ${autoCalculate ? 'active' : ''}`} role="switch" aria-checked={autoCalculate} onClick={toggleAutoCalculate}><span aria-hidden="true" /><strong>Auto calculate</strong><small>{autoCalculate ? 'On' : 'Off'}</small></button><span className="calculator-mark"><Calculator size={20} /></span></div></div>
 
           <div className="calculator-section">
             <div className="calculator-section-heading"><strong>1. Resale value</strong><small>Use a recent second-hand selling price, not the original retail price.</small></div>
             <div className="form-grid">
               <label><span>Valuation currency</span><select value={valuationCurrency} onChange={(event) => changeValuationCurrency(event.target.value as PawnCurrency)}><option value="USD">USD — US Dollar</option><option value="KHR" disabled={!exchangeRate}>KHR — Cambodian Riel</option></select></label>
-              <label><span>Verified market price</span><div className="input-prefix"><span>{valuationCurrency}</span><input type="number" min="0" step={valuationCurrency === 'KHR' ? 100 : 0.01} inputMode={valuationCurrency === 'KHR' ? 'numeric' : 'decimal'} value={marketPrice} onChange={(event) => setMarketPrice(Number(event.target.value))} /></div></label>
+              <label><span>Resale value</span><div className="input-prefix"><span>{valuationCurrency}</span><input type="number" min="0" step={valuationCurrency === 'KHR' ? 100 : 0.01} inputMode={valuationCurrency === 'KHR' ? 'numeric' : 'decimal'} value={marketPrice} onChange={(event) => setMarketPrice(Number(event.target.value))} /></div></label>
               <label><span>Phone age</span><div className="input-suffix"><input type="number" min="0" max="120" value={ageMonths} onChange={(event) => setAgeMonths(Number(event.target.value))} /><span>months</span></div></label>
               <label><span>Physical condition</span><select value={condition} onChange={(event) => setCondition(event.target.value)}><option value="excellent">Excellent / Like new</option><option value="good">Good / Minor wear</option><option value="fair">Fair / Visible wear</option><option value="damaged">Damaged / Repair needed</option></select></label>
               <label><span>Battery health</span><div className="input-suffix"><input type="number" min="0" max="100" value={batteryHealth} onChange={(event) => setBatteryHealth(Math.min(100, Math.max(0, Number(event.target.value))))} /><span>%</span></div></label>
@@ -1955,30 +1970,30 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
         </article>
 
         <article className={`surface-card valuation-result-card ${result.eligible ? '' : 'valuation-ineligible'}`}>
-          <div className="valuation-result-heading"><span className="eyebrow">Recommended offer</span><span className={`valuation-status ${result.eligible ? 'eligible' : 'blocked'}`}>{result.eligible ? 'Eligible' : 'Blocked'}</span></div>
+          <div className="valuation-result-heading"><span className="eyebrow">{autoCalculate ? 'Recommended offer' : 'Manual offer'}</span><span className={`valuation-status ${result.eligible ? 'eligible' : 'blocked'}`}>{result.eligible ? 'Eligible' : 'Blocked'}</span></div>
           <div className="valuation-hero">
-            <small>{result.eligible ? 'Maximum pawn principal' : 'Offer unavailable'}</small>
+            <small>{result.eligible ? autoCalculate ? 'Maximum pawn principal' : 'Manual maximum principal' : 'Offer unavailable'}</small>
             <strong>{result.eligible ? pawnMoney(result.maximumPawn, valuationCurrency) : pawnMoney(0, valuationCurrency)}</strong>
             <div className="khr-equivalent">
               {result.eligible ? exchangeRate ? pawnEquivalentText(result.maximumPawn, valuationCurrency, exchangeRate) : 'Loading exchange rate...' : 'Remove activation lock before valuation'}
             </div>
-            <span>{result.eligible ? `${pawnRate}% of adjusted resale value` : 'Activation lock failed the eligibility check'}</span>
+            <span>{result.eligible ? `${pawnRate}% of ${autoCalculate ? 'adjusted' : 'manually entered'} resale value` : 'Activation lock failed the eligibility check'}</span>
             {exchangeRate && (
               <span className="exchange-rate-source">
                 1 USD = {riel.format(exchangeRate.usdKhr)} KHR - {exchangeRate.source === 'ABA PayWay' ? `ABA PayWay ${exchangeRate.side || 'bank'} rate` : 'ABA configured fallback'}
               </span>
             )}
           </div>
-          <div className="calculation-breakdown">
-            <div><span>Verified market price</span><strong>{pawnMoney(marketPrice, valuationCurrency)}</strong></div>
+          {autoCalculate && <div className="calculation-breakdown">
+            <div><span>Resale value</span><strong>{pawnMoney(marketPrice, valuationCurrency)}</strong></div>
             <div><span>Age ({Math.round(result.ageRate * 100)}%)</span><strong>-{pawnMoney(result.ageDeduction, valuationCurrency)}</strong></div>
             <div><span>Condition ({Math.round(result.conditionRate * 100)}%)</span><strong>-{pawnMoney(result.conditionDeduction, valuationCurrency)}</strong></div>
             <div><span>Battery ({Math.round(result.batteryRate * 100)}%)</span><strong>-{pawnMoney(result.batteryDeduction, valuationCurrency)}</strong></div>
             <div><span>Lock and accessories</span><strong>-{pawnMoney(result.carrierLockDeduction + result.accessoryDeduction, valuationCurrency)}</strong></div>
             <div><span>Repair cost</span><strong>-{pawnMoney(Math.max(repairCost, 0), valuationCurrency)}</strong></div>
-            <div className="estimated-row"><span>Estimated resale value</span><strong>{pawnMoney(result.estimatedValue, valuationCurrency)}</strong></div>
+            <div className="estimated-row"><span>{autoCalculate ? 'Estimated resale value' : 'Resale value'}</span><strong>{pawnMoney(result.estimatedValue, valuationCurrency)}</strong></div>
             <div className="reserve-row"><span>Shop risk reserve after loan</span><strong>{pawnMoney(result.riskReserve, valuationCurrency)}</strong></div>
-          </div>
+          </div>}
           <button className="primary-button full-width" onClick={useForPawn} disabled={!result.eligible || result.maximumPawn <= 0}><HandCoins size={17} /> Start pawn with this offer</button>
           <button className="ghost-button full-width" onClick={saveValuation}><FileText size={16} /> Save valuation only</button>
         </article>

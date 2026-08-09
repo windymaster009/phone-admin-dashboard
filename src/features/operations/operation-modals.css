@@ -1239,6 +1239,7 @@ body.operation-modal-open {
 .pawn-contract-fields-heading small,
 .pawn-inline-policy > div > small { color: var(--muted, #8f9bb4); font-size: 8px; line-height: 1.45; }
 .pawn-assessment-heading b { flex: 0 0 auto; padding: 5px 8px; border-radius: 999px; color: #a78bfa; background: rgba(139,92,246,.12); font-size: 8px; text-transform: uppercase; letter-spacing: .04em; }
+.pawn-assessment-heading .calculation-mode-toggle { flex: 0 0 auto; }
 .pawn-assessment-grid { grid-template-columns: repeat(3,minmax(0,1fr)); padding: 15px; }
 .pawn-assessment-accessories { grid-column: span 2; }
 .pawn-inline-policy { display: grid; grid-template-columns: minmax(180px,.7fr) minmax(280px,1.3fr); align-items: center; gap: 18px; padding: 14px 15px; border-top: 1px solid var(--border, rgba(255,255,255,.08)); }

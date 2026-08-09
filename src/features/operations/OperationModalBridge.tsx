@@ -26,6 +26,7 @@ import {
   X,
 } from 'lucide-react'
 import { api } from '../../lib/api'
+import { getPawnAutoCalculatePreference, PAWN_AUTO_CALCULATE_EVENT, savePawnAutoCalculatePreference } from '../../lib/pawnPreferences'
 import { BarcodeGraphic, printInventoryLabels } from '../inventory/barcode'
 
 type ModalKind = 'stock' | 'purchase' | 'sale' | 'pawn' | 'scan' | 'label'
@@ -74,6 +75,7 @@ type StockAdjustmentStatus = 'IN_STOCK' | 'REPAIR' | 'ARCHIVED'
 type PawnValuationSnapshot = {
   id?: string
   source?: string
+  calculationMode?: 'AUTO' | 'MANUAL'
   createdAt?: string
   currency?: PawnCurrency
   exchangeRate?: number
@@ -360,6 +362,7 @@ export default function OperationModalBridge() {
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [estimatedValue, setEstimatedValue] = useState(0)
+  const [pawnAutoCalculate, setPawnAutoCalculate] = useState(getPawnAutoCalculatePreference)
   const [pawnPercentage, setPawnPercentage] = useState(45)
   const [pawnPrincipal, setPawnPrincipal] = useState('')
   const [pawnTermDays, setPawnTermDays] = useState<3 | 7 | 15 | 30>(7)
@@ -426,6 +429,12 @@ export default function OperationModalBridge() {
   const [imeiScanError, setImeiScanError] = useState('')
   const imeiInputs = useRef(new Map<string, HTMLInputElement>())
 
+  useEffect(() => {
+    const syncPreference = (event: Event) => setPawnAutoCalculate((event as CustomEvent<boolean>).detail)
+    window.addEventListener(PAWN_AUTO_CALCULATE_EVENT, syncPreference)
+    return () => window.removeEventListener(PAWN_AUTO_CALCULATE_EVENT, syncPreference)
+  }, [])
+
   const pawnAssessment = useMemo(() => {
     const marketPrice = Math.max(0, pawnMarketPrice)
     const ageRate = Math.min(Math.max(pawnAgeMonths, 0) * 0.0125, 0.5)
@@ -465,9 +474,11 @@ export default function OperationModalBridge() {
       maximumPawn: round(estimatedValue * pawnPercentage / 100),
     }
   }, [pawnAccessories, pawnAgeMonths, pawnBatteryHealth, pawnCarrierLock, pawnCondition, pawnCurrency, pawnMarketPrice, pawnPercentage, pawnRepairCost])
-  const effectiveEstimatedValue = pawnValuation ? estimatedValue : pawnAssessment.estimatedValue
-  const maximumPawn = pawnValuation
-    ? roundPawnAmount(Math.max(0, estimatedValue * pawnPercentage / 100), pawnCurrency)
+  const effectiveEstimatedValue = pawnValuation
+    ? estimatedValue
+    : pawnAutoCalculate ? pawnAssessment.estimatedValue : pawnAssessment.eligible ? roundPawnAmount(pawnMarketPrice, pawnCurrency) : 0
+  const maximumPawn = pawnValuation || !pawnAutoCalculate
+    ? roundPawnAmount(Math.max(0, effectiveEstimatedValue * pawnPercentage / 100), pawnCurrency)
     : pawnAssessment.maximumPawn
   const pawnTermFee = roundPawnAmount((Number(pawnPrincipal) || 0) * (Number(pawnDailyFeeRate) || 0) / 100 * pawnTermDays, pawnCurrency)
   const pawnTotalAtDue = roundPawnAmount((Number(pawnPrincipal) || 0) + pawnTermFee, pawnCurrency)
@@ -477,15 +488,19 @@ export default function OperationModalBridge() {
   }, [pawnTermDays])
   useEffect(() => {
     if (kind !== 'pawn' || pawnStep !== 2 || pawnValuation) return
+    if (!pawnAutoCalculate) {
+      setPawnPrincipal((current) => Number(current) > maximumPawn ? String(maximumPawn) : current)
+      return
+    }
     setPawnPrincipal(maximumPawn > 0 ? String(maximumPawn) : '')
-  }, [kind, maximumPawn, pawnStep, pawnValuation])
+  }, [kind, maximumPawn, pawnAutoCalculate, pawnStep, pawnValuation])
   const selectedPawnCustomer = customers.find((customer) => customer._id === pawnCustomerId)
   const pawnCustomerHasId = pawnCustomerMode === 'EXISTING'
     ? Boolean(selectedPawnCustomer?.nationalIdNumber)
     : Boolean(pawnWalkInNationalId.trim())
   const pawnCustomerValid = pawnCustomerMode === 'EXISTING'
     ? Boolean(selectedPawnCustomer && pawnOwnershipConfirmed)
-    : Boolean(pawnWalkInName.trim() && pawnWalkInPhone.trim() && pawnOwnershipConfirmed)
+    : Boolean(pawnWalkInName.trim() && pawnOwnershipConfirmed)
   const purchaseTotal = useMemo(
     () => purchaseDevices.reduce((sum, item) => sum + Math.max(0, Number(item.purchasePrice) || 0) * (item.category === 'PHONE' ? 1 : Math.max(1, Number(item.quantity) || 1)), 0),
     [purchaseDevices],
@@ -623,6 +638,7 @@ export default function OperationModalBridge() {
             throw new Error('This KHR valuation does not have a valid exchange rate')
           }
           setPawnValuation(valuation)
+          setPawnAutoCalculate(valuation.calculationMode !== 'MANUAL')
           setPawnCurrency(valuationCurrency)
           if (valuationCurrency === 'KHR') {
             setUsdKhrRate(valuationExchangeRate)
@@ -671,6 +687,7 @@ export default function OperationModalBridge() {
     setStockAdjustmentNotes('')
     setStockInventoryLoading(false)
     setEstimatedValue(0)
+    setPawnAutoCalculate(getPawnAutoCalculatePreference())
     setPawnPercentage(45)
     setPawnPrincipal('')
     setPawnTermDays(7)
@@ -1158,6 +1175,7 @@ export default function OperationModalBridge() {
     const valuationSnapshot: PawnValuationSnapshot = pawnValuation || {
       id: `INLINE-${Date.now()}`,
       source: 'CALCULATOR',
+      calculationMode: pawnAutoCalculate ? 'AUTO' : 'MANUAL',
       createdAt: new Date().toISOString(),
       currency: pawnCurrency,
       exchangeRate: pawnCurrency === 'KHR' ? usdKhrRate : 1,
@@ -1175,8 +1193,8 @@ export default function OperationModalBridge() {
       batteryDeduction: pawnAssessment.batteryDeduction,
       accessoryDeduction: pawnAssessment.accessoryDeduction,
       carrierLockDeduction: pawnAssessment.carrierLockDeduction,
-      estimatedValue: pawnAssessment.estimatedValue,
-      maximumPawn: pawnAssessment.maximumPawn,
+      estimatedValue: effectiveEstimatedValue,
+      maximumPawn,
     }
     const payload = {
       customer: pawnCustomerMode === 'EXISTING' ? pawnCustomerId : undefined,
@@ -1310,7 +1328,7 @@ export default function OperationModalBridge() {
             <button type="button" className={sellerType === 'NEW_SUPPLIER' ? 'active' : ''} onClick={() => setSellerType('NEW_SUPPLIER')}>New supplier</button>
           </div>
           <div className="operation-form-grid purchase-fields-grid">
-            {sellerType === 'EXISTING_SUPPLIER' ? <label className={`operation-wide ${purchaseAttempted && !supplierId ? 'field-invalid' : ''}`}>Supplier<select required value={supplierId} onChange={(event) => setSupplierId(event.target.value)}><option value="" disabled>Select supplier</option>{suppliers.map((supplier) => <option key={supplier._id} value={supplier._id}>{supplier.name}{supplier.phone ? ` — ${supplier.phone}` : ''}</option>)}</select>{purchaseAttempted && !supplierId && <small>Select a supplier</small>}</label> : sellerType === 'EXISTING_CUSTOMER' ? <label className={`operation-wide ${purchaseAttempted && !sellerCustomerId ? 'field-invalid' : ''}`}>Customer<select required value={sellerCustomerId} onChange={(event) => setSellerCustomerId(event.target.value)}><option value="" disabled>Select customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name} — {customer.phone}</option>)}</select>{purchaseAttempted && !sellerCustomerId && <small>Select a customer</small>}</label> : <>
+            {sellerType === 'EXISTING_SUPPLIER' ? <label className={`operation-wide ${purchaseAttempted && !supplierId ? 'field-invalid' : ''}`}>Supplier<select required value={supplierId} onChange={(event) => setSupplierId(event.target.value)}><option value="" disabled>Select supplier</option>{suppliers.map((supplier) => <option key={supplier._id} value={supplier._id}>{supplier.name}{supplier.phone ? ` — ${supplier.phone}` : ''}</option>)}</select>{purchaseAttempted && !supplierId && <small>Select a supplier</small>}</label> : sellerType === 'EXISTING_CUSTOMER' ? <label className={`operation-wide ${purchaseAttempted && !sellerCustomerId ? 'field-invalid' : ''}`}>Customer<select required value={sellerCustomerId} onChange={(event) => setSellerCustomerId(event.target.value)}><option value="" disabled>Select customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name}{customer.phone ? ` — ${customer.phone}` : ' — No phone recorded'}</option>)}</select>{purchaseAttempted && !sellerCustomerId && <small>Select a customer</small>}</label> : <>
               <label className={purchaseAttempted && !sellerName.trim() ? 'field-invalid' : ''}>Seller name<input required value={sellerName} onChange={(event) => setSellerName(event.target.value)} placeholder={sellerType === 'NEW_SUPPLIER' ? 'Supplier or business name' : 'Customer name'} />{purchaseAttempted && !sellerName.trim() && <small>Seller name is required</small>}</label>
               <label className={purchaseAttempted && sellerType === 'NEW_CUSTOMER' && !sellerPhone.trim() ? 'field-invalid' : ''}>Phone number {sellerType !== 'NEW_CUSTOMER' && <small className="optional-marker">Optional</small>}<input required={sellerType === 'NEW_CUSTOMER'} value={sellerPhone} onChange={(event) => setSellerPhone(event.target.value)} placeholder="012 345 678" />{purchaseAttempted && sellerType === 'NEW_CUSTOMER' && !sellerPhone.trim() && <small>Phone number is required for a new customer</small>}</label>
               <label>National ID <small className="optional-marker">Optional</small><input value={sellerNationalId} onChange={(event) => setSellerNationalId(event.target.value)} /></label>
@@ -1463,7 +1481,7 @@ export default function OperationModalBridge() {
         <nav className="purchase-stepper" aria-label="Pawn contract progress">
           <button type="button" className={pawnStep === 1 ? 'active' : pawnCustomerValid ? 'complete' : ''} onClick={() => setPawnStep(1)}><span>{pawnCustomerValid ? <CheckCircle2 size={15} /> : '1'}</span><p><strong>Customer verification</strong><small>Identity and ownership</small></p></button>
           <i />
-          <button type="button" className={pawnStep === 2 ? 'active' : ''} onClick={() => { setPawnAttempted(true); if (pawnCustomerValid) { setError(''); setPawnStep(2) } else setError('Select a customer and confirm identity and phone ownership first') }}><span>2</span><p><strong>Collateral & terms</strong><small>Device, valuation, and loan</small></p></button>
+          <button type="button" className={pawnStep === 2 ? 'active' : ''} onClick={() => { setPawnAttempted(true); if (pawnCustomerValid) { setError(''); setPawnStep(2) } else setError('Select a customer and confirm identity and collateral ownership first') }}><span>2</span><p><strong>Collateral & terms</strong><small>Device, valuation, and loan</small></p></button>
         </nav>
 
         {pawnStep === 1 && <>
@@ -1475,9 +1493,9 @@ export default function OperationModalBridge() {
                 <button type="button" className={pawnCustomerMode === 'NEW' ? 'active' : ''} onClick={() => { setPawnCustomerMode('NEW'); setPawnOwnershipConfirmed(false); setError('') }}>New customer</button>
               </div>
               <div className="operation-form-grid purchase-fields-grid">
-                {pawnCustomerMode === 'EXISTING' ? <label className={`operation-wide ${pawnAttempted && !pawnCustomerId ? 'field-invalid' : ''}`}>Customer<select required value={pawnCustomerId} onChange={(event) => { setPawnCustomerId(event.target.value); setPawnOwnershipConfirmed(false); setError('') }}><option value="" disabled>Select customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name} — {customer.phone}{customer.nationalIdNumber ? ' — ID recorded' : ' — ID not provided'}</option>)}</select>{pawnAttempted && !pawnCustomerId && <small>Select a customer</small>}</label> : <>
+                {pawnCustomerMode === 'EXISTING' ? <label className={`operation-wide ${pawnAttempted && !pawnCustomerId ? 'field-invalid' : ''}`}>Customer<select required value={pawnCustomerId} onChange={(event) => { setPawnCustomerId(event.target.value); setPawnOwnershipConfirmed(false); setError('') }}><option value="" disabled>Select customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name}{customer.phone ? ` — ${customer.phone}` : ' — No phone recorded'}{customer.nationalIdNumber ? ' — ID recorded' : ' — ID not provided'}</option>)}</select>{pawnAttempted && !pawnCustomerId && <small>Select a customer</small>}</label> : <>
                   <label className={pawnAttempted && !pawnWalkInName.trim() ? 'field-invalid' : ''}>Customer name<input required value={pawnWalkInName} onChange={(event) => setPawnWalkInName(event.target.value)} placeholder="Full name" />{pawnAttempted && !pawnWalkInName.trim() && <small>Name is required</small>}</label>
-                  <label className={pawnAttempted && !pawnWalkInPhone.trim() ? 'field-invalid' : ''}>Phone number<input required value={pawnWalkInPhone} onChange={(event) => setPawnWalkInPhone(event.target.value)} placeholder="012 345 678" />{pawnAttempted && !pawnWalkInPhone.trim() && <small>Phone number is required</small>}</label>
+                  <label>Phone number <small className="optional-marker">Optional</small><input value={pawnWalkInPhone} onChange={(event) => setPawnWalkInPhone(event.target.value)} placeholder="012 345 678" /></label>
                   <label>National ID <small className="optional-marker">Optional</small><input value={pawnWalkInNationalId} onChange={(event) => { setPawnWalkInNationalId(event.target.value); setPawnOwnershipConfirmed(false) }} placeholder="Leave blank to protect privacy" /></label>
                   <label>Address <small className="optional-marker">Optional</small><input value={pawnWalkInAddress} onChange={(event) => setPawnWalkInAddress(event.target.value)} placeholder="Current address" /></label>
                 </>}
@@ -1489,11 +1507,11 @@ export default function OperationModalBridge() {
               </div>}
               <label className={`pawn-verification-check ${pawnAttempted && !pawnCustomerValid ? 'field-invalid' : ''}`}>
                 <input type="checkbox" checked={pawnOwnershipConfirmed} onChange={(event) => setPawnOwnershipConfirmed(event.target.checked)} />
-                <span><strong>Customer identity and phone ownership confirmed</strong><small>{pawnCustomerHasId ? 'I checked the recorded National ID and confirmed this customer owns the phone.' : 'No National ID will be stored. I confirmed ownership using the information and evidence available to the shop.'}</small></span>
+                <span><strong>Customer identity and collateral ownership confirmed</strong><small>{pawnCustomerHasId ? 'I checked the recorded National ID and confirmed this customer owns the phone.' : 'No National ID will be stored. I confirmed ownership using the information and evidence available to the shop.'}</small></span>
               </label>
             </section>
           </div>
-          <footer className="operation-modal-actions"><div className="purchase-submit-summary"><span>Step 1 of 2</span><strong>Customer verification</strong></div><button type="button" className="ghost-button" onClick={close}>Cancel</button><button type="button" className="primary-button" onClick={() => { setPawnAttempted(true); if (pawnCustomerValid) { setError(''); setPawnStep(2) } else setError('Select a customer and confirm identity and phone ownership first') }}>Continue to collateral</button></footer>
+          <footer className="operation-modal-actions"><div className="purchase-submit-summary"><span>Step 1 of 2</span><strong>Customer verification</strong></div><button type="button" className="ghost-button" onClick={close}>Cancel</button><button type="button" className="primary-button" onClick={() => { setPawnAttempted(true); if (pawnCustomerValid) { setError(''); setPawnStep(2) } else setError('Select a customer and confirm identity and collateral ownership first') }}>Continue to collateral</button></footer>
         </>}
 
         {pawnStep === 2 && <>
@@ -1519,10 +1537,10 @@ export default function OperationModalBridge() {
               {pawnValuation && <div className="pawn-imported-valuation"><CheckCircle2 size={18} /><div><strong>Standalone calculator offer imported</strong><small>Valuation {pawnValuation.id || 'draft'} · Values are locked to the verified assessment.</small></div><span>Maximum {pawnAmountText(maximumPawn, pawnCurrency)}</span></div>}
 
               <div className="pawn-inline-assessment">
-                <div className="pawn-assessment-heading"><div><span>1. Resale value and condition</span><small>Use a recent second-hand selling price and inspect the actual phone.</small></div><b>{pawnValuation ? 'Imported' : 'Live calculation'}</b></div>
+                <div className="pawn-assessment-heading"><div><span>1. Resale value and condition</span><small>Use a recent second-hand selling price and inspect the actual phone.</small></div>{pawnValuation ? <b>Imported</b> : <button type="button" className={`calculation-mode-toggle ${pawnAutoCalculate ? 'active' : ''}`} role="switch" aria-checked={pawnAutoCalculate} onClick={() => savePawnAutoCalculatePreference(!pawnAutoCalculate)}><span aria-hidden="true" /><strong>Auto calculate</strong><small>{pawnAutoCalculate ? 'On' : 'Off'}</small></button>}</div>
                 <div className="operation-form-grid pawn-assessment-grid">
                   <label>Valuation currency<select disabled={Boolean(pawnValuation)} value={pawnCurrency} onChange={(event) => changePawnCurrency(event.target.value as PawnCurrency)}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Cambodian Riel</option></select></label>
-                  <label>Verified market price ({pawnCurrency})<input type="number" min={pawnCurrency === 'KHR' ? 1 : 0.01} step={pawnCurrency === 'KHR' ? 100 : 0.01} required readOnly={Boolean(pawnValuation)} value={pawnMarketPrice || ''} onChange={(event) => setPawnMarketPrice(Math.max(0, Number(event.target.value)))} /></label>
+                  <label>Resale value ({pawnCurrency})<input type="number" min={pawnCurrency === 'KHR' ? 1 : 0.01} step={pawnCurrency === 'KHR' ? 100 : 0.01} required readOnly={Boolean(pawnValuation)} value={pawnMarketPrice || ''} onChange={(event) => setPawnMarketPrice(Math.max(0, Number(event.target.value)))} /></label>
                   <label>Phone age<div className="device-unit-input"><input type="number" min="0" max="120" step="1" required readOnly={Boolean(pawnValuation)} value={pawnAgeMonths} onChange={(event) => setPawnAgeMonths(Math.max(0, Number(event.target.value)))} /><span>months</span></div></label>
                   <label>Physical condition<select disabled={Boolean(pawnValuation)} value={pawnCondition} onChange={(event) => setPawnCondition(event.target.value)}><option value="LIKE_NEW">Excellent / Like new</option><option value="GOOD">Good / Minor wear</option><option value="FAIR">Fair / Visible wear</option><option value="DAMAGED">Damaged / Repair needed</option></select></label>
                   <label>Battery health<div className="device-unit-input"><input type="number" min="0" max="100" step="1" required readOnly={Boolean(pawnValuation)} value={pawnBatteryHealth} onChange={(event) => setPawnBatteryHealth(event.target.value)} /><span>%</span></div></label>
@@ -1536,8 +1554,8 @@ export default function OperationModalBridge() {
                   <label><div><strong>{pawnPercentage}%</strong><span>Loan-to-value</span><small>Recommended: 40–50%</small></div><input type="range" min="40" max="50" disabled={Boolean(pawnValuation)} value={pawnPercentage} onChange={(event) => setPawnPercentage(Number(event.target.value))} /></label>
                 </div>
 
-                <div className={`pawn-inline-offer ${pawnAssessment.eligible ? '' : 'blocked'}`}>
-                  <div className="pawn-offer-total"><span>{pawnAssessment.eligible ? 'Recommended maximum principal' : 'Offer blocked'}</span><strong>{pawnAmountText(maximumPawn, pawnCurrency)}</strong>{pawnAssessment.eligible && <b>{pawnEquivalentAmountText(maximumPawn, pawnCurrency, usdKhrRate)}</b>}<small>{pawnAssessment.eligible ? `${pawnPercentage}% of ${pawnAmountText(effectiveEstimatedValue, pawnCurrency)} adjusted resale value` : 'Remove the activation lock before accepting this phone.'}</small><small>1 USD = {Math.round(usdKhrRate).toLocaleString()} KHR</small></div>
+                {pawnAutoCalculate && <div className={`pawn-inline-offer ${pawnAssessment.eligible ? '' : 'blocked'}`}>
+                  <div className="pawn-offer-total"><span>{pawnAssessment.eligible ? pawnAutoCalculate ? 'Recommended maximum principal' : 'Manual maximum principal' : 'Offer blocked'}</span><strong>{pawnAmountText(maximumPawn, pawnCurrency)}</strong>{pawnAssessment.eligible && <b>{pawnEquivalentAmountText(maximumPawn, pawnCurrency, usdKhrRate)}</b>}<small>{pawnAssessment.eligible ? `${pawnPercentage}% of ${pawnAmountText(effectiveEstimatedValue, pawnCurrency)} ${pawnAutoCalculate ? 'adjusted' : 'manually entered'} resale value` : 'Remove the activation lock before accepting this phone.'}</small><small>1 USD = {Math.round(usdKhrRate).toLocaleString()} KHR</small></div>
                   <dl>
                     <div><dt>Market price</dt><dd>{pawnAmountText(pawnMarketPrice, pawnCurrency)}</dd></div>
                     <div><dt>Age deduction</dt><dd>-{pawnAmountText(pawnAssessment.ageDeduction, pawnCurrency)}</dd></div>
@@ -1546,8 +1564,8 @@ export default function OperationModalBridge() {
                     <div><dt>Lock & accessories</dt><dd>-{pawnAmountText(pawnAssessment.carrierLockDeduction + pawnAssessment.accessoryDeduction, pawnCurrency)}</dd></div>
                     <div><dt>Repair cost</dt><dd>-{pawnAmountText(pawnRepairCost, pawnCurrency)}</dd></div>
                   </dl>
-                </div>
-                <div className={`pawn-inline-inspection ${pawnAssessment.eligible ? '' : 'blocked'}`}><AlertTriangle size={16} /><div><strong>{pawnAssessment.eligible ? 'Physical inspection is still required' : 'Do not accept this phone as collateral'}</strong><small>{pawnAssessment.eligible ? 'Confirm IMEI ownership, display, cameras, speakers, charging, biometrics, and the repair estimate before approval.' : 'The customer must remove the activation or iCloud lock before this phone has pawn value.'}</small></div></div>
+                </div>}
+                {pawnAutoCalculate && <div className={`pawn-inline-inspection ${pawnAssessment.eligible ? '' : 'blocked'}`}><AlertTriangle size={16} /><div><strong>{pawnAssessment.eligible ? 'Physical inspection is still required' : 'Do not accept this phone as collateral'}</strong><small>{pawnAssessment.eligible ? 'Confirm IMEI ownership, display, cameras, speakers, charging, biometrics, and the repair estimate before approval.' : 'The customer must remove the activation or iCloud lock before this phone has pawn value.'}</small></div></div>}
               </div>
 
               <div className="pawn-contract-fields-heading"><span>3. Contract terms</span><small>The principal may be reduced, but cannot exceed the calculated maximum.</small></div>
@@ -1571,7 +1589,7 @@ export default function OperationModalBridge() {
 
       {kind === 'sale' && !saleKhqr && <form className="operation-form sale-form" onSubmit={submitSale}>
         <div className="operation-form-grid">
-          <label>Customer<select value={saleCustomerId} onChange={(event) => setSaleCustomerId(event.target.value)}><option value="">Walk-in customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name} — {customer.phone}</option>)}</select></label>
+          <label>Customer<select value={saleCustomerId} onChange={(event) => setSaleCustomerId(event.target.value)}><option value="">Walk-in customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name}{customer.phone ? ` — ${customer.phone}` : ' — No phone recorded'}</option>)}</select></label>
           <label className="operation-wide">Inventory item<select required value={saleItemId} disabled={saleInventoryLoading || (!saleInventoryLoading && inventory.length === 0)} onChange={(event) => {
             const item = inventory.find((entry) => entry._id === event.target.value)
             setSaleItemId(event.target.value)

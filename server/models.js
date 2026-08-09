@@ -23,7 +23,7 @@ const userSchema = new Schema(
 const customerSchema = new Schema(
   {
     name: { type: String, required: true, trim: true, index: true },
-    phone: { type: String, required: true, trim: true, index: true },
+    phone: { type: String, trim: true, index: true },
     nationalIdNumber: { type: String, trim: true, index: true },
     nationalIdFrontUrl: String,
     nationalIdBackUrl: String,
@@ -158,6 +158,7 @@ const pawnSchema = new Schema(
     pawnPercentage: { type: Number, min: 40, max: 50, required: true },
     valuationSnapshot: {
       source: { type: String, enum: ['CALCULATOR'] },
+      calculationMode: { type: String, enum: ['AUTO', 'MANUAL'], default: 'AUTO' },
       valuationId: String,
       createdAt: Date,
       currency: { type: String, enum: ['USD', 'KHR'], default: 'USD' },

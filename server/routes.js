@@ -376,6 +376,7 @@ async function buildSaleQuote(lines, session, role) {
 function calculatePawnOffer(input = {}) {
   const currency = pawnCurrencyCode(input.currency)
   const exchangeRate = pawnExchangeRate(currency, input.exchangeRate)
+  const calculationMode = String(input.calculationMode || 'AUTO').toUpperCase() === 'MANUAL' ? 'MANUAL' : 'AUTO'
   const marketPrice = Math.max(0, Number(input.marketPrice) || 0)
   const ageMonths = Math.max(0, Number(input.ageMonths) || 0)
   const condition = String(input.condition || 'good').toLowerCase()
@@ -409,13 +410,17 @@ function calculatePawnOffer(input = {}) {
   const batteryDeduction = marketPrice * batteryRate
   const accessoryDeduction = marketPrice * accessoryRate
   const carrierLockDeduction = marketPrice * carrierLockRate
-  const estimatedValue = eligible
+  const calculatedEstimatedValue = eligible
     ? Math.max(0, marketPrice - ageDeduction - conditionDeduction - batteryDeduction - accessoryDeduction - carrierLockDeduction - repairCost)
     : 0
+  const estimatedValue = calculationMode === 'MANUAL' && eligible
+    ? Math.max(0, Number(input.estimatedValue) || 0)
+    : calculatedEstimatedValue
   const roundedEstimatedValue = roundPawnCurrency(estimatedValue, currency)
 
   return {
     eligible,
+    calculationMode,
     currency,
     exchangeRate,
     marketPrice: roundPawnCurrency(marketPrice, currency),
@@ -1845,11 +1850,10 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
     if (!existingCustomer) throw requestError(404, 'Customer not found')
   } else {
     if (!clean(customerDetails?.name)) throw requestError(400, 'New customer name is required')
-    if (!clean(customerDetails?.phone)) throw requestError(400, 'New customer phone number is required')
   }
   const nationalIdNumber = clean(existingCustomer?.nationalIdNumber || customerDetails?.nationalIdNumber)
   const confirmedOwnership = Boolean(ownershipConfirmed || (nationalIdNumber && identificationVerified))
-  if (!confirmedOwnership) throw requestError(400, 'Confirm the customer identity and phone ownership before releasing pawn money')
+  if (!confirmedOwnership) throw requestError(400, 'Confirm the customer identity and collateral ownership before releasing pawn money')
   const nationalIdVerified = Boolean(nationalIdNumber && identificationVerified)
   const importedFromCalculator = valuationSnapshot?.source === 'CALCULATOR'
   const verifiedOffer = importedFromCalculator ? calculatePawnOffer(valuationSnapshot) : null
@@ -1882,7 +1886,7 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
     if (!pawnCustomerId) {
       const [createdCustomer] = await Customer.create([{
         name: clean(customerDetails.name),
-        phone: clean(customerDetails.phone),
+        phone: clean(customerDetails.phone) || undefined,
         nationalIdNumber,
         address: clean(customerDetails.address),
         notes: 'Created during new pawn registration',
