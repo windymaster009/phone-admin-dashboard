@@ -1,0 +1,48 @@
+.cashflow-chart {
+  height: 190px;
+}
+
+/* The columns reserve 23px for their labels. Include that row when locating
+   zero so both positive and negative bars start exactly on the axis. */
+.cashflow-zero-line {
+  top: calc(5px + (100% - 5px - 25px - 23px) / 2);
+}
+
+.cashflow-chart-scroll {
+  overscroll-behavior: contain;
+}
+
+.cashflow-chart-scroll.month {
+  cursor: ew-resize;
+  scroll-behavior: smooth;
+}
+
+.cashflow-chart-scroll.month .cashflow-half i {
+  width: min(68%, 28px);
+}
+
+.cashflow-chart-scroll.week .cashflow-chart {
+  min-width: 0;
+}
+
+.cashflow-kpis {
+  margin-block: 12px 9px;
+}
+
+.cashflow-context {
+  margin-bottom: 6px;
+}
+
+.performance-card.dashboard-performance-bridge-active {
+  align-self: start;
+}
+
+@media (max-width: 620px) {
+  .cashflow-chart {
+    height: 190px;
+  }
+
+  .cashflow-chart-scroll.week .cashflow-chart {
+    min-width: 520px;
+  }
+}

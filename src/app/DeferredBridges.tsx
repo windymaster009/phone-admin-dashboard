@@ -1,5 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 
+const DashboardPerformanceBridge = lazy(() => import('../features/dashboard/DashboardPerformanceBridge'))
+const InventoryInsightsBridge = lazy(() => import('../features/dashboard/InventoryInsightsBridge'))
 const OperationModalBridge = lazy(() => import('../features/operations/OperationModalBridge'))
 const CustomerWorkspaceBridge = lazy(() => import('../features/customers/CustomerWorkspaceBridge'))
 const ActivityReportBridge = lazy(() => import('../features/activity/ActivityReportBridge'))
@@ -10,6 +12,7 @@ const ReceiptCenterBridge = lazy(() => import('../features/receipts/ReceiptCente
 const SecureDocumentsBridge = lazy(() => import('../features/documents/SecureDocumentsBridge'))
 
 export default function DeferredBridges() {
+  const [dashboardReady, setDashboardReady] = useState(false)
   const [operationsReady, setOperationsReady] = useState(false)
   const [customersReady, setCustomersReady] = useState(false)
   const [activityReady, setActivityReady] = useState(false)
@@ -18,6 +21,7 @@ export default function DeferredBridges() {
   const [documentsReady, setDocumentsReady] = useState(false)
 
   useEffect(() => {
+    let dashboardTimer = 0
     let operationTimer = 0
     let customerTimer = 0
     let activityTimer = 0
@@ -26,6 +30,8 @@ export default function DeferredBridges() {
     let documentTimer = 0
 
     const frame = window.requestAnimationFrame(() => {
+      const dashboardPath = ['/', '/admin', '/dashboard'].includes(window.location.pathname)
+      dashboardTimer = window.setTimeout(() => setDashboardReady(true), dashboardPath ? 0 : 700)
       operationTimer = window.setTimeout(() => setOperationsReady(true), 0)
       customerTimer = window.setTimeout(
         () => setCustomersReady(true),
@@ -48,6 +54,7 @@ export default function DeferredBridges() {
 
     return () => {
       window.cancelAnimationFrame(frame)
+      window.clearTimeout(dashboardTimer)
       window.clearTimeout(operationTimer)
       window.clearTimeout(customerTimer)
       window.clearTimeout(activityTimer)
@@ -59,6 +66,7 @@ export default function DeferredBridges() {
 
   return (
     <>
+      {dashboardReady && <Suspense fallback={null}><DashboardPerformanceBridge /><InventoryInsightsBridge /></Suspense>}
       {operationsReady && <Suspense fallback={null}><OperationModalBridge /></Suspense>}
       {customersReady && <Suspense fallback={null}><CustomerWorkspaceBridge /></Suspense>}
       {activityReady && <Suspense fallback={null}><ActivityReportBridge /></Suspense>}

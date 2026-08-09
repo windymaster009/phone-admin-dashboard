@@ -697,6 +697,14 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const month = new Date(now.getFullYear(), now.getMonth(), 1)
   const year = new Date(now.getFullYear(), 0, 1)
+  const cambodiaOffsetMs = 7 * 60 * 60 * 1000
+  const cambodiaNow = new Date(now.getTime() + cambodiaOffsetMs)
+  const daysSinceMonday = (cambodiaNow.getUTCDay() + 6) % 7
+  const weekStart = new Date(Date.UTC(
+    cambodiaNow.getUTCFullYear(),
+    cambodiaNow.getUTCMonth(),
+    cambodiaNow.getUTCDate() - daysSinceMonday,
+  ) - cambodiaOffsetMs)
 
   const [salesToday, purchasesToday, activePawnValue, phonesInStock, overdueContracts, lowStock, customerCount, pawnCount] = await Promise.all([
     Trade.aggregate([{ $match: { type: 'SELL', status: 'COMPLETED', createdAt: { $gte: today } } }, { $group: { _id: null, total: { $sum: '$total' } } }]),
@@ -730,7 +738,7 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
     Pawn.estimatedDocumentCount(),
   ])
 
-  const [recentPawns, recentTrades, inventoryMix, monthPerformance, monthlyPerformance, dailyPerformance] = await Promise.all([
+  const [recentPawns, recentTrades, inventoryMix, monthPerformance, monthlyPerformance, dailyPerformance, weekPerformance] = await Promise.all([
     Pawn.find().populate('customer', 'name phone').sort({ createdAt: -1 }).limit(6),
     Trade.find().populate('customer', 'name phone').populate('supplier', 'name phone').sort({ createdAt: -1 }).limit(6),
     InventoryItem.aggregate([
@@ -761,6 +769,19 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
       },
       { $sort: { '_id.day': 1 } },
     ]),
+    Trade.aggregate([
+      { $match: { status: 'COMPLETED', createdAt: { $gte: weekStart } } },
+      {
+        $group: {
+          _id: {
+            date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: '+07:00' } },
+            type: '$type',
+          },
+          total: { $sum: '$total' },
+        },
+      },
+      { $sort: { '_id.date': 1 } },
+    ]),
   ])
 
   res.json({
@@ -780,6 +801,7 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
     monthPerformance,
     monthlyPerformance,
     dailyPerformance,
+    weekPerformance,
   })
 }))
 
