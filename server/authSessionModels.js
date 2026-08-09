@@ -11,6 +11,7 @@ const authSessionSchema = new Schema({
   ipAddress: { type: String, trim: true, maxlength: 128 },
   lastSeenAt: { type: Date, default: Date.now, index: true },
   expiresAt: { type: Date, required: true },
+  twoFactorVerifiedAt: { type: Date, default: null },
   revokedAt: { type: Date, default: null, index: true },
   revokedReason: { type: String, trim: true, maxlength: 120 },
 }, { timestamps: true, versionKey: false })
@@ -22,6 +23,7 @@ const androidPairingSchema = new Schema({
   codeHash: { type: String, required: true, unique: true },
   user: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   createdBySessionId: { type: String, required: true, index: true },
+  twoFactorVerifiedAt: { type: Date, default: null },
   expiresAt: { type: Date, required: true },
   usedAt: { type: Date, default: null, index: true },
 }, { timestamps: true, versionKey: false })

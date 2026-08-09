@@ -39,7 +39,7 @@ function inferDeviceName(req, kind, suppliedName) {
   return kind === 'ANDROID' ? 'PhoneFlow Android' : 'Web browser'
 }
 
-export async function createAuthSession({ user, req, kind = 'WEB', deviceName } = {}) {
+export async function createAuthSession({ user, req, kind = 'WEB', deviceName, twoFactorVerifiedAt = null } = {}) {
   const now = new Date()
   const session = await AuthSession.create({
     sessionId: randomUUID(),
@@ -50,6 +50,7 @@ export async function createAuthSession({ user, req, kind = 'WEB', deviceName } 
     ipAddress: cleanText(req.ip || req.socket?.remoteAddress, 128),
     lastSeenAt: now,
     expiresAt: new Date(now.getTime() + sessionDurationMs()),
+    twoFactorVerifiedAt: twoFactorVerifiedAt ? new Date(twoFactorVerifiedAt) : null,
   })
   return session
 }
@@ -81,6 +82,14 @@ export function touchSession(session, req) {
   ).catch((error) => console.error('Unable to update session activity:', error.message))
 }
 
+export async function markSessionTwoFactorVerified({ userId, sessionId, verifiedAt = new Date() } = {}) {
+  return AuthSession.findOneAndUpdate(
+    { user: userId, sessionId, revokedAt: null, expiresAt: { $gt: new Date() } },
+    { $set: { twoFactorVerifiedAt: verifiedAt } },
+    { new: true },
+  )
+}
+
 export async function listUserSessions(userId, currentSessionId) {
   const now = new Date()
   const sessions = await AuthSession.find({ user: userId, expiresAt: { $gt: now } })
@@ -96,6 +105,7 @@ export async function listUserSessions(userId, currentSessionId) {
     createdAt: session.createdAt,
     lastSeenAt: session.lastSeenAt,
     expiresAt: session.expiresAt,
+    twoFactorVerifiedAt: session.twoFactorVerifiedAt || null,
     revokedAt: session.revokedAt,
     current: session.sessionId === currentSessionId,
   }))
@@ -130,7 +140,7 @@ function pairingHash(code) {
   return createHmac('sha256', secret).update(`phoneflow-android-pairing:${code}`).digest('hex')
 }
 
-export async function createAndroidPairing({ userId, sessionId } = {}) {
+export async function createAndroidPairing({ userId, sessionId, twoFactorVerifiedAt = null } = {}) {
   const now = new Date()
   await AndroidPairing.deleteMany({ user: userId, usedAt: null })
 
@@ -142,6 +152,7 @@ export async function createAndroidPairing({ userId, sessionId } = {}) {
         codeHash: pairingHash(code),
         user: userId,
         createdBySessionId: sessionId,
+        twoFactorVerifiedAt: twoFactorVerifiedAt ? new Date(twoFactorVerifiedAt) : null,
         expiresAt,
       })
       return { code, expiresAt }
