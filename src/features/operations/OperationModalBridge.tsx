@@ -1498,7 +1498,10 @@ export default function OperationModalBridge() {
             <div><dt>Inventory status</dt><dd><span>PAWNED</span></dd></div>
           </dl>
         </div>
-        <footer className="operation-modal-actions"><button type="button" className="primary-button record-created-done" onClick={() => window.location.reload()}><CheckCircle2 size={16} /> Done</button></footer>
+        <footer className="operation-modal-actions record-created-actions">
+          <button type="button" className="secondary-button" onClick={() => window.dispatchEvent(new CustomEvent('phoneflow:open-pawn-ticket', { detail: { reference: pawnCreated.pawnNo } }))}><Printer size={16} /> Print 80mm pawn ticket</button>
+          <button type="button" className="primary-button record-created-done" onClick={() => window.location.reload()}><CheckCircle2 size={16} /> Done</button>
+        </footer>
       </section>}
 
       {kind === 'pawn' && !pawnCreated && <form className="operation-form purchase-workflow-form pawn-workflow-form" onSubmit={submitPawn}>

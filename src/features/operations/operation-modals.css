@@ -1099,6 +1099,7 @@ body.operation-modal-open {
 .record-created-card dd { min-width: 0; margin: 0; overflow: hidden; font-size: 11px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
 .record-created-card dd span { color: #34d399; }
 .record-created-workflow > .operation-modal-actions { position: static; flex: 0 0 auto; margin: 0; padding: 12px 18px; }
+.record-created-actions { gap: 10px; }
 .record-created-done { min-width: 150px; margin-left: auto; }
 .purchase-stepper { width: min(560px, 100%); display: grid; grid-template-columns: max-content 64px max-content; align-items: center; justify-content: center; align-self: center; flex: 0 0 auto; padding: 18px 24px; }
 .purchase-step-content { min-height: 0; flex: 1; overflow-y: auto; display: grid; align-content: start; gap: 18px; padding: 0 24px 24px; scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: rgba(143,155,180,.38) transparent; }

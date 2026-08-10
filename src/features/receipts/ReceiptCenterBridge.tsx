@@ -7,6 +7,7 @@ import ReceiptDocument, { receiptPrintStyles } from './ReceiptDocument'
 import type { ReceiptDocumentType, ReceiptLayout, ReceiptOption, ReceiptOptionResponse, ReceiptRecord, ReceiptSourceType } from './receipt-types'
 
 type SourceContext = { sourceType: ReceiptSourceType; reference: string }
+type ViewerState = { receipt: ReceiptRecord; initialLayout?: ReceiptLayout }
 
 function money(value: number, currency: 'USD' | 'KHR') {
   return currency === 'KHR'
@@ -91,9 +92,9 @@ function OptionPicker({ response, busy, pendingOptionKey, error, onSelect, onClo
   </Modal>
 }
 
-function Viewer({ initialReceipt, onClose, onUpdated }: { initialReceipt: ReceiptRecord; onClose: () => void; onUpdated: (receipt: ReceiptRecord) => void }) {
+function Viewer({ initialReceipt, initialLayout = 'A4', onClose, onUpdated }: { initialReceipt: ReceiptRecord; initialLayout?: ReceiptLayout; onClose: () => void; onUpdated: (receipt: ReceiptRecord) => void }) {
   const [receipt, setReceipt] = useState(initialReceipt)
-  const [layout, setLayout] = useState<ReceiptLayout>('A4')
+  const [layout, setLayout] = useState<ReceiptLayout>(initialLayout)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const paperRef = useRef<HTMLDivElement>(null)
@@ -224,7 +225,7 @@ export default function ReceiptCenterBridge() {
   const [context, setContext] = useState<SourceContext | null>(null)
   const [active, setActive] = useState(() => window.location.pathname === '/receipts')
   const [picker, setPicker] = useState<ReceiptOptionResponse | null>(null)
-  const [viewer, setViewer] = useState<ReceiptRecord | null>(null)
+  const [viewer, setViewer] = useState<ViewerState | null>(null)
   const [busy, setBusy] = useState(false)
   const [pendingOptionKey, setPendingOptionKey] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -322,7 +323,7 @@ export default function ReceiptCenterBridge() {
 
   const openPage = () => { if (window.location.pathname !== '/receipts') window.history.pushState({ view: 'receipts' }, '', '/receipts'); setActive(true) }
 
-  const generate = useCallback(async (source: SourceContext, option: ReceiptOption) => {
+  const generate = useCallback(async (source: SourceContext, option: ReceiptOption, initialLayout: ReceiptLayout = 'A4') => {
     generationController.current?.abort()
     const controller = new AbortController()
     generationController.current = controller
@@ -337,7 +338,7 @@ export default function ReceiptCenterBridge() {
         signal: controller.signal,
       })
       if (!result.receipt?._id) throw new Error('The receipt was created without a valid preview. Please try again.')
-      setViewer(result.receipt); setPicker(null); setVersion((value) => value + 1)
+      setViewer({ receipt: result.receipt, initialLayout }); setPicker(null); setVersion((value) => value + 1)
     } catch (reason) {
       if (reason instanceof DOMException && reason.name === 'AbortError') {
         if (!generationClosed.current) setError('The receipt preview took too long to prepare. Please try again.')
@@ -353,6 +354,20 @@ export default function ReceiptCenterBridge() {
       }
     }
   }, [])
+
+  useEffect(() => {
+    const openPawnTicket = (event: Event) => {
+      const reference = (event as CustomEvent<{ reference?: string }>).detail?.reference?.trim()
+      if (!reference) return
+      void generate(
+        { sourceType: 'PAWN', reference },
+        { documentType: 'PAWN_CONTRACT', sourceSubId: 'contract', label: 'Pawn contract', issuedAt: new Date().toISOString(), amount: 0, currency: 'USD' },
+        'THERMAL',
+      )
+    }
+    window.addEventListener('phoneflow:open-pawn-ticket', openPawnTicket)
+    return () => window.removeEventListener('phoneflow:open-pawn-ticket', openPawnTicket)
+  }, [generate])
 
   const closePicker = useCallback(() => {
     generationClosed.current = true
@@ -380,9 +395,9 @@ export default function ReceiptCenterBridge() {
   return <>
     {navTarget && createPortal(<button className={active ? 'active' : ''} onClick={openPage}><ReceiptText size={19} /><span>Receipts</span></button>, navTarget)}
     {actionTarget && context && createPortal(<button className="secondary-button receipt-detail-action" onClick={() => void openDocuments()} disabled={busy}><Printer size={15} /> {busy ? 'Loading...' : context.sourceType === 'TRADE' ? 'Print receipt' : 'Documents'}</button>, actionTarget)}
-    {active && mainTarget && createPortal(<Workspace refreshVersion={version} onOpen={setViewer} />, mainTarget)}
+    {active && mainTarget && createPortal(<Workspace refreshVersion={version} onOpen={(receipt) => setViewer({ receipt })} />, mainTarget)}
     {picker && context && <OptionPicker response={picker} busy={busy} pendingOptionKey={pendingOptionKey} error={error} onSelect={(option) => void generate(context, option)} onClose={closePicker} />}
-    {viewer && <Viewer key={viewer._id} initialReceipt={viewer} onClose={() => setViewer(null)} onUpdated={(receipt) => { setViewer(receipt); setVersion((value) => value + 1) }} />}
+    {viewer && <Viewer key={viewer.receipt._id} initialReceipt={viewer.receipt} initialLayout={viewer.initialLayout} onClose={() => setViewer(null)} onUpdated={(receipt) => { setViewer((current) => current ? { ...current, receipt } : null); setVersion((value) => value + 1) }} />}
     {!picker && !viewer && error && createPortal(<div className="receipt-toast"><AlertTriangle size={16} /> {error}<button onClick={() => setError('')}><X size={14} /></button></div>, document.body)}
   </>
 }
