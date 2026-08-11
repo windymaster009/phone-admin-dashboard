@@ -702,8 +702,8 @@ body.operation-modal-open {
 }
 
 :root[data-theme='light'] .stock-adjustment-result-icon.phone {
-  color: #7c3aed;
-  background: rgba(124, 58, 237, 0.1);
+  color: var(--primary);
+  background: var(--primary-soft);
 }
 
 :root[data-theme='light'] .stock-adjustment-results > button:hover,
