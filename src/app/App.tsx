@@ -1726,34 +1726,43 @@ function InventoryView() {
         )}
       </section>
       {selectedItem && (
-        <div className="modal-backdrop" role="presentation" onClick={() => { setSelectedItem(null); setEditingPrice(false) }}>
-          <section className="detail-modal inventory-detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="stock-detail-title" onClick={(event) => event.stopPropagation()}>
+        <div className="modal-backdrop inventory-detail-backdrop" role="presentation">
+          <section className="detail-modal inventory-detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="stock-detail-title" aria-describedby="stock-detail-description">
             <header className="detail-modal-header">
               <InventoryPhoto item={selectedItem} size="large" />
               <div>
                 <span className="eyebrow">Stock record</span>
                 <h3 id="stock-detail-title">{selectedItem.name}</h3>
-                <p>{selectedItem.sku} - {titleStatus(selectedItem.category)}{selectedItem.imageUrl ? ' - Product photo saved' : ''}</p>
+                <p id="stock-detail-description">{selectedItem.sku} · {titleStatus(selectedItem.category)}</p>
               </div>
               <button className="icon-button" onClick={() => { setSelectedItem(null); setEditingPrice(false) }} aria-label="Close details"><X size={18} /></button>
             </header>
 
             <div className="inventory-detail-body">
-              <div className="detail-grid">
-                <div><span>Status</span><strong><StatusBadge status={selectedItem.status} /></strong></div>
-                <div><span>Barcode</span><strong className="mono">{selectedItem.barcode || selectedItem.sku}</strong></div>
-                <div><span>Quantity</span><strong>{selectedItem.quantity}</strong></div>
-                <div><span>Buy price</span><strong>{money.format(selectedItem.buyPrice)}</strong></div>
-                <div><span>Sell price</span><strong>{money.format(selectedItem.sellPrice)}</strong></div>
-                <div><span>Low stock level</span><strong>{selectedItem.reorderLevel}</strong></div>
-                <div><span>Minimum sell</span><strong>{money.format(selectedItem.minimumSellPrice || 0)}</strong></div>
-                <div><span>Source</span><strong>{selectedItem.source ? titleStatus(selectedItem.source) : 'Not recorded'}</strong></div>
-                <div><span>Created</span><strong>{selectedItem.createdAt ? dateText(selectedItem.createdAt) : 'Not recorded'}</strong></div>
-              </div>
+              <section className="inventory-detail-group inventory-summary-group" aria-labelledby="inventory-summary-title">
+                <div className="inventory-detail-section-heading">
+                  <div><span className="eyebrow">Overview</span><h4 id="inventory-summary-title">Stock and pricing</h4></div>
+                </div>
+                <div className="detail-grid">
+                  <div><span>Status</span><strong><StatusBadge status={selectedItem.status} /></strong></div>
+                  <div><span>Quantity</span><strong>{selectedItem.quantity}</strong></div>
+                  <div><span>Low stock level</span><strong>{selectedItem.reorderLevel}</strong></div>
+                  <div><span>Buy price</span><strong>{money.format(selectedItem.buyPrice)}</strong></div>
+                  <div><span>Sell price</span><strong>{money.format(selectedItem.sellPrice)}</strong></div>
+                  <div><span>Minimum sell</span><strong>{money.format(selectedItem.minimumSellPrice || 0)}</strong></div>
+                  <div><span>Barcode</span><strong className="mono">{selectedItem.barcode || selectedItem.sku}</strong></div>
+                  <div><span>Source</span><strong>{selectedItem.source ? titleStatus(selectedItem.source) : 'Not recorded'}</strong></div>
+                  <div><span>Created</span><strong>{selectedItem.createdAt ? dateText(selectedItem.createdAt) : 'Not recorded'}</strong></div>
+                </div>
+              </section>
 
-              <div className="detail-sections">
+              <section className="inventory-detail-group inventory-information-group" aria-labelledby="inventory-information-title">
+                <div className="inventory-detail-section-heading">
+                  <div><span className="eyebrow">Information</span><h4 id="inventory-information-title">Product details</h4></div>
+                </div>
+                <div className="detail-sections">
                 <article>
-                  <span className="eyebrow">Device</span>
+                  <span className="eyebrow">Product</span>
                   <p><strong>{[selectedItem.brand, selectedItem.model].filter(Boolean).join(' ') || selectedItem.name}</strong></p>
                   <p>{[selectedItem.storage, selectedItem.ram && `${selectedItem.ram} RAM`, selectedItem.color, selectedItem.condition && titleStatus(selectedItem.condition)].filter(Boolean).join(' ') || 'No extra product details'}</p>
                   <p>{selectedItem.batteryHealth !== undefined ? `Battery ${selectedItem.batteryHealth}%` : 'Battery not recorded'}</p>
@@ -1771,11 +1780,12 @@ function InventoryView() {
                   <p>{selectedItem.accessoriesIncluded?.length ? selectedItem.accessoriesIncluded.map(titleStatus).join(', ') : 'Included accessories not recorded'}</p>
                 </article>
                 <article>
-                  <span className="eyebrow">Picture</span>
-                  <p><strong>{selectedItem.imageUrl ? 'Photo URL saved' : 'No photo URL saved'}</strong></p>
-                  <p>{selectedItem.imageUrl || 'Add imageUrl through the inventory API or purchase payload to show the real product picture here.'}</p>
+                  <span className="eyebrow">Photo</span>
+                  <p><strong>{selectedItem.imageUrl ? 'Product photo added' : 'No product photo'}</strong></p>
+                  <p>{selectedItem.imageUrl ? 'Use Change photo below to replace it.' : 'Use Add photo below to upload one.'}</p>
                 </article>
-              </div>
+                </div>
+              </section>
 
               {editingPrice && <div className="inventory-price-editor">
                 <div className="inventory-price-heading"><span className="eyebrow">Inventory pricing</span><h4>Set selling price</h4><p>Changing these values does not modify the original purchase transaction.</p></div>

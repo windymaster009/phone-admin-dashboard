@@ -831,26 +831,100 @@ td strong { color: var(--text); }
 .detail-modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 22px; border-bottom: 1px solid var(--border); background: linear-gradient(135deg, var(--primary-soft), transparent); }
 .detail-modal-header h3 { margin: 6px 0; font: 800 24px Manrope, sans-serif; }
 .detail-modal-header p { margin: 0; color: var(--muted); font-size: 12px; }
-.inventory-detail-modal { width: min(860px, 100%); max-height: calc(100vh - 48px); display: flex; flex-direction: column; overflow: hidden; }
-.inventory-detail-modal .detail-modal-header { flex: 0 0 auto; align-items: center; padding: 18px; }
-.inventory-detail-modal .detail-modal-header > .inventory-photo-large { width: 76px; height: 76px; }
+.inventory-detail-modal { width: min(760px, 100%); max-height: min(720px, calc(100vh - 48px)); display: flex; flex-direction: column; overflow: hidden; }
+.inventory-detail-modal .detail-modal-header { flex: 0 0 auto; align-items: center; padding: 13px 15px; }
+.inventory-detail-modal .detail-modal-header > .inventory-photo-large { width: 58px; height: 58px; border-radius: 11px; }
 .inventory-detail-modal .detail-modal-header > .inventory-photo-large:not(.has-image) { width: 54px; height: 54px; border-radius: 12px; }
 .inventory-detail-modal .detail-modal-header > .inventory-photo-large:not(.has-image) small { display: none; }
 .inventory-detail-modal .detail-modal-header > .inventory-photo-large:not(.has-image) svg { width: 25px; height: 25px; }
 .inventory-detail-modal .detail-modal-header > div { min-width: 0; flex: 1; }
-.inventory-detail-modal .detail-modal-header h3 { margin: 4px 0; overflow: hidden; font-size: 22px; text-overflow: ellipsis; white-space: nowrap; }
+.inventory-detail-modal .detail-modal-header h3 { margin: 3px 0; overflow: hidden; font-size: 19px; text-overflow: ellipsis; white-space: nowrap; }
+.inventory-detail-modal .detail-modal-header p { font-size: 10px; }
 .inventory-detail-body { min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
-.inventory-detail-modal .detail-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; padding: 16px 18px; }
-.inventory-detail-modal .detail-grid div { min-width: 0; min-height: 70px; padding: 12px 13px; transition: border-color .18s ease, background .18s ease; }
+.inventory-detail-group { min-width: 0; }
+.inventory-detail-section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px 7px; }
+.inventory-detail-section-heading > div { min-width: 0; }
+.inventory-detail-section-heading h4 { margin: 2px 0 0; color: var(--text); font: 800 12px Manrope, sans-serif; }
+.inventory-detail-section-heading > p { margin: 0; color: var(--muted); font-size: 9px; line-height: 1.45; text-align: right; }
+.inventory-summary-group { border-bottom: 1px solid var(--border); }
+.inventory-detail-modal .detail-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; padding: 10px 14px; }
+.inventory-detail-modal .detail-grid div { min-width: 0; min-height: 50px; padding: 8px 10px; border-radius: 9px; transition: border-color .18s ease, background .18s ease; }
 .inventory-detail-modal .detail-grid div:hover { border-color: color-mix(in srgb, var(--primary) 30%, var(--border)); background: color-mix(in srgb, var(--bg-soft) 92%, var(--primary)); }
 .inventory-detail-modal .detail-grid div:nth-child(1) { border-color: color-mix(in srgb, var(--green) 24%, var(--border)); background: linear-gradient(135deg, color-mix(in srgb, var(--green) 8%, transparent), var(--bg-soft) 65%); }
 .inventory-detail-modal .detail-grid div:nth-child(4),
 .inventory-detail-modal .detail-grid div:nth-child(5) { border-color: color-mix(in srgb, var(--primary) 22%, var(--border)); }
-.inventory-detail-modal .detail-grid strong { display: block; overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.inventory-detail-modal .detail-sections { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; padding: 0 18px 16px; }
-.inventory-detail-modal .detail-sections article { min-width: 0; padding: 14px 15px; border-top: 2px solid color-mix(in srgb, var(--primary) 42%, transparent); }
-.inventory-detail-modal .detail-sections p { overflow-wrap: anywhere; margin-top: 7px; font-size: 10px; line-height: 1.5; }
-.inventory-detail-modal .detail-modal-footer { flex: 0 0 auto; flex-wrap: wrap; padding: 13px 18px; background: var(--surface-solid); box-shadow: 0 -12px 30px color-mix(in srgb, var(--text) 12%, transparent); }
+.inventory-detail-modal .detail-grid span { margin-bottom: 4px; font-size: 8px; }
+.inventory-detail-modal .detail-grid strong { display: block; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.inventory-detail-modal .inventory-summary-group .detail-grid { padding-top: 0; border-bottom: 0; }
+.inventory-detail-modal .detail-sections { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; padding: 0 14px 10px; }
+.inventory-detail-modal .detail-sections article { min-width: 0; padding: 9px 10px; border-radius: 9px; border-top: 1px solid color-mix(in srgb, var(--primary) 42%, transparent); }
+.inventory-detail-modal .detail-sections p { overflow-wrap: anywhere; margin-top: 4px; font-size: 8px; line-height: 1.4; }
+.inventory-detail-modal .detail-sections .eyebrow { font-size: 8px; letter-spacing: .9px; }
+.inventory-detail-modal .detail-note { margin: 0 14px 10px; padding: 9px 11px; border-radius: 9px; }
+.inventory-detail-modal .detail-note p { margin-top: 4px; font-size: 9px; line-height: 1.4; }
+.inventory-detail-modal .detail-modal-footer { flex: 0 0 auto; flex-wrap: wrap; padding: 9px 14px; background: var(--surface-solid); box-shadow: 0 -10px 24px color-mix(in srgb, var(--text) 10%, transparent); }
+.inventory-detail-modal .detail-modal-footer .primary-button,
+.inventory-detail-modal .detail-modal-footer .secondary-button,
+.inventory-detail-modal .detail-modal-footer .ghost-button { min-height: 34px; padding-inline: 11px; font-size: 10px; }
+
+.app[data-theme='light'] .inventory-detail-backdrop {
+  background: rgba(23, 37, 29, 0.56);
+}
+
+.app[data-theme='light'] .inventory-detail-modal {
+  border-color: rgba(31, 73, 48, 0.16);
+  background: #f5f9f5;
+  box-shadow: 0 24px 70px rgba(20, 48, 31, 0.2);
+}
+
+.app[data-theme='light'] .inventory-detail-modal .detail-modal-header {
+  border-color: rgba(31, 73, 48, 0.12);
+  background: linear-gradient(135deg, rgba(47, 143, 91, 0.14), rgba(248, 252, 248, 0.96));
+}
+
+.app[data-theme='light'] .inventory-detail-modal .detail-modal-header p,
+.app[data-theme='light'] .inventory-detail-section-heading > p,
+.app[data-theme='light'] .inventory-detail-modal .detail-sections p,
+.app[data-theme='light'] .inventory-detail-modal .detail-note p {
+  color: #596f61;
+}
+
+.app[data-theme='light'] .inventory-detail-body {
+  background: #eef4ef;
+}
+
+.app[data-theme='light'] .inventory-summary-group {
+  border-color: rgba(31, 73, 48, 0.11);
+}
+
+.app[data-theme='light'] .inventory-detail-modal .detail-grid div,
+.app[data-theme='light'] .inventory-detail-modal .detail-grid div:nth-child(4),
+.app[data-theme='light'] .inventory-detail-modal .detail-grid div:nth-child(5),
+.app[data-theme='light'] .inventory-detail-modal .detail-sections article,
+.app[data-theme='light'] .inventory-detail-modal .detail-note {
+  border-color: rgba(31, 73, 48, 0.13);
+  background: #f9fcf9;
+}
+
+.app[data-theme='light'] .inventory-detail-modal .detail-grid div:nth-child(1) {
+  border-color: rgba(47, 143, 91, 0.3);
+  background: rgba(47, 143, 91, 0.08);
+}
+
+.app[data-theme='light'] .inventory-detail-modal .detail-grid div:hover {
+  border-color: rgba(47, 143, 91, 0.32);
+  background: #f3f9f4;
+}
+
+.app[data-theme='light'] .inventory-detail-modal .detail-sections article {
+  border-top-width: 1px;
+}
+
+.app[data-theme='light'] .inventory-detail-modal .detail-modal-footer {
+  border-color: rgba(31, 73, 48, 0.12);
+  background: #f8fcf8;
+  box-shadow: 0 -10px 24px rgba(31, 73, 48, 0.08);
+}
 .pawn-detail-modal { display: flex; flex-direction: column; overflow: hidden; }
 .pawn-detail-modal .detail-modal-header { flex: 0 0 auto; }
 .pawn-detail-body { min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
