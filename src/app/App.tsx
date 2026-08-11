@@ -721,6 +721,9 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
   const pawnCurrency: PawnCurrency = pawn.currency === 'KHR' ? 'KHR' : 'USD'
   const currencyLabel = pawnCurrency === 'KHR' ? 'KHR' : '$'
   const isOpen = ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED'].includes(pawn.status)
+  const remainingPrincipal = pawn.remainingPrincipal ?? pawn.principal
+  const currentFee = pawn.feeModel === 'DAILY_SIMPLE' ? pawn.feeSummary?.accruedFee || 0 : pawn.accruedInterest || 0
+  const dailyFeeRate = Number(pawn.dailyFeeRate || 2.5).toLocaleString(undefined, { maximumFractionDigits: 4 })
 
   function openAction(nextAction: PawnAction) {
     setAction(nextAction)
@@ -777,26 +780,51 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
           <button className="icon-button" onClick={onClose} aria-label="Close details"><X size={18} /></button>
         </header>
         <div className="pawn-detail-body">
-        <div className="detail-grid">
-          <div><span>Status</span><strong><StatusBadge status={pawn.status} /></strong></div>
-          <div><span>ID card</span><strong>{pawn.identificationVerified ? 'Verified' : 'Not provided (optional)'}</strong></div>
-          <div><span>Ownership</span><strong>{pawn.ownershipConfirmed || pawn.identificationVerified ? 'Confirmed' : 'Legacy record'}</strong></div>
-          <div><span>Currency</span><strong>{pawnCurrency}</strong></div>
-          <div><span>Estimated value</span><strong>{pawnMoney(pawn.estimatedValue, pawnCurrency)}</strong></div>
-          <div><span>Remaining principal</span><strong>{pawnMoney(pawn.remainingPrincipal ?? pawn.principal, pawnCurrency)}</strong></div>
-          <div><span>{pawn.feeModel === 'DAILY_SIMPLE' ? 'Accrued pawn fee' : 'Interest due'}</span><strong>{pawnMoney(pawn.feeModel === 'DAILY_SIMPLE' ? pawn.feeSummary?.accruedFee || 0 : pawn.accruedInterest || 0, pawnCurrency)}</strong></div>
-          <div><span>Redeem today</span><strong>{pawnMoney(outstanding, pawnCurrency)}</strong></div>
-          <div><span>Amount paid</span><strong>{pawnMoney(pawn.amountPaid || 0, pawnCurrency)}</strong></div>
-          <div><span>Pawn percent</span><strong>{pawn.pawnPercentage}%</strong></div>
-          <div><span>{pawn.feeModel === 'DAILY_SIMPLE' ? 'Daily pawn fee' : 'Interest rate'}</span><strong>{pawn.feeModel === 'DAILY_SIMPLE' ? `${pawn.dailyFeeRate || 2.5}% / day` : `${pawn.interestRate}%`}</strong></div>
-          {pawn.feeModel === 'DAILY_SIMPLE' && <div><span>Pawn term</span><strong>{pawn.termDays} days</strong></div>}
-          {pawn.feeModel === 'DAILY_SIMPLE' && <div><span>Accrued days</span><strong>{pawn.feeSummary?.accruedDays || 0} days</strong></div>}
-          {pawn.feeModel === 'DAILY_SIMPLE' && <div><span>Fee at due date</span><strong>{pawnMoney(pawn.feeSummary?.feeAtDueDate || 0, pawnCurrency)}</strong></div>}
-          {pawn.feeModel === 'DAILY_SIMPLE' && <div><span>Total at due date</span><strong>{pawnMoney(pawn.feeSummary?.totalAtDueDate || 0, pawnCurrency)}</strong></div>}
-          {pawn.feeModel === 'DAILY_SIMPLE' && <div><span>Start date</span><strong>{dateText(pawn.startDate || pawn.createdAt)}</strong></div>}
-          <div><span>Due date</span><strong>{dateText(pawn.dueDate)}</strong></div>
-          <div><span>Created</span><strong>{dateText(pawn.createdAt)}</strong></div>
+        <section className="pawn-balance-summary" aria-label="Current pawn balance">
+          <div className="pawn-balance-heading">
+            <div><span className="eyebrow">Current balance</span><h4>Amount to redeem today</h4></div>
+            <StatusBadge status={pawn.status} />
+          </div>
+          <strong className="pawn-balance-total">{pawnMoney(outstanding, pawnCurrency)}</strong>
+          <p>Return this amount to collect the pawned item today.</p>
+          <div className="pawn-balance-breakdown">
+            <div><span>Principal still owed</span><strong>{pawnMoney(remainingPrincipal, pawnCurrency)}</strong></div>
+            <div><span>Fee accumulated today</span><strong>{pawnMoney(currentFee, pawnCurrency)}</strong></div>
+            <div><span>Payments received</span><strong>{pawnMoney(pawn.amountPaid || 0, pawnCurrency)}</strong></div>
+            <div><span>Payment due</span><strong>{dateText(pawn.dueDate)}</strong></div>
+          </div>
+        </section>
+
+        <div className="pawn-detail-groups">
+          <section className="pawn-detail-group">
+            <header><span className="eyebrow">Loan agreement</span><h4>Contract terms</h4></header>
+            <dl>
+              <div><dt>Cash originally given</dt><dd>{pawnMoney(pawn.principal, pawnCurrency)}</dd></div>
+              <div><dt>Estimated resale value</dt><dd>{pawnMoney(pawn.estimatedValue, pawnCurrency)}</dd></div>
+              <div><dt>Loan-to-value</dt><dd>{pawn.pawnPercentage}%</dd></div>
+              <div><dt>Currency</dt><dd>{pawnCurrency}</dd></div>
+              <div><dt>{pawn.feeModel === 'DAILY_SIMPLE' ? 'Daily fee rate' : 'Interest rate'}</dt><dd>{pawn.feeModel === 'DAILY_SIMPLE' ? `${dailyFeeRate}% per day` : `${pawn.interestRate}%`}</dd></div>
+              {pawn.feeModel === 'DAILY_SIMPLE' && <div><dt>Contract length</dt><dd>{pawn.termDays} days</dd></div>}
+            </dl>
+          </section>
+
+          <section className="pawn-detail-group">
+            <header><span className="eyebrow">Payment schedule</span><h4>Dates and expected fee</h4></header>
+            <dl>
+              <div><dt>Pawned on</dt><dd>{dateText(pawn.startDate || pawn.createdAt)}</dd></div>
+              <div><dt>Due date</dt><dd>{dateText(pawn.dueDate)}</dd></div>
+              {pawn.feeModel === 'DAILY_SIMPLE' && <div><dt>Days accumulated</dt><dd>{pawn.feeSummary?.accruedDays || 0} days</dd></div>}
+              {pawn.feeModel === 'DAILY_SIMPLE' && <div><dt>Fee if paid on due date</dt><dd>{pawnMoney(pawn.feeSummary?.feeAtDueDate || 0, pawnCurrency)}</dd></div>}
+              {pawn.feeModel === 'DAILY_SIMPLE' && <div className="pawn-total-at-due"><dt>Total to pay on due date</dt><dd>{pawnMoney(pawn.feeSummary?.totalAtDueDate || 0, pawnCurrency)}</dd></div>}
+              {pawn.feeModel !== 'DAILY_SIMPLE' && <div><dt>Record created</dt><dd>{dateText(pawn.createdAt)}</dd></div>}
+            </dl>
+          </section>
         </div>
+
+        <section className="pawn-verification-summary" aria-label="Contract verification">
+          <div><span>Item ownership</span><strong>{pawn.ownershipConfirmed || pawn.identificationVerified ? 'Confirmed by staff' : 'Legacy record'}</strong></div>
+          <div><span>National ID</span><strong>{pawn.identificationVerified ? 'Recorded and verified' : 'Not recorded — optional'}</strong></div>
+        </section>
         {pawn.renewals && pawn.renewals.length > 0 && <div className="detail-note pawn-renewal-history"><span className="eyebrow">Renewal history</span>{pawn.renewals.map((renewal, index) => <p key={`${renewal.renewedAt}-${index}`}><strong>{dateText(renewal.renewedAt)}</strong> · {renewal.termDays ? `${renewal.termDays} days` : 'Legacy renewal'} · Fee paid {pawnMoney(renewal.feePaid ?? renewal.paymentAmount, pawnCurrency)} · Principal {pawnMoney(renewal.principalRemaining ?? pawn.remainingPrincipal ?? pawn.principal, pawnCurrency)} · New due {dateText(renewal.newDueDate)}{renewal.renewedBy?.name ? ` · ${renewal.renewedBy.name}` : ''}</p>)}</div>}
         <div className="detail-sections">
           <article>
@@ -835,7 +863,7 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
         </form>}
         </div>
         {!action && <footer className="detail-modal-footer">
-          {onAction && isOpen && !action && <><button className="secondary-button" onClick={() => openAction('payment')}>Payment</button><button className="secondary-button" onClick={() => openAction('renew')}>Renew</button><button className="primary-button" onClick={() => openAction('redeem')}>Redeem</button>{pawn.status === 'OVERDUE' && <button className="ghost-button danger-link" onClick={() => openAction('forfeit')}>Forfeit</button>}</>}
+          {onAction && isOpen && !action && <><button className="secondary-button" onClick={() => openAction('payment')}>Record payment</button><button className="secondary-button" onClick={() => openAction('renew')}>Renew contract</button><button className="primary-button" onClick={() => openAction('redeem')}>Redeem item</button>{pawn.status === 'OVERDUE' && <button className="ghost-button danger-link" onClick={() => openAction('forfeit')}>Forfeit item</button>}</>}
           {onOpenAll && <button className="secondary-button" onClick={onOpenAll}>Open pawn management <ArrowUpRight size={15} /></button>}
           <button className="ghost-button" onClick={onClose}>Close</button>
         </footer>}
