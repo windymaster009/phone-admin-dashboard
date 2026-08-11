@@ -1335,16 +1335,16 @@ export default function OperationModalBridge() {
       </form>}
 
       {kind === 'purchase' && <form className="operation-form purchase-workflow-form" onSubmit={submitPurchase}>
-        <nav className="purchase-stepper" aria-label="Purchase progress">
-          <button type="button" className={purchaseStep === 1 ? 'active' : purchaseSellerValid ? 'complete' : ''} onClick={() => setPurchaseStep(1)}><span>{purchaseSellerValid ? <CheckCircle2 size={15} /> : '1'}</span><p><strong>Seller & purchase</strong><small>Transaction details</small></p></button>
+        <div className="purchase-stepper" role="group" aria-label="Purchase progress">
+          <div aria-current={purchaseStep === 1 ? 'step' : undefined} aria-label="Step 1 of 2: Seller and purchase details" className={`purchase-step ${purchaseStep === 1 ? 'active' : purchaseSellerValid ? 'complete' : ''}`}><span>{purchaseSellerValid ? <CheckCircle2 size={17} /> : '1'}</span><p><strong>Seller & purchase</strong><small>Step 1 · Seller and payment details</small></p></div>
           <i />
-          <button type="button" className={purchaseStep === 2 ? 'active' : purchaseItemsValid ? 'complete' : ''} onClick={() => { if (purchaseSellerValid) { setError(''); setPurchaseAttempted(false); setPurchaseStep(2) } else { setPurchaseAttempted(true); setError('Complete the seller information first') } }}><span>{purchaseItemsValid ? <CheckCircle2 size={15} /> : '2'}</span><p><strong>Items & payment</strong><small>Products and settlement</small></p></button>
-        </nav>
+          <div aria-current={purchaseStep === 2 ? 'step' : undefined} aria-label="Step 2 of 2: Items and settlement" className={`purchase-step ${purchaseStep === 2 ? 'active' : purchaseItemsValid ? 'complete' : ''}`}><span>{purchaseItemsValid ? <CheckCircle2 size={17} /> : '2'}</span><p><strong>Items & payment</strong><small>Step 2 · Products and settlement</small></p></div>
+        </div>
 
         {purchaseStep === 1 && <>
         <div className="purchase-step-content">
         <section className="purchase-section-card">
-          <div className="purchase-section-heading"><span>1</span><div><h3>Purchase</h3><p>Seller and payment details for this transaction.</p></div></div>
+          <div className="purchase-section-heading purchase-section-heading-plain"><div><h3>Seller and purchase details</h3><p>Choose who is selling, then record the date, payment method, and currency.</p></div></div>
           <div className="purchase-seller-tabs">
             <button type="button" className={sellerType === 'EXISTING_CUSTOMER' ? 'active' : ''} onClick={() => setSellerType('EXISTING_CUSTOMER')}>Existing customer</button>
             <button type="button" className={sellerType === 'EXISTING_SUPPLIER' ? 'active' : ''} onClick={() => setSellerType('EXISTING_SUPPLIER')}>Existing supplier</button>
@@ -1506,11 +1506,11 @@ export default function OperationModalBridge() {
       </section>}
 
       {kind === 'pawn' && !pawnCreated && <form className="operation-form purchase-workflow-form pawn-workflow-form" onSubmit={submitPawn}>
-        <nav className="purchase-stepper" aria-label="Pawn contract progress">
-          <button type="button" className={pawnStep === 1 ? 'active' : pawnCustomerValid ? 'complete' : ''} onClick={() => setPawnStep(1)}><span>{pawnCustomerValid ? <CheckCircle2 size={15} /> : '1'}</span><p><strong>Customer verification</strong><small>Identity and ownership</small></p></button>
+        <div className="purchase-stepper" role="group" aria-label="Pawn contract progress">
+          <div aria-current={pawnStep === 1 ? 'step' : undefined} aria-label="Step 1 of 2: Customer verification" className={`purchase-step ${pawnStep === 1 ? 'active' : pawnCustomerValid ? 'complete' : ''}`}><span>{pawnCustomerValid ? <CheckCircle2 size={17} /> : '1'}</span><p><strong>Customer verification</strong><small>Step 1 · Identity and ownership</small></p></div>
           <i />
-          <button type="button" className={pawnStep === 2 ? 'active' : ''} onClick={() => { setPawnAttempted(true); if (pawnCustomerValid) { setError(''); setPawnStep(2) } else setError('Select a customer and confirm identity and collateral ownership first') }}><span>2</span><p><strong>Collateral & terms</strong><small>Device, valuation, and loan</small></p></button>
-        </nav>
+          <div aria-current={pawnStep === 2 ? 'step' : undefined} aria-label="Step 2 of 2: Collateral and contract terms" className={`purchase-step ${pawnStep === 2 ? 'active' : ''}`}><span>2</span><p><strong>Collateral & terms</strong><small>Step 2 · Device, valuation, and loan</small></p></div>
+        </div>
 
         {pawnStep === 1 && <>
           <div className="purchase-step-content">
