@@ -279,7 +279,7 @@ kbd { border: 1px solid var(--border-strong); border-radius: 6px; padding: 3px 7
   from { opacity: 0; transform: translateY(-5px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
-.avatar { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; flex-shrink: 0; color: #fff; font-size: 10px; font-weight: 700; background: linear-gradient(135deg, #0ea5e9, #7c3aed); }
+.avatar { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; flex-shrink: 0; color: #fff; font-size: 10px; font-weight: 700; background: linear-gradient(135deg, var(--blue), var(--primary-strong)); }
 .avatar.large { width: 34px; height: 34px; }
 .mobile-menu { display: none; width: 38px; height: 38px; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 10px; }
 
@@ -594,9 +594,9 @@ td strong { color: var(--text); }
   flex: 0 0 auto;
   border-radius: 13px;
 }
-.settings-icon.violet { color: #a78bfa; background: rgba(139, 92, 246, 0.14); }
-.settings-icon.blue { color: var(--blue); background: rgba(56, 189, 248, 0.12); }
-.settings-icon.orange { color: var(--orange); background: rgba(251, 146, 60, 0.12); }
+.settings-icon.violet { color: var(--primary); background: var(--primary-soft); }
+.settings-icon.blue { color: var(--blue); background: color-mix(in srgb, var(--blue) 12%, transparent); }
+.settings-icon.orange { color: var(--orange); background: color-mix(in srgb, var(--orange) 12%, transparent); }
 .account-status, .service-state {
   display: inline-flex;
   align-items: center;
@@ -608,11 +608,11 @@ td strong { color: var(--text); }
 .account-status {
   padding: 6px 9px;
   color: var(--green);
-  border: 1px solid rgba(52, 211, 153, 0.14);
+  border: 1px solid color-mix(in srgb, var(--green) 18%, transparent);
   border-radius: 999px;
-  background: rgba(52, 211, 153, 0.08);
+  background: color-mix(in srgb, var(--green) 9%, transparent);
 }
-.account-status.disabled { color: var(--rose); border-color: rgba(251, 113, 133, 0.14); background: rgba(251, 113, 133, 0.08); }
+.account-status.disabled { color: var(--rose); border-color: color-mix(in srgb, var(--rose) 18%, transparent); background: color-mix(in srgb, var(--rose) 9%, transparent); }
 .account-status i, .service-state i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 9px currentColor; }
 .account-settings-body {
   display: grid;
@@ -637,8 +637,8 @@ td strong { color: var(--text); }
   flex: 0 0 auto;
   border-radius: 17px;
   color: #fff;
-  background: linear-gradient(135deg, #38bdf8, #7c3aed);
-  box-shadow: 0 12px 28px rgba(124, 58, 237, 0.23);
+  background: linear-gradient(135deg, var(--blue), var(--primary-strong));
+  box-shadow: 0 12px 28px color-mix(in srgb, var(--primary) 23%, transparent);
   font: 800 15px Manrope, sans-serif;
 }
 .account-identity { min-width: 0; display: grid; gap: 2px; }
@@ -671,7 +671,7 @@ td strong { color: var(--text); }
 .environment-list small { margin-top: 4px; color: var(--muted); font-size: 9px; }
 .service-state { color: var(--green); }
 .saved-valuation-summary { min-height: 116px; display: flex; align-items: center; gap: 14px; padding: 20px; }
-.saved-valuation-summary > strong { color: #a78bfa; font: 800 40px Manrope, sans-serif; letter-spacing: -1.5px; }
+.saved-valuation-summary > strong { color: var(--primary); font: 800 40px Manrope, sans-serif; letter-spacing: -1.5px; }
 .saved-valuation-summary p { display: flex; flex-direction: column; margin: 0; color: var(--text); font-size: 11px; font-weight: 700; }
 .saved-valuation-summary small { margin-top: 5px; color: var(--muted); font-size: 9px; font-weight: 500; }
 .font-size-settings-card { grid-area: display; }
