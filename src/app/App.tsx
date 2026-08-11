@@ -967,8 +967,8 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
       : 'short'
   const donutStyle = {
     background: totalInventoryValue
-      ? `conic-gradient(#8b5cf6 0 ${phoneStop}%, #38bdf8 ${phoneStop}% ${accessoryStop}%, #fb923c ${accessoryStop}% 100%)`
-      : 'conic-gradient(rgba(139, 92, 246, 0.18) 0 100%)',
+      ? `conic-gradient(var(--chart-primary) 0 ${phoneStop}%, var(--chart-blue) ${phoneStop}% ${accessoryStop}%, var(--chart-orange) ${accessoryStop}% 100%)`
+      : 'conic-gradient(var(--primary-soft) 0 100%)',
   }
 
   if (loading && !data) {

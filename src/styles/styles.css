@@ -21,6 +21,11 @@
   --orange: #fb923c;
   --rose: #fb7185;
   --green: #34d399;
+  --chart-primary: #8b5cf6;
+  --chart-blue: #38bdf8;
+  --chart-orange: #fb923c;
+  --chart-green: #34d399;
+  --chart-neutral: #94a3b8;
   --surface-color: var(--surface-solid);
   --text-color: var(--text);
   --muted-text: var(--muted);
@@ -52,6 +57,11 @@
   --orange: #d47a27;
   --rose: #d9576d;
   --green: #238b57;
+  --chart-primary: #2f8f5b;
+  --chart-blue: #268f89;
+  --chart-orange: #d47a27;
+  --chart-green: #238b57;
+  --chart-neutral: #71867a;
   --surface-color: var(--surface-solid);
   --text-color: var(--text);
   --muted-text: var(--muted);
@@ -87,6 +97,11 @@ button { cursor: pointer; }
   --orange: #fb923c;
   --rose: #fb7185;
   --green: #34d399;
+  --chart-primary: #8b5cf6;
+  --chart-blue: #38bdf8;
+  --chart-orange: #fb923c;
+  --chart-green: #34d399;
+  --chart-neutral: #94a3b8;
   min-height: 100vh;
   background:
     radial-gradient(circle at 76% -10%, rgba(124, 58, 237, 0.16), transparent 30%),
@@ -115,6 +130,11 @@ button { cursor: pointer; }
   --primary-soft: rgba(47, 143, 91, 0.12);
   --blue: #268f89;
   --green: #238b57;
+  --chart-primary: #2f8f5b;
+  --chart-blue: #268f89;
+  --chart-orange: #d47a27;
+  --chart-green: #238b57;
+  --chart-neutral: #71867a;
   background-color: var(--bg);
   background-image:
     radial-gradient(circle at 78% -8%, rgba(47, 143, 91, 0.16), transparent 32%),
@@ -146,6 +166,30 @@ button { cursor: pointer; }
   background: rgba(47, 143, 91, 0.13);
 }
 
+.app[data-theme='light'] .tone-blue,
+.app[data-theme='light'] .quick-icon.blue,
+.app[data-theme='light'] .stock-icon.blue {
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+}
+
+.app[data-theme='light'] .tone-orange,
+.app[data-theme='light'] .quick-icon.orange,
+.app[data-theme='light'] .stock-icon.orange {
+  color: var(--orange);
+  background: color-mix(in srgb, var(--orange) 12%, transparent);
+}
+
+.app[data-theme='light'] .tone-rose,
+.app[data-theme='light'] .quick-icon.rose {
+  color: var(--rose);
+  background: color-mix(in srgb, var(--rose) 12%, transparent);
+}
+
+.app[data-theme='light'] .surface-card {
+  box-shadow: 0 12px 30px rgba(31, 73, 48, 0.07);
+}
+
 .app[data-theme='light'] .chart-column span {
   background: linear-gradient(180deg, #62b783, #237348);
   box-shadow: 0 9px 18px rgba(35, 115, 72, 0.16);
@@ -156,7 +200,15 @@ button { cursor: pointer; }
 }
 
 .app[data-theme='light'] .donut-chart .donut-khr {
-  color: #6d28d9;
+  color: var(--primary-strong);
+}
+
+.app[data-theme='light'] .support-card > span {
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+}
+
+.app[data-theme='light'] .khr-table-value {
+  color: var(--primary-strong);
 }
 
 .app[data-font-size='default'] {
@@ -339,7 +391,7 @@ kbd { border: 1px solid var(--border-strong); border-radius: 6px; padding: 3px 7
 .chart-empty strong { margin-top: 8px; color: var(--muted); font-size: 11px; }
 .chart-empty span { margin-top: 4px; color: var(--muted-2); font-size: 9px; }
 .donut-wrap { display: grid; place-items: center; padding: 16px 0 12px; }
-.donut-chart { width: 132px; height: 132px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(#8b5cf6 0 62%, #38bdf8 62% 86%, #fb923c 86% 100%); position: relative; }
+.donut-chart { width: 132px; height: 132px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--chart-primary) 0 62%, var(--chart-blue) 62% 86%, var(--chart-orange) 86% 100%); position: relative; }
 .donut-chart::before { content: ''; position: absolute; width: 94px; height: 94px; border-radius: 50%; background: var(--surface-solid); }
 .donut-chart .donut-center { position: relative; z-index: 1; width: 82px; min-width: 0; text-align: center; font-family: Manrope, sans-serif; }
 .donut-value { display: block; line-height: 1.05; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -0.45px; white-space: nowrap; }
@@ -351,7 +403,7 @@ kbd { border: 1px solid var(--border-strong); border-radius: 6px; padding: 3px 7
 .legend-list { display: grid; gap: 13px; }
 .legend-list > div { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; }
 .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
-.dot-violet { background: #8b5cf6; } .dot-blue { background: #38bdf8; } .dot-orange { background: #fb923c; }
+.dot-violet { background: var(--chart-primary); } .dot-blue { background: var(--chart-blue); } .dot-orange { background: var(--chart-orange); }
 .legend-list p { margin: 0; display: flex; flex-direction: column; font-size: 11px; }
 .legend-list p small { color: var(--muted); margin-top: 2px; font-size: 9px; }
 .legend-list strong { font-size: 11px; }
