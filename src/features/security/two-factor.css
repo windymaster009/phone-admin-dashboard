@@ -9,8 +9,8 @@
   gap: 4px;
   padding: 3px 7px;
   border-radius: 999px;
-  color: #c4b5fd;
-  background: color-mix(in srgb, #7c3aed 17%, transparent);
+  color: var(--primary);
+  background: var(--primary-soft);
   font-size: 9px;
   font-weight: 800;
   white-space: nowrap;
@@ -51,7 +51,7 @@
 
 .security-2fa-enabled > svg {
   flex: 0 0 auto;
-  color: #34d399;
+  color: var(--green);
 }
 
 .security-2fa-enabled > div {
@@ -128,7 +128,7 @@
 
 .security-secret code {
   overflow-wrap: anywhere;
-  color: #ddd6fe;
+  color: var(--primary);
   font-size: 11px;
   letter-spacing: 0.06em;
 }

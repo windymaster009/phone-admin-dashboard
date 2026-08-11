@@ -88,23 +88,23 @@
   flex: 0 0 40px;
   padding: 10px;
   border-radius: 11px;
-  color: #a78bfa;
-  background: color-mix(in srgb, #7c3aed 18%, transparent);
+  color: var(--primary);
+  background: var(--primary-soft);
 }
 
 .security-summary > article:nth-child(2) > svg {
-  color: #7dd3fc;
-  background: color-mix(in srgb, #0284c7 17%, transparent);
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 15%, transparent);
 }
 
 .security-summary > article:nth-child(3) > svg {
-  color: #5eead4;
-  background: color-mix(in srgb, #0f766e 19%, transparent);
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 15%, transparent);
 }
 
 .security-summary > article:nth-child(4) > svg {
-  color: #fcd34d;
-  background: color-mix(in srgb, #d97706 18%, transparent);
+  color: var(--orange);
+  background: color-mix(in srgb, var(--orange) 15%, transparent);
 }
 
 .security-summary > article > div {
@@ -212,8 +212,8 @@
   display: grid;
   place-items: center;
   border-radius: 11px;
-  color: #7dd3fc;
-  background: color-mix(in srgb, #0284c7 17%, transparent);
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 15%, transparent);
 }
 
 .security-session-info {
@@ -261,13 +261,13 @@
 }
 
 .security-current {
-  color: #6ee7b7;
-  background: color-mix(in srgb, #059669 18%, transparent);
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 15%, transparent);
 }
 
 .security-revoked {
-  color: #fda4af;
-  background: color-mix(in srgb, #e11d48 16%, transparent);
+  color: var(--rose);
+  background: color-mix(in srgb, var(--rose) 15%, transparent);
 }
 
 .security-pairing-code {
@@ -333,13 +333,13 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #34d399;
-  box-shadow: 0 0 0 4px color-mix(in srgb, #34d399 12%, transparent);
+  background: var(--green);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--green) 12%, transparent);
 }
 
 .security-event-dot.danger {
-  background: #fb7185;
-  box-shadow: 0 0 0 4px color-mix(in srgb, #fb7185 12%, transparent);
+  background: var(--rose);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--rose) 12%, transparent);
 }
 
 .security-event-list article > div {
@@ -374,10 +374,10 @@
 .security-panel .danger-button {
   min-height: 36px;
   padding: 0 11px;
-  border: 1px solid color-mix(in srgb, #fb7185 32%, transparent);
+  border: 1px solid color-mix(in srgb, var(--rose) 32%, transparent);
   border-radius: 10px;
-  color: #fda4af;
-  background: color-mix(in srgb, #881337 20%, transparent);
+  color: var(--rose);
+  background: color-mix(in srgb, var(--rose) 12%, transparent);
   font: inherit;
   font-size: 11px;
   font-weight: 800;
@@ -390,7 +390,7 @@
 }
 
 .security-panel .icon-button.danger {
-  color: #fda4af;
+  color: var(--rose);
 }
 
 .security-workspace button:focus-visible,
