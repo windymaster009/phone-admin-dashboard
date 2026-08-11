@@ -972,21 +972,21 @@ td strong { color: var(--text); }
 .overview-chart-legend { display: flex; justify-content: flex-end; gap: 13px; margin: 0 5px 3px; }
 .overview-chart-legend span { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 9px; font-weight: 700; }
 .overview-chart-legend span::before { width: 8px; height: 8px; content: ''; border-radius: 50%; background: currentColor; }
-.overview-chart-legend .sales { color: #38bdf8; }
-.overview-chart-legend .purchases { color: #fb923c; }
-.overview-chart-legend .profit { color: #a78bfa; }
+.overview-chart-legend .sales { color: var(--chart-blue); }
+.overview-chart-legend .purchases { color: var(--chart-orange); }
+.overview-chart-legend .profit { color: var(--chart-primary); }
 .overview-chart { width: 100%; height: 210px; min-height: 0; display: block; overflow: visible; }
 .overview-chart-grid { stroke: var(--border); stroke-width: 1; }
 .overview-chart-zero { stroke: var(--muted-2); stroke-dasharray: 5 5; stroke-width: 1; }
 .overview-chart-axis { fill: var(--muted-2); font: 9px Inter, sans-serif; }
 .overview-chart-line { fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-.overview-chart-line.sales { stroke: #38bdf8; }
-.overview-chart-line.purchases { stroke: #fb923c; }
-.overview-chart-line.profit { stroke: #a78bfa; }
+.overview-chart-line.sales { stroke: var(--chart-blue); }
+.overview-chart-line.purchases { stroke: var(--chart-orange); }
+.overview-chart-line.profit { stroke: var(--chart-primary); }
 .overview-chart-marker { stroke: var(--surface-solid); stroke-width: 2; vector-effect: non-scaling-stroke; }
-.overview-chart-marker.sales { fill: #38bdf8; }
-.overview-chart-marker.purchases { fill: #fb923c; }
-.overview-chart-marker.profit { fill: #a78bfa; }
+.overview-chart-marker.sales { fill: var(--chart-blue); }
+.overview-chart-marker.purchases { fill: var(--chart-orange); }
+.overview-chart-marker.profit { fill: var(--chart-primary); }
 .overview-chart-empty { position: absolute; inset: 42px 0 22px 58px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--muted-2); background: color-mix(in srgb, var(--surface-solid) 82%, transparent); backdrop-filter: blur(2px); }
 .overview-chart-empty strong { margin-top: 8px; color: var(--text); font-size: 11px; }
 .overview-chart-empty span { margin-top: 4px; color: var(--muted); font-size: 9px; }
@@ -1026,6 +1026,102 @@ td strong { color: var(--text); }
 .overview-transactions-card table td { padding-inline: 13px; }
 .overview-activity-card .transaction-list { padding: 0 13px 8px; }
 .overview-transaction-details { grid-template-columns: repeat(3, minmax(0, 1fr)) auto; }
+
+.business-overview-page .transaction-icon.sale {
+  color: var(--chart-green);
+  background: color-mix(in srgb, var(--chart-green) 12%, transparent);
+}
+
+.business-overview-page .transaction-icon.purchase {
+  color: var(--chart-orange);
+  background: color-mix(in srgb, var(--chart-orange) 12%, transparent);
+}
+
+.app[data-theme='light'] .business-overview-page .surface-card {
+  border-color: rgba(31, 73, 48, 0.13);
+  background: rgba(248, 252, 248, 0.95);
+  box-shadow: 0 10px 26px rgba(31, 73, 48, 0.07);
+  backdrop-filter: none;
+}
+
+.app[data-theme='light'] .overview-period-controls {
+  border-color: rgba(31, 73, 48, 0.14);
+  background: rgba(248, 252, 248, 0.96);
+  box-shadow: 0 8px 22px rgba(31, 73, 48, 0.05);
+}
+
+.app[data-theme='light'] .overview-period-controls select,
+.app[data-theme='light'] .overview-period-controls input {
+  border-color: rgba(31, 73, 48, 0.17);
+  color: var(--text);
+  background: #edf4ee;
+}
+
+.app[data-theme='light'] .overview-kpi-card p,
+.app[data-theme='light'] .overview-performance-card .card-heading p,
+.app[data-theme='light'] .overview-snapshot-card .card-heading p,
+.app[data-theme='light'] .overview-recent-grid .table-heading p,
+.app[data-theme='light'] .overview-snapshot-group dt,
+.app[data-theme='light'] .overview-inventory-stats span,
+.app[data-theme='light'] .overview-low-stock p small,
+.app[data-theme='light'] .overview-activity-card .transaction-row p small {
+  color: #536b5c;
+}
+
+.app[data-theme='light'] .overview-kpi-card > div > small,
+.app[data-theme='light'] .overview-inventory-stats small {
+  color: #718679;
+}
+
+.app[data-theme='light'] .overview-currency-value small {
+  color: var(--primary-strong);
+}
+
+.app[data-theme='light'] .overview-chart-grid {
+  stroke: rgba(31, 73, 48, 0.15);
+}
+
+.app[data-theme='light'] .overview-chart-zero {
+  stroke: #718679;
+}
+
+.app[data-theme='light'] .overview-chart-axis {
+  fill: #607667;
+}
+
+.app[data-theme='light'] .overview-chart-marker {
+  stroke: #f8fcf8;
+}
+
+.app[data-theme='light'] .overview-snapshot-group,
+.app[data-theme='light'] .overview-inventory-stats > div {
+  border-color: rgba(31, 73, 48, 0.13);
+  background: #edf4ee;
+}
+
+.app[data-theme='light'] .overview-snapshot-title,
+.app[data-theme='light'] .overview-snapshot-group dl > div,
+.app[data-theme='light'] .overview-low-stock > div {
+  border-color: rgba(31, 73, 48, 0.11);
+}
+
+.app[data-theme='light'] .overview-low-stock {
+  border-color: color-mix(in srgb, var(--orange) 30%, rgba(31, 73, 48, 0.12));
+  background: color-mix(in srgb, var(--orange) 7%, #f5f9f5);
+}
+
+.app[data-theme='light'] .overview-transactions-card th {
+  color: #607667;
+}
+
+.app[data-theme='light'] .overview-transactions-card td {
+  color: #536b5c;
+}
+
+.app[data-theme='light'] .overview-transactions-card tbody tr:hover,
+.app[data-theme='light'] .overview-activity-card .transaction-row:hover {
+  background: rgba(47, 143, 91, 0.055);
+}
 
 /* Reports landing, Sales Report, and Purchases Report */
 .reports-hub-page,
