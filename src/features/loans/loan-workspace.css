@@ -456,6 +456,123 @@
   font-size: 0.7rem;
 }
 
+:root[data-theme='light'] .loan-error {
+  border-color: color-mix(in srgb, var(--rose) 38%, transparent);
+  color: #9f2942;
+  background: color-mix(in srgb, var(--rose) 10%, var(--surface-solid));
+}
+
+:root[data-theme='light'] .loan-stat-icon.violet {
+  color: var(--primary-strong);
+  background: var(--primary-soft);
+}
+
+:root[data-theme='light'] .loan-stat-icon.blue {
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 13%, transparent);
+}
+
+:root[data-theme='light'] .loan-stat-icon.orange {
+  color: var(--orange);
+  background: color-mix(in srgb, var(--orange) 13%, transparent);
+}
+
+:root[data-theme='light'] .loan-stat-icon.rose {
+  color: var(--rose);
+  background: color-mix(in srgb, var(--rose) 12%, transparent);
+}
+
+:root[data-theme='light'] .loan-filter-row > select,
+:root[data-theme='light'] .loan-due-form input,
+:root[data-theme='light'] .loan-payment-form input,
+:root[data-theme='light'] .loan-payment-form select,
+:root[data-theme='light'] .loan-payment-form textarea {
+  color-scheme: light;
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--surface-solid);
+}
+
+:root[data-theme='light'] .loan-filter-row > select option,
+:root[data-theme='light'] .loan-payment-form select option {
+  color: var(--text);
+  background: var(--surface-solid);
+}
+
+:root[data-theme='light'] .loan-status-active,
+:root[data-theme='light'] .loan-status-paid {
+  color: var(--primary-strong);
+}
+
+:root[data-theme='light'] .loan-status-due-soon {
+  color: #a55b13;
+}
+
+:root[data-theme='light'] .loan-status-overdue,
+:root[data-theme='light'] .loan-due-note.danger {
+  color: #b8304c;
+}
+
+:root[data-theme='light'] .loan-status-partially-paid {
+  color: #6b5bb2;
+}
+
+:root[data-theme='light'] .loan-status-cancelled {
+  color: var(--muted);
+}
+
+:root[data-theme='light'] .loan-overdue-row td {
+  background: color-mix(in srgb, var(--rose) 6%, var(--surface));
+}
+
+:root[data-theme='light'] .loan-preview,
+:root[data-theme='light'] .loan-detail-summary > div,
+:root[data-theme='light'] .loan-detail-card,
+:root[data-theme='light'] .loan-payment-history {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--surface-solid) 78%, var(--bg-soft));
+}
+
+:root[data-theme='light'] .loan-definition-list > div,
+:root[data-theme='light'] .loan-due-form {
+  border-color: var(--border);
+}
+
+:root[data-theme='light'] .loan-payment-list article {
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+}
+
+:root[data-theme='light'] .loan-payment-complete,
+:root[data-theme='light'] .loan-payment-icon {
+  color: var(--primary-strong);
+}
+
+:root[data-theme='light'] .loan-payment-icon {
+  background: var(--primary-soft);
+}
+
+:root[data-theme='light'] .loan-danger-zone {
+  border-color: color-mix(in srgb, var(--rose) 30%, transparent);
+  background: color-mix(in srgb, var(--rose) 6%, var(--surface-solid));
+}
+
+:root[data-theme='light'] .loan-mobile-card {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--surface-solid);
+}
+
+:root[data-theme='light'] .loan-mobile-card:hover,
+:root[data-theme='light'] .loan-mobile-card:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
+  background: var(--surface-hover);
+}
+
+:root[data-theme='light'] .loan-mobile-card.overdue {
+  border-color: color-mix(in srgb, var(--rose) 40%, transparent);
+}
+
 @media (max-width: 1100px) {
   .loan-stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .loan-detail-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }

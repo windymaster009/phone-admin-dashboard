@@ -870,6 +870,10 @@ body.operation-modal-open {
   box-shadow: 0 12px 28px rgba(35, 115, 72, 0.25);
 }
 
+:root[data-theme='light'] .record-created-card dd span {
+  color: var(--primary-strong);
+}
+
 :root[data-theme='light'] .purchase-stepper button {
   color: #52695a;
 }
