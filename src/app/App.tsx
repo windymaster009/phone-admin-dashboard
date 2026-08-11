@@ -46,6 +46,7 @@ import {
 import { api, type SessionUser } from '../lib/api'
 import { getPawnAutoCalculatePreference, PAWN_AUTO_CALCULATE_EVENT, savePawnAutoCalculatePreference } from '../lib/pawnPreferences'
 import LoadingState from '../components/LoadingState'
+import MoneyInput from '../components/MoneyInput'
 import { printInventoryLabel } from '../features/inventory/barcode'
 import BackupStatusBridge from '../features/backup/BackupStatusBridge'
 import SupplierWorkspace from '../features/suppliers/SupplierWorkspace'
@@ -1946,7 +1947,7 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
             <div className="calculator-section-heading"><strong>1. Resale value</strong><small>Use a recent second-hand selling price, not the original retail price.</small></div>
             <div className="form-grid">
               <label><span>Valuation currency</span><select value={valuationCurrency} onChange={(event) => changeValuationCurrency(event.target.value as PawnCurrency)}><option value="USD">USD — US Dollar</option><option value="KHR" disabled={!exchangeRate}>KHR — Cambodian Riel</option></select></label>
-              <label><span>Resale value</span><div className="input-prefix"><span>{valuationCurrency}</span><input type="number" min="0" step={valuationCurrency === 'KHR' ? 100 : 0.01} inputMode={valuationCurrency === 'KHR' ? 'numeric' : 'decimal'} value={marketPrice} onChange={(event) => setMarketPrice(Number(event.target.value))} /></div></label>
+              <label><span>Resale value</span><div className="input-prefix"><span>{valuationCurrency}</span><MoneyInput currency={valuationCurrency} value={marketPrice} onValueChange={(value) => setMarketPrice(Number(value))} /></div></label>
               <label><span>Phone age</span><div className="input-suffix"><input type="number" min="0" max="120" value={ageMonths} onChange={(event) => setAgeMonths(Number(event.target.value))} /><span>months</span></div></label>
               <label><span>Physical condition</span><select value={condition} onChange={(event) => setCondition(event.target.value)}><option value="excellent">Excellent / Like new</option><option value="good">Good / Minor wear</option><option value="fair">Fair / Visible wear</option><option value="damaged">Damaged / Repair needed</option></select></label>
               <label><span>Battery health</span><div className="input-suffix"><input type="number" min="0" max="100" value={batteryHealth} onChange={(event) => setBatteryHealth(Math.min(100, Math.max(0, Number(event.target.value))))} /><span>%</span></div></label>
@@ -1958,7 +1959,7 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
             <div className="form-grid calculator-risk-grid">
               <label><span>Lock status</span><select value={lockStatus} onChange={(event) => setLockStatus(event.target.value)}><option value="unlocked">Unlocked / IMEI clear</option><option value="carrier_locked">Carrier locked (-10%)</option><option value="activation_locked">Activation or iCloud locked</option></select></label>
               <fieldset className="calculator-accessories"><legend>Included accessories</legend><div>{['BOX', 'CHARGER', 'CABLE', 'CASE', 'EARPHONES'].map((accessory) => <label key={accessory}><input type="checkbox" checked={includedAccessories.includes(accessory)} onChange={(event) => setIncludedAccessories((current) => event.target.checked ? [...current, accessory] : current.filter((item) => item !== accessory))} />{accessory.charAt(0) + accessory.slice(1).toLowerCase()}</label>)}</div><small>{result.accessoryDeduction > 0 ? `${pawnMoney(result.accessoryDeduction, valuationCurrency)} accessory deduction` : 'No accessory deduction'}</small></fieldset>
-              <label><span>Estimated repair cost</span><div className="input-prefix"><span>{valuationCurrency}</span><input type="number" min="0" step={valuationCurrency === 'KHR' ? 100 : 0.01} inputMode={valuationCurrency === 'KHR' ? 'numeric' : 'decimal'} value={repairCost} onChange={(event) => setRepairCost(Number(event.target.value))} /></div></label>
+              <label><span>Estimated repair cost</span><div className="input-prefix"><span>{valuationCurrency}</span><MoneyInput currency={valuationCurrency} value={repairCost} onValueChange={(value) => setRepairCost(Number(value))} /></div></label>
             </div>
           </div>
 
