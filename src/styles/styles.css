@@ -507,10 +507,10 @@ td strong { color: var(--text); }
 .calculator-accessories legend { margin-bottom: 8px; color: var(--muted); font-size: 10px; font-weight: 700; }
 .calculator-accessories > div { display: flex; flex-wrap: wrap; gap: 7px; }
 .calculator-risk-grid .calculator-accessories label { min-height: 32px; display: inline-flex; flex: 0 0 auto; flex-direction: row; align-items: center; gap: 7px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted); background: var(--bg-soft); font-size: 8px; cursor: pointer; transition: color .18s ease, border-color .18s ease, background .18s ease; }
-.calculator-risk-grid .calculator-accessories label:has(input:checked) { color: var(--text); border-color: rgba(139,92,246,.42); background: rgba(139,92,246,.12); }
+.calculator-risk-grid .calculator-accessories label:has(input:checked) { color: var(--text); border-color: color-mix(in srgb, var(--primary) 42%, transparent); background: var(--primary-soft); }
 .calculator-risk-grid .calculator-accessories input { width: 14px; height: 14px; min-height: 14px; flex: 0 0 14px; margin: 0; padding: 0; border: 0; border-radius: 3px; box-shadow: none; appearance: auto; accent-color: var(--primary); }
 .calculator-accessories > small { display: block; margin-top: 7px; color: var(--muted-2); font-size: 8px; }
-.pawn-policy-control { display: grid; grid-template-columns: minmax(0, .8fr) minmax(280px, 1.2fr); align-items: start; gap: 22px; margin-top: 20px; padding: 14px 17px; border: 1px solid rgba(139,92,246,.2); border-radius: 12px; background: rgba(139,92,246,.06); }
+.pawn-policy-control { display: grid; grid-template-columns: minmax(0, .8fr) minmax(280px, 1.2fr); align-items: start; gap: 22px; margin-top: 20px; padding: 14px 17px; border: 1px solid color-mix(in srgb, var(--primary) 20%, transparent); border-radius: 12px; background: color-mix(in srgb, var(--primary) 6%, transparent); }
 .pawn-policy-control > div { display: flex; flex-direction: column; gap: 5px; }
 .pawn-policy-control label { min-width: 0; display: flex; flex-direction: column; gap: 5px; color: var(--muted); font-size: 10px; font-weight: 700; }
 .pawn-rate-value { display: flex; align-items: baseline; gap: 8px; }
@@ -532,14 +532,14 @@ td strong { color: var(--text); }
 .notice-box strong { font-size: 10px; }
 .notice-box span { color: var(--muted); margin-top: 4px; font-size: 9px; line-height: 1.6; }
 .notice-box.danger { color: var(--rose); border-color: rgba(251,113,133,.24); background: rgba(251,113,133,.08); }
-.valuation-result-card { background: linear-gradient(155deg, rgba(124, 58, 237, 0.15), var(--surface) 45%); }
+.valuation-result-card { background: linear-gradient(155deg, color-mix(in srgb, var(--primary) 15%, transparent), var(--surface) 45%); }
 .valuation-result-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .valuation-status { padding: 5px 8px; border-radius: 999px; font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
 .valuation-status.eligible { color: var(--green); background: rgba(52,211,153,.1); }
 .valuation-status.blocked { color: var(--rose); background: rgba(251,113,133,.1); }
-.valuation-hero { margin: 18px 0; padding: 23px 16px; text-align: center; border: 1px solid rgba(139, 92, 246, 0.18); border-radius: 14px; background: rgba(139, 92, 246, 0.08); }
+.valuation-hero { margin: 18px 0; padding: 23px 16px; text-align: center; border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent); border-radius: 14px; background: color-mix(in srgb, var(--primary) 8%, transparent); }
 .valuation-hero small, .valuation-hero span { display: block; color: var(--muted); font-size: 9px; }
-.valuation-hero strong { display: block; margin: 7px 0; color: #a78bfa; font: 800 36px Manrope, sans-serif; }
+.valuation-hero strong { display: block; margin: 7px 0; color: var(--primary); font: 800 36px Manrope, sans-serif; }
 .valuation-hero .khr-equivalent { margin: -2px 0 9px; color: var(--text); font: 700 16px Manrope, sans-serif; }
 .valuation-hero .exchange-rate-source { margin-top: 10px; color: var(--muted-2); font-size: 8px; }
 .calculation-breakdown { display: grid; gap: 10px; margin-bottom: 18px; }
