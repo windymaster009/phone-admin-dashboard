@@ -29,6 +29,7 @@ import {
   DAILY_PAWN_FEE_RATE,
   addPawnDays,
   calculateDailyPawnSummary,
+  calculatePawnRenewalQuote,
   dailyPawnFeeRateFromDueFee,
   isDailyPawn,
   materializeDailyPawnFee,
@@ -1991,19 +1992,22 @@ router.post('/pawns/:id/renew', requireAuth, allowRoles('OWNER', 'MANAGER', 'CAS
     const renewalAt = new Date()
     const selectedTermDays = validatePawnTermDays(req.body.termDays)
     materializeDailyPawnFee(pawn, renewalAt)
-    const requiredFeeAndCharges = roundPawnCurrency((Number(pawn.accruedPawnFee) || 0) + (Number(pawn.fees) || 0), currency)
+    const renewalQuote = calculatePawnRenewalQuote(pawn, selectedTermDays, renewalAt)
+    const requiredFeeAndCharges = renewalQuote.requiredPayment
     const paymentAmount = pawnCurrencyAmount(req.body.amount, currency, 'Renewal payment', true)
     if (paymentAmount !== requiredFeeAndCharges) {
-      throw requestError(400, `Renewal requires the exact accrued fee and charges of ${requiredFeeAndCharges} ${currency}`)
+      throw requestError(400, `Renewal requires ${requiredFeeAndCharges} ${currency}, including the ${selectedTermDays}-day extension fee`)
     }
     const previousDueDate = pawn.dueDate
+    pawn.accruedPawnFee = roundPawnCurrency((Number(pawn.accruedPawnFee) || 0) + renewalQuote.extensionFee, currency)
     const allocation = paymentAmount > 0
       ? applyPawnPayment(pawn, paymentAmount, { type: 'RENEWAL', userId: req.user._id, note: req.body.note, paidAt: renewalAt })
       : { amount: 0, feesApplied: 0, pawnFeeApplied: 0, interestApplied: 0, principalApplied: 0, balanceAfter: pawnAmountDue(pawn, renewalAt) }
-    const newDueDate = addPawnDays(renewalAt, selectedTermDays)
+    const newDueDate = renewalQuote.newDueDate
     pawn.termDays = selectedTermDays
-    pawn.currentTermStartDate = renewalAt
-    pawn.feeAccrualStartedAt = renewalAt
+    pawn.currentTermStartDate = renewalQuote.extensionStartsAt
+    // This extension was paid up front, so daily accrual resumes after it ends.
+    pawn.feeAccrualStartedAt = newDueDate
     pawn.dueDate = newDueDate
     pawn.graceEndsAt = pawnGraceEnd(newDueDate, pawn.gracePeriodDays)
     pawn.dueReminderFor = undefined

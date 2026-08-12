@@ -725,18 +725,33 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
   const currentFee = pawn.feeModel === 'DAILY_SIMPLE' ? pawn.feeSummary?.accruedFee || 0 : pawn.accruedInterest || 0
   const dailyFeeRate = Number(pawn.dailyFeeRate || 2.5).toLocaleString(undefined, { maximumFractionDigits: 4 })
   const dailyFeeAmount = remainingPrincipal * Number(pawn.dailyFeeRate || 2.5) / 100
-  const renewalPaymentDue = currentFee + (pawn.fees || 0)
+  const renewalTermFeeRaw = dailyFeeAmount * Number(renewalTermDays || 0)
+  const renewalTermFee = pawnCurrency === 'KHR'
+    ? Math.round(renewalTermFeeRaw)
+    : Math.round((renewalTermFeeRaw + Number.EPSILON) * 100) / 100
+  const renewalPaymentDueRaw = currentFee + (pawn.fees || 0) + (pawn.feeModel === 'DAILY_SIMPLE' ? renewalTermFee : 0)
+  const renewalPaymentDue = pawnCurrency === 'KHR'
+    ? Math.round(renewalPaymentDueRaw)
+    : Math.round((renewalPaymentDueRaw + Number.EPSILON) * 100) / 100
+
+  function renewalAmountText(termDays: number) {
+    const rawAmount = currentFee + (pawn.fees || 0) + dailyFeeAmount * termDays
+    return pawnCurrency === 'KHR'
+      ? String(Math.round(rawAmount))
+      : (Math.round((rawAmount + Number.EPSILON) * 100) / 100).toFixed(2)
+  }
 
   function openAction(nextAction: PawnAction) {
     setAction(nextAction)
     setActionError('')
     setNote('')
     setNewDueDate('')
-    setRenewalTermDays(String(pawn.termDays || 7))
+    const initialRenewalTermDays = pawn.termDays || 7
+    setRenewalTermDays(String(initialRenewalTermDays))
     const suggestedAmount = nextAction === 'redeem'
       ? outstanding
       : nextAction === 'renew'
-        ? pawn.feeModel === 'DAILY_SIMPLE' ? (pawn.feeSummary?.accruedFee || 0) + (pawn.fees || 0) : (pawn.accruedInterest || 0) + (pawn.fees || 0)
+        ? pawn.feeModel === 'DAILY_SIMPLE' ? Number(renewalAmountText(initialRenewalTermDays)) : (pawn.accruedInterest || 0) + (pawn.fees || 0)
         : null
     setAmount(suggestedAmount === null ? '' : pawnCurrency === 'KHR' ? String(Math.round(suggestedAmount)) : suggestedAmount.toFixed(2))
   }
@@ -852,12 +867,12 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
             <button type="button" className="icon-button" onClick={() => setAction(null)} aria-label="Cancel action"><X size={15} /></button>
           </div>
           {actionError && <p className="pawn-action-error">{actionError}</p>}
-          {action !== 'forfeit' && <label className="pawn-action-amount"><span>{action === 'redeem' ? 'Full amount due' : action === 'renew' ? 'Renewal payment' : 'Payment amount'}{action === 'renew' && <small>Required now: {pawnMoney(renewalPaymentDue, pawnCurrency)}</small>}</span><div className="input-prefix"><span>{currencyLabel}</span><MoneyInput autoFocus currency={pawnCurrency} minimum={pawnCurrency === 'KHR' ? 1 : 0.01} required readOnly={action === 'redeem'} value={amount} onValueChange={setAmount} placeholder={pawnCurrency === 'KHR' ? '0' : '0.00'} /></div></label>}
+          {action !== 'forfeit' && <label className="pawn-action-amount"><span>{action === 'redeem' ? 'Full amount due' : action === 'renew' ? 'Renewal payment' : 'Payment amount'}{action === 'renew' && <small>Required now: {pawnMoney(renewalPaymentDue, pawnCurrency)}</small>}</span><div className="input-prefix"><span>{currencyLabel}</span><MoneyInput autoFocus currency={pawnCurrency} minimum={pawnCurrency === 'KHR' ? 1 : 0.01} required readOnly={action === 'redeem' || (action === 'renew' && pawn.feeModel === 'DAILY_SIMPLE')} value={amount} onValueChange={setAmount} placeholder={pawnCurrency === 'KHR' ? '0' : '0.00'} /></div></label>}
           {action === 'forfeit' && <label><span>Selling price <small>Optional</small></span><div className="input-prefix"><span>{currencyLabel}</span><input autoFocus type="text" inputMode={pawnCurrency === 'KHR' ? 'numeric' : 'decimal'} value={amount} onChange={(event) => setAmount(event.target.value.replace(pawnCurrency === 'KHR' ? /\D/g : /[^0-9.]/g, ''))} placeholder={String(pawn.estimatedValue)} /></div></label>}
           {action === 'renew' && (pawn.feeModel === 'DAILY_SIMPLE'
-            ? <label className="pawn-renewal-term">Renewal term<select required value={renewalTermDays} onChange={(event) => setRenewalTermDays(event.target.value)}><option value="3">3 Days</option><option value="7">1 Week (7 days)</option><option value="15">Half Month (15 days)</option><option value="30">1 Month (30 days)</option></select></label>
+            ? <label className="pawn-renewal-term">Renewal term<select required value={renewalTermDays} onChange={(event) => { const nextTerm = event.target.value; setRenewalTermDays(nextTerm); setAmount(renewalAmountText(Number(nextTerm))) }}><option value="3">3 Days</option><option value="7">1 Week (7 days)</option><option value="15">Half Month (15 days)</option><option value="30">1 Month (30 days)</option></select></label>
             : <label>New due date<input type="date" required value={newDueDate} onChange={(event) => setNewDueDate(event.target.value)} /></label>)}
-          {action === 'renew' && pawn.feeModel === 'DAILY_SIMPLE' && <div className="pawn-renewal-summary" aria-label="Renewal summary"><div><span>Extension</span><strong>{renewalTermDays} days</strong></div><div><span>Daily pawn fee</span><strong>{dailyFeeRate}% · {pawnMoney(dailyFeeAmount, pawnCurrency)} / day</strong></div></div>}
+          {action === 'renew' && pawn.feeModel === 'DAILY_SIMPLE' && <div className="pawn-renewal-summary" aria-label="Renewal summary"><div><span>Extension</span><strong>{renewalTermDays} days added to current due date</strong></div><div><span>Extension fee</span><strong>{pawnMoney(dailyFeeAmount, pawnCurrency)} / day × {renewalTermDays} = {pawnMoney(renewalTermFee, pawnCurrency)}</strong></div></div>}
           {action !== 'forfeit' && <label className="pawn-action-note"><span>Note <small>Optional</small></span><textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add a reference or payment note" /></label>}
           <div className="pawn-action-buttons">
             <button type="button" className="ghost-button" onClick={() => setAction(null)}>Cancel</button>

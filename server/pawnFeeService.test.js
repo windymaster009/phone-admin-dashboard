@@ -5,6 +5,7 @@ import {
   addPawnDays,
   calculateDailyPawnSummary,
   calculatePawnFee,
+  calculatePawnRenewalQuote,
   dailyPawnFeeRateFromDueFee,
   validateMaximumPawnPrincipal,
   validateDailyPawnFeeRate,
@@ -68,4 +69,20 @@ test('renewal fee does not become principal', () => {
   assert.equal(summary.accruedFee, 3.5)
   assert.equal(summary.remainingPrincipal, 20)
   assert.equal(addPawnDays(due, 7).toISOString(), '2026-08-15T00:00:00.000Z')
+})
+
+test('early renewal charges the selected extension and preserves remaining days', () => {
+  const start = new Date('2026-08-01T00:00:00.000Z')
+  const due = addPawnDays(start, 7)
+  const quote = calculatePawnRenewalQuote({
+    feeModel: 'DAILY_SIMPLE', status: 'ACTIVE', currency: 'KHR',
+    remainingPrincipal: 50_000, dailyFeeRate: 2, termDays: 7,
+    startDate: start, currentTermStartDate: start, feeAccrualStartedAt: start,
+    dueDate: due, accruedPawnFee: 0, fees: 0,
+  }, 7, start)
+
+  assert.equal(quote.extensionFee, 7_000)
+  assert.equal(quote.requiredPayment, 7_000)
+  assert.equal(quote.extensionStartsAt.toISOString(), due.toISOString())
+  assert.equal(quote.newDueDate.toISOString(), addPawnDays(due, 7).toISOString())
 })

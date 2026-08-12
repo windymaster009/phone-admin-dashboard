@@ -84,6 +84,37 @@ export function calculatePawnFee(principal, days, currency = 'USD', dailyFeeRate
   )
 }
 
+export function calculatePawnRenewalQuote(pawn, termDays, renewedAt = new Date()) {
+  const currency = pawnCurrencyCode(pawn?.currency)
+  const selectedTermDays = validatePawnTermDays(termDays)
+  const renewalAt = new Date(renewedAt)
+  if (Number.isNaN(renewalAt.getTime())) throw new TypeError('Pawn renewal date is invalid')
+
+  const summary = calculateDailyPawnSummary(pawn, renewalAt)
+  const extensionFee = calculatePawnFee(
+    summary.remainingPrincipal,
+    selectedTermDays,
+    currency,
+    pawn?.dailyFeeRate,
+  )
+  const otherCharges = roundPawnAmount(Math.max(0, Number(pawn?.fees) || 0), currency)
+  const currentDueDate = new Date(pawn?.dueDate)
+  const extensionStartsAt = !Number.isNaN(currentDueDate.getTime()) && currentDueDate > renewalAt
+    ? currentDueDate
+    : renewalAt
+
+  return {
+    currency,
+    termDays: selectedTermDays,
+    accruedFee: summary.accruedFee,
+    otherCharges,
+    extensionFee,
+    requiredPayment: roundPawnAmount(summary.accruedFee + otherCharges + extensionFee, currency),
+    extensionStartsAt,
+    newDueDate: addPawnDays(extensionStartsAt, selectedTermDays),
+  }
+}
+
 export function isDailyPawn(pawn) {
   return pawn?.feeModel === 'DAILY_SIMPLE'
 }
@@ -101,7 +132,11 @@ export function calculateDailyPawnSummary(pawn, asOf = new Date()) {
   const accruedFee = roundPawnAmount(storedAccruedFee + currentSegmentFee, currency)
   const otherFees = roundPawnAmount(Math.max(0, Number(pawn?.fees) || 0), currency)
   const termDays = Number(pawn?.termDays) || 0
-  const termFee = calculatePawnFee(principal, termDays, currency, rate)
+  const dueDate = pawn?.dueDate ? new Date(pawn.dueDate) : null
+  const projectedDays = dueDate && !Number.isNaN(dueDate.getTime())
+    ? elapsedPawnDays(accrualStart, dueDate)
+    : termDays
+  const termFee = roundPawnAmount(storedAccruedFee + calculatePawnFee(principal, projectedDays, currency, rate), currency)
   const redemptionTotal = roundPawnAmount(principal + accruedFee + otherFees, currency)
 
   return {
