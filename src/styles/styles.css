@@ -993,23 +993,33 @@ td strong { color: var(--text); }
 .upload-photo-button { position: relative; overflow: hidden; }
 .upload-photo-button input { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
 .upload-photo-button.disabled { opacity: .55; cursor: wait; }
-.pawn-action-form { display: grid; grid-template-columns: minmax(220px, .72fr) minmax(300px, 1.28fr); gap: 14px; margin: 0 18px 18px; padding: 18px; border: 1px solid rgba(139,92,246,.3); border-radius: 14px; background: linear-gradient(135deg, rgba(139,92,246,.1), rgba(15,23,42,.34)); }
+.pawn-action-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 0 18px 18px; padding: 18px; border: 1px solid color-mix(in srgb, var(--primary) 34%, var(--border)); border-radius: 14px; background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 9%, var(--surface-solid)), var(--surface-solid)); }
 .pawn-action-header { grid-column: 1 / -1; display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
 .pawn-action-header p { max-width: 560px; margin: 7px 0 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
 .pawn-action-form label { min-width: 0; display: flex; flex-direction: column; gap: 7px; color: var(--muted); font-size: 10px; font-weight: 700; }
 .pawn-action-form label > span { display: flex; align-items: center; gap: 5px; }
 .pawn-action-form label small { color: var(--purple-soft); font-size: 8px; }
 .pawn-action-form label > input,
+.pawn-action-form select,
 .pawn-action-form textarea { width: 100%; border: 1px solid var(--border-strong); border-radius: 10px; outline: 0; color: var(--text); background: var(--bg-soft); transition: border-color .18s ease, box-shadow .18s ease; }
-.pawn-action-form label > input { height: 44px; padding: 0 12px; }
+.pawn-action-form label > input,
+.pawn-action-form select { height: 44px; padding: 0 12px; }
+.pawn-action-form select { appearance: auto; color-scheme: dark; font-weight: 700; }
+.app[data-theme='light'] .pawn-action-form select { color-scheme: light; }
 .pawn-action-form textarea { min-height: 72px; padding: 11px 12px; resize: vertical; font: inherit; }
 .pawn-action-form label > input:focus,
+.pawn-action-form select:focus,
 .pawn-action-form textarea:focus,
 .pawn-action-form .input-prefix:focus-within { border-color: var(--purple); box-shadow: 0 0 0 3px rgba(139,92,246,.12); }
 .pawn-action-form .input-prefix { width: 100%; height: 44px; }
-.pawn-action-form .input-prefix input { min-width: 0; width: 100%; height: 100%; color: var(--text); }
-.pawn-action-form .pawn-action-note { grid-column: 2; }
-.pawn-action-buttons { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; padding-top: 2px; }
+.pawn-action-form .input-prefix input { min-width: 0; width: 100%; height: 100%; padding: 0 12px 0 0; outline: 0; color: var(--text); font-weight: 750; }
+.pawn-action-form .pawn-action-amount > span { justify-content: space-between; }
+.pawn-action-form .pawn-action-note { grid-column: 1 / -1; }
+.pawn-renewal-summary { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.pawn-renewal-summary > div { min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-soft); }
+.pawn-renewal-summary span { display: block; margin-bottom: 5px; color: var(--muted-2); font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
+.pawn-renewal-summary strong { display: block; color: var(--text); font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+.pawn-action-buttons { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; margin-top: 2px; padding-top: 14px; border-top: 1px solid var(--border); }
 .pawn-action-error { grid-column: 1 / -1; margin: 0; color: var(--rose); font-size: 10px; }
 .danger-button { color: #fff; background: #be123c; }
 .mobile-overlay { display: none; }
@@ -1739,6 +1749,7 @@ a:focus-visible,
   .pawn-detail-modal .pawn-action-form { grid-template-columns: 1fr; margin: 0 12px 12px; padding: 14px; }
   .pawn-detail-modal .pawn-action-form > * { grid-column: 1; }
   .pawn-detail-modal .pawn-action-header p { font-size: 10px; }
+  .pawn-detail-modal .pawn-renewal-summary { grid-template-columns: 1fr; }
   .pawn-detail-modal .pawn-action-buttons { display: grid; grid-template-columns: 1fr 1.35fr; }
   .pawn-detail-modal .pawn-action-buttons button { width: 100%; }
   .pawn-detail-modal .detail-modal-footer { position: sticky; bottom: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 11px 12px; background: var(--surface-solid); }

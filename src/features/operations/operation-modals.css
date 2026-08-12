@@ -1228,6 +1228,17 @@ body.operation-modal-open {
 .pawn-contract-summary span { display: block; margin-bottom: 6px; color: var(--muted, #8f9bb4); font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
 .pawn-customer-summary strong,
 .pawn-contract-summary strong { display: block; overflow: hidden; color: var(--text, #f4f6fb); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.operation-form .pawn-daily-fee-help {
+  color: var(--muted, #8f9bb4);
+  font-size: 9px;
+  font-weight: 700;
+}
+.pawn-contract-summary .daily-fee-summary strong {
+  overflow: visible;
+  line-height: 1.35;
+  text-overflow: clip;
+  white-space: normal;
+}
 .pawn-customer-summary strong.verified { color: #34d399; }
 .pawn-customer-summary strong.missing { color: #fb7185; }
 .pawn-customer-summary strong.optional { color: var(--muted, #8f9bb4); }
