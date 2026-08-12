@@ -366,6 +366,7 @@ export default function OperationModalBridge() {
   const [pawnAutoCalculate, setPawnAutoCalculate] = useState(getPawnAutoCalculatePreference)
   const [pawnPercentage, setPawnPercentage] = useState(45)
   const [pawnPrincipal, setPawnPrincipal] = useState('')
+  const [pawnPrincipalLimitMessage, setPawnPrincipalLimitMessage] = useState('')
   const [pawnTermDays, setPawnTermDays] = useState<3 | 7 | 15 | 30>(7)
   const [pawnDailyFeeRate, setPawnDailyFeeRate] = useState('2.5')
   const [pawnFeeAtDue, setPawnFeeAtDue] = useState('')
@@ -498,12 +499,13 @@ export default function OperationModalBridge() {
     return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(date)
   }, [pawnTermDays])
   useEffect(() => {
-    if (kind !== 'pawn' || pawnStep !== 2 || pawnValuation) return
-    if (!pawnAutoCalculate) {
-      setPawnPrincipal((current) => Number(current) > maximumPawn ? String(maximumPawn) : current)
-      return
-    }
-    setPawnPrincipal(maximumPawn > 0 ? String(maximumPawn) : '')
+    if (kind !== 'pawn' || pawnStep !== 2) return
+    setPawnPrincipal((current) => {
+      if (Number(current) > maximumPawn) return maximumPawn > 0 ? String(maximumPawn) : ''
+      if (pawnValuation || !pawnAutoCalculate) return current
+      return maximumPawn > 0 ? String(maximumPawn) : ''
+    })
+    setPawnPrincipalLimitMessage('')
   }, [kind, maximumPawn, pawnAutoCalculate, pawnStep, pawnValuation])
 
   function togglePawnAutoCalculate() {
@@ -712,6 +714,7 @@ export default function OperationModalBridge() {
     setPawnAutoCalculate(getPawnAutoCalculatePreference())
     setPawnPercentage(45)
     setPawnPrincipal('')
+    setPawnPrincipalLimitMessage('')
     setPawnTermDays(7)
     setPawnDailyFeeRate('2.5')
     setPawnFeeAtDue('')
@@ -1186,9 +1189,20 @@ export default function OperationModalBridge() {
 
   async function submitPawn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setBusy(true)
     setError('')
     const form = new FormData(event.currentTarget)
+    const requestedPrincipal = Number(form.get('principal') || 0)
+    if (!Number.isFinite(requestedPrincipal) || requestedPrincipal <= 0) {
+      setError('Enter a principal amount greater than zero.')
+      return
+    }
+    if (requestedPrincipal > maximumPawn) {
+      setPawnPrincipal(maximumPawn > 0 ? String(maximumPawn) : '')
+      setPawnPrincipalLimitMessage(`Principal cannot exceed ${pawnAmountText(maximumPawn, pawnCurrency)}.`)
+      setError(`Principal cannot exceed the approved maximum of ${pawnAmountText(maximumPawn, pawnCurrency)}.`)
+      return
+    }
+    setBusy(true)
     const brand = String(form.get('brand') || '').trim()
     const model = String(form.get('model') || '').trim()
     const storage = String(form.get('storage') || '').trim()
@@ -1244,7 +1258,7 @@ export default function OperationModalBridge() {
       estimatedValue: effectiveEstimatedValue,
       pawnPercentage,
       valuationSnapshot,
-      principal: Number(form.get('principal') || 0),
+      principal: requestedPrincipal,
       currency: pawnCurrency,
       exchangeRate: pawnCurrency === 'KHR' ? usdKhrRate : 1,
       termDays: pawnTermDays,
@@ -1598,7 +1612,7 @@ export default function OperationModalBridge() {
 
               <div className="pawn-contract-fields-heading"><span>3. Contract terms</span><small>The principal may be reduced, but cannot exceed the calculated maximum.</small></div>
               <div className="operation-form-grid purchase-fields-grid pawn-contract-fields">
-                <label><span className="operation-label-heading">Principal ({pawnCurrency}) <small>Maximum {pawnAmountText(maximumPawn, pawnCurrency)}</small></span><MoneyInput name="principal" currency={pawnCurrency} minimum={pawnCurrency === 'KHR' ? 1 : 0.01} maximum={maximumPawn || undefined} required value={pawnPrincipal} onValueChange={setPawnPrincipal} /></label>
+                <label><span className="operation-label-heading">Principal ({pawnCurrency}) <small>Maximum {pawnAmountText(maximumPawn, pawnCurrency)}</small></span><MoneyInput name="principal" currency={pawnCurrency} minimum={pawnCurrency === 'KHR' ? 1 : 0.01} maximum={maximumPawn || undefined} clampToMaximum required value={pawnPrincipal} aria-describedby={pawnPrincipalLimitMessage ? 'pawn-principal-limit' : undefined} onValueChange={(value) => { setPawnPrincipal(value); setPawnPrincipalLimitMessage('') }} onMaximumExceeded={(limit) => setPawnPrincipalLimitMessage(`Principal capped at ${pawnAmountText(limit, pawnCurrency)}.`)} />{pawnPrincipalLimitMessage && <small id="pawn-principal-limit" className="operation-field-warning" role="status">{pawnPrincipalLimitMessage}</small>}</label>
                 {pawnAutoCalculate ? <label>Daily pawn fee rate<div className="device-unit-input"><input type="number" min="0" max="100" step="0.01" required value={pawnDailyFeeRate} onChange={(event) => setPawnDailyFeeRate(event.target.value)} aria-label="Daily pawn fee rate" /><span>% / day</span></div></label> : <label><span className="operation-label-heading">Fee at due date ({pawnCurrency}) <small>Maximum {pawnAmountText(pawnMaximumFeeAtDue, pawnCurrency)}</small></span><MoneyInput currency={pawnCurrency} maximum={pawnMaximumFeeAtDue || undefined} required value={pawnFeeAtDue} onValueChange={setPawnFeeAtDue} aria-label="Fee at due date" placeholder={pawnPrincipalAmount > 0 ? 'Enter total fee' : 'Enter principal first'} /><small>Equivalent to {pawnEffectiveDailyFeeRate.toLocaleString(undefined, { maximumFractionDigits: 4 })}% per day.</small></label>}
                 <fieldset className="pawn-term-selector operation-wide"><legend>Pawn term</legend><div role="radiogroup" aria-label="Pawn term">{([{ days: 3, label: '3 Days' }, { days: 7, label: '1 Week' }, { days: 15, label: 'Half Month' }, { days: 30, label: '1 Month' }] as const).map((term) => <button key={term.days} type="button" role="radio" aria-checked={pawnTermDays === term.days} className={pawnTermDays === term.days ? 'active' : ''} onClick={() => setPawnTermDays(term.days)}><strong>{term.label}</strong><small>{term.days} days</small></button>)}</div></fieldset>
                 <label className="operation-wide">Contract notes <small className="optional-marker">Optional</small><textarea name="notes" rows={2} /></label>
@@ -1611,7 +1625,7 @@ export default function OperationModalBridge() {
               </div>
             </section>
           </div>
-          <footer className="operation-modal-actions"><div className="purchase-submit-summary"><span>Step 2 of 2</span><strong>{pawnAmountText(Number(pawnPrincipal || 0), pawnCurrency)} principal</strong></div><button type="button" className="ghost-button" onClick={() => { setError(''); setPawnStep(1) }}>Back</button><button className="primary-button" disabled={busy || !pawnAssessment.eligible || maximumPawn <= 0}>{busy ? 'Saving contract...' : !pawnAssessment.eligible ? 'Activation lock must be removed' : maximumPawn <= 0 ? 'Enter valuation details' : 'Create pawn contract'}</button></footer>
+          <footer className="operation-modal-actions"><div className="purchase-submit-summary"><span>Step 2 of 2</span><strong>{pawnAmountText(Number(pawnPrincipal || 0), pawnCurrency)} principal</strong></div><button type="button" className="ghost-button" onClick={() => { setError(''); setPawnStep(1) }}>Back</button><button className="primary-button" disabled={busy || !pawnAssessment.eligible || maximumPawn <= 0 || pawnPrincipalAmount <= 0 || pawnPrincipalAmount > maximumPawn}>{busy ? 'Saving contract...' : !pawnAssessment.eligible ? 'Activation lock must be removed' : maximumPawn <= 0 ? 'Enter valuation details' : pawnPrincipalAmount <= 0 ? 'Enter principal' : pawnPrincipalAmount > maximumPawn ? 'Principal exceeds maximum' : 'Create pawn contract'}</button></footer>
         </>}
       </form>}
 

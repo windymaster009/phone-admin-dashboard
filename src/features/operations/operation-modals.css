@@ -363,6 +363,19 @@ body.operation-modal-open {
   box-shadow: 0 10px 24px rgba(124, 58, 237, 0.2);
 }
 
+.operation-form .operation-field-warning {
+  display: block;
+  margin-top: 6px;
+  color: #fbbf24;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+:root[data-theme='light'] .operation-form .operation-field-warning {
+  color: #9a5b00;
+}
+
 .stock-adjustment-form {
   padding-top: 20px;
 }

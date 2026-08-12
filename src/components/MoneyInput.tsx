@@ -8,6 +8,8 @@ type MoneyInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'val
   onValueChange: (value: string) => void
   minimum?: number
   maximum?: number
+  clampToMaximum?: boolean
+  onMaximumExceeded?: (maximum: number) => void
 }
 
 function cleanMoneyValue(value: number | string, currency: Currency) {
@@ -35,6 +37,8 @@ export default function MoneyInput({
   onValueChange,
   minimum = 0,
   maximum,
+  clampToMaximum = false,
+  onMaximumExceeded,
   name,
   required,
   onFocus,
@@ -80,9 +84,20 @@ export default function MoneyInput({
         onBlur?.(event)
       }}
       onChange={(event) => {
-        const nextValue = cleanMoneyValue(event.target.value, currency)
+        const cleanedValue = cleanMoneyValue(event.target.value, currency)
+        const amount = Number(cleanedValue)
+        const exceedsMaximum = Boolean(
+          cleanedValue
+          && maximum !== undefined
+          && Number.isFinite(amount)
+          && amount > maximum
+        )
+        const nextValue = clampToMaximum && exceedsMaximum
+          ? cleanMoneyValue(maximum ?? 0, currency)
+          : cleanedValue
         setDraft(nextValue)
         onValueChange(nextValue)
+        if (exceedsMaximum && maximum !== undefined) onMaximumExceeded?.(maximum)
       }}
     />
     {name && <input type="hidden" name={name} value={draft} />}
