@@ -340,6 +340,8 @@ kbd { border: 1px solid var(--border-strong); border-radius: 6px; padding: 3px 7
 .section-header h2 { margin: 4px 0 4px; font-family: Manrope, sans-serif; font-size: clamp(23px, 2.4vw, 30px); letter-spacing: -0.8px; }
 .section-header p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }
 .section-header-actions { display: flex; align-items: center; gap: 9px; }
+.dashboard-welcome-header { align-items: center; }
+.dashboard-welcome-header > .primary-button { flex: 0 0 auto; }
 .eyebrow { color: var(--primary); font-size: 10px; text-transform: uppercase; font-weight: 800; letter-spacing: 1.35px; }
 
 .primary-button, .secondary-button, .ghost-button, .text-button { min-height: 38px; border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 14px; font-size: 12px; font-weight: 700; transition: 0.18s ease; white-space: nowrap; }
@@ -1292,6 +1294,64 @@ a:focus-visible,
   outline-offset: 2px;
 }
 
+@media (max-width: 1360px) {
+  .dashboard-metrics-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .dashboard-metrics-grid .metric-card {
+    min-height: 82px;
+    padding: 11px 13px;
+    grid-template-columns: 34px minmax(0, 1fr);
+    column-gap: 10px;
+    row-gap: 2px;
+    align-items: center;
+  }
+
+  .dashboard-metrics-grid .metric-card::after {
+    width: 64px;
+    height: 64px;
+    right: -26px;
+    bottom: -29px;
+  }
+
+  .dashboard-metrics-grid .metric-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+  }
+
+  .dashboard-metrics-grid .metric-icon svg { width: 17px; height: 17px; }
+  .dashboard-metrics-grid .metric-copy { min-width: 0; }
+  .dashboard-metrics-grid .metric-copy p { margin: 0 0 3px; font-size: 9px; }
+  .dashboard-metrics-grid .metric-copy h3 { overflow-wrap: anywhere; font-size: clamp(17px, 2.2vw, 20px); line-height: 1.08; }
+  .dashboard-metrics-grid .metric-copy .khr-value { margin-top: 3px; font-size: 8px; }
+  .dashboard-metrics-grid .metric-change { margin: 1px 0 0; font-size: 8px; }
+
+  .dashboard-grid,
+  .dashboard-lower-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .dashboard-grid .performance-card,
+  .dashboard-grid .inventory-mix-card {
+    min-height: 0;
+    padding: 14px;
+  }
+
+  .dashboard-grid .card-heading {
+    min-width: 0;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .dashboard-grid .card-heading > div { min-width: 0; flex: 1 1 220px; }
+}
+
 /* The fixed sidebar leaves settings cards less room than the viewport suggests. */
 @media (max-width: 1480px) {
   .settings-grid {
@@ -1705,5 +1765,7 @@ a:focus-visible,
 }
 
 @media (max-width: 440px) {
+  .dashboard-metrics-grid { grid-template-columns: minmax(0, 1fr); }
+  .dashboard-metrics-grid .metric-card { min-height: 72px; }
   .inventory-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

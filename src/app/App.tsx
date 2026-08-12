@@ -904,14 +904,16 @@ function SectionHeader({
   title,
   description,
   action,
+  className = '',
 }: {
   eyebrow?: string
   title: string
   description?: string
   action?: ReactNode
+  className?: string
 }) {
   return (
-    <div className="section-header">
+    <div className={`section-header ${className}`.trim()}>
       <div>
         {eyebrow && <span className="eyebrow">{eyebrow}</span>}
         <h2>{title}</h2>
@@ -1003,6 +1005,7 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
     return (
       <>
         <SectionHeader
+          className="dashboard-welcome-header"
           eyebrow="Live MongoDB dashboard"
           title={`Good afternoon, ${user.name.split(' ')[0]}`}
           description="Connecting to the shop and preparing today's overview."
@@ -1016,6 +1019,7 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
   return (
     <>
       <SectionHeader
+        className="dashboard-welcome-header"
         eyebrow="Live MongoDB dashboard"
         title={`Good afternoon, ${user.name.split(' ')[0]}`}
         description={error || 'Here is what is happening in the shop today.'}
@@ -1026,7 +1030,7 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
         }
       />
 
-      <section className="metrics-grid">
+      <section className="metrics-grid dashboard-metrics-grid">
         {metrics.map((metric) => (
           <MetricCard key={metric.label} {...metric} />
         ))}
