@@ -2161,11 +2161,21 @@ function overviewKhr(amount: number) {
   return `${riel.format(Math.round(Number(amount) || 0))} KHR`
 }
 
+function overviewValueSize(value: string) {
+  const length = value.replace(/\s/g, '').length
+  if (length >= 15) return 'extra-long'
+  if (length >= 11) return 'long'
+  return 'standard'
+}
+
 function OverviewCurrencyValue({ totals }: { totals: OverviewCurrencyTotals }) {
+  const usdValue = money.format(totals.USD)
+  const khrValue = overviewKhr(totals.KHR)
+
   return (
     <span className="overview-currency-value">
-      <strong>{money.format(totals.USD)}</strong>
-      {totals.KHR > 0 && <small>{overviewKhr(totals.KHR)}</small>}
+      <strong className="overview-responsive-value" data-value-size={overviewValueSize(usdValue)} title={usdValue}>{usdValue}</strong>
+      {totals.KHR > 0 && <small className="overview-responsive-value" data-value-size={overviewValueSize(khrValue)} title={khrValue}>{khrValue}</small>}
     </span>
   )
 }
@@ -2274,6 +2284,10 @@ function BusinessOverviewView() {
   }, [period, customFrom, customTo])
 
   const periodLabel = data?.period.label || 'This Month'
+  const salesRevenueValue = money.format(data?.financial.salesRevenue || 0)
+  const purchasesValue = money.format(data?.financial.purchases || 0)
+  const grossProfitValue = money.format(data?.financial.grossProfit || 0)
+  const stockValue = money.format(data?.inventory.costValue || 0)
   const periodOptions: Array<{ value: BusinessOverviewPeriod; label: string }> = [
     { value: 'today', label: 'Today' },
     { value: 'yesterday', label: 'Yesterday' },
@@ -2310,11 +2324,11 @@ function BusinessOverviewView() {
       {error && <p className="overview-error"><AlertTriangle size={16} />{error}</p>}
 
       <section className="overview-kpi-grid" aria-label="Business summary">
-        <article className="surface-card overview-kpi-card"><span className="metric-icon tone-violet"><CircleDollarSign size={21} /></span><div><p>Sales Revenue</p><h3>{money.format(data?.financial.salesRevenue || 0)}</h3><small>{periodLabel}</small></div></article>
-        <article className="surface-card overview-kpi-card"><span className="metric-icon tone-orange"><Banknote size={21} /></span><div><p>Purchases</p><h3>{money.format(data?.financial.purchases || 0)}</h3><small>{periodLabel}</small></div></article>
-        <article className="surface-card overview-kpi-card"><span className="metric-icon tone-blue"><TrendingDown size={21} /></span><div><p>Gross Profit</p><h3 className={(data?.financial.grossProfit || 0) < 0 ? 'negative' : ''}>{money.format(data?.financial.grossProfit || 0)}</h3><small>{periodLabel} · after COGS</small></div></article>
+        <article className="surface-card overview-kpi-card"><span className="metric-icon tone-violet"><CircleDollarSign size={21} /></span><div><p>Sales Revenue</p><h3 className="overview-responsive-value" data-value-size={overviewValueSize(salesRevenueValue)} title={salesRevenueValue}>{salesRevenueValue}</h3><small>{periodLabel}</small></div></article>
+        <article className="surface-card overview-kpi-card"><span className="metric-icon tone-orange"><Banknote size={21} /></span><div><p>Purchases</p><h3 className="overview-responsive-value" data-value-size={overviewValueSize(purchasesValue)} title={purchasesValue}>{purchasesValue}</h3><small>{periodLabel}</small></div></article>
+        <article className="surface-card overview-kpi-card"><span className="metric-icon tone-blue"><TrendingDown size={21} /></span><div><p>Gross Profit</p><h3 className={`overview-responsive-value ${(data?.financial.grossProfit || 0) < 0 ? 'negative' : ''}`} data-value-size={overviewValueSize(grossProfitValue)} title={grossProfitValue}>{grossProfitValue}</h3><small>{periodLabel} · after COGS</small></div></article>
         <article className="surface-card overview-kpi-card"><span className="metric-icon tone-blue"><HandCoins size={21} /></span><div><p>Pawn Outstanding</p><OverviewCurrencyValue totals={data?.pawn.outstandingPrincipal || { USD: 0, KHR: 0 }} /><small>Current snapshot</small></div></article>
-        <article className="surface-card overview-kpi-card"><span className="metric-icon tone-rose"><Boxes size={21} /></span><div><p>Stock Value</p><h3>{money.format(data?.inventory.costValue || 0)}</h3><small>Current cost value</small></div></article>
+        <article className="surface-card overview-kpi-card"><span className="metric-icon tone-rose"><Boxes size={21} /></span><div><p>Stock Value</p><h3 className="overview-responsive-value" data-value-size={overviewValueSize(stockValue)} title={stockValue}>{stockValue}</h3><small>Current cost value</small></div></article>
       </section>
 
       <section className="surface-card overview-performance-card">

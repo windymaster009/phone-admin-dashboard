@@ -1023,17 +1023,22 @@ td strong { color: var(--text); }
 .overview-period-controls input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent); }
 .overview-error { margin: 0; padding: 11px 13px; display: flex; align-items: center; gap: 8px; border: 1px solid color-mix(in srgb, var(--rose) 32%, var(--border)); border-radius: 11px; color: var(--rose); background: color-mix(in srgb, var(--rose) 8%, var(--surface-solid)); font-size: 10px; font-weight: 700; }
 .overview-kpi-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
-.overview-kpi-card { min-width: 0; min-height: 88px; padding: 11px 12px; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; overflow: hidden; }
+.overview-kpi-card { container-type: inline-size; min-width: 0; min-height: 88px; padding: 11px 12px; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; overflow: hidden; }
 .overview-kpi-card .metric-icon { width: 36px; height: 36px; border-radius: 10px; }
 .overview-kpi-card > div { min-width: 0; }
 .overview-kpi-card p { margin: 0 0 5px; color: var(--muted); font-size: 10px; font-weight: 650; }
 .overview-kpi-card h3,
 .overview-currency-value > strong { display: block; margin: 0; overflow: hidden; color: var(--text); font: 800 clamp(17px, 1.35vw, 21px) Manrope, sans-serif; letter-spacing: -.4px; text-overflow: ellipsis; white-space: nowrap; }
+.overview-kpi-card .overview-responsive-value { overflow: visible; max-width: 100%; font-size: clamp(15px, 10cqi, 21px); line-height: 1.08; letter-spacing: -.5px; text-overflow: clip; white-space: nowrap; }
+.overview-kpi-card .overview-responsive-value[data-value-size='long'] { font-size: clamp(12px, 8.2cqi, 18px); letter-spacing: -.65px; }
+.overview-kpi-card .overview-responsive-value[data-value-size='extra-long'] { font-size: clamp(10px, 6.8cqi, 15px); letter-spacing: -.75px; }
 .overview-kpi-card h3.negative { color: var(--rose); }
 .overview-kpi-card > div > small,
 .overview-currency-value small { display: block; margin-top: 4px; overflow: hidden; color: var(--muted-2); font-size: 8px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
 .overview-currency-value { min-width: 0; display: block; }
 .overview-currency-value small { color: var(--primary); }
+.overview-kpi-card .overview-currency-value small.overview-responsive-value { margin-top: 5px; font-size: clamp(8px, 5.2cqi, 10px); }
+.overview-kpi-card .overview-currency-value small.overview-responsive-value[data-value-size='extra-long'] { font-size: clamp(7px, 4.5cqi, 9px); }
 .overview-performance-card { min-width: 0; padding: 12px 14px 8px; }
 .overview-performance-card .card-heading,
 .overview-snapshot-card > .card-heading { margin-bottom: 9px; align-items: flex-start; }
