@@ -1287,6 +1287,21 @@ a:focus-visible,
   outline-offset: 2px;
 }
 
+/* The fixed sidebar leaves settings cards less room than the viewport suggests. */
+@media (max-width: 1480px) {
+  .settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: none;
+  }
+
+  .account-settings-card,
+  .environment-settings-card,
+  .valuation-settings-card,
+  .font-size-settings-card {
+    grid-area: auto;
+  }
+}
+
 @media (max-width: 1180px) {
   .metrics-grid, .mini-stats-grid { grid-template-columns: repeat(2, 1fr); }
   .report-hub-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1306,7 +1321,7 @@ a:focus-visible,
   .stock-category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
   html, body { scrollbar-width: none; }
   html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
   .app, .app-shell { width: 100%; max-width: 100%; overflow-x: clip; }
@@ -1331,6 +1346,8 @@ a:focus-visible,
   .trade-detail-modal { display: block; width: min(760px, 100%); }
   .trade-detail-modal .detail-sections { grid-template-columns: repeat(2, 1fr); padding: 14px 18px; }
   .trade-detail-modal .detail-lines { margin: 0 18px 14px; }
+  .account-settings-body { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .account-profile { padding: 0 0 16px; border-right: 0; border-bottom: 1px solid var(--border); }
   .font-size-options { grid-template-columns: 1fr; }
 }
 
