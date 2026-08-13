@@ -186,6 +186,7 @@ type Pawn = {
     renewedBy?: { name?: string }
   }>
   dueDate: string
+  gracePeriodDays?: number
   graceEndsAt?: string
   status: string
   identificationVerified: boolean
@@ -681,12 +682,16 @@ function khrText(amount: number, exchangeRate: ExchangeRateData | null) {
   return exchangeRate ? `≈ ${riel.format(convertedKhr(amount, exchangeRate))} ៛` : ''
 }
 const dateText = (value: string) => new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(new Date(value))
-const titleStatus = (status: string) => status.replaceAll('_', ' ').toLowerCase().replace(/(^|\s)\S/g, (letter) => letter.toUpperCase())
+const titleStatus = (status: string) => {
+  if (status === 'FORFEITED') return 'Claimed'
+  if (status === 'PAWN_FORFEIT') return 'Pawn claim'
+  return status.replaceAll('_', ' ').toLowerCase().replace(/(^|\s)\S/g, (letter) => letter.toUpperCase())
+}
 const comingNext = (label: string) => window.alert(`${label} form is next. The tables and dashboard are connected to MongoDB now.`)
 
 function StatusBadge({ status }: { status: string }) {
   const label = titleStatus(status)
-  const slug = label.toLowerCase().replaceAll(' ', '-')
+  const slug = status.toLowerCase().replaceAll('_', '-')
   const Icon = status === 'IN_STOCK' || status === 'ACTIVE' || status === 'PAID'
     ? BadgeCheck
     : status === 'RESERVED' || status === 'DUE_SOON'
@@ -738,6 +743,17 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
   const renewalPaymentDue = pawnCurrency === 'KHR'
     ? Math.round(renewalPaymentDueRaw)
     : Math.round((renewalPaymentDueRaw + Number.EPSILON) * 100) / 100
+  const dayInMilliseconds = 86_400_000
+  const dueDateMilliseconds = new Date(pawn.dueDate).getTime()
+  const minimumClaimDateMilliseconds = dueDateMilliseconds + 5 * dayInMilliseconds
+  const savedClaimDateMilliseconds = pawn.graceEndsAt ? new Date(pawn.graceEndsAt).getTime() : Number.NaN
+  const claimAvailableAtMilliseconds = Number.isFinite(savedClaimDateMilliseconds)
+    ? Math.max(minimumClaimDateMilliseconds, savedClaimDateMilliseconds)
+    : dueDateMilliseconds + Math.max(5, Number(pawn.gracePeriodDays) || 0) * dayInMilliseconds
+  const claimRecommendedByMilliseconds = dueDateMilliseconds + 7 * dayInMilliseconds
+  const canClaimCollateral = pawn.status === 'OVERDUE' && Date.now() > claimAvailableAtMilliseconds
+  const claimAvailableText = dateText(new Date(claimAvailableAtMilliseconds).toISOString())
+  const claimRecommendedByText = dateText(new Date(claimRecommendedByMilliseconds).toISOString())
 
   function renewalAmountText(termDays: number) {
     const rawAmount = (isEarlyDailyRenewal ? 0 : currentFee) + (pawn.fees || 0) + dailyFeeAmount * termDays
@@ -868,14 +884,15 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
         {action && <form className={`pawn-action-form ${action === 'renew' ? 'renew-action-form' : ''}`} onSubmit={submitAction}>
           <div className="pawn-action-header">
             <div>
-              <span className="eyebrow">{action === 'payment' ? 'Due payment' : action === 'renew' ? 'Renew contract' : action === 'redeem' ? 'Redeem collateral' : 'Forfeit collateral'}</span>
-              <p>{action === 'payment' ? 'Pay the fee accumulated through today without reducing the principal.' : action === 'renew' ? 'Record the required payment and extend the contract due date.' : action === 'redeem' ? 'Collect the full balance and return the collateral to the customer.' : 'Close the contract and move the collateral into shop inventory.'}</p>
+              <span className="eyebrow">{action === 'payment' ? 'Due payment' : action === 'renew' ? 'Renew contract' : action === 'redeem' ? 'Redeem collateral' : 'Claim collateral'}</span>
+              <p>{action === 'payment' ? 'Pay the fee accumulated through today without reducing the principal.' : action === 'renew' ? 'Record the required payment and extend the contract due date.' : action === 'redeem' ? 'Collect the full balance and return the collateral to the customer.' : 'Close this overdue contract and transfer the collateral into shop inventory.'}</p>
             </div>
             <button type="button" className="icon-button" onClick={() => setAction(null)} aria-label="Cancel action"><X size={15} /></button>
           </div>
           {actionError && <p className="pawn-action-error">{actionError}</p>}
           {action !== 'forfeit' && <label className="pawn-action-amount"><span>{action === 'redeem' ? 'Full amount due' : action === 'renew' ? 'Renewal payment' : 'Fee due today'}{action === 'renew' && <small>Required now: {pawnMoney(renewalPaymentDue, pawnCurrency)}</small>}{action === 'payment' && pawn.feeModel === 'DAILY_SIMPLE' && <small>{pawnMoney(dailyFeeAmount, pawnCurrency)} per day × {pawn.feeSummary?.accruedDays || 0} days</small>}</span><div className="input-prefix"><span>{currencyLabel}</span><MoneyInput autoFocus currency={pawnCurrency} minimum={pawnCurrency === 'KHR' ? 1 : 0.01} required readOnly={action === 'payment' || action === 'redeem' || (action === 'renew' && pawn.feeModel === 'DAILY_SIMPLE')} value={amount} onValueChange={setAmount} placeholder={pawnCurrency === 'KHR' ? '0' : '0.00'} /></div></label>}
           {action === 'forfeit' && <label><span>Selling price <small>Optional</small></span><div className="input-prefix"><span>{currencyLabel}</span><input autoFocus type="text" inputMode={pawnCurrency === 'KHR' ? 'numeric' : 'decimal'} value={amount} onChange={(event) => setAmount(event.target.value.replace(pawnCurrency === 'KHR' ? /\D/g : /[^0-9.]/g, ''))} placeholder={String(pawn.estimatedValue)} /></div></label>}
+          {action === 'forfeit' && <div className="pawn-claim-confirmation" role="note"><strong>Confirm this claim carefully</strong><span>The customer will no longer be able to redeem this contract, and the collateral will become shop inventory.</span></div>}
           {action === 'renew' && (pawn.feeModel === 'DAILY_SIMPLE'
             ? <label className="pawn-renewal-term">Renewal term<select required value={renewalTermDays} onChange={(event) => { const nextTerm = event.target.value; setRenewalTermDays(nextTerm); setAmount(renewalAmountText(Number(nextTerm))) }}><option value="3">3 Days</option><option value="7">1 Week (7 days)</option><option value="15">Half Month (15 days)</option><option value="30">1 Month (30 days)</option></select></label>
             : <label>New due date<input type="date" required value={newDueDate} onChange={(event) => setNewDueDate(event.target.value)} /></label>)}
@@ -883,12 +900,12 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
           {action !== 'forfeit' && <label className="pawn-action-note"><span>Note <small>Optional</small></span><textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add a reference or payment note" /></label>}
           <div className="pawn-action-buttons">
             <button type="button" className="ghost-button" onClick={() => setAction(null)}>Cancel</button>
-            <button className={`primary-button ${action === 'forfeit' ? 'danger-button' : ''}`} disabled={actionBusy || (action === 'payment' && duePayment <= 0)}>{actionBusy ? 'Saving...' : action === 'payment' ? 'Save due payment' : action === 'renew' ? 'Confirm renewal' : action === 'redeem' ? 'Confirm full redemption' : 'Confirm forfeiture'}</button>
+            <button className={`primary-button ${action === 'forfeit' ? 'danger-button' : ''}`} disabled={actionBusy || (action === 'payment' && duePayment <= 0)}>{actionBusy ? 'Saving...' : action === 'payment' ? 'Save due payment' : action === 'renew' ? 'Confirm renewal' : action === 'redeem' ? 'Confirm full redemption' : 'Confirm claim'}</button>
           </div>
         </form>}
         </div>
         {!action && <footer className="detail-modal-footer">
-          {onAction && isOpen && !action && <><button className="secondary-button" onClick={() => openAction('payment')} disabled={duePayment <= 0} title={duePayment <= 0 ? 'No fee is due today' : `Pay ${pawnMoney(duePayment, pawnCurrency)} due today`}>Due payment</button><button className="secondary-button" onClick={() => openAction('renew')}>Renew contract</button><button className="primary-button" onClick={() => openAction('redeem')}>Redeem item</button>{pawn.status === 'OVERDUE' && <button className="ghost-button danger-link" onClick={() => openAction('forfeit')}>Forfeit item</button>}</>}
+          {onAction && isOpen && !action && <>{pawn.status === 'OVERDUE' && <div className={`pawn-claim-action ${canClaimCollateral ? 'eligible' : ''}`} role="note"><span><strong>{canClaimCollateral ? 'Claim is available' : `Available ${claimAvailableText}`}</strong><small>Recommended claim window: 5-7 days overdue{claimRecommendedByMilliseconds > claimAvailableAtMilliseconds ? ` (by ${claimRecommendedByText})` : ''}.</small></span><button className="ghost-button danger-link" onClick={() => openAction('forfeit')} disabled={!canClaimCollateral} title={canClaimCollateral ? 'Claim this collateral for shop inventory' : `Wait until ${claimAvailableText} to claim this collateral`}>Claim collateral</button></div>}<button className="secondary-button" onClick={() => openAction('payment')} disabled={duePayment <= 0} title={duePayment <= 0 ? 'No fee is due today' : `Pay ${pawnMoney(duePayment, pawnCurrency)} due today`}>Due payment</button><button className="secondary-button" onClick={() => openAction('renew')}>Renew contract</button><button className="primary-button" onClick={() => openAction('redeem')}>Redeem item</button></>}
           {onOpenAll && <button className="secondary-button" onClick={onOpenAll}>Open pawn management <ArrowUpRight size={15} /></button>}
           <button className="ghost-button" onClick={onClose}>Close</button>
         </footer>}
@@ -1274,7 +1291,7 @@ function PawnView() {
         <div className="filter-row">
           <div className="search-field"><Search size={17} /><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search contract, customer, phone or IMEI" /></div>
           <select className="ghost-button filter-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter pawn status">
-            <option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="DUE_SOON">Due soon</option><option value="OVERDUE">Overdue</option><option value="REDEEMED">Redeemed</option><option value="FORFEITED">Forfeited</option>
+            <option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="DUE_SOON">Due soon</option><option value="OVERDUE">Overdue</option><option value="REDEEMED">Redeemed</option><option value="FORFEITED">Claimed</option>
           </select>
           <select className="ghost-button filter-select" value={dueSort} onChange={(event) => setDueSort(event.target.value as 'soonest' | 'latest')} aria-label="Sort by due date">
             <option value="soonest">Due soonest</option><option value="latest">Due latest</option>
@@ -2408,7 +2425,7 @@ const reportSections = [
   { slug: 'sales', title: 'Sales', description: 'Revenue, COGS, gross profit, items sold', icon: CircleDollarSign, tone: 'violet' },
   { slug: 'purchases', title: 'Purchases', description: 'Purchases from suppliers and customers, and total cost', icon: ShoppingCart, tone: 'orange' },
   { slug: 'inventory', title: 'Inventory', description: 'Stock quantity, cost value, retail value, and low stock', icon: Boxes, tone: 'blue' },
-  { slug: 'pawns', title: 'Pawn', description: 'Outstanding principal, overdue, redeemed, and forfeited', icon: HandCoins, tone: 'violet' },
+  { slug: 'pawns', title: 'Pawn', description: 'Outstanding principal, overdue, redeemed, and claimed collateral', icon: HandCoins, tone: 'violet' },
   { slug: 'loans', title: 'Loans', description: 'Outstanding loans, repayments, and overdue balances', icon: WalletCards, tone: 'blue' },
   { slug: 'payments', title: 'Payments', description: 'Cash, KHQR, bank, card, and daily closing', icon: Banknote, tone: 'rose' },
   { slug: 'activity', title: 'Activity', description: 'Staff actions and audit history', icon: FileText, tone: 'orange' },

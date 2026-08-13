@@ -223,7 +223,7 @@ router.get('/pawns', requireAuth, allowRoles(...reportRoles), asyncRoute(async (
 
   res.json({
     title: 'Pawn Report',
-    description: 'Principal, repayments, overdue exposure, redemptions, and forfeitures.',
+    description: 'Principal, repayments, overdue exposure, redemptions, and claimed collateral.',
     meta: { currency, period, totalRecords: pawns.length, limited: pawns.length > 500 },
     filters: { currency, status, staff: staff ? String(staff) : 'ALL' },
     staff: await reportStaff(),
@@ -233,7 +233,7 @@ router.get('/pawns', requireAuth, allowRoles(...reportRoles), asyncRoute(async (
       { label: 'Outstanding', value: outstanding, format: 'currency', detail: 'Remaining principal', tone: 'rose' },
       { label: 'Collected', value: collected, format: 'currency', detail: 'All recorded payments', tone: 'blue' },
       { label: 'Overdue', value: overdue, format: 'number', detail: 'Contracts needing action', tone: 'rose' },
-      { label: 'Closed Outcomes', value: redeemed + forfeited, format: 'number', detail: `${redeemed} redeemed · ${forfeited} forfeited`, tone: 'orange' },
+      { label: 'Closed Outcomes', value: redeemed + forfeited, format: 'number', detail: `${redeemed} redeemed · ${forfeited} claimed`, tone: 'orange' },
     ],
     breakdowns: [
       { title: 'Contracts by Status', description: 'Contract count across the pawn lifecycle.', format: 'number', rows: breakdown(pawns, (pawn) => pawn.status) },

@@ -453,8 +453,8 @@ function parsePawnDueDate(value) {
   return date
 }
 
-function pawnGraceEnd(dueDate, days = 3) {
-  return new Date(dueDate.getTime() + Math.max(0, Number(days) || 0) * 86_400_000)
+function pawnGraceEnd(dueDate, days = 5) {
+  return new Date(dueDate.getTime() + Math.max(5, Number(days) || 0) * 86_400_000)
 }
 
 function pawnFeeSummary(pawn, asOf = new Date()) {
@@ -1905,7 +1905,7 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
     return res.status(400).json({ message: `Principal cannot exceed the ${percentage}% valuation limit` })
   }
 
-  const gracePeriodDays = 3
+  const gracePeriodDays = 5
   let pawn
   await mongoose.connection.transaction(async (session) => {
     let pawnCustomerId = customer
@@ -2100,9 +2100,11 @@ router.post('/pawns/:id/forfeit', requireAuth, allowRoles('OWNER', 'MANAGER'), a
   await mongoose.connection.transaction(async (session) => {
     pawn = await Pawn.findById(req.params.id).session(session)
     if (!pawn) throw requestError(404, 'Pawn contract not found')
-    if (pawn.status !== 'OVERDUE') throw requestError(409, 'Only overdue pawn contracts can be forfeited')
-    const graceEndsAt = pawn.graceEndsAt || pawnGraceEnd(new Date(pawn.dueDate), pawn.gracePeriodDays)
-    if (new Date() <= graceEndsAt) throw requestError(409, `This pawn is still in its grace period until ${graceEndsAt.toISOString()}`)
+    if (pawn.status !== 'OVERDUE') throw requestError(409, 'Only overdue pawn collateral can be claimed')
+    const minimumClaimDate = pawnGraceEnd(new Date(pawn.dueDate), 5)
+    const savedGraceEnd = pawn.graceEndsAt ? new Date(pawn.graceEndsAt) : minimumClaimDate
+    const claimAvailableAt = savedGraceEnd > minimumClaimDate ? savedGraceEnd : minimumClaimDate
+    if (new Date() <= claimAvailableAt) throw requestError(409, `This collateral cannot be claimed until ${claimAvailableAt.toISOString()}`)
     pawn.status = 'FORFEITED'
     pawn.forfeitedAt = new Date()
     await pawn.save({ session })
