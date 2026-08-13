@@ -1235,7 +1235,7 @@ function PawnView() {
   const [selectedPawn, setSelectedPawn] = useState<Pawn | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
-  const [dueSort, setDueSort] = useState<'soonest' | 'latest'>('soonest')
+  const [pawnSort, setPawnSort] = useState<'newest' | 'oldest' | 'due-soonest' | 'due-latest'>('newest')
   const [error, setError] = useState('')
   const exchangeRate = useExchangeRate()
 
@@ -1254,9 +1254,12 @@ function PawnView() {
       return [pawn.pawnNo, pawn.customer?.name, pawn.itemSnapshot.name, pawn.itemSnapshot.imei]
         .some((value) => value?.toLowerCase().includes(query))
     })
-    .sort((a, b) => dueSort === 'soonest'
-      ? new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
-      : new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime())
+    .sort((a, b) => {
+      if (pawnSort === 'oldest') return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      if (pawnSort === 'due-soonest') return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime()
+      if (pawnSort === 'due-latest') return new Date(b.dueDate).getTime() - new Date(a.dueDate).getTime()
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    })
 
   async function updatePawn(action: PawnAction, payload: Record<string, unknown>) {
     if (!selectedPawn) return
@@ -1293,8 +1296,8 @@ function PawnView() {
           <select className="ghost-button filter-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter pawn status">
             <option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="DUE_SOON">Due soon</option><option value="OVERDUE">Overdue</option><option value="REDEEMED">Redeemed</option><option value="FORFEITED">Claimed</option>
           </select>
-          <select className="ghost-button filter-select" value={dueSort} onChange={(event) => setDueSort(event.target.value as 'soonest' | 'latest')} aria-label="Sort by due date">
-            <option value="soonest">Due soonest</option><option value="latest">Due latest</option>
+          <select className="ghost-button filter-select" value={pawnSort} onChange={(event) => setPawnSort(event.target.value as 'newest' | 'oldest' | 'due-soonest' | 'due-latest')} aria-label="Sort pawn contracts">
+            <option value="newest">Newest contracts</option><option value="oldest">Oldest contracts</option><option value="due-soonest">Due soonest</option><option value="due-latest">Due latest</option>
           </select>
         </div>
         <div className="table-scroll pawn-management-table">
