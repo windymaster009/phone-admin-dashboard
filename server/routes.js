@@ -1972,8 +1972,13 @@ router.post('/pawns/:id/payment', requireAuth, allowRoles('OWNER', 'MANAGER', 'C
   const pawn = await Pawn.findById(req.params.id)
   if (!pawn) return res.status(404).json({ message: 'Pawn contract not found' })
   if (!openPawnStatuses.includes(pawn.status)) return res.status(409).json({ message: 'This pawn contract is closed' })
-  const allocation = applyPawnPayment(pawn, req.body.amount, {
-    type: 'PRINCIPAL', userId: req.user._id, note: req.body.note, paidAt: req.body.paidAt,
+  const paymentAt = new Date()
+  const summary = pawnFeeSummary(pawn, paymentAt)
+  const currency = pawnCurrencyCode(pawn.currency)
+  const duePayment = roundPawnCurrency(summary.accruedFee + Math.max(0, Number(pawn.fees) || 0), currency)
+  if (duePayment <= pawnCurrencyTolerance(currency)) throw requestError(400, 'No pawn fee is due today')
+  const allocation = applyPawnPayment(pawn, duePayment, {
+    type: 'INTEREST', userId: req.user._id, note: req.body.note, paidAt: paymentAt,
   })
   await pawn.save()
   await writeActivity(req, { action: 'PAYMENT', entity: 'PAWN', entityId: pawn._id, details: { ...allocation, currency: pawn.currency } })

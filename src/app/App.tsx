@@ -723,6 +723,10 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
   const isOpen = ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED'].includes(pawn.status)
   const remainingPrincipal = pawn.remainingPrincipal ?? pawn.principal
   const currentFee = pawn.feeModel === 'DAILY_SIMPLE' ? pawn.feeSummary?.accruedFee || 0 : pawn.accruedInterest || 0
+  const duePaymentRaw = currentFee + (pawn.fees || 0)
+  const duePayment = pawnCurrency === 'KHR'
+    ? Math.round(duePaymentRaw)
+    : Math.round((duePaymentRaw + Number.EPSILON) * 100) / 100
   const dailyFeeRate = Number(pawn.dailyFeeRate || 2.5).toLocaleString(undefined, { maximumFractionDigits: 4 })
   const dailyFeeAmount = remainingPrincipal * Number(pawn.dailyFeeRate || 2.5) / 100
   const renewalTermFeeRaw = dailyFeeAmount * Number(renewalTermDays || 0)
@@ -753,7 +757,9 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
       ? outstanding
       : nextAction === 'renew'
         ? pawn.feeModel === 'DAILY_SIMPLE' ? Number(renewalAmountText(initialRenewalTermDays)) : (pawn.accruedInterest || 0) + (pawn.fees || 0)
-        : null
+        : nextAction === 'payment'
+          ? duePayment
+          : null
     setAmount(suggestedAmount === null ? '' : pawnCurrency === 'KHR' ? String(Math.round(suggestedAmount)) : suggestedAmount.toFixed(2))
   }
 
@@ -863,12 +869,12 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
           <div className="pawn-action-header">
             <div>
               <span className="eyebrow">{action === 'payment' ? 'Due payment' : action === 'renew' ? 'Renew contract' : action === 'redeem' ? 'Redeem collateral' : 'Forfeit collateral'}</span>
-              <p>{action === 'payment' ? `Apply a payment to the ${pawnMoney(outstanding, pawnCurrency)} outstanding balance.` : action === 'renew' ? 'Record the required payment and extend the contract due date.' : action === 'redeem' ? 'Collect the full balance and return the collateral to the customer.' : 'Close the contract and move the collateral into shop inventory.'}</p>
+              <p>{action === 'payment' ? 'Pay the fee accumulated through today without reducing the principal.' : action === 'renew' ? 'Record the required payment and extend the contract due date.' : action === 'redeem' ? 'Collect the full balance and return the collateral to the customer.' : 'Close the contract and move the collateral into shop inventory.'}</p>
             </div>
             <button type="button" className="icon-button" onClick={() => setAction(null)} aria-label="Cancel action"><X size={15} /></button>
           </div>
           {actionError && <p className="pawn-action-error">{actionError}</p>}
-          {action !== 'forfeit' && <label className="pawn-action-amount"><span>{action === 'redeem' ? 'Full amount due' : action === 'renew' ? 'Renewal payment' : 'Payment amount'}{action === 'renew' && <small>Required now: {pawnMoney(renewalPaymentDue, pawnCurrency)}</small>}</span><div className="input-prefix"><span>{currencyLabel}</span><MoneyInput autoFocus currency={pawnCurrency} minimum={pawnCurrency === 'KHR' ? 1 : 0.01} required readOnly={action === 'redeem' || (action === 'renew' && pawn.feeModel === 'DAILY_SIMPLE')} value={amount} onValueChange={setAmount} placeholder={pawnCurrency === 'KHR' ? '0' : '0.00'} /></div></label>}
+          {action !== 'forfeit' && <label className="pawn-action-amount"><span>{action === 'redeem' ? 'Full amount due' : action === 'renew' ? 'Renewal payment' : 'Fee due today'}{action === 'renew' && <small>Required now: {pawnMoney(renewalPaymentDue, pawnCurrency)}</small>}{action === 'payment' && pawn.feeModel === 'DAILY_SIMPLE' && <small>{pawnMoney(dailyFeeAmount, pawnCurrency)} per day × {pawn.feeSummary?.accruedDays || 0} days</small>}</span><div className="input-prefix"><span>{currencyLabel}</span><MoneyInput autoFocus currency={pawnCurrency} minimum={pawnCurrency === 'KHR' ? 1 : 0.01} required readOnly={action === 'payment' || action === 'redeem' || (action === 'renew' && pawn.feeModel === 'DAILY_SIMPLE')} value={amount} onValueChange={setAmount} placeholder={pawnCurrency === 'KHR' ? '0' : '0.00'} /></div></label>}
           {action === 'forfeit' && <label><span>Selling price <small>Optional</small></span><div className="input-prefix"><span>{currencyLabel}</span><input autoFocus type="text" inputMode={pawnCurrency === 'KHR' ? 'numeric' : 'decimal'} value={amount} onChange={(event) => setAmount(event.target.value.replace(pawnCurrency === 'KHR' ? /\D/g : /[^0-9.]/g, ''))} placeholder={String(pawn.estimatedValue)} /></div></label>}
           {action === 'renew' && (pawn.feeModel === 'DAILY_SIMPLE'
             ? <label className="pawn-renewal-term">Renewal term<select required value={renewalTermDays} onChange={(event) => { const nextTerm = event.target.value; setRenewalTermDays(nextTerm); setAmount(renewalAmountText(Number(nextTerm))) }}><option value="3">3 Days</option><option value="7">1 Week (7 days)</option><option value="15">Half Month (15 days)</option><option value="30">1 Month (30 days)</option></select></label>
@@ -877,12 +883,12 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
           {action !== 'forfeit' && <label className="pawn-action-note"><span>Note <small>Optional</small></span><textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add a reference or payment note" /></label>}
           <div className="pawn-action-buttons">
             <button type="button" className="ghost-button" onClick={() => setAction(null)}>Cancel</button>
-            <button className={`primary-button ${action === 'forfeit' ? 'danger-button' : ''}`} disabled={actionBusy}>{actionBusy ? 'Saving...' : action === 'payment' ? 'Save due payment' : action === 'renew' ? 'Confirm renewal' : action === 'redeem' ? 'Confirm full redemption' : 'Confirm forfeiture'}</button>
+            <button className={`primary-button ${action === 'forfeit' ? 'danger-button' : ''}`} disabled={actionBusy || (action === 'payment' && duePayment <= 0)}>{actionBusy ? 'Saving...' : action === 'payment' ? 'Save due payment' : action === 'renew' ? 'Confirm renewal' : action === 'redeem' ? 'Confirm full redemption' : 'Confirm forfeiture'}</button>
           </div>
         </form>}
         </div>
         {!action && <footer className="detail-modal-footer">
-          {onAction && isOpen && !action && <><button className="secondary-button" onClick={() => openAction('payment')}>Due payment</button><button className="secondary-button" onClick={() => openAction('renew')}>Renew contract</button><button className="primary-button" onClick={() => openAction('redeem')}>Redeem item</button>{pawn.status === 'OVERDUE' && <button className="ghost-button danger-link" onClick={() => openAction('forfeit')}>Forfeit item</button>}</>}
+          {onAction && isOpen && !action && <><button className="secondary-button" onClick={() => openAction('payment')} disabled={duePayment <= 0} title={duePayment <= 0 ? 'No fee is due today' : `Pay ${pawnMoney(duePayment, pawnCurrency)} due today`}>Due payment</button><button className="secondary-button" onClick={() => openAction('renew')}>Renew contract</button><button className="primary-button" onClick={() => openAction('redeem')}>Redeem item</button>{pawn.status === 'OVERDUE' && <button className="ghost-button danger-link" onClick={() => openAction('forfeit')}>Forfeit item</button>}</>}
           {onOpenAll && <button className="secondary-button" onClick={onOpenAll}>Open pawn management <ArrowUpRight size={15} /></button>}
           <button className="ghost-button" onClick={onClose}>Close</button>
         </footer>}
