@@ -1291,7 +1291,7 @@ export default function OperationModalBridge() {
       busy={busy}
       compact={(kind === 'sale' && Boolean(saleKhqr)) || (kind === 'pawn' && Boolean(pawnCreated))}
       dismissible={!(kind === 'sale' && saleKhqr)}
-      dismissOnBackdrop={kind !== 'pawn'}
+      dismissOnBackdrop={kind !== 'pawn' && kind !== 'purchase'}
       dismissOnEscape={kind !== 'pawn'}
       onClose={close}
     >
