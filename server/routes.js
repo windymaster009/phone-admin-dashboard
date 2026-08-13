@@ -1999,7 +1999,9 @@ router.post('/pawns/:id/renew', requireAuth, allowRoles('OWNER', 'MANAGER', 'CAS
       throw requestError(400, `Renewal requires ${requiredFeeAndCharges} ${currency}, including the ${selectedTermDays}-day extension fee`)
     }
     const previousDueDate = pawn.dueDate
-    pawn.accruedPawnFee = roundPawnCurrency((Number(pawn.accruedPawnFee) || 0) + renewalQuote.extensionFee, currency)
+    pawn.accruedPawnFee = renewalQuote.isEarlyRenewal
+      ? renewalQuote.extensionFee
+      : roundPawnCurrency((Number(pawn.accruedPawnFee) || 0) + renewalQuote.extensionFee, currency)
     const allocation = paymentAmount > 0
       ? applyPawnPayment(pawn, paymentAmount, { type: 'RENEWAL', userId: req.user._id, note: req.body.note, paidAt: renewalAt })
       : { amount: 0, feesApplied: 0, pawnFeeApplied: 0, interestApplied: 0, principalApplied: 0, balanceAfter: pawnAmountDue(pawn, renewalAt) }

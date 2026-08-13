@@ -86,3 +86,37 @@ test('early renewal charges the selected extension and preserves remaining days'
   assert.equal(quote.extensionStartsAt.toISOString(), due.toISOString())
   assert.equal(quote.newDueDate.toISOString(), addPawnDays(due, 7).toISOString())
 })
+
+test('early renewal does not add elapsed fees to the selected term fee', () => {
+  const start = new Date('2026-08-01T00:00:00.000Z')
+  const due = addPawnDays(start, 7)
+  const quote = calculatePawnRenewalQuote({
+    feeModel: 'DAILY_SIMPLE', status: 'ACTIVE', currency: 'USD',
+    remainingPrincipal: 20, dailyFeeRate: 2.5, termDays: 7,
+    startDate: start, currentTermStartDate: start, feeAccrualStartedAt: start,
+    dueDate: due, accruedPawnFee: 0, fees: 0,
+  }, 7, addPawnDays(start, 5))
+
+  assert.equal(quote.accruedFee, 2.5)
+  assert.equal(quote.accruedFeeDue, 0)
+  assert.equal(quote.extensionFee, 3.5)
+  assert.equal(quote.requiredPayment, 3.5)
+  assert.equal(quote.isEarlyRenewal, true)
+})
+
+test('overdue renewal still includes accrued fees and the selected extension', () => {
+  const start = new Date('2026-08-01T00:00:00.000Z')
+  const due = addPawnDays(start, 7)
+  const quote = calculatePawnRenewalQuote({
+    feeModel: 'DAILY_SIMPLE', status: 'OVERDUE', currency: 'USD',
+    remainingPrincipal: 20, dailyFeeRate: 2.5, termDays: 7,
+    startDate: start, currentTermStartDate: start, feeAccrualStartedAt: start,
+    dueDate: due, accruedPawnFee: 0, fees: 0,
+  }, 7, addPawnDays(start, 8))
+
+  assert.equal(quote.accruedFee, 4)
+  assert.equal(quote.accruedFeeDue, 4)
+  assert.equal(quote.extensionFee, 3.5)
+  assert.equal(quote.requiredPayment, 7.5)
+  assert.equal(quote.isEarlyRenewal, false)
+})

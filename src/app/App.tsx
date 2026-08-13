@@ -729,13 +729,14 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
   const renewalTermFee = pawnCurrency === 'KHR'
     ? Math.round(renewalTermFeeRaw)
     : Math.round((renewalTermFeeRaw + Number.EPSILON) * 100) / 100
-  const renewalPaymentDueRaw = currentFee + (pawn.fees || 0) + (pawn.feeModel === 'DAILY_SIMPLE' ? renewalTermFee : 0)
+  const isEarlyDailyRenewal = pawn.feeModel === 'DAILY_SIMPLE' && new Date(pawn.dueDate).getTime() > Date.now()
+  const renewalPaymentDueRaw = (isEarlyDailyRenewal ? 0 : currentFee) + (pawn.fees || 0) + (pawn.feeModel === 'DAILY_SIMPLE' ? renewalTermFee : 0)
   const renewalPaymentDue = pawnCurrency === 'KHR'
     ? Math.round(renewalPaymentDueRaw)
     : Math.round((renewalPaymentDueRaw + Number.EPSILON) * 100) / 100
 
   function renewalAmountText(termDays: number) {
-    const rawAmount = currentFee + (pawn.fees || 0) + dailyFeeAmount * termDays
+    const rawAmount = (isEarlyDailyRenewal ? 0 : currentFee) + (pawn.fees || 0) + dailyFeeAmount * termDays
     return pawnCurrency === 'KHR'
       ? String(Math.round(rawAmount))
       : (Math.round((rawAmount + Number.EPSILON) * 100) / 100).toFixed(2)

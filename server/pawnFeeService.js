@@ -99,17 +99,21 @@ export function calculatePawnRenewalQuote(pawn, termDays, renewedAt = new Date()
   )
   const otherCharges = roundPawnAmount(Math.max(0, Number(pawn?.fees) || 0), currency)
   const currentDueDate = new Date(pawn?.dueDate)
-  const extensionStartsAt = !Number.isNaN(currentDueDate.getTime()) && currentDueDate > renewalAt
+  const isEarlyRenewal = !Number.isNaN(currentDueDate.getTime()) && currentDueDate > renewalAt
+  const extensionStartsAt = isEarlyRenewal
     ? currentDueDate
     : renewalAt
+  const accruedFeeDue = isEarlyRenewal ? 0 : summary.accruedFee
 
   return {
     currency,
     termDays: selectedTermDays,
     accruedFee: summary.accruedFee,
+    accruedFeeDue,
     otherCharges,
     extensionFee,
-    requiredPayment: roundPawnAmount(summary.accruedFee + otherCharges + extensionFee, currency),
+    requiredPayment: roundPawnAmount(accruedFeeDue + otherCharges + extensionFee, currency),
+    isEarlyRenewal,
     extensionStartsAt,
     newDueDate: addPawnDays(extensionStartsAt, selectedTermDays),
   }
