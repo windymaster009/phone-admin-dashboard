@@ -881,7 +881,7 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
         </form>}
         </div>
         {!action && <footer className="detail-modal-footer">
-          {onAction && isOpen && !action && <><button className="secondary-button" onClick={() => openAction('payment')}>Record payment</button><button className="secondary-button" onClick={() => openAction('renew')}>Renew contract</button><button className="primary-button" onClick={() => openAction('redeem')}>Redeem item</button>{pawn.status === 'OVERDUE' && <button className="ghost-button danger-link" onClick={() => openAction('forfeit')}>Forfeit item</button>}</>}
+          {onAction && isOpen && !action && <><button className="secondary-button" onClick={() => openAction('renew')}>Renew contract</button><button className="primary-button" onClick={() => openAction('redeem')}>Redeem item</button>{pawn.status === 'OVERDUE' && <button className="ghost-button danger-link" onClick={() => openAction('forfeit')}>Forfeit item</button>}</>}
           {onOpenAll && <button className="secondary-button" onClick={onOpenAll}>Open pawn management <ArrowUpRight size={15} /></button>}
           <button className="ghost-button" onClick={onClose}>Close</button>
         </footer>}
