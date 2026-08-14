@@ -934,7 +934,9 @@ td strong { color: var(--text); }
 .pawn-detail-body { min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
 .pawn-detail-body::-webkit-scrollbar { width: 8px; }
 .pawn-detail-body::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: var(--border-strong); background-clip: padding-box; }
-.pawn-detail-modal .detail-modal-footer { position: relative; z-index: 2; flex: 0 0 auto; flex-wrap: wrap; background: var(--surface-solid); box-shadow: 0 -12px 30px rgba(3,7,18,.2); }
+.pawn-detail-modal .detail-modal-footer { position: relative; z-index: 2; flex: 0 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px 14px; background: var(--surface-solid); box-shadow: 0 -12px 30px rgba(3,7,18,.2); }
+.pawn-detail-modal .detail-modal-footer .receipt-detail-action { grid-column: 1; justify-self: start; }
+.pawn-footer-actions { grid-column: 2; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 9px; }
 .pawn-balance-summary { margin: 18px; padding: 18px; border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border)); border-radius: 15px; background: linear-gradient(135deg, var(--primary-soft), var(--bg-soft)); }
 .pawn-balance-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .pawn-balance-heading h4,
@@ -1018,11 +1020,12 @@ td strong { color: var(--text); }
 .pawn-claim-confirmation { grid-column: 1 / -1; display: grid; gap: 4px; padding: 11px 12px; border: 1px solid color-mix(in srgb, var(--rose) 38%, var(--border)); border-radius: 10px; background: color-mix(in srgb, var(--rose) 8%, var(--bg-soft)); }
 .pawn-claim-confirmation strong { color: var(--text); font-size: 10px; }
 .pawn-claim-confirmation span { color: var(--muted); font-size: 9px; line-height: 1.5; }
-.pawn-claim-action { min-width: 220px; display: flex; align-items: center; gap: 9px; margin-right: auto; }
+.pawn-claim-action { order: -1; grid-column: 1 / -1; width: 100%; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--rose) 20%, var(--border)); border-radius: 10px; background: color-mix(in srgb, var(--rose) 5%, var(--bg-soft)); }
 .pawn-claim-action > span { min-width: 0; display: grid; gap: 2px; }
-.pawn-claim-action strong { color: var(--muted); font-size: 9px; }
-.pawn-claim-action small { color: var(--muted-2); font-size: 8px; line-height: 1.35; }
+.pawn-claim-action strong { color: var(--muted); font-size: 10px; }
+.pawn-claim-action small { color: var(--muted-2); font-size: 9px; line-height: 1.35; }
 .pawn-claim-action.eligible strong { color: var(--rose); }
+.pawn-claim-action .danger-link { flex: 0 0 auto; }
 .pawn-claim-action .danger-link:disabled { opacity: .5; cursor: not-allowed; }
 .pawn-renewal-summary { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .pawn-renewal-summary > div { min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-soft); }
@@ -1761,12 +1764,13 @@ a:focus-visible,
   .pawn-detail-modal .pawn-renewal-summary { grid-template-columns: 1fr; }
   .pawn-detail-modal .pawn-action-buttons { display: grid; grid-template-columns: 1fr 1.35fr; }
   .pawn-detail-modal .pawn-action-buttons button { width: 100%; }
-  .pawn-detail-modal .detail-modal-footer { position: sticky; bottom: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 11px 12px; background: var(--surface-solid); }
-  .pawn-detail-modal .detail-modal-footer > *,
-  .pawn-detail-modal .detail-modal-footer .receipt-action-host > * { width: 100%; justify-content: center; }
-  .pawn-detail-modal .detail-modal-footer .pawn-claim-action { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto; text-align: left; }
+  .pawn-detail-modal .detail-modal-footer { position: sticky; bottom: 0; display: grid; grid-template-columns: 1fr; gap: 8px; padding: 11px 12px; background: var(--surface-solid); }
+  .pawn-detail-modal .detail-modal-footer .receipt-detail-action { grid-column: 1; width: 100%; justify-content: center; }
+  .pawn-detail-modal .detail-modal-footer .pawn-claim-action { grid-column: 1; display: grid; grid-template-columns: minmax(0, 1fr) auto; text-align: left; }
   .pawn-detail-modal .detail-modal-footer .pawn-claim-action > span { width: auto; }
   .pawn-detail-modal .detail-modal-footer .pawn-claim-action > button { width: auto; }
+  .pawn-detail-modal .pawn-footer-actions { grid-column: 1; width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .pawn-detail-modal .pawn-footer-actions > * { width: 100%; justify-content: center; }
   .trade-detail-modal .detail-sections { grid-template-columns: 1fr; padding: 12px; }
   .trade-detail-modal .detail-lines, .trade-detail-modal .detail-note { margin: 0 12px 12px; }
   .trade-detail-modal .detail-grid { padding: 12px; }
