@@ -29,7 +29,7 @@ import {
   DAILY_PAWN_FEE_RATE,
   addPawnDays,
   calculateDailyPawnSummary,
-  calculatePawnRenewalQuote,
+  calculatePawnExtensionQuote,
   dailyPawnFeeRateFromDueFee,
   isDailyPawn,
   materializeDailyPawnFee,
@@ -1994,45 +1994,35 @@ router.post('/pawns/:id/renew', requireAuth, allowRoles('OWNER', 'MANAGER', 'CAS
   if (!openPawnStatuses.includes(pawn.status)) return res.status(409).json({ message: 'This pawn contract is closed' })
   const currency = pawnCurrencyCode(pawn.currency)
   if (isDailyPawn(pawn)) {
-    const renewalAt = new Date()
+    const extensionAt = new Date()
     const selectedTermDays = validatePawnTermDays(req.body.termDays)
-    materializeDailyPawnFee(pawn, renewalAt)
-    const renewalQuote = calculatePawnRenewalQuote(pawn, selectedTermDays, renewalAt)
-    const requiredFeeAndCharges = renewalQuote.requiredPayment
-    const paymentAmount = pawnCurrencyAmount(req.body.amount, currency, 'Renewal payment', true)
-    if (paymentAmount !== requiredFeeAndCharges) {
-      throw requestError(400, `Renewal requires ${requiredFeeAndCharges} ${currency}, including the ${selectedTermDays}-day extension fee`)
+    materializeDailyPawnFee(pawn, extensionAt)
+    const extensionQuote = calculatePawnExtensionQuote(pawn, selectedTermDays, extensionAt)
+    const unpaidFees = extensionQuote.outstandingFeeBalance
+    if (unpaidFees > pawnCurrencyTolerance(currency)) {
+      throw requestError(409, `Pay the current due fee of ${unpaidFees} ${currency} before extending this pawn`)
     }
+
     const previousDueDate = pawn.dueDate
-    pawn.accruedPawnFee = renewalQuote.isEarlyRenewal
-      ? renewalQuote.extensionFee
-      : roundPawnCurrency((Number(pawn.accruedPawnFee) || 0) + renewalQuote.extensionFee, currency)
-    const allocation = paymentAmount > 0
-      ? applyPawnPayment(pawn, paymentAmount, { type: 'RENEWAL', userId: req.user._id, note: req.body.note, paidAt: renewalAt })
-      : { amount: 0, feesApplied: 0, pawnFeeApplied: 0, interestApplied: 0, principalApplied: 0, balanceAfter: pawnAmountDue(pawn, renewalAt) }
-    const newDueDate = renewalQuote.newDueDate
+    const newDueDate = extensionQuote.newDueDate
     pawn.termDays = selectedTermDays
-    pawn.currentTermStartDate = renewalQuote.extensionStartsAt
-    // This extension was paid up front, so daily accrual resumes after it ends.
-    pawn.feeAccrualStartedAt = newDueDate
+    pawn.currentTermStartDate = extensionQuote.extensionStartsAt
     pawn.dueDate = newDueDate
     pawn.graceEndsAt = pawnGraceEnd(newDueDate, pawn.gracePeriodDays)
     pawn.dueReminderFor = undefined
     pawn.dueReminderSentAt = undefined
     pawn.status = 'ACTIVE'
     pawn.renewals.push({
-      previousDueDate, newDueDate, paymentAmount, interestCharged: 0,
-      feePaid: allocation.pawnFeeApplied + allocation.feesApplied,
+      previousDueDate, newDueDate, paymentAmount: 0, interestCharged: 0, feePaid: 0,
       principalRemaining: pawn.remainingPrincipal, termDays: selectedTermDays,
-      renewedAt: renewalAt, renewedBy: req.user._id, note: clean(req.body.note),
+      renewedAt: extensionAt, renewedBy: req.user._id, note: clean(req.body.note),
     })
-    if (paymentAmount > 0 && pawn.payments.length) pawn.payments[pawn.payments.length - 1].balanceAfter = pawnAmountDue(pawn, renewalAt)
     await pawn.save()
-    await writeActivity(req, { action: 'RENEW', entity: 'PAWN', entityId: pawn._id, details: { ...allocation, pawnNo: pawn.pawnNo, termDays: selectedTermDays, newDueDate, currency } })
+    await writeActivity(req, { action: 'RENEW', entity: 'PAWN', entityId: pawn._id, details: { pawnNo: pawn.pawnNo, termDays: selectedTermDays, previousDueDate, newDueDate, currency, paymentRecorded: false } })
     const customerFields = req.user.role === 'CASHIER' ? 'name phone' : 'name phone nationalIdNumber'
     await pawn.populate('customer', customerFields)
     await pawn.populate('renewals.renewedBy', 'name role')
-    return res.json({ pawn: pawnResponse(pawn, renewalAt) })
+    return res.json({ pawn: pawnResponse(pawn, extensionAt) })
   }
 
   const newDueDate = parsePawnDueDate(req.body.newDueDate)

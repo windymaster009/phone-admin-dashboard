@@ -84,14 +84,14 @@ export function calculatePawnFee(principal, days, currency = 'USD', dailyFeeRate
   )
 }
 
-export function calculatePawnRenewalQuote(pawn, termDays, renewedAt = new Date()) {
+export function calculatePawnExtensionQuote(pawn, termDays, extendedAt = new Date()) {
   const currency = pawnCurrencyCode(pawn?.currency)
   const selectedTermDays = validatePawnTermDays(termDays)
-  const renewalAt = new Date(renewedAt)
-  if (Number.isNaN(renewalAt.getTime())) throw new TypeError('Pawn renewal date is invalid')
+  const extensionAt = new Date(extendedAt)
+  if (Number.isNaN(extensionAt.getTime())) throw new TypeError('Pawn extension date is invalid')
 
-  const summary = calculateDailyPawnSummary(pawn, renewalAt)
-  const extensionFee = calculatePawnFee(
+  const summary = calculateDailyPawnSummary(pawn, extensionAt)
+  const projectedExtensionFee = calculatePawnFee(
     summary.remainingPrincipal,
     selectedTermDays,
     currency,
@@ -99,21 +99,21 @@ export function calculatePawnRenewalQuote(pawn, termDays, renewedAt = new Date()
   )
   const otherCharges = roundPawnAmount(Math.max(0, Number(pawn?.fees) || 0), currency)
   const currentDueDate = new Date(pawn?.dueDate)
-  const isEarlyRenewal = !Number.isNaN(currentDueDate.getTime()) && currentDueDate > renewalAt
-  const extensionStartsAt = isEarlyRenewal
+  const isEarlyExtension = !Number.isNaN(currentDueDate.getTime()) && currentDueDate > extensionAt
+  const extensionStartsAt = isEarlyExtension
     ? currentDueDate
-    : renewalAt
-  const accruedFeeDue = isEarlyRenewal ? 0 : summary.accruedFee
+    : extensionAt
+  const outstandingFeeBalance = roundPawnAmount(summary.accruedFee + otherCharges, currency)
 
   return {
     currency,
     termDays: selectedTermDays,
     accruedFee: summary.accruedFee,
-    accruedFeeDue,
     otherCharges,
-    extensionFee,
-    requiredPayment: roundPawnAmount(accruedFeeDue + otherCharges + extensionFee, currency),
-    isEarlyRenewal,
+    outstandingFeeBalance,
+    projectedExtensionFee,
+    paymentRecorded: 0,
+    isEarlyExtension,
     extensionStartsAt,
     newDueDate: addPawnDays(extensionStartsAt, selectedTermDays),
   }

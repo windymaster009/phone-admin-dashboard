@@ -57,6 +57,7 @@ const actionLabels: Record<string, string> = {
   CREATE: 'Created',
   UPDATE: 'Updated',
   PAYMENT: 'Recorded payment for',
+  RENEW: 'Extended',
   REDEEM: 'Redeemed',
   FORFEIT: 'Claimed collateral',
   CANCEL: 'Cancelled',

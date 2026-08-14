@@ -5,7 +5,7 @@ import {
   addPawnDays,
   calculateDailyPawnSummary,
   calculatePawnFee,
-  calculatePawnRenewalQuote,
+  calculatePawnExtensionQuote,
   dailyPawnFeeRateFromDueFee,
   validateMaximumPawnPrincipal,
   validateDailyPawnFeeRate,
@@ -57,7 +57,7 @@ test('charges only four elapsed days for early redemption', () => {
   assert.equal(summary.totalAtDueDate, 23.5)
 })
 
-test('renewal fee does not become principal', () => {
+test('daily pawn fee does not become principal', () => {
   const start = new Date('2026-08-01T00:00:00.000Z')
   const due = addPawnDays(start, 7)
   const summary = calculateDailyPawnSummary({
@@ -71,26 +71,27 @@ test('renewal fee does not become principal', () => {
   assert.equal(addPawnDays(due, 7).toISOString(), '2026-08-15T00:00:00.000Z')
 })
 
-test('early renewal charges the selected extension and preserves remaining days', () => {
+test('early extension records no payment and preserves the remaining days', () => {
   const start = new Date('2026-08-01T00:00:00.000Z')
   const due = addPawnDays(start, 7)
-  const quote = calculatePawnRenewalQuote({
+  const quote = calculatePawnExtensionQuote({
     feeModel: 'DAILY_SIMPLE', status: 'ACTIVE', currency: 'KHR',
     remainingPrincipal: 50_000, dailyFeeRate: 2, termDays: 7,
     startDate: start, currentTermStartDate: start, feeAccrualStartedAt: start,
     dueDate: due, accruedPawnFee: 0, fees: 0,
   }, 7, start)
 
-  assert.equal(quote.extensionFee, 7_000)
-  assert.equal(quote.requiredPayment, 7_000)
+  assert.equal(quote.projectedExtensionFee, 7_000)
+  assert.equal(quote.outstandingFeeBalance, 0)
+  assert.equal(quote.paymentRecorded, 0)
   assert.equal(quote.extensionStartsAt.toISOString(), due.toISOString())
   assert.equal(quote.newDueDate.toISOString(), addPawnDays(due, 7).toISOString())
 })
 
-test('early renewal does not add elapsed fees to the selected term fee', () => {
+test('extension requires already accrued fees to be paid first', () => {
   const start = new Date('2026-08-01T00:00:00.000Z')
   const due = addPawnDays(start, 7)
-  const quote = calculatePawnRenewalQuote({
+  const quote = calculatePawnExtensionQuote({
     feeModel: 'DAILY_SIMPLE', status: 'ACTIVE', currency: 'USD',
     remainingPrincipal: 20, dailyFeeRate: 2.5, termDays: 7,
     startDate: start, currentTermStartDate: start, feeAccrualStartedAt: start,
@@ -98,25 +99,27 @@ test('early renewal does not add elapsed fees to the selected term fee', () => {
   }, 7, addPawnDays(start, 5))
 
   assert.equal(quote.accruedFee, 2.5)
-  assert.equal(quote.accruedFeeDue, 0)
-  assert.equal(quote.extensionFee, 3.5)
-  assert.equal(quote.requiredPayment, 3.5)
-  assert.equal(quote.isEarlyRenewal, true)
+  assert.equal(quote.outstandingFeeBalance, 2.5)
+  assert.equal(quote.projectedExtensionFee, 3.5)
+  assert.equal(quote.paymentRecorded, 0)
+  assert.equal(quote.isEarlyExtension, true)
 })
 
-test('overdue renewal still includes accrued fees and the selected extension', () => {
+test('overdue extension starts today after the outstanding fee is cleared', () => {
   const start = new Date('2026-08-01T00:00:00.000Z')
   const due = addPawnDays(start, 7)
-  const quote = calculatePawnRenewalQuote({
+  const extensionAt = addPawnDays(start, 8)
+  const quote = calculatePawnExtensionQuote({
     feeModel: 'DAILY_SIMPLE', status: 'OVERDUE', currency: 'USD',
     remainingPrincipal: 20, dailyFeeRate: 2.5, termDays: 7,
     startDate: start, currentTermStartDate: start, feeAccrualStartedAt: start,
     dueDate: due, accruedPawnFee: 0, fees: 0,
-  }, 7, addPawnDays(start, 8))
+  }, 7, extensionAt)
 
   assert.equal(quote.accruedFee, 4)
-  assert.equal(quote.accruedFeeDue, 4)
-  assert.equal(quote.extensionFee, 3.5)
-  assert.equal(quote.requiredPayment, 7.5)
-  assert.equal(quote.isEarlyRenewal, false)
+  assert.equal(quote.outstandingFeeBalance, 4)
+  assert.equal(quote.projectedExtensionFee, 3.5)
+  assert.equal(quote.paymentRecorded, 0)
+  assert.equal(quote.isEarlyExtension, false)
+  assert.equal(quote.newDueDate.toISOString(), addPawnDays(extensionAt, 7).toISOString())
 })
