@@ -199,7 +199,7 @@ function pawnItem(pawn) {
 const RECEIPT_DAY_MS = 24 * 60 * 60 * 1000
 
 function pawnReceiptAmount(value, currency) {
-  return currency === 'KHR' ? Math.round(Number(value || 0)) : roundMoney(value)
+  return currency === 'KHR' ? Math.round(Number(value || 0) / 100) * 100 : roundMoney(value)
 }
 
 function daysBetween(fromValue, toValue, fallback = 0) {

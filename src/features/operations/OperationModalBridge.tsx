@@ -176,20 +176,20 @@ function localDateValue() {
 
 function roundPawnAmount(value: number, currency: PawnCurrency) {
   return currency === 'KHR'
-    ? Math.round(Number(value) || 0)
+    ? Math.round((Number(value) || 0) / 100) * 100
     : Math.round(((Number(value) || 0) + Number.EPSILON) * 100) / 100
 }
 
 function pawnAmountText(value: number, currency: PawnCurrency) {
   return currency === 'KHR'
-    ? `${Math.round(Number(value) || 0).toLocaleString()} KHR`
+    ? `${roundPawnAmount(value, currency).toLocaleString()} KHR`
     : `$${(Number(value) || 0).toFixed(2)}`
 }
 
 function pawnEquivalentAmountText(value: number, currency: PawnCurrency, usdKhrRate: number) {
   return currency === 'KHR'
     ? `≈ $${((Number(value) || 0) / usdKhrRate).toFixed(2)}`
-    : `≈ ${Math.round((Number(value) || 0) * usdKhrRate).toLocaleString()} KHR`
+    : `≈ ${(Math.round(((Number(value) || 0) * usdKhrRate) / 100) * 100).toLocaleString()} KHR`
 }
 
 const modalMeta: Record<ModalKind, { title: string; description: string; icon: ReactNode }> = {
@@ -1600,7 +1600,7 @@ export default function OperationModalBridge() {
                 <div className="pawn-assessment-heading"><div><span>1. Resale value and condition</span><small>Use a recent second-hand selling price and inspect the actual phone.</small></div>{pawnValuation ? <b>Imported</b> : <button type="button" className={`calculation-mode-toggle ${pawnAutoCalculate ? 'active' : ''}`} role="switch" aria-checked={pawnAutoCalculate} onClick={togglePawnAutoCalculate}><span aria-hidden="true" /><strong>Auto calculate</strong><small>{pawnAutoCalculate ? 'On' : 'Off'}</small></button>}</div>
                 <div className="operation-form-grid pawn-assessment-grid">
                   <label>Valuation currency<select disabled={Boolean(pawnValuation)} value={pawnCurrency} onChange={(event) => changePawnCurrency(event.target.value as PawnCurrency)}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Cambodian Riel</option></select></label>
-                  <label>Resale value ({pawnCurrency})<MoneyInput currency={pawnCurrency} minimum={pawnCurrency === 'KHR' ? 1 : 0.01} required readOnly={Boolean(pawnValuation)} value={pawnMarketPrice || ''} onValueChange={(value) => setPawnMarketPrice(Math.max(0, Number(value)))} /></label>
+                  <label>Resale value ({pawnCurrency})<MoneyInput currency={pawnCurrency} minimum={pawnCurrency === 'KHR' ? 100 : 0.01} required readOnly={Boolean(pawnValuation)} value={pawnMarketPrice || ''} onValueChange={(value) => setPawnMarketPrice(Math.max(0, Number(value)))} /></label>
                   <label>Phone age<div className="device-unit-input"><input type="number" min="0" max="120" step="1" required readOnly={Boolean(pawnValuation)} value={pawnAgeMonths} onChange={(event) => setPawnAgeMonths(Math.max(0, Number(event.target.value)))} /><span>months</span></div></label>
                   <label>Physical condition<select disabled={Boolean(pawnValuation)} value={pawnCondition} onChange={(event) => setPawnCondition(event.target.value)}><option value="LIKE_NEW">Excellent / Like new</option><option value="GOOD">Good / Minor wear</option><option value="FAIR">Fair / Visible wear</option><option value="DAMAGED">Damaged / Repair needed</option></select></label>
                   <label>Battery health<div className="device-unit-input"><input type="number" min="0" max="100" step="1" required readOnly={Boolean(pawnValuation)} value={pawnBatteryHealth} onChange={(event) => setPawnBatteryHealth(event.target.value)} /><span>%</span></div></label>
@@ -1630,7 +1630,7 @@ export default function OperationModalBridge() {
 
               <div className="pawn-contract-fields-heading"><span>3. Contract terms</span><small>The principal may be reduced, but cannot exceed the calculated maximum.</small></div>
               <div className="operation-form-grid purchase-fields-grid pawn-contract-fields">
-                <label><span className="operation-label-heading">Principal ({pawnCurrency}) <small>Maximum {pawnAmountText(maximumPawn, pawnCurrency)}</small></span><MoneyInput name="principal" currency={pawnCurrency} minimum={pawnCurrency === 'KHR' ? 1 : 0.01} maximum={maximumPawn || undefined} clampToMaximum required value={pawnPrincipal} aria-describedby={pawnPrincipalLimitMessage ? 'pawn-principal-limit' : undefined} onValueChange={(value) => { setPawnPrincipal(value); setPawnPrincipalLimitMessage('') }} onMaximumExceeded={(limit) => setPawnPrincipalLimitMessage(`Principal capped at ${pawnAmountText(limit, pawnCurrency)}.`)} />{pawnPrincipalLimitMessage && <small id="pawn-principal-limit" className="operation-field-warning" role="status">{pawnPrincipalLimitMessage}</small>}</label>
+                <label><span className="operation-label-heading">Principal ({pawnCurrency}) <small>Maximum {pawnAmountText(maximumPawn, pawnCurrency)}</small></span><MoneyInput name="principal" currency={pawnCurrency} minimum={pawnCurrency === 'KHR' ? 100 : 0.01} maximum={maximumPawn || undefined} clampToMaximum required value={pawnPrincipal} aria-describedby={pawnPrincipalLimitMessage ? 'pawn-principal-limit' : undefined} onValueChange={(value) => { setPawnPrincipal(value); setPawnPrincipalLimitMessage('') }} onMaximumExceeded={(limit) => setPawnPrincipalLimitMessage(`Principal capped at ${pawnAmountText(limit, pawnCurrency)}.`)} />{pawnPrincipalLimitMessage && <small id="pawn-principal-limit" className="operation-field-warning" role="status">{pawnPrincipalLimitMessage}</small>}</label>
                 {pawnAutoCalculate ? <label>Daily pawn fee rate<div className="device-unit-input"><input type="number" min="0" max="100" step="0.01" required value={pawnDailyFeeRate} onChange={(event) => setPawnDailyFeeRate(event.target.value)} aria-label="Daily pawn fee rate" /><span>% / day</span></div><small className="pawn-daily-fee-help">Charges {pawnAmountText(pawnDailyFeeAmount, pawnCurrency)} per day.</small></label> : <label><span className="operation-label-heading">Fee at due date ({pawnCurrency}) <small>Maximum {pawnAmountText(pawnMaximumFeeAtDue, pawnCurrency)}</small></span><MoneyInput currency={pawnCurrency} maximum={pawnMaximumFeeAtDue || undefined} required value={pawnFeeAtDue} onValueChange={setPawnFeeAtDue} aria-label="Fee at due date" placeholder={pawnPrincipalAmount > 0 ? 'Enter total fee' : 'Enter principal first'} /><small className="pawn-daily-fee-help">Equivalent to {pawnEffectiveDailyFeeRate.toLocaleString(undefined, { maximumFractionDigits: 4 })}% / day · {pawnAmountText(pawnDailyFeeAmount, pawnCurrency)} / day.</small></label>}
                 <fieldset className="pawn-term-selector operation-wide"><legend>Pawn term</legend><div role="radiogroup" aria-label="Pawn term">{([{ days: 3, label: '3 Days' }, { days: 7, label: '1 Week' }, { days: 15, label: 'Half Month' }, { days: 30, label: '1 Month' }] as const).map((term) => <button key={term.days} type="button" role="radio" aria-checked={pawnTermDays === term.days} className={pawnTermDays === term.days ? 'active' : ''} onClick={() => setPawnTermDays(term.days)}><strong>{term.label}</strong><small>{term.days} days</small></button>)}</div></fieldset>
                 <label className="operation-wide">Contract notes <small className="optional-marker">Optional</small><textarea name="notes" rows={2} /></label>

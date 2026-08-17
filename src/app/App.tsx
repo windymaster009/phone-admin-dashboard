@@ -649,7 +649,7 @@ const riel = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
 
 function pawnMoney(amount: number, currencyCode: PawnCurrency = 'USD') {
   return currencyCode === 'KHR'
-    ? `${riel.format(Math.round(Number(amount) || 0))} KHR`
+    ? `${riel.format(Math.round((Number(amount) || 0) / 100) * 100)} KHR`
     : money.format(Number(amount) || 0)
 }
 
@@ -738,7 +738,7 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
   const currentFee = pawn.feeModel === 'DAILY_SIMPLE' ? pawn.feeSummary?.accruedFee || 0 : pawn.accruedInterest || 0
   const duePaymentRaw = currentFee + (pawn.fees || 0)
   const duePayment = pawnCurrency === 'KHR'
-    ? Math.round(duePaymentRaw)
+    ? Math.round(duePaymentRaw / 100) * 100
     : Math.round((duePaymentRaw + Number.EPSILON) * 100) / 100
   const dailyFeeRate = Number(pawn.dailyFeeRate || 2.5).toLocaleString(undefined, { maximumFractionDigits: 4 })
   const dailyFeeAmount = pawn.feeSummary?.dailyFeeAmount ?? remainingPrincipal * Number(pawn.dailyFeeRate || 2.5) / 100
@@ -788,7 +788,7 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
         : nextAction === 'payment'
           ? duePayment
           : null
-    setAmount(suggestedAmount === null ? '' : pawnCurrency === 'KHR' ? String(Math.round(suggestedAmount)) : suggestedAmount.toFixed(2))
+    setAmount(suggestedAmount === null ? '' : pawnCurrency === 'KHR' ? String(Math.round(suggestedAmount / 100) * 100) : suggestedAmount.toFixed(2))
   }
 
   async function submitAction(event: FormEvent<HTMLFormElement>) {
@@ -902,7 +902,7 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
             <button type="button" className="icon-button" onClick={() => setAction(null)} aria-label="Cancel action"><X size={15} /></button>
           </div>
           {actionError && <p className="pawn-action-error">{actionError}</p>}
-          {action !== 'forfeit' && !(action === 'renew' && pawn.feeModel === 'DAILY_SIMPLE') && <label className="pawn-action-amount"><span>{action === 'redeem' ? 'Redemption amount' : action === 'renew' ? 'Required fee payment' : 'Fee due today'}{action === 'redeem' && <small>Minimum due: {pawnMoney(outstanding, pawnCurrency)}</small>}{action === 'payment' && pawn.feeModel === 'DAILY_SIMPLE' && <small>{pawnMoney(dailyFeeAmount, pawnCurrency)} per day × {pawn.feeSummary?.accruedDays || 0} days</small>}</span><div className="input-prefix"><span>{currencyLabel}</span><MoneyInput autoFocus currency={pawnCurrency} minimum={action === 'redeem' ? Math.max(outstanding, pawnCurrency === 'KHR' ? 1 : 0.01) : pawnCurrency === 'KHR' ? 1 : 0.01} required readOnly={action === 'payment'} value={amount} onValueChange={setAmount} placeholder={pawnCurrency === 'KHR' ? '0' : '0.00'} /></div>{action === 'redeem' && redemptionExtra > 0 && <small className="pawn-redemption-adjustment">Additional amount collected above the calculated balance: {pawnMoney(redemptionExtra, pawnCurrency)}.</small>}</label>}
+          {action !== 'forfeit' && !(action === 'renew' && pawn.feeModel === 'DAILY_SIMPLE') && <label className="pawn-action-amount"><span>{action === 'redeem' ? 'Redemption amount' : action === 'renew' ? 'Required fee payment' : 'Fee due today'}{action === 'redeem' && <small>Minimum due: {pawnMoney(outstanding, pawnCurrency)}</small>}{action === 'payment' && pawn.feeModel === 'DAILY_SIMPLE' && <small>{pawnMoney(dailyFeeAmount, pawnCurrency)} per day × {pawn.feeSummary?.accruedDays || 0} days</small>}</span><div className="input-prefix"><span>{currencyLabel}</span><MoneyInput autoFocus currency={pawnCurrency} minimum={action === 'redeem' ? Math.max(outstanding, pawnCurrency === 'KHR' ? 100 : 0.01) : pawnCurrency === 'KHR' ? 100 : 0.01} required readOnly={action === 'payment'} value={amount} onValueChange={setAmount} placeholder={pawnCurrency === 'KHR' ? '0' : '0.00'} /></div>{action === 'redeem' && redemptionExtra > 0 && <small className="pawn-redemption-adjustment">Additional amount collected above the calculated balance: {pawnMoney(redemptionExtra, pawnCurrency)}.</small>}</label>}
           {action === 'forfeit' && <label><span>Selling price <small>Optional</small></span><div className="input-prefix"><span>{currencyLabel}</span><input autoFocus type="text" inputMode={pawnCurrency === 'KHR' ? 'numeric' : 'decimal'} value={amount} onChange={(event) => setAmount(event.target.value.replace(pawnCurrency === 'KHR' ? /\D/g : /[^0-9.]/g, ''))} placeholder={String(pawn.estimatedValue)} /></div></label>}
           {action === 'forfeit' && <div className="pawn-claim-confirmation" role="note"><strong>Confirm this claim carefully</strong><span>The customer will no longer be able to redeem this contract, and the collateral will become shop inventory.</span></div>}
           {action === 'renew' && (pawn.feeModel === 'DAILY_SIMPLE'
@@ -1938,7 +1938,7 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
     const carrierLockRate = lockStatus === 'carrier_locked' ? 0.1 : 0
     const eligible = lockStatus !== 'activation_locked'
     const roundAmount = (amount: number) => valuationCurrency === 'KHR'
-      ? Math.round(amount)
+      ? Math.round(amount / 100) * 100
       : Math.round((amount + Number.EPSILON) * 100) / 100
     const rawAgeDeduction = marketPrice * ageRate
     const rawConditionDeduction = marketPrice * conditionRate
@@ -2229,7 +2229,7 @@ function CustomersView() {
 }
 
 function overviewKhr(amount: number) {
-  return `${riel.format(Math.round(Number(amount) || 0))} KHR`
+  return `${riel.format(Math.round((Number(amount) || 0) / 100) * 100)} KHR`
 }
 
 function overviewValueSize(value: string) {

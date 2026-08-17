@@ -59,12 +59,14 @@ export default function MoneyInput({
     const amount = draft === '' || draft === '.' ? Number.NaN : Number(draft)
     if (draft && (!Number.isFinite(amount) || amount < minimum)) {
       input.setCustomValidity(`Enter an amount of at least ${formatMoneyValue(String(minimum))}.`)
+    } else if (draft && currency === 'KHR' && amount !== 0 && amount % 100 !== 0) {
+      input.setCustomValidity('Cambodian riel amounts must use increments of 100 KHR.')
     } else if (draft && maximum !== undefined && amount > maximum) {
       input.setCustomValidity(`Enter an amount no greater than ${formatMoneyValue(String(maximum))}.`)
     } else {
       input.setCustomValidity('')
     }
-  }, [draft, maximum, minimum])
+  }, [currency, draft, maximum, minimum])
 
   return <>
     <input

@@ -8,6 +8,7 @@ import {
   calculatePawnExtensionQuote,
   dailyPawnFeeRateFromDueFee,
   materializeDailyPawnFee,
+  roundPawnAmount,
   validateMaximumPawnPrincipal,
   validateDailyPawnFeeRate,
 } from './pawnFeeService.js'
@@ -17,6 +18,13 @@ test('calculates the required simple daily fee examples', () => {
   assert.equal(calculatePawnFee(20, 7), 3.5)
   assert.equal(calculatePawnFee(20, 15), 7.5)
   assert.equal(calculatePawnFee(20, 30), 15)
+})
+
+test('rounds Cambodian riel pawn amounts to spendable 100 KHR increments', () => {
+  assert.equal(roundPawnAmount(71_429, 'KHR'), 71_400)
+  assert.equal(roundPawnAmount(71_450, 'KHR'), 71_500)
+  assert.equal(roundPawnAmount(0, 'KHR'), 0)
+  assert.equal(roundPawnAmount(12.345, 'USD'), 12.35)
 })
 
 test('counts the deposit date as billable day one for workflow version 5', () => {

@@ -10,7 +10,7 @@ export function pawnCurrencyCode(value) {
 export function roundPawnAmount(value, currency = 'USD') {
   const amount = Number(value) || 0
   return pawnCurrencyCode(currency) === 'KHR'
-    ? Math.round(amount)
+    ? Math.round(amount / 100) * 100
     : Math.round((amount + Number.EPSILON) * 100) / 100
 }
 

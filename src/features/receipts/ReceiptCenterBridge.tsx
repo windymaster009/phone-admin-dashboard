@@ -11,7 +11,7 @@ type ViewerState = { receipt: ReceiptRecord; initialLayout?: ReceiptLayout }
 
 function money(value: number, currency: 'USD' | 'KHR') {
   return currency === 'KHR'
-    ? `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value || 0)} ៛`
+    ? `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Math.round((value || 0) / 100) * 100)} ៛`
     : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(value || 0)
 }
 

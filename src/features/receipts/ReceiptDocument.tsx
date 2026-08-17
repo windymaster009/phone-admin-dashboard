@@ -5,7 +5,7 @@ const riel = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
 
 function money(value: number | undefined, currency: 'USD' | 'KHR') {
   const amount = Number(value || 0)
-  return currency === 'KHR' ? `${riel.format(amount)} ៛` : `$${number.format(amount)}`
+  return currency === 'KHR' ? `${riel.format(Math.round(amount / 100) * 100)} ៛` : `$${number.format(amount)}`
 }
 
 function dateTime(value?: string) {
