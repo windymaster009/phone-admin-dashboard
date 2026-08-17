@@ -70,11 +70,16 @@ export function addPawnDays(value, days) {
   return new Date(start.getTime() + Number(days) * DAY_MS)
 }
 
-export function elapsedPawnDays(fromValue, toValue = new Date()) {
+export function elapsedPawnDays(fromValue, toValue = new Date(), inclusive = false) {
   const from = new Date(fromValue)
   const to = new Date(toValue)
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return 0
-  return Math.max(0, Math.floor((to.getTime() - from.getTime()) / DAY_MS))
+  const elapsed = Math.floor((to.getTime() - from.getTime()) / DAY_MS)
+  return Math.max(0, elapsed + (inclusive ? 1 : 0))
+}
+
+function countsPawnStartDay(pawn) {
+  return Number(pawn?.workflowVersion) >= 5
 }
 
 export function pawnContractLengthDays(pawn) {
@@ -85,7 +90,7 @@ export function pawnContractLengthDays(pawn) {
   const start = new Date(pawn?.startDate || pawn?.issueDate || pawn?.createdAt)
   const due = new Date(pawn?.dueDate)
   if (!Number.isNaN(start.getTime()) && !Number.isNaN(due.getTime())) {
-    return Math.max(0, Math.round((due.getTime() - start.getTime()) / DAY_MS))
+    return Math.max(0, Math.round((due.getTime() - start.getTime()) / DAY_MS) + (countsPawnStartDay(pawn) ? 1 : 0))
   }
   return Math.max(0, Number(pawn?.termDays) || 0)
 }
@@ -113,10 +118,10 @@ export function calculatePawnExtensionQuote(pawn, termDays, extendedAt = new Dat
   const otherCharges = roundPawnAmount(Math.max(0, Number(pawn?.fees) || 0), currency)
   const currentDueDate = new Date(pawn?.dueDate)
   const isEarlyExtension = !Number.isNaN(currentDueDate.getTime()) && currentDueDate > extensionAt
-  // An extension is a new paid period. It starts when staff records it, even
-  // when the customer extends before the previous due date. This makes a day-4
-  // extension by seven days end on contract day 11 instead of day 14.
-  const extensionStartsAt = extensionAt
+  // Inclusive contracts have already billed the extension date. Their added
+  // days therefore begin tomorrow. Legacy contracts keep their original
+  // start-today behavior so existing history is not silently recalculated.
+  const extensionStartsAt = countsPawnStartDay(pawn) ? addPawnDays(extensionAt, 1) : extensionAt
   const outstandingFeeBalance = roundPawnAmount(summary.accruedFee + otherCharges, currency)
   const dailyFeeRate = Number.isFinite(Number(pawn?.dailyFeeRate))
     ? Number(pawn.dailyFeeRate)
@@ -125,6 +130,7 @@ export function calculatePawnExtensionQuote(pawn, termDays, extendedAt = new Dat
   const elapsedContractDays = elapsedPawnDays(
     pawn?.startDate || pawn?.issueDate || pawn?.createdAt,
     extensionAt,
+    countsPawnStartDay(pawn),
   )
 
   return {
@@ -141,7 +147,7 @@ export function calculatePawnExtensionQuote(pawn, termDays, extendedAt = new Dat
     elapsedContractDays,
     contractLengthDays: elapsedContractDays + selectedTermDays,
     extensionStartsAt,
-    newDueDate: addPawnDays(extensionStartsAt, selectedTermDays),
+    newDueDate: addPawnDays(extensionAt, selectedTermDays),
   }
 }
 
@@ -157,7 +163,8 @@ export function calculateDailyPawnSummary(pawn, asOf = new Date()) {
   const accrualStart = pawn?.feeAccrualStartedAt || pawn?.currentTermStartDate || pawn?.startDate || pawn?.issueDate || pawn?.createdAt
   const open = ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED'].includes(String(pawn?.status || 'ACTIVE'))
   const effectiveAsOf = open ? asOf : pawn?.redeemedAt || pawn?.forfeitedAt || pawn?.updatedAt || asOf
-  const currentSegmentDays = elapsedPawnDays(accrualStart, effectiveAsOf)
+  const inclusive = countsPawnStartDay(pawn)
+  const currentSegmentDays = elapsedPawnDays(accrualStart, effectiveAsOf, inclusive)
   const currentSegmentFee = calculatePawnFee(principal, currentSegmentDays, currency, rate)
   const storedAccruedFee = roundPawnAmount(Math.max(0, Number(pawn?.accruedPawnFee) || 0), currency)
   const accruedFee = roundPawnAmount(storedAccruedFee + currentSegmentFee, currency)
@@ -165,7 +172,7 @@ export function calculateDailyPawnSummary(pawn, asOf = new Date()) {
   const termDays = Number(pawn?.termDays) || 0
   const dueDate = pawn?.dueDate ? new Date(pawn.dueDate) : null
   const projectedDays = dueDate && !Number.isNaN(dueDate.getTime())
-    ? elapsedPawnDays(accrualStart, dueDate)
+    ? elapsedPawnDays(accrualStart, dueDate, inclusive)
     : termDays
   const termFee = roundPawnAmount(storedAccruedFee + calculatePawnFee(principal, projectedDays, currency, rate), currency)
   const redemptionTotal = roundPawnAmount(principal + accruedFee + otherFees, currency)
@@ -176,7 +183,7 @@ export function calculateDailyPawnSummary(pawn, asOf = new Date()) {
     dailyFeeAmount: calculatePawnFee(principal, 1, currency, rate),
     termDays,
     contractLengthDays: pawnContractLengthDays(pawn),
-    accruedDays: elapsedPawnDays(pawn?.currentTermStartDate || pawn?.startDate || pawn?.issueDate || pawn?.createdAt, effectiveAsOf),
+    accruedDays: elapsedPawnDays(pawn?.currentTermStartDate || pawn?.startDate || pawn?.issueDate || pawn?.createdAt, effectiveAsOf, inclusive),
     accruedFee,
     feeAtDueDate: termFee,
     totalAtDueDate: roundPawnAmount(principal + termFee + otherFees, currency),
@@ -189,7 +196,7 @@ export function materializeDailyPawnFee(pawn, at = new Date()) {
   if (!isDailyPawn(pawn)) return 0
   const currency = pawnCurrencyCode(pawn.currency)
   const start = pawn.feeAccrualStartedAt || pawn.currentTermStartDate || pawn.startDate || pawn.issueDate || pawn.createdAt
-  const days = elapsedPawnDays(start, at)
+  const days = elapsedPawnDays(start, at, countsPawnStartDay(pawn))
   const addedFee = calculatePawnFee(pawn.remainingPrincipal ?? pawn.principal, days, currency, pawn.dailyFeeRate)
   pawn.accruedPawnFee = roundPawnAmount((Number(pawn.accruedPawnFee) || 0) + addedFee, currency)
   // Keep any uncompleted part of the current day instead of discarding it when

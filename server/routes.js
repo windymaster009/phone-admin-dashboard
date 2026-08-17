@@ -1899,7 +1899,9 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
     ? dailyPawnFeeRateFromDueFee(requestedPrincipal, feeAtDue, selectedTermDays, currency)
     : validateDailyPawnFeeRate(dailyFeeRate === undefined ? DAILY_PAWN_FEE_RATE : dailyFeeRate)
   const startDate = new Date()
-  const maturityDate = addPawnDays(startDate, selectedTermDays)
+  // The deposit date is billable Day 1, so a seven-day pawn opened on the
+  // 17th is due on the 23rd (six calendar-day boundaries later).
+  const maturityDate = addPawnDays(startDate, selectedTermDays - 1)
   if (!/^\d{15}$/.test(clean(itemSnapshot.imei) || '')) throw requestError(400, 'IMEI must contain exactly 15 digits')
   try {
     validateMaximumPawnPrincipal(requestedPrincipal, maxPrincipal, currency)
@@ -1960,7 +1962,7 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
       dueDate: maturityDate, gracePeriodDays, graceEndsAt: pawnGraceEnd(maturityDate, gracePeriodDays),
       identificationVerified: nationalIdVerified,
       ownershipConfirmed: true,
-      notes: clean(notes), createdBy: req.user._id, workflowVersion: 4,
+      notes: clean(notes), createdBy: req.user._id, workflowVersion: 5,
     }], { session })
     pawn = created[0]
   })

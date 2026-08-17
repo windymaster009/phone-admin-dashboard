@@ -195,6 +195,7 @@ type Pawn = {
   dueDate: string
   gracePeriodDays?: number
   graceEndsAt?: string
+  workflowVersion?: number
   status: string
   identificationVerified: boolean
   ownershipConfirmed?: boolean
@@ -754,12 +755,14 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
   const claimRecommendedByText = dateText(new Date(claimRecommendedByMilliseconds).toISOString())
 
   const extensionBaseDate = Date.now()
-  const extensionDueDate = dateText(new Date(extensionBaseDate + Number(renewalTermDays || 0) * dayInMilliseconds).toISOString())
+  const countsStartDay = Number(pawn.workflowVersion) >= 5
+  const renewalDays = Number(renewalTermDays || 0)
+  const extensionDueDate = dateText(new Date(extensionBaseDate + renewalDays * dayInMilliseconds).toISOString())
   const pawnStartMilliseconds = new Date(pawn.startDate || pawn.createdAt).getTime()
   const elapsedContractDays = Number.isFinite(pawnStartMilliseconds)
-    ? Math.max(0, Math.floor((extensionBaseDate - pawnStartMilliseconds) / dayInMilliseconds))
+    ? Math.max(0, Math.floor((extensionBaseDate - pawnStartMilliseconds) / dayInMilliseconds) + (countsStartDay ? 1 : 0))
     : Math.max(0, Number(pawn.feeSummary?.contractLengthDays || pawn.termDays) || 0)
-  const extendedContractLengthDays = elapsedContractDays + Number(renewalTermDays || 0)
+  const extendedContractLengthDays = elapsedContractDays + renewalDays
 
   function printPawnTicket(sourceSubId = 'latest-contract') {
     window.dispatchEvent(new CustomEvent('phoneflow:open-pawn-ticket', {

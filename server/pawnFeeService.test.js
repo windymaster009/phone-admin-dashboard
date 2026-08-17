@@ -7,6 +7,7 @@ import {
   calculatePawnFee,
   calculatePawnExtensionQuote,
   dailyPawnFeeRateFromDueFee,
+  materializeDailyPawnFee,
   validateMaximumPawnPrincipal,
   validateDailyPawnFeeRate,
 } from './pawnFeeService.js'
@@ -16,6 +17,59 @@ test('calculates the required simple daily fee examples', () => {
   assert.equal(calculatePawnFee(20, 7), 3.5)
   assert.equal(calculatePawnFee(20, 15), 7.5)
   assert.equal(calculatePawnFee(20, 30), 15)
+})
+
+test('counts the deposit date as billable day one for workflow version 5', () => {
+  const start = new Date('2026-08-17T00:00:00.000Z')
+  const due = addPawnDays(start, 6)
+  const pawn = {
+    feeModel: 'DAILY_SIMPLE', status: 'ACTIVE', workflowVersion: 5, currency: 'KHR',
+    remainingPrincipal: 100_000, dailyFeeRate: 2, termDays: 7,
+    startDate: start, currentTermStartDate: start, feeAccrualStartedAt: start,
+    dueDate: due, accruedPawnFee: 0, fees: 0,
+  }
+
+  const firstDay = calculateDailyPawnSummary(pawn, start)
+  assert.equal(firstDay.accruedDays, 1)
+  assert.equal(firstDay.accruedFee, 2_000)
+  assert.equal(firstDay.feeAtDueDate, 14_000)
+
+  const dueDay = calculateDailyPawnSummary(pawn, due)
+  assert.equal(dueDay.accruedDays, 7)
+  assert.equal(dueDay.accruedFee, 14_000)
+  assert.equal(due.toISOString(), '2026-08-23T00:00:00.000Z')
+})
+
+test('does not charge day one twice after its due payment is materialized', () => {
+  const start = new Date('2026-08-17T00:00:00.000Z')
+  const pawn = {
+    feeModel: 'DAILY_SIMPLE', status: 'ACTIVE', workflowVersion: 5, currency: 'KHR',
+    remainingPrincipal: 100_000, dailyFeeRate: 2, termDays: 7,
+    startDate: start, currentTermStartDate: start, feeAccrualStartedAt: start,
+    dueDate: addPawnDays(start, 6), accruedPawnFee: 0, fees: 0,
+  }
+
+  assert.equal(materializeDailyPawnFee(pawn, start), 2_000)
+  pawn.accruedPawnFee = 0
+  assert.equal(calculateDailyPawnSummary(pawn, start).accruedFee, 0)
+  assert.equal(calculateDailyPawnSummary(pawn, addPawnDays(start, 1)).accruedFee, 2_000)
+})
+
+test('a seven-day extension adds seven new days without charging the paid day twice', () => {
+  const start = new Date('2026-08-17T00:00:00.000Z')
+  const extensionAt = addPawnDays(start, 3)
+  const quote = calculatePawnExtensionQuote({
+    feeModel: 'DAILY_SIMPLE', status: 'ACTIVE', workflowVersion: 5, currency: 'KHR',
+    remainingPrincipal: 100_000, dailyFeeRate: 2, termDays: 7,
+    startDate: start, currentTermStartDate: start,
+    feeAccrualStartedAt: addPawnDays(extensionAt, 1),
+    dueDate: addPawnDays(start, 6), accruedPawnFee: 0, fees: 0,
+  }, 7, extensionAt)
+
+  assert.equal(quote.elapsedContractDays, 4)
+  assert.equal(quote.contractLengthDays, 11)
+  assert.equal(quote.extensionStartsAt.toISOString(), addPawnDays(extensionAt, 1).toISOString())
+  assert.equal(quote.newDueDate.toISOString(), addPawnDays(extensionAt, 7).toISOString())
 })
 
 test('validates an owner-entered daily fee rate', () => {
@@ -71,7 +125,7 @@ test('daily pawn fee does not become principal', () => {
   assert.equal(addPawnDays(due, 7).toISOString(), '2026-08-15T00:00:00.000Z')
 })
 
-test('early extension starts a new period today and preserves the daily money rate', () => {
+test('legacy early extension keeps its original start-today behavior', () => {
   const start = new Date('2026-08-01T00:00:00.000Z')
   const due = addPawnDays(start, 7)
   const quote = calculatePawnExtensionQuote({
@@ -126,7 +180,7 @@ test('extension requires already accrued fees to be paid first', () => {
   assert.equal(quote.isEarlyExtension, true)
 })
 
-test('overdue extension starts today after the outstanding fee is cleared', () => {
+test('legacy overdue extension keeps its original start-today behavior', () => {
   const start = new Date('2026-08-01T00:00:00.000Z')
   const due = addPawnDays(start, 7)
   const extensionAt = addPawnDays(start, 8)
@@ -142,5 +196,6 @@ test('overdue extension starts today after the outstanding fee is cleared', () =
   assert.equal(quote.projectedExtensionFee, 3.5)
   assert.equal(quote.paymentRecorded, 0)
   assert.equal(quote.isEarlyExtension, false)
+  assert.equal(quote.extensionStartsAt.toISOString(), extensionAt.toISOString())
   assert.equal(quote.newDueDate.toISOString(), addPawnDays(extensionAt, 7).toISOString())
 })
