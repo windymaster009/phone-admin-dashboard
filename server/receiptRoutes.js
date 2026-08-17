@@ -345,6 +345,7 @@ function buildPawnPaymentSnapshot(pawn, payment, documentType) {
       interest: roundMoney(payment.interestApplied),
       fees: roundMoney((payment.feesApplied || 0) + (payment.pawnFeeApplied || 0)),
       pawnFee: roundMoney(payment.pawnFeeApplied),
+      additionalCollected: roundMoney(payment.additionalCollected),
     },
     contractPrincipal: roundMoney(pawn.originalPrincipal ?? pawn.principal),
     dueDate: pawn.dueDate,

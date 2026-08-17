@@ -72,6 +72,7 @@ function ContractDetails({ snapshot }: { snapshot: ReceiptSnapshot }) {
           <Row label="Interest applied" value={money(snapshot.allocation?.interest, snapshot.currency)} />
           {Number(snapshot.allocation?.pawnFee || 0) > 0 && <Row label="Daily pawn fee applied" value={money(snapshot.allocation?.pawnFee, snapshot.currency)} />}
           <Row label="Fees applied" value={money(snapshot.allocation?.fees, snapshot.currency)} />
+          {Number(snapshot.allocation?.additionalCollected || 0) > 0 && <Row label="Additional amount collected" value={money(snapshot.allocation?.additionalCollected, snapshot.currency)} />}
           <Row label="Remaining balance" value={money(snapshot.balance, snapshot.currency)} />
           <Row label="Contract due date" value={dateOnly(snapshot.dueDate)} />
         </>}

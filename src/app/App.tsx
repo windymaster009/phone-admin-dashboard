@@ -764,8 +764,8 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
     : Math.max(0, Number(pawn.feeSummary?.contractLengthDays || pawn.termDays) || 0)
   const extendedContractLengthDays = elapsedContractDays + renewalDays
   const enteredRedemptionAmount = action === 'redeem' ? Number(amount) : 0
-  const redemptionDiscount = action === 'redeem' && Number.isFinite(enteredRedemptionAmount)
-    ? Math.max(0, outstanding - enteredRedemptionAmount)
+  const redemptionExtra = action === 'redeem' && Number.isFinite(enteredRedemptionAmount)
+    ? Math.max(0, enteredRedemptionAmount - outstanding)
     : 0
 
   function printPawnTicket(sourceSubId = 'latest-contract') {
@@ -794,10 +794,6 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
   async function submitAction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!action || !onAction) return
-    if (action === 'redeem' && redemptionDiscount > 0 && !note.trim()) {
-      setActionError('Add a note explaining why the redemption amount is lower than the calculated balance.')
-      return
-    }
     setActionBusy(true)
     setActionError('')
     try {
@@ -906,7 +902,7 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
             <button type="button" className="icon-button" onClick={() => setAction(null)} aria-label="Cancel action"><X size={15} /></button>
           </div>
           {actionError && <p className="pawn-action-error">{actionError}</p>}
-          {action !== 'forfeit' && !(action === 'renew' && pawn.feeModel === 'DAILY_SIMPLE') && <label className="pawn-action-amount"><span>{action === 'redeem' ? 'Redemption amount' : action === 'renew' ? 'Required fee payment' : 'Fee due today'}{action === 'redeem' && <small>Calculated due: {pawnMoney(outstanding, pawnCurrency)}</small>}{action === 'payment' && pawn.feeModel === 'DAILY_SIMPLE' && <small>{pawnMoney(dailyFeeAmount, pawnCurrency)} per day × {pawn.feeSummary?.accruedDays || 0} days</small>}</span><div className="input-prefix"><span>{currencyLabel}</span><MoneyInput autoFocus currency={pawnCurrency} minimum={pawnCurrency === 'KHR' ? 1 : 0.01} maximum={action === 'redeem' ? outstanding : undefined} required readOnly={action === 'payment'} value={amount} onValueChange={setAmount} placeholder={pawnCurrency === 'KHR' ? '0' : '0.00'} /></div>{action === 'redeem' && redemptionDiscount > 0 && <small className="pawn-redemption-adjustment">The remaining {pawnMoney(redemptionDiscount, pawnCurrency)} will be waived. Add a note explaining the adjustment.</small>}</label>}
+          {action !== 'forfeit' && !(action === 'renew' && pawn.feeModel === 'DAILY_SIMPLE') && <label className="pawn-action-amount"><span>{action === 'redeem' ? 'Redemption amount' : action === 'renew' ? 'Required fee payment' : 'Fee due today'}{action === 'redeem' && <small>Minimum due: {pawnMoney(outstanding, pawnCurrency)}</small>}{action === 'payment' && pawn.feeModel === 'DAILY_SIMPLE' && <small>{pawnMoney(dailyFeeAmount, pawnCurrency)} per day × {pawn.feeSummary?.accruedDays || 0} days</small>}</span><div className="input-prefix"><span>{currencyLabel}</span><MoneyInput autoFocus currency={pawnCurrency} minimum={action === 'redeem' ? Math.max(outstanding, pawnCurrency === 'KHR' ? 1 : 0.01) : pawnCurrency === 'KHR' ? 1 : 0.01} required readOnly={action === 'payment'} value={amount} onValueChange={setAmount} placeholder={pawnCurrency === 'KHR' ? '0' : '0.00'} /></div>{action === 'redeem' && redemptionExtra > 0 && <small className="pawn-redemption-adjustment">Additional amount collected above the calculated balance: {pawnMoney(redemptionExtra, pawnCurrency)}.</small>}</label>}
           {action === 'forfeit' && <label><span>Selling price <small>Optional</small></span><div className="input-prefix"><span>{currencyLabel}</span><input autoFocus type="text" inputMode={pawnCurrency === 'KHR' ? 'numeric' : 'decimal'} value={amount} onChange={(event) => setAmount(event.target.value.replace(pawnCurrency === 'KHR' ? /\D/g : /[^0-9.]/g, ''))} placeholder={String(pawn.estimatedValue)} /></div></label>}
           {action === 'forfeit' && <div className="pawn-claim-confirmation" role="note"><strong>Confirm this claim carefully</strong><span>The customer will no longer be able to redeem this contract, and the collateral will become shop inventory.</span></div>}
           {action === 'renew' && (pawn.feeModel === 'DAILY_SIMPLE'

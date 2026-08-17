@@ -2080,24 +2080,43 @@ router.post('/pawns/:id/redeem', requireAuth, allowRoles('OWNER', 'MANAGER', 'CA
     materializeDailyPawnFee(pawn, redemptionAt)
     const outstanding = pawnAmountDue(pawn, redemptionAt)
     const amount = pawnCurrencyAmount(req.body.amount, currency, 'Redemption amount')
-    if (amount > outstanding + pawnCurrencyTolerance(currency)) throw requestError(400, `Redemption amount cannot exceed the outstanding balance of ${outstanding} ${currency}`)
-    const waivedAmount = roundPawnCurrency(Math.max(0, outstanding - amount), currency)
+    if (amount < outstanding) throw requestError(400, `Redemption amount cannot be less than the outstanding balance of ${outstanding} ${currency}`)
+    const additionalCollected = roundPawnCurrency(Math.max(0, amount - outstanding), currency)
     const note = clean(req.body.note)
-    if (waivedAmount > pawnCurrencyTolerance(currency) && !note) {
-      throw requestError(400, 'A note is required when redeeming for less than the outstanding balance')
-    }
     allocation = outstanding > 0
-      ? applyPawnPayment(pawn, amount, { type: 'REDEMPTION', userId: req.user._id, note, paidAt: redemptionAt })
+      ? applyPawnPayment(pawn, outstanding, { type: 'REDEMPTION', userId: req.user._id, note, paidAt: redemptionAt })
       : { amount: 0, feesApplied: 0, pawnFeeApplied: 0, interestApplied: 0, principalApplied: 0, balanceAfter: 0 }
+    let redemptionPayment = outstanding > 0 ? pawn.payments.at(-1) : null
+    if (!redemptionPayment) {
+      pawn.payments.push({
+        amount,
+        type: 'REDEMPTION',
+        additionalCollected: amount,
+        feesApplied: 0,
+        pawnFeeApplied: 0,
+        interestApplied: 0,
+        principalApplied: 0,
+        balanceAfter: 0,
+        paidAt: redemptionAt,
+        note,
+        receivedBy: req.user._id,
+      })
+      redemptionPayment = pawn.payments.at(-1)
+      pawn.amountPaid = roundPawnCurrency((Number(pawn.amountPaid) || 0) + amount, currency)
+    } else if (additionalCollected > 0) {
+      redemptionPayment.amount = amount
+      redemptionPayment.additionalCollected = additionalCollected
+      pawn.amountPaid = roundPawnCurrency((Number(pawn.amountPaid) || 0) + additionalCollected, currency)
+    }
     pawn.fees = 0
     pawn.accruedPawnFee = 0
     pawn.accruedInterest = 0
     pawn.remainingPrincipal = 0
     pawn.redemptionAmount = amount
-    pawn.redemptionWaivedAmount = waivedAmount
-    const redemptionPayment = pawn.payments.at(-1)
+    pawn.redemptionWaivedAmount = 0
+    pawn.redemptionAdditionalAmount = additionalCollected
     if (redemptionPayment?.type === 'REDEMPTION') redemptionPayment.balanceAfter = 0
-    allocation = { ...allocation, balanceAfter: 0, waivedAmount }
+    allocation = { ...allocation, amount, balanceAfter: 0, additionalCollected }
     pawn.status = 'REDEEMED'
     pawn.redeemedAt = redemptionAt
     await pawn.save({ session })

@@ -110,6 +110,7 @@ export type ReceiptSnapshot = {
     interest?: number
     fees?: number
     pawnFee?: number
+    additionalCollected?: number
   }
   notes?: string
   staff?: { name: string; role?: string } | null
