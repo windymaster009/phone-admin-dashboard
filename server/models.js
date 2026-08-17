@@ -219,6 +219,8 @@ const pawnSchema = new Schema(
     ownershipConfirmed: { type: Boolean, default: false },
     payments: [paymentSchema],
     renewals: [renewalSchema],
+    redemptionAmount: { type: Number, min: 0 },
+    redemptionWaivedAmount: { type: Number, min: 0 },
     redeemedAt: Date,
     forfeitedAt: Date,
     workflowVersion: { type: Number, default: 3 },

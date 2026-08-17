@@ -763,6 +763,10 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
     ? Math.max(0, Math.floor((extensionBaseDate - pawnStartMilliseconds) / dayInMilliseconds) + (countsStartDay ? 1 : 0))
     : Math.max(0, Number(pawn.feeSummary?.contractLengthDays || pawn.termDays) || 0)
   const extendedContractLengthDays = elapsedContractDays + renewalDays
+  const enteredRedemptionAmount = action === 'redeem' ? Number(amount) : 0
+  const redemptionDiscount = action === 'redeem' && Number.isFinite(enteredRedemptionAmount)
+    ? Math.max(0, outstanding - enteredRedemptionAmount)
+    : 0
 
   function printPawnTicket(sourceSubId = 'latest-contract') {
     window.dispatchEvent(new CustomEvent('phoneflow:open-pawn-ticket', {
@@ -790,6 +794,10 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
   async function submitAction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!action || !onAction) return
+    if (action === 'redeem' && redemptionDiscount > 0 && !note.trim()) {
+      setActionError('Add a note explaining why the redemption amount is lower than the calculated balance.')
+      return
+    }
     setActionBusy(true)
     setActionError('')
     try {
@@ -893,12 +901,12 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
           <div className="pawn-action-header">
             <div>
               <span className="eyebrow">{action === 'payment' ? 'Due payment' : action === 'renew' ? 'Extend pawn' : action === 'redeem' ? 'Redeem collateral' : 'Claim collateral'}</span>
-              <p>{action === 'payment' ? 'Pay the fee accumulated through today without reducing the principal.' : action === 'renew' ? pawn.feeModel === 'DAILY_SIMPLE' ? 'Add more days to this pawn. This does not record another payment.' : 'Clear the required fees and extend the contract due date.' : action === 'redeem' ? 'Collect the full balance and return the collateral to the customer.' : 'Close this overdue contract and transfer the collateral into shop inventory.'}</p>
+              <p>{action === 'payment' ? 'Pay the fee accumulated through today without reducing the principal.' : action === 'renew' ? pawn.feeModel === 'DAILY_SIMPLE' ? 'Add more days to this pawn. This does not record another payment.' : 'Clear the required fees and extend the contract due date.' : action === 'redeem' ? 'Confirm the amount collected and return the collateral to the customer.' : 'Close this overdue contract and transfer the collateral into shop inventory.'}</p>
             </div>
             <button type="button" className="icon-button" onClick={() => setAction(null)} aria-label="Cancel action"><X size={15} /></button>
           </div>
           {actionError && <p className="pawn-action-error">{actionError}</p>}
-          {action !== 'forfeit' && !(action === 'renew' && pawn.feeModel === 'DAILY_SIMPLE') && <label className="pawn-action-amount"><span>{action === 'redeem' ? 'Full amount due' : action === 'renew' ? 'Required fee payment' : 'Fee due today'}{action === 'payment' && pawn.feeModel === 'DAILY_SIMPLE' && <small>{pawnMoney(dailyFeeAmount, pawnCurrency)} per day × {pawn.feeSummary?.accruedDays || 0} days</small>}</span><div className="input-prefix"><span>{currencyLabel}</span><MoneyInput autoFocus currency={pawnCurrency} minimum={pawnCurrency === 'KHR' ? 1 : 0.01} required readOnly={action === 'payment' || action === 'redeem'} value={amount} onValueChange={setAmount} placeholder={pawnCurrency === 'KHR' ? '0' : '0.00'} /></div></label>}
+          {action !== 'forfeit' && !(action === 'renew' && pawn.feeModel === 'DAILY_SIMPLE') && <label className="pawn-action-amount"><span>{action === 'redeem' ? 'Redemption amount' : action === 'renew' ? 'Required fee payment' : 'Fee due today'}{action === 'redeem' && <small>Calculated due: {pawnMoney(outstanding, pawnCurrency)}</small>}{action === 'payment' && pawn.feeModel === 'DAILY_SIMPLE' && <small>{pawnMoney(dailyFeeAmount, pawnCurrency)} per day × {pawn.feeSummary?.accruedDays || 0} days</small>}</span><div className="input-prefix"><span>{currencyLabel}</span><MoneyInput autoFocus currency={pawnCurrency} minimum={pawnCurrency === 'KHR' ? 1 : 0.01} maximum={action === 'redeem' ? outstanding : undefined} required readOnly={action === 'payment'} value={amount} onValueChange={setAmount} placeholder={pawnCurrency === 'KHR' ? '0' : '0.00'} /></div>{action === 'redeem' && redemptionDiscount > 0 && <small className="pawn-redemption-adjustment">The remaining {pawnMoney(redemptionDiscount, pawnCurrency)} will be waived. Add a note explaining the adjustment.</small>}</label>}
           {action === 'forfeit' && <label><span>Selling price <small>Optional</small></span><div className="input-prefix"><span>{currencyLabel}</span><input autoFocus type="text" inputMode={pawnCurrency === 'KHR' ? 'numeric' : 'decimal'} value={amount} onChange={(event) => setAmount(event.target.value.replace(pawnCurrency === 'KHR' ? /\D/g : /[^0-9.]/g, ''))} placeholder={String(pawn.estimatedValue)} /></div></label>}
           {action === 'forfeit' && <div className="pawn-claim-confirmation" role="note"><strong>Confirm this claim carefully</strong><span>The customer will no longer be able to redeem this contract, and the collateral will become shop inventory.</span></div>}
           {action === 'renew' && (pawn.feeModel === 'DAILY_SIMPLE'
@@ -908,7 +916,7 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
           {action !== 'forfeit' && <label className="pawn-action-note"><span>Note <small>Optional</small></span><textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add a reference or payment note" /></label>}
           <div className="pawn-action-buttons">
             <button type="button" className="ghost-button" onClick={() => setAction(null)}>Cancel</button>
-            <button className={`primary-button ${action === 'forfeit' ? 'danger-button' : ''}`} disabled={actionBusy || (action === 'payment' && duePayment <= 0)}>{actionBusy ? 'Saving...' : action === 'payment' ? 'Save due payment' : action === 'renew' ? 'Confirm extension' : action === 'redeem' ? 'Confirm full redemption' : 'Confirm claim'}</button>
+            <button className={`primary-button ${action === 'forfeit' ? 'danger-button' : ''}`} disabled={actionBusy || (action === 'payment' && duePayment <= 0)}>{actionBusy ? 'Saving...' : action === 'payment' ? 'Save due payment' : action === 'renew' ? 'Confirm extension' : action === 'redeem' ? 'Confirm redemption' : 'Confirm claim'}</button>
           </div>
         </form>}
         </div>

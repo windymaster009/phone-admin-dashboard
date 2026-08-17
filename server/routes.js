@@ -2079,11 +2079,25 @@ router.post('/pawns/:id/redeem', requireAuth, allowRoles('OWNER', 'MANAGER', 'CA
     const redemptionAt = new Date()
     materializeDailyPawnFee(pawn, redemptionAt)
     const outstanding = pawnAmountDue(pawn, redemptionAt)
-    const amount = pawnCurrencyAmount(req.body.amount, currency, 'Redemption amount', true)
-    if (Math.abs(amount - outstanding) > pawnCurrencyTolerance(currency)) throw requestError(400, `Redemption requires the full outstanding amount of ${outstanding} ${currency}`)
+    const amount = pawnCurrencyAmount(req.body.amount, currency, 'Redemption amount')
+    if (amount > outstanding + pawnCurrencyTolerance(currency)) throw requestError(400, `Redemption amount cannot exceed the outstanding balance of ${outstanding} ${currency}`)
+    const waivedAmount = roundPawnCurrency(Math.max(0, outstanding - amount), currency)
+    const note = clean(req.body.note)
+    if (waivedAmount > pawnCurrencyTolerance(currency) && !note) {
+      throw requestError(400, 'A note is required when redeeming for less than the outstanding balance')
+    }
     allocation = outstanding > 0
-      ? applyPawnPayment(pawn, amount, { type: 'REDEMPTION', userId: req.user._id, note: req.body.note, paidAt: redemptionAt })
+      ? applyPawnPayment(pawn, amount, { type: 'REDEMPTION', userId: req.user._id, note, paidAt: redemptionAt })
       : { amount: 0, feesApplied: 0, pawnFeeApplied: 0, interestApplied: 0, principalApplied: 0, balanceAfter: 0 }
+    pawn.fees = 0
+    pawn.accruedPawnFee = 0
+    pawn.accruedInterest = 0
+    pawn.remainingPrincipal = 0
+    pawn.redemptionAmount = amount
+    pawn.redemptionWaivedAmount = waivedAmount
+    const redemptionPayment = pawn.payments.at(-1)
+    if (redemptionPayment?.type === 'REDEMPTION') redemptionPayment.balanceAfter = 0
+    allocation = { ...allocation, balanceAfter: 0, waivedAmount }
     pawn.status = 'REDEEMED'
     pawn.redeemedAt = redemptionAt
     await pawn.save({ session })
