@@ -816,6 +816,20 @@ export default function OperationModalBridge() {
     resetAndClose()
   }
 
+  const printCreatedPawnTicket = () => {
+    if (!pawnCreated) return
+    const reference = pawnCreated.pawnNo
+
+    // Remove the completed operation before opening the receipt viewer so the
+    // user does not return to a stale success dialog after printing.
+    resetAndClose()
+    window.requestAnimationFrame(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-pawn-ticket', {
+        detail: { reference },
+      }))
+    })
+  }
+
   const findScannedProduct = useCallback(async (rawCode: string) => {
     const code = rawCode.trim()
     if (!code) {
@@ -1518,7 +1532,7 @@ export default function OperationModalBridge() {
           </dl>
         </div>
         <footer className="operation-modal-actions record-created-actions">
-          <button type="button" className="secondary-button" onClick={() => window.dispatchEvent(new CustomEvent('phoneflow:open-pawn-ticket', { detail: { reference: pawnCreated.pawnNo } }))}><Printer size={16} /> Print 80mm pawn ticket</button>
+          <button type="button" className="secondary-button" onClick={printCreatedPawnTicket}><Printer size={16} /> Print 80mm pawn ticket</button>
           <button type="button" className="primary-button record-created-done" onClick={() => window.location.reload()}><CheckCircle2 size={16} /> Done</button>
         </footer>
       </section>}
