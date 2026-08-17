@@ -357,11 +357,13 @@ export default function ReceiptCenterBridge() {
 
   useEffect(() => {
     const openPawnTicket = (event: Event) => {
-      const reference = (event as CustomEvent<{ reference?: string }>).detail?.reference?.trim()
+      const detail = (event as CustomEvent<{ reference?: string; sourceSubId?: string }>).detail
+      const reference = detail?.reference?.trim()
       if (!reference) return
+      const sourceSubId = detail?.sourceSubId?.trim() || 'latest-contract'
       void generate(
         { sourceType: 'PAWN', reference },
-        { documentType: 'PAWN_CONTRACT', sourceSubId: 'contract', label: 'Pawn contract', issuedAt: new Date().toISOString(), amount: 0, currency: 'USD' },
+        { documentType: 'PAWN_CONTRACT', sourceSubId, label: 'Pawn contract', issuedAt: new Date().toISOString(), amount: 0, currency: 'USD' },
         'THERMAL',
       )
     }

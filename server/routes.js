@@ -2007,6 +2007,8 @@ router.post('/pawns/:id/renew', requireAuth, allowRoles('OWNER', 'MANAGER', 'CAS
     const newDueDate = extensionQuote.newDueDate
     pawn.termDays = selectedTermDays
     pawn.currentTermStartDate = extensionQuote.extensionStartsAt
+    pawn.feeAccrualStartedAt = extensionQuote.extensionStartsAt
+    pawn.accruedPawnFee = 0
     pawn.dueDate = newDueDate
     pawn.graceEndsAt = pawnGraceEnd(newDueDate, pawn.gracePeriodDays)
     pawn.dueReminderFor = undefined
@@ -2015,6 +2017,10 @@ router.post('/pawns/:id/renew', requireAuth, allowRoles('OWNER', 'MANAGER', 'CAS
     pawn.renewals.push({
       previousDueDate, newDueDate, paymentAmount: 0, interestCharged: 0, feePaid: 0,
       principalRemaining: pawn.remainingPrincipal, termDays: selectedTermDays,
+      contractLengthDays: extensionQuote.contractLengthDays,
+      dailyFeeRate: extensionQuote.dailyFeeRate,
+      dailyFeeAmount: extensionQuote.dailyFeeAmount,
+      ticketPart: pawn.renewals.length + 2,
       renewedAt: extensionAt, renewedBy: req.user._id, note: clean(req.body.note),
     })
     await pawn.save()

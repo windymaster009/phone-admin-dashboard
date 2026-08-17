@@ -162,7 +162,9 @@ type Pawn = {
   feeSummary?: {
     feeModel: 'LEGACY_MONTHLY' | 'DAILY_SIMPLE'
     dailyFeeRate: number
+    dailyFeeAmount?: number
     termDays: number
+    contractLengthDays?: number
     accruedDays: number
     accruedFee: number
     feeAtDueDate: number
@@ -175,12 +177,17 @@ type Pawn = {
   currency?: PawnCurrency
   exchangeRate?: number
   renewals?: Array<{
+    _id?: string
     previousDueDate: string
     newDueDate: string
     paymentAmount: number
     feePaid?: number
     principalRemaining?: number
     termDays?: number
+    contractLengthDays?: number
+    dailyFeeRate?: number
+    dailyFeeAmount?: number
+    ticketPart?: number
     renewedAt: string
     note?: string
     renewedBy?: { name?: string }
@@ -733,7 +740,7 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
     ? Math.round(duePaymentRaw)
     : Math.round((duePaymentRaw + Number.EPSILON) * 100) / 100
   const dailyFeeRate = Number(pawn.dailyFeeRate || 2.5).toLocaleString(undefined, { maximumFractionDigits: 4 })
-  const dailyFeeAmount = remainingPrincipal * Number(pawn.dailyFeeRate || 2.5) / 100
+  const dailyFeeAmount = pawn.feeSummary?.dailyFeeAmount ?? remainingPrincipal * Number(pawn.dailyFeeRate || 2.5) / 100
   const dayInMilliseconds = 86_400_000
   const dueDateMilliseconds = new Date(pawn.dueDate).getTime()
   const minimumClaimDateMilliseconds = dueDateMilliseconds + 5 * dayInMilliseconds
@@ -746,8 +753,19 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
   const claimAvailableText = dateText(new Date(claimAvailableAtMilliseconds).toISOString())
   const claimRecommendedByText = dateText(new Date(claimRecommendedByMilliseconds).toISOString())
 
-  const extensionBaseDate = Math.max(Date.now(), dueDateMilliseconds)
+  const extensionBaseDate = Date.now()
   const extensionDueDate = dateText(new Date(extensionBaseDate + Number(renewalTermDays || 0) * dayInMilliseconds).toISOString())
+  const pawnStartMilliseconds = new Date(pawn.startDate || pawn.createdAt).getTime()
+  const elapsedContractDays = Number.isFinite(pawnStartMilliseconds)
+    ? Math.max(0, Math.floor((extensionBaseDate - pawnStartMilliseconds) / dayInMilliseconds))
+    : Math.max(0, Number(pawn.feeSummary?.contractLengthDays || pawn.termDays) || 0)
+  const extendedContractLengthDays = elapsedContractDays + Number(renewalTermDays || 0)
+
+  function printPawnTicket(sourceSubId = 'latest-contract') {
+    window.dispatchEvent(new CustomEvent('phoneflow:open-pawn-ticket', {
+      detail: { reference: pawn.pawnNo, sourceSubId },
+    }))
+  }
 
   function openAction(nextAction: PawnAction) {
     setAction(nextAction)
@@ -831,7 +849,7 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
               <div><dt>Loan-to-value</dt><dd>{pawn.pawnPercentage}%</dd></div>
               <div><dt>Currency</dt><dd>{pawnCurrency}</dd></div>
               <div><dt>{pawn.feeModel === 'DAILY_SIMPLE' ? 'Daily fee rate' : 'Interest rate'}</dt><dd>{pawn.feeModel === 'DAILY_SIMPLE' ? `${dailyFeeRate}% per day` : `${pawn.interestRate}%`}</dd></div>
-              {pawn.feeModel === 'DAILY_SIMPLE' && <div><dt>Contract length</dt><dd>{pawn.termDays} days</dd></div>}
+              {pawn.feeModel === 'DAILY_SIMPLE' && <div><dt>Total contract length</dt><dd>{pawn.feeSummary?.contractLengthDays ?? pawn.termDays} days</dd></div>}
             </dl>
           </section>
 
@@ -852,7 +870,7 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
           <div><span>Item ownership</span><strong>{pawn.ownershipConfirmed || pawn.identificationVerified ? 'Confirmed by staff' : 'Legacy record'}</strong></div>
           <div><span>National ID</span><strong>{pawn.identificationVerified ? 'Recorded and verified' : 'Not recorded — optional'}</strong></div>
         </section>
-        {pawn.renewals && pawn.renewals.length > 0 && <div className="detail-note pawn-renewal-history"><span className="eyebrow">Extension history</span>{pawn.renewals.map((renewal, index) => { const recordedPayment = renewal.feePaid ?? renewal.paymentAmount; return <p key={`${renewal.renewedAt}-${index}`}><strong>{dateText(renewal.renewedAt)}</strong> · {renewal.termDays ? `${renewal.termDays} days added` : 'Legacy extension'} · {recordedPayment ? `Payment recorded ${pawnMoney(recordedPayment, pawnCurrency)}` : 'No payment recorded'} · Principal {pawnMoney(renewal.principalRemaining ?? pawn.remainingPrincipal ?? pawn.principal, pawnCurrency)} · New due {dateText(renewal.newDueDate)}{renewal.renewedBy?.name ? ` · ${renewal.renewedBy.name}` : ''}</p> })}</div>}
+        {pawn.renewals && pawn.renewals.length > 0 && <div className="detail-note pawn-renewal-history"><span className="eyebrow">Extension history</span>{pawn.renewals.map((renewal, index) => { const recordedPayment = renewal.feePaid ?? renewal.paymentAmount; const ticketPart = renewal.ticketPart || index + 2; return <div className="pawn-renewal-history-row" key={`${renewal.renewedAt}-${index}`}><p><strong>Part {ticketPart} · {dateText(renewal.renewedAt)}</strong> · {renewal.termDays ? `${renewal.termDays} days added` : 'Legacy extension'} · Total contract length {renewal.contractLengthDays ?? '—'} days · {recordedPayment ? `Payment recorded ${pawnMoney(recordedPayment, pawnCurrency)}` : 'No extension payment'} · {pawnMoney(renewal.dailyFeeAmount ?? dailyFeeAmount, pawnCurrency)} per day · New due {dateText(renewal.newDueDate)}{renewal.renewedBy?.name ? ` · ${renewal.renewedBy.name}` : ''}</p>{renewal._id && <button type="button" className="ghost-button pawn-renewal-print" onClick={() => printPawnTicket(`renewal:${renewal._id}`)}>Print Part {ticketPart}</button>}</div> })}</div>}
         <div className="detail-sections">
           <article>
             <span className="eyebrow">Customer</span>
@@ -883,7 +901,7 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
           {action === 'renew' && (pawn.feeModel === 'DAILY_SIMPLE'
             ? <label className="pawn-renewal-term">Days to add<select autoFocus required value={renewalTermDays} onChange={(event) => setRenewalTermDays(event.target.value)}><option value="3">3 Days</option><option value="7">1 Week (7 days)</option><option value="15">Half Month (15 days)</option><option value="30">1 Month (30 days)</option></select></label>
             : <label>New due date<input type="date" required value={newDueDate} onChange={(event) => setNewDueDate(event.target.value)} /></label>)}
-          {action === 'renew' && pawn.feeModel === 'DAILY_SIMPLE' && <div className="pawn-renewal-summary" aria-label="Extension summary"><div><span>Extension</span><strong>{renewalTermDays} days added</strong></div><div><span>New due date</span><strong>{extensionDueDate}</strong></div><div><span>Payment</span><strong>No payment recorded</strong></div><div><span>Next fee</span><strong>{pawnMoney(dailyFeeAmount, pawnCurrency)} per day accrues after the paid period</strong></div></div>}
+          {action === 'renew' && pawn.feeModel === 'DAILY_SIMPLE' && <div className="pawn-renewal-summary" aria-label="Extension summary"><div><span>Contract length</span><strong>{elapsedContractDays} elapsed + {renewalTermDays} added = {extendedContractLengthDays} days</strong></div><div><span>New due date</span><strong>{extensionDueDate}</strong></div><div><span>Daily pawn fee</span><strong>{pawnMoney(dailyFeeAmount, pawnCurrency)} per day · {dailyFeeRate}%</strong></div><div><span>Next period fee</span><strong>{pawnMoney(dailyFeeAmount * Number(renewalTermDays || 0), pawnCurrency)} for {renewalTermDays} days</strong></div></div>}
           {action !== 'forfeit' && <label className="pawn-action-note"><span>Note <small>Optional</small></span><textarea rows={2} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Add a reference or payment note" /></label>}
           <div className="pawn-action-buttons">
             <button type="button" className="ghost-button" onClick={() => setAction(null)}>Cancel</button>
@@ -1259,6 +1277,13 @@ function PawnView() {
     })
     setPawns((current) => current.map((pawn) => pawn._id === result.pawn._id ? result.pawn : pawn))
     setSelectedPawn(result.pawn)
+    if (action === 'renew') {
+      const latestRenewal = result.pawn.renewals?.at(-1)
+      const sourceSubId = latestRenewal?._id ? `renewal:${latestRenewal._id}` : 'latest-contract'
+      window.dispatchEvent(new CustomEvent('phoneflow:open-pawn-ticket', {
+        detail: { reference: result.pawn.pawnNo, sourceSubId },
+      }))
+    }
   }
 
   const openPawns = pawns.filter((pawn) => ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED'].includes(pawn.status))

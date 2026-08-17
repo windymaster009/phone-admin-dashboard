@@ -92,7 +92,12 @@ export type ReceiptSnapshot = {
   interestPeriod?: string
   feeModel?: 'LEGACY_MONTHLY' | 'DAILY_SIMPLE'
   dailyFeeRate?: number
+  dailyFeeAmount?: number
   termDays?: number
+  contractLengthDays?: number
+  extensionTermDays?: number
+  ticketPart?: number
+  previousDueDate?: string
   startDate?: string
   pawnFeeAtDue?: number
   dueDate?: string

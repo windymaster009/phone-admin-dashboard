@@ -4,7 +4,7 @@ import { allowRoles, requireAuth, writeActivity } from './auth.js'
 import { Loan, LoanPayment } from './loanModels.js'
 import { Pawn, Trade } from './models.js'
 import { Receipt } from './receiptModels.js'
-import { calculateDailyPawnSummary, isDailyPawn } from './pawnFeeService.js'
+import { calculateDailyPawnSummary, calculatePawnFee, isDailyPawn } from './pawnFeeService.js'
 
 const router = Router()
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
@@ -73,6 +73,7 @@ async function findPawn(reference) {
     .populate('customer', 'name phone nationalIdNumber address')
     .populate('createdBy', 'name role')
     .populate('payments.receivedBy', 'name role')
+    .populate('renewals.renewedBy', 'name role')
   if (!pawn) throw requestError(404, 'Pawn contract not found')
   return pawn
 }
@@ -195,34 +196,105 @@ function pawnItem(pawn) {
   }
 }
 
-function buildPawnContractSnapshot(pawn) {
-  const dailySummary = isDailyPawn(pawn) ? calculateDailyPawnSummary(pawn, pawn.dueDate) : null
+const RECEIPT_DAY_MS = 24 * 60 * 60 * 1000
+
+function pawnReceiptAmount(value, currency) {
+  return currency === 'KHR' ? Math.round(Number(value || 0)) : roundMoney(value)
+}
+
+function daysBetween(fromValue, toValue, fallback = 0) {
+  const from = new Date(fromValue)
+  const to = new Date(toValue)
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return Math.max(0, Number(fallback) || 0)
+  return Math.max(0, Math.round((to.getTime() - from.getTime()) / RECEIPT_DAY_MS))
+}
+
+function graceEndForTicket(dueDate, gracePeriodDays) {
+  const due = new Date(dueDate)
+  if (Number.isNaN(due.getTime())) return dueDate
+  return new Date(due.getTime() + Math.max(0, Number(gracePeriodDays) || 0) * RECEIPT_DAY_MS)
+}
+
+function pawnContractRevisions(pawn) {
+  const renewals = Array.from(pawn.renewals || [])
+  return [
+    { sourceSubId: 'contract', renewal: null, part: 1 },
+    ...renewals.map((renewal, index) => ({
+      sourceSubId: `renewal:${renewal._id}`,
+      renewal,
+      part: Number(renewal.ticketPart) || index + 2,
+    })),
+  ]
+}
+
+function findPawnContractRevision(pawn, requestedSubId) {
+  const revisions = pawnContractRevisions(pawn)
+  if (!requestedSubId || requestedSubId === 'latest-contract') return revisions.at(-1)
+  const revision = revisions.find((entry) => entry.sourceSubId === requestedSubId)
+  if (!revision) throw requestError(404, 'This pawn ticket revision was not found')
+  return revision
+}
+
+function buildPawnContractSnapshot(pawn, revision = findPawnContractRevision(pawn, 'contract')) {
+  const currency = pawn.currency === 'KHR' ? 'KHR' : 'USD'
+  const renewals = Array.from(pawn.renewals || [])
+  const renewal = revision.renewal
+  const initialDueDate = renewals[0]?.previousDueDate || pawn.dueDate
+  const dueDate = renewal?.newDueDate || initialDueDate
+  const issuedAt = renewal?.renewedAt || pawn.issueDate || pawn.createdAt
+  const termDays = Number(renewal?.termDays) || daysBetween(
+    pawn.startDate || pawn.issueDate || pawn.createdAt,
+    initialDueDate,
+    pawn.termDays,
+  )
+  const contractLengthDays = Number(renewal?.contractLengthDays) || daysBetween(
+    pawn.startDate || pawn.issueDate || pawn.createdAt,
+    dueDate,
+    termDays,
+  )
+  const principal = pawnReceiptAmount(
+    renewal?.principalRemaining ?? pawn.originalPrincipal ?? pawn.principal,
+    currency,
+  )
+  const dailyFeeRate = Number.isFinite(Number(renewal?.dailyFeeRate))
+    ? Number(renewal.dailyFeeRate)
+    : Number(pawn.dailyFeeRate || 0)
+  const dailyFeeAmount = Number.isFinite(Number(renewal?.dailyFeeAmount))
+    ? pawnReceiptAmount(renewal.dailyFeeAmount, currency)
+    : calculatePawnFee(principal, 1, currency, dailyFeeRate)
+  const pawnFeeAtDue = pawnReceiptAmount(dailyFeeAmount * termDays, currency)
+  const dailySummary = isDailyPawn(pawn) ? calculateDailyPawnSummary(pawn, dueDate) : null
   return {
     schemaVersion: 1,
     documentType: 'PAWN_CONTRACT',
-    title: 'Pawn Contract',
+    title: `Pawn Contract - Part ${revision.part}`,
     shop: shopSnapshot(),
     referenceNo: pawn.pawnNo,
-    issuedAt: pawn.issueDate || pawn.createdAt,
+    issuedAt,
     party: customerParty(pawn.customer),
-    currency: pawn.currency === 'KHR' ? 'KHR' : 'USD',
+    currency,
     exchangeRate: Number(pawn.exchangeRate || 1),
     items: [pawnItem(pawn)],
     estimatedValue: roundMoney(pawn.estimatedValue),
     pawnPercentage: Number(pawn.pawnPercentage || 0),
-    principal: roundMoney(pawn.originalPrincipal ?? pawn.principal),
-    total: dailySummary?.totalAtDueDate ?? roundMoney(pawn.originalPrincipal ?? pawn.principal),
+    principal,
+    total: isDailyPawn(pawn) ? pawnReceiptAmount(principal + pawnFeeAtDue, currency) : roundMoney(pawn.originalPrincipal ?? pawn.principal),
     amountPaid: 0,
     balance: roundMoney(pawn.remainingPrincipal ?? pawn.principal),
     interestRate: Number(pawn.interestRate || 0),
     interestPeriod: pawn.interestPeriod || 'MONTHLY',
     feeModel: pawn.feeModel || 'LEGACY_MONTHLY',
-    dailyFeeRate: Number(pawn.dailyFeeRate || 0),
-    termDays: Number(pawn.termDays || 0),
+    dailyFeeRate,
+    dailyFeeAmount,
+    termDays,
+    contractLengthDays,
+    extensionTermDays: renewal ? termDays : undefined,
+    ticketPart: revision.part,
+    previousDueDate: renewal?.previousDueDate,
     startDate: pawn.startDate || pawn.issueDate || pawn.createdAt,
-    pawnFeeAtDue: dailySummary?.feeAtDueDate,
-    dueDate: pawn.dueDate,
-    graceEndsAt: pawn.graceEndsAt,
+    pawnFeeAtDue: isDailyPawn(pawn) ? pawnFeeAtDue : dailySummary?.feeAtDueDate,
+    dueDate,
+    graceEndsAt: graceEndForTicket(dueDate, pawn.gracePeriodDays),
     identificationVerified: Boolean(pawn.identificationVerified),
     ownershipConfirmed: Boolean(pawn.ownershipConfirmed || pawn.identificationVerified),
     status: pawn.status,
@@ -452,17 +524,18 @@ router.get('/options', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), a
       payment.amount,
       currency,
     ))
+    const contractRevisions = pawnContractRevisions(pawn).slice().reverse().map((revision) => option(
+      'PAWN_CONTRACT',
+      revision.sourceSubId,
+      `Pawn contract - Part ${revision.part}`,
+      revision.renewal?.renewedAt || pawn.issueDate || pawn.createdAt,
+      revision.renewal?.principalRemaining ?? pawn.originalPrincipal ?? pawn.principal,
+      currency,
+    ))
     return res.json({
       sourceType,
       referenceNo: pawn.pawnNo,
-      options: [option(
-        'PAWN_CONTRACT',
-        'contract',
-        'Pawn contract',
-        pawn.issueDate || pawn.createdAt,
-        pawn.originalPrincipal ?? pawn.principal,
-        currency,
-      ), ...payments],
+      options: [...contractRevisions, ...payments],
     })
   }
 
@@ -516,9 +589,10 @@ router.post('/generate', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'),
     if (!['PAWN_CONTRACT', 'PAWN_PAYMENT', 'PAWN_REDEMPTION'].includes(documentType)) {
       throw requestError(400, 'Invalid pawn receipt type')
     }
+    const revision = documentType === 'PAWN_CONTRACT' ? findPawnContractRevision(source, requestedSubId) : null
     const payment = documentType === 'PAWN_CONTRACT' ? null : findPawnPayment(source, requestedSubId, documentType)
-    sourceSubId = payment ? payment._id.toString() : 'contract'
-    snapshot = payment ? buildPawnPaymentSnapshot(source, payment, documentType) : buildPawnContractSnapshot(source)
+    sourceSubId = payment ? payment._id.toString() : revision.sourceSubId
+    snapshot = payment ? buildPawnPaymentSnapshot(source, payment, documentType) : buildPawnContractSnapshot(source, revision)
   } else if (sourceType === 'LOAN') {
     const result = await findLoan(reference)
     source = result.loan

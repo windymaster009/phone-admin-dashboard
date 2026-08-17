@@ -64,3 +64,15 @@
   border-color: rgba(180, 35, 63, .24);
   background: #fff0f3;
 }
+
+.pawn-ticket-date-note {
+  margin: 0 0 9px;
+  padding: 7px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  color: #374151;
+  background: #f9fafb;
+  font-size: 8px;
+  line-height: 1.4;
+  text-align: center;
+}

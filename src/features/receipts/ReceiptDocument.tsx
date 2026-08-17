@@ -46,14 +46,15 @@ function ContractDetails({ snapshot }: { snapshot: ReceiptSnapshot }) {
           <Row label="Loan amount" value={money(snapshot.principal, snapshot.currency)} />
           <Row label="Pawn percentage" value={`${Number(snapshot.pawnPercentage || 0)}%`} />
           {snapshot.feeModel === 'DAILY_SIMPLE'
-            ? <Row label="Daily pawn fee" value={`${Number(snapshot.dailyFeeRate || 0)}% per day`} />
+            ? <Row label="Daily pawn fee" value={`${Number(snapshot.dailyFeeRate || 0)}% · ${money(snapshot.dailyFeeAmount, snapshot.currency)} / day`} />
             : <Row label="Interest" value={`${Number(snapshot.interestRate || 0)}% per month`} />}
-          {snapshot.feeModel === 'DAILY_SIMPLE' && <Row label="Pawn term" value={`${Number(snapshot.termDays || 0)} days`} />}
+          {snapshot.feeModel === 'DAILY_SIMPLE' && <Row label="Contract length" value={`${Number(snapshot.contractLengthDays || snapshot.termDays || 0)} days`} />}
+          {snapshot.feeModel === 'DAILY_SIMPLE' && Number(snapshot.ticketPart || 1) > 1 && <Row label="Extension period" value={`${Number(snapshot.extensionTermDays || snapshot.termDays || 0)} days`} />}
           <Row label="Pawned / deposited on" value={dateOnly(snapshot.startDate || snapshot.issuedAt)} />
           {snapshot.feeModel === 'DAILY_SIMPLE' && <Row label="Fee at due date" value={money(snapshot.pawnFeeAtDue, snapshot.currency)} />}
           {snapshot.feeModel === 'DAILY_SIMPLE' && <Row label="Total at due date" value={money(snapshot.total, snapshot.currency)} />}
           <Row label={snapshot.feeModel === 'DAILY_SIMPLE' ? 'Date to pay pawn fee' : 'Date to pay interest'} value={dateOnly(snapshot.dueDate)} />
-          <Row label="Expiration / due date" value={dateOnly(snapshot.graceEndsAt || snapshot.dueDate)} />
+          <Row label="Grace period ends" value={dateOnly(snapshot.graceEndsAt || snapshot.dueDate)} />
           <Row label="Ownership" value={snapshot.ownershipConfirmed ? 'Confirmed' : 'Legacy record'} />
           <Row label="National ID" value={snapshot.identificationVerified ? 'Verified' : 'Not provided (optional)'} />
         </>}
@@ -112,7 +113,7 @@ function PawnTicketThermal({ receipt, snapshot }: { receipt: ReceiptRecord; snap
       </header>
 
       <div className="pawn-ticket-reference">
-        <strong>Pawn ticket</strong>
+        <strong>Pawn ticket · Part {Number(snapshot.ticketPart || 1)}</strong>
         <span>{snapshot.referenceNo}</span>
         <small>Receipt {receipt.receiptNo}</small>
       </div>
@@ -123,12 +124,15 @@ function PawnTicketThermal({ receipt, snapshot }: { receipt: ReceiptRecord; snap
         <Row label="Loan amount" value={money(snapshot.principal, snapshot.currency)} />
         {isDailyFee ? <>
           <Row label="Pawn fee at due date" value={money(snapshot.pawnFeeAtDue, snapshot.currency)} />
-          <Row label="Daily pawn fee rate" value={`${number.format(Number(snapshot.dailyFeeRate || 0))}% per day`} />
+          <Row label="Daily pawn fee rate" value={`${number.format(Number(snapshot.dailyFeeRate || 0))}% · ${money(snapshot.dailyFeeAmount, snapshot.currency)} / day`} />
         </> : <Row label="Interest" value={`${number.format(Number(snapshot.interestRate || 0))}% per month`} />}
+        {isDailyFee && <Row label="Contract length" value={`${Number(snapshot.contractLengthDays || snapshot.termDays || 0)} days`} />}
         <Row label="Pawned / deposited on" value={dateOnly(snapshot.startDate || snapshot.issuedAt)} />
         <Row label={isDailyFee ? 'Date to pay pawn fee' : 'Date to pay interest'} value={dateOnly(snapshot.dueDate)} />
-        <Row label="Expiration / due date" value={dateOnly(snapshot.graceEndsAt || snapshot.dueDate)} />
+        <Row label="Grace period ends" value={dateOnly(snapshot.graceEndsAt || snapshot.dueDate)} />
       </section>
+
+      {isDailyFee && <p className="pawn-ticket-date-note">Pay, redeem, or extend by the fee due date. Claim review begins only after the grace period ends.</p>}
 
       <section className="pawn-ticket-items">
         <h3>Pawned item</h3>

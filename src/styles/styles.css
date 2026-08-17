@@ -1031,6 +1031,10 @@ td strong { color: var(--text); }
 .pawn-renewal-summary > div { min-width: 0; padding: 11px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-soft); }
 .pawn-renewal-summary span { display: block; margin-bottom: 5px; color: var(--muted-2); font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
 .pawn-renewal-summary strong { display: block; color: var(--text); font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; }
+.pawn-renewal-history-row { display: flex; align-items: center; gap: 12px; padding-top: 9px; }
+.pawn-renewal-history-row + .pawn-renewal-history-row { margin-top: 9px; border-top: 1px solid var(--border); }
+.pawn-renewal-history-row p { flex: 1; min-width: 0; margin: 0; }
+.pawn-renewal-print { flex: 0 0 auto; min-height: 34px; padding: 7px 10px; white-space: nowrap; }
 .pawn-action-buttons { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; margin-top: 2px; padding-top: 14px; border-top: 1px solid var(--border); }
 .pawn-action-error { grid-column: 1 / -1; margin: 0; color: var(--rose); font-size: 10px; }
 .danger-button { color: #fff; background: #be123c; }

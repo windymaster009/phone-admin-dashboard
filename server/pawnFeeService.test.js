@@ -71,7 +71,7 @@ test('daily pawn fee does not become principal', () => {
   assert.equal(addPawnDays(due, 7).toISOString(), '2026-08-15T00:00:00.000Z')
 })
 
-test('early extension records no payment and preserves the remaining days', () => {
+test('early extension starts a new period today and preserves the daily money rate', () => {
   const start = new Date('2026-08-01T00:00:00.000Z')
   const due = addPawnDays(start, 7)
   const quote = calculatePawnExtensionQuote({
@@ -79,13 +79,34 @@ test('early extension records no payment and preserves the remaining days', () =
     remainingPrincipal: 50_000, dailyFeeRate: 2, termDays: 7,
     startDate: start, currentTermStartDate: start, feeAccrualStartedAt: start,
     dueDate: due, accruedPawnFee: 0, fees: 0,
-  }, 7, start)
+  }, 7, addPawnDays(start, 4))
 
   assert.equal(quote.projectedExtensionFee, 7_000)
-  assert.equal(quote.outstandingFeeBalance, 0)
+  assert.equal(quote.outstandingFeeBalance, 4_000)
   assert.equal(quote.paymentRecorded, 0)
-  assert.equal(quote.extensionStartsAt.toISOString(), due.toISOString())
-  assert.equal(quote.newDueDate.toISOString(), addPawnDays(due, 7).toISOString())
+  assert.equal(quote.dailyFeeRate, 2)
+  assert.equal(quote.dailyFeeAmount, 1_000)
+  assert.equal(quote.elapsedContractDays, 4)
+  assert.equal(quote.contractLengthDays, 11)
+  assert.equal(quote.extensionStartsAt.toISOString(), addPawnDays(start, 4).toISOString())
+  assert.equal(quote.newDueDate.toISOString(), addPawnDays(start, 11).toISOString())
+})
+
+test('extended contract summary retains its saved daily rate and cumulative length', () => {
+  const start = new Date('2026-08-01T00:00:00.000Z')
+  const extensionStart = addPawnDays(start, 4)
+  const summary = calculateDailyPawnSummary({
+    feeModel: 'DAILY_SIMPLE', status: 'ACTIVE', currency: 'KHR',
+    remainingPrincipal: 50_000, dailyFeeRate: 2, termDays: 7,
+    startDate: start, currentTermStartDate: extensionStart,
+    feeAccrualStartedAt: extensionStart, dueDate: addPawnDays(start, 11),
+    renewals: [{ contractLengthDays: 11 }], accruedPawnFee: 0, fees: 0,
+  }, addPawnDays(start, 11))
+
+  assert.equal(summary.dailyFeeRate, 2)
+  assert.equal(summary.dailyFeeAmount, 1_000)
+  assert.equal(summary.feeAtDueDate, 7_000)
+  assert.equal(summary.contractLengthDays, 11)
 })
 
 test('extension requires already accrued fees to be paid first', () => {
