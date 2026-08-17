@@ -453,8 +453,10 @@ function parsePawnDueDate(value) {
   return date
 }
 
-function pawnGraceEnd(dueDate, days = 5) {
-  return new Date(dueDate.getTime() + Math.max(5, Number(days) || 0) * 86_400_000)
+const PAWN_GRACE_PERIOD_DAYS = 2
+
+function pawnGraceEnd(dueDate, days = PAWN_GRACE_PERIOD_DAYS) {
+  return new Date(dueDate.getTime() + Math.max(PAWN_GRACE_PERIOD_DAYS, Number(days) || 0) * 86_400_000)
 }
 
 function pawnFeeSummary(pawn, asOf = new Date()) {
@@ -1905,7 +1907,7 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
     return res.status(400).json({ message: `Principal cannot exceed the ${percentage}% valuation limit` })
   }
 
-  const gracePeriodDays = 5
+  const gracePeriodDays = PAWN_GRACE_PERIOD_DAYS
   let pawn
   await mongoose.connection.transaction(async (session) => {
     let pawnCustomerId = customer
@@ -2010,7 +2012,8 @@ router.post('/pawns/:id/renew', requireAuth, allowRoles('OWNER', 'MANAGER', 'CAS
     pawn.feeAccrualStartedAt = extensionQuote.extensionStartsAt
     pawn.accruedPawnFee = 0
     pawn.dueDate = newDueDate
-    pawn.graceEndsAt = pawnGraceEnd(newDueDate, pawn.gracePeriodDays)
+    pawn.gracePeriodDays = PAWN_GRACE_PERIOD_DAYS
+    pawn.graceEndsAt = pawnGraceEnd(newDueDate, PAWN_GRACE_PERIOD_DAYS)
     pawn.dueReminderFor = undefined
     pawn.dueReminderSentAt = undefined
     pawn.status = 'ACTIVE'
@@ -2047,7 +2050,8 @@ router.post('/pawns/:id/renew', requireAuth, allowRoles('OWNER', 'MANAGER', 'CAS
   const nextInterest = roundPawnCurrency((Number(pawn.remainingPrincipal) || 0) * (Number(pawn.interestRate) || 0) / 100, currency)
   pawn.accruedInterest = nextInterest
   pawn.dueDate = newDueDate
-  pawn.graceEndsAt = pawnGraceEnd(newDueDate, pawn.gracePeriodDays)
+  pawn.gracePeriodDays = PAWN_GRACE_PERIOD_DAYS
+  pawn.graceEndsAt = pawnGraceEnd(newDueDate, PAWN_GRACE_PERIOD_DAYS)
   pawn.status = 'ACTIVE'
   pawn.renewals.push({
     previousDueDate, newDueDate, paymentAmount, interestCharged: nextInterest,
@@ -2097,7 +2101,7 @@ router.post('/pawns/:id/forfeit', requireAuth, allowRoles('OWNER', 'MANAGER'), a
     pawn = await Pawn.findById(req.params.id).session(session)
     if (!pawn) throw requestError(404, 'Pawn contract not found')
     if (pawn.status !== 'OVERDUE') throw requestError(409, 'Only overdue pawn collateral can be claimed')
-    const minimumClaimDate = pawnGraceEnd(new Date(pawn.dueDate), 5)
+    const minimumClaimDate = pawnGraceEnd(new Date(pawn.dueDate), PAWN_GRACE_PERIOD_DAYS)
     const savedGraceEnd = pawn.graceEndsAt ? new Date(pawn.graceEndsAt) : minimumClaimDate
     const claimAvailableAt = savedGraceEnd > minimumClaimDate ? savedGraceEnd : minimumClaimDate
     if (new Date() <= claimAvailableAt) throw requestError(409, `This collateral cannot be claimed until ${claimAvailableAt.toISOString()}`)

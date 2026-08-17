@@ -747,7 +747,7 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
   const savedClaimDateMilliseconds = pawn.graceEndsAt ? new Date(pawn.graceEndsAt).getTime() : Number.NaN
   const claimAvailableAtMilliseconds = Number.isFinite(savedClaimDateMilliseconds)
     ? Math.max(minimumClaimDateMilliseconds, savedClaimDateMilliseconds)
-    : dueDateMilliseconds + Math.max(5, Number(pawn.gracePeriodDays) || 0) * dayInMilliseconds
+    : dueDateMilliseconds + Math.max(2, Number(pawn.gracePeriodDays) || 0) * dayInMilliseconds
   const claimRecommendedByMilliseconds = dueDateMilliseconds + 7 * dayInMilliseconds
   const canClaimCollateral = pawn.status === 'OVERDUE' && Date.now() > claimAvailableAtMilliseconds
   const claimAvailableText = dateText(new Date(claimAvailableAtMilliseconds).toISOString())

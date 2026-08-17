@@ -205,7 +205,7 @@ const pawnSchema = new Schema(
     exchangeRate: { type: Number, min: 0, default: 1 },
     issueDate: { type: Date, default: Date.now },
     dueDate: { type: Date, required: true, index: true },
-    gracePeriodDays: { type: Number, min: 0, max: 30, default: 5 },
+    gracePeriodDays: { type: Number, min: 0, max: 30, default: 2 },
     graceEndsAt: { type: Date, required: true, index: true },
     dueReminderFor: { type: Date, index: true, sparse: true },
     dueReminderSentAt: Date,
