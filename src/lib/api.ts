@@ -2,6 +2,7 @@ const TOKEN_KEY = 'phoneflow_token'
 const SESSION_USER_KEY = 'phoneflow_session_user'
 const tokenListeners = new Set<() => void>()
 const inFlightReads = new Map<string, Promise<unknown>>()
+let authTransitionInProgress = false
 
 export type SessionUser = {
   id: string
@@ -66,6 +67,10 @@ export function setToken(token: string | null) {
   }
 }
 
+export function setAuthTransitionInProgress(inProgress: boolean) {
+  authTransitionInProgress = inProgress
+}
+
 export class ApiError extends Error {
   status: number
   requestId?: string
@@ -115,7 +120,7 @@ async function performRequest<T>(path: string, options: RequestInit, behavior: A
       })
       const payload = (await response.json().catch(() => ({}))) as { message?: string; requestId?: string; retryable?: boolean } & T
 
-      if (response.status === 401) setToken(null)
+      if (response.status === 401 && !authTransitionInProgress) setToken(null)
       if (response.ok) return payload
 
       const requestId = payload.requestId || response.headers.get('X-Request-ID') || undefined

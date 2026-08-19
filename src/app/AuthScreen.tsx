@@ -7,6 +7,34 @@ function ErrorNotice({ message }: { message: string }) {
   return <div className="error-notice"><AlertTriangle size={16} /> {message}</div>
 }
 
+type RestoreSuccessNotice = {
+  restoredAt?: string
+  filename?: string
+}
+
+function readRestoreSuccessNotice(): RestoreSuccessNotice | null {
+  try {
+    const stored = sessionStorage.getItem('phoneflow_restore_success')
+    sessionStorage.removeItem('phoneflow_restore_success')
+    return stored ? JSON.parse(stored) as RestoreSuccessNotice : null
+  } catch {
+    return null
+  }
+}
+
+function RestoreNotice({ notice }: { notice: RestoreSuccessNotice }) {
+  const parsedDate = notice.restoredAt ? new Date(notice.restoredAt) : null
+  const restoredDate = parsedDate && !Number.isNaN(parsedDate.getTime())
+    ? new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(parsedDate)
+    : ''
+  return (
+    <div className="restore-success-notice">
+      <BadgeCheck size={18} />
+      <span><strong>Restore completed successfully</strong><small>{restoredDate ? `Shop data was restored to ${restoredDate}. ` : ''}Sign in again to continue.</small></span>
+    </div>
+  )
+}
+
 function StardustBackground({ theme }: { theme: 'dark' | 'light' }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
@@ -100,6 +128,7 @@ export default function AuthScreen({
   const [twoFactor, setTwoFactor] = useState<TwoFactorChallenge | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [restoreNotice] = useState<RestoreSuccessNotice | null>(readRestoreSuccessNotice)
 
   useEffect(() => {
     api<{ setupRequired: boolean }>('/auth/status')
@@ -219,6 +248,7 @@ export default function AuthScreen({
               <div><h2>{heading}</h2><p>{description}</p></div>
               <span className="auth-security-mark">{twoFactor ? <ShieldCheck size={20} /> : pairMode ? <KeyRound size={20} /> : <BadgeCheck size={20} />}</span>
             </header>
+            {restoreNotice && <RestoreNotice notice={restoreNotice} />}
             {error && <ErrorNotice message={error} />}
             {setupRequired === null ? (
               <div className="loading-line">Checking secure connection…</div>

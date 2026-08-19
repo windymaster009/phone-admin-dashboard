@@ -1,7 +1,7 @@
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, BadgeCheck, Check, Download, FileUp, RefreshCcw, RotateCcw, Trash2, X } from 'lucide-react'
-import { api, setToken } from '../../lib/api'
+import { ApiError, api, setAuthTransitionInProgress, setToken } from '../../lib/api'
 
 type BackupMetadata = {
   filename: string
@@ -41,6 +41,12 @@ type RestorePreview = BackupMetadata & {
 type RestoreCandidate = {
   source: 'server' | 'upload'
   backup: RestorePreview
+}
+
+type RestoreResult = {
+  restored: RestorePreview
+  safetyBackup: BackupMetadata
+  sessionsRevoked: boolean
 }
 
 function backupTime(value?: string) {
@@ -92,6 +98,7 @@ export default function BackupStatusBridge() {
   const [restoreBusy, setRestoreBusy] = useState(false)
   const [restoreConfirmation, setRestoreConfirmation] = useState('')
   const [restoreError, setRestoreError] = useState('')
+  const [restoreSuccess, setRestoreSuccess] = useState<RestoreResult | null>(null)
   const restoreFileInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -146,6 +153,7 @@ export default function BackupStatusBridge() {
         return
       }
       if (restoreCandidate) {
+        if (restoreSuccess) return
         if (!restoreBusy) setRestoreCandidate(null)
         return
       }
@@ -153,7 +161,7 @@ export default function BackupStatusBridge() {
     }
     document.addEventListener('keydown', closeOnEscape)
     return () => document.removeEventListener('keydown', closeOnEscape)
-  }, [bulkDeleteBusy, deleteBusy, deleteConfirmation, managerOpen, restoreBusy, restoreCandidate])
+  }, [bulkDeleteBusy, deleteBusy, deleteConfirmation, managerOpen, restoreBusy, restoreCandidate, restoreSuccess])
 
   async function refreshStatus() {
     const result = await api<BackupStatus>('/backups/status')
@@ -175,6 +183,7 @@ export default function BackupStatusBridge() {
     setSelectedBackups(new Set())
     setDeleteConfirmation(null)
     setRestoreCandidate(null)
+    setRestoreSuccess(null)
     setError('')
     try {
       await Promise.all([refreshStatus(), refreshList()])
@@ -301,6 +310,7 @@ export default function BackupStatusBridge() {
   function requestServerRestore(backup: BackupMetadata) {
     setRestoreConfirmation('')
     setRestoreError('')
+    setRestoreSuccess(null)
     setRestoreCandidate({
       source: 'server',
       backup: { ...backup, collectionCount: 0, uncompressedUploadBytes: 0, database: null },
@@ -329,6 +339,7 @@ export default function BackupStatusBridge() {
         body: file,
       })
       setRestoreConfirmation('')
+      setRestoreSuccess(null)
       setRestoreCandidate({ source: 'upload', backup: result.backup })
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to inspect the selected backup')
@@ -341,20 +352,37 @@ export default function BackupStatusBridge() {
     if (!restoreCandidate || restoreConfirmation !== 'RESTORE' || restoreBusy) return
     setRestoreBusy(true)
     setRestoreError('')
+    setAuthTransitionInProgress(true)
     try {
       const endpoint = restoreCandidate.source === 'upload'
         ? `/backups/restore/upload/${encodeURIComponent(restoreCandidate.backup.token || '')}`
         : `/backups/restore/server/${encodeURIComponent(restoreCandidate.backup.filename)}`
-      await api(endpoint, {
+      const result = await api<RestoreResult>(endpoint, {
         method: 'POST',
         body: JSON.stringify({ confirmation: restoreConfirmation }),
       })
-      setToken(null)
-      window.location.reload()
+      try {
+        sessionStorage.setItem('phoneflow_restore_success', JSON.stringify({
+          restoredAt: result.restored.createdAt,
+          filename: result.restored.filename,
+          safetyBackupAt: result.safetyBackup.completedAt,
+        }))
+      } catch {
+        // The in-app completion screen still confirms success when storage is unavailable.
+      }
+      setRestoreSuccess(result)
+      setRestoreBusy(false)
     } catch (reason) {
+      setAuthTransitionInProgress(false)
       setRestoreError(reason instanceof Error ? reason.message : 'Unable to restore this backup')
       setRestoreBusy(false)
+      if (reason instanceof ApiError && reason.status === 401) setToken(null)
     }
+  }
+
+  function continueAfterRestore() {
+    setAuthTransitionInProgress(false)
+    setToken(null)
   }
 
   const view = useMemo(() => {
@@ -558,7 +586,30 @@ export default function BackupStatusBridge() {
         document.body,
       )}
 
-      {restoreCandidate && restoreAge && createPortal(
+      {restoreSuccess && createPortal(
+        <div className="backup-restore-backdrop" role="presentation">
+          <section
+            className="backup-restore-dialog backup-restore-success-dialog surface-card"
+            role="status"
+            aria-live="polite"
+            aria-labelledby="backup-restore-success-title"
+          >
+            <div className="backup-restore-success-icon"><BadgeCheck size={30} /></div>
+            <span className="eyebrow">Recovery complete</span>
+            <h3 id="backup-restore-success-title">Backup restored successfully</h3>
+            <p>Shop data and uploaded images were restored to <strong>{backupTime(restoreSuccess.restored.createdAt)}</strong>.</p>
+            <div className="backup-restore-success-summary">
+              <div><span>Restored archive</span><strong>{restoreSuccess.restored.filename}</strong></div>
+              <div><span>Safety backup created</span><strong>{backupTime(restoreSuccess.safetyBackup.completedAt)}</strong></div>
+            </div>
+            <div className="backup-restore-success-note"><Check size={16} />Restore verified. All previous sessions were safely signed out.</div>
+            <button className="primary-button" onClick={continueAfterRestore}>Continue to sign in</button>
+          </section>
+        </div>,
+        document.body,
+      )}
+
+      {!restoreSuccess && restoreCandidate && restoreAge && createPortal(
         <div className="backup-restore-backdrop" role="presentation" onMouseDown={(event) => {
           if (event.target === event.currentTarget && !restoreBusy) setRestoreCandidate(null)
         }}>
