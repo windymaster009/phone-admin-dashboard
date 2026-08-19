@@ -26,6 +26,10 @@ type BackupStatus = {
   canRun: boolean
 }
 
+type DeleteConfirmation =
+  | { kind: 'single'; backup: BackupMetadata }
+  | { kind: 'bulk'; filenames: string[] }
+
 function backupTime(value?: string) {
   if (!value) return 'No successful backup yet'
   return new Intl.DateTimeFormat('en-GB', {
@@ -54,6 +58,7 @@ export default function BackupStatusBridge() {
   const [deleteBusy, setDeleteBusy] = useState('')
   const [selectedBackups, setSelectedBackups] = useState<Set<string>>(() => new Set())
   const [bulkDeleteBusy, setBulkDeleteBusy] = useState(false)
+  const [deleteConfirmation, setDeleteConfirmation] = useState<DeleteConfirmation | null>(null)
 
   useEffect(() => {
     const locate = () => setHost(document.querySelector<HTMLElement>('.sidebar-footer .support-card'))
@@ -101,11 +106,16 @@ export default function BackupStatusBridge() {
   useEffect(() => {
     if (!managerOpen) return
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setManagerOpen(false)
+      if (event.key !== 'Escape') return
+      if (deleteConfirmation) {
+        if (!bulkDeleteBusy && !deleteBusy) setDeleteConfirmation(null)
+        return
+      }
+      setManagerOpen(false)
     }
     document.addEventListener('keydown', closeOnEscape)
     return () => document.removeEventListener('keydown', closeOnEscape)
-  }, [managerOpen])
+  }, [bulkDeleteBusy, deleteBusy, deleteConfirmation, managerOpen])
 
   async function refreshStatus() {
     const result = await api<BackupStatus>('/backups/status')
@@ -125,6 +135,7 @@ export default function BackupStatusBridge() {
     if (!status?.canRun) return
     setManagerOpen(true)
     setSelectedBackups(new Set())
+    setDeleteConfirmation(null)
     setError('')
     try {
       await Promise.all([refreshStatus(), refreshList()])
@@ -182,18 +193,8 @@ export default function BackupStatusBridge() {
     }
   }
 
-  async function removeBackup(backup: BackupMetadata) {
-    if (!window.confirm(`Delete ${backup.filename}? This cannot be undone.`)) return
-    setDeleteBusy(backup.filename)
-    setError('')
-    try {
-      await api(`/backups/${encodeURIComponent(backup.filename)}`, { method: 'DELETE' })
-      await Promise.all([refreshStatus(), refreshList()])
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to delete backup')
-    } finally {
-      setDeleteBusy('')
-    }
+  function removeBackup(backup: BackupMetadata) {
+    setDeleteConfirmation({ kind: 'single', backup })
   }
 
   function toggleBackupSelection(filename: string) {
@@ -215,21 +216,38 @@ export default function BackupStatusBridge() {
     ))
   }
 
-  async function removeSelectedBackups() {
+  function removeSelectedBackups() {
     const filenames = backups
       .filter((backup) => selectedBackups.has(backup.filename))
       .map((backup) => backup.filename)
     if (filenames.length === 0 || bulkDeleteBusy) return
+    setDeleteConfirmation({ kind: 'bulk', filenames })
+  }
 
-    const label = filenames.length === 1 ? 'backup' : 'backups'
-    if (!window.confirm(`Delete ${filenames.length} selected ${label}? This cannot be undone.`)) return
+  async function confirmDelete() {
+    if (!deleteConfirmation || bulkDeleteBusy || deleteBusy) return
+    setError('')
+
+    if (deleteConfirmation.kind === 'single') {
+      const { backup } = deleteConfirmation
+      setDeleteBusy(backup.filename)
+      try {
+        await api(`/backups/${encodeURIComponent(backup.filename)}`, { method: 'DELETE' })
+        await Promise.all([refreshStatus(), refreshList()])
+      } catch (reason) {
+        setError(reason instanceof Error ? reason.message : 'Unable to delete backup')
+      } finally {
+        setDeleteBusy('')
+        setDeleteConfirmation(null)
+      }
+      return
+    }
 
     setBulkDeleteBusy(true)
-    setError('')
     try {
       await api('/backups', {
         method: 'DELETE',
-        body: JSON.stringify({ filenames }),
+        body: JSON.stringify({ filenames: deleteConfirmation.filenames }),
       })
       setSelectedBackups(new Set())
       await Promise.all([refreshStatus(), refreshList()])
@@ -237,6 +255,7 @@ export default function BackupStatusBridge() {
       setError(reason instanceof Error ? reason.message : 'Unable to delete selected backups')
     } finally {
       setBulkDeleteBusy(false)
+      setDeleteConfirmation(null)
     }
   }
 
@@ -270,6 +289,9 @@ export default function BackupStatusBridge() {
   const Icon = view.Icon
   const selectedCount = selectedBackups.size
   const allBackupsSelected = backups.length > 0 && selectedCount === backups.length
+  const confirmationCount = deleteConfirmation?.kind === 'bulk' ? deleteConfirmation.filenames.length : 1
+  const confirmationPlural = confirmationCount === 1 ? 'backup' : 'backups'
+  const deleteConfirmationBusy = bulkDeleteBusy || Boolean(deleteBusy)
 
   return (
     <>
@@ -375,6 +397,40 @@ export default function BackupStatusBridge() {
               })}
 
               {backups.length === 0 && <div className="backup-manager-empty">No backups exist yet. Run the first backup now.</div>}
+            </div>
+          </section>
+        </div>,
+        document.body,
+      )}
+
+      {deleteConfirmation && createPortal(
+        <div className="backup-delete-backdrop" role="presentation" onMouseDown={(event) => {
+          if (event.target === event.currentTarget && !deleteConfirmationBusy) setDeleteConfirmation(null)
+        }}>
+          <section
+            className="backup-delete-dialog surface-card"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="backup-delete-title"
+            aria-describedby="backup-delete-description"
+          >
+            <div className="backup-delete-dialog-icon"><AlertTriangle size={22} /></div>
+            <div className="backup-delete-dialog-copy">
+              <span className="eyebrow">Permanent action</span>
+              <h3 id="backup-delete-title">Delete {confirmationCount} {confirmationPlural}?</h3>
+              <p id="backup-delete-description">
+                {deleteConfirmation.kind === 'single'
+                  ? `The backup from ${backupTime(deleteConfirmation.backup.completedAt)} will be permanently removed.`
+                  : 'The selected backup archives and their metadata will be permanently removed.'}
+                {' '}This action cannot be undone.
+              </p>
+            </div>
+            <div className="backup-delete-dialog-actions">
+              <button className="ghost-button" onClick={() => setDeleteConfirmation(null)} disabled={deleteConfirmationBusy} autoFocus>Cancel</button>
+              <button className="backup-delete-confirm-button" onClick={confirmDelete} disabled={deleteConfirmationBusy}>
+                {deleteConfirmationBusy ? <RefreshCcw className="backup-button-spin" size={16} /> : <Trash2 size={16} />}
+                {deleteConfirmationBusy ? 'Deleting…' : `Delete ${confirmationPlural}`}
+              </button>
             </div>
           </section>
         </div>,
