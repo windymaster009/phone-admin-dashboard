@@ -3,6 +3,7 @@ import { allowRoles, requireAuth, writeActivity } from './auth.js'
 import {
   BackupInProgressError,
   deleteBackup,
+  deleteBackups,
   getBackupList,
   getBackupStatus,
   resolveBackupArchive,
@@ -18,6 +19,23 @@ router.get('/status', requireAuth, asyncRoute(async (req, res) => {
 
 router.get('/', requireAuth, allowRoles('OWNER'), asyncRoute(async (_req, res) => {
   res.json({ backups: await getBackupList() })
+}))
+
+router.delete('/', requireAuth, allowRoles('OWNER'), asyncRoute(async (req, res) => {
+  let deleted
+  try {
+    deleted = await deleteBackups(req.body?.filenames)
+  } catch (error) {
+    if (error?.code === 'ENOENT') return res.status(404).json({ message: 'One or more backups were not found' })
+    throw error
+  }
+
+  await writeActivity(req, {
+    action: 'DELETE',
+    entity: 'BACKUP',
+    details: { filenames: deleted, count: deleted.length },
+  })
+  res.json({ deleted })
 }))
 
 router.post('/run', requireAuth, allowRoles('OWNER'), asyncRoute(async (req, res) => {

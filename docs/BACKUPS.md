@@ -54,6 +54,7 @@ All endpoints require authentication. Owner-only endpoints are marked below.
 - `GET /api/backups` — owner only
 - `POST /api/backups/run` — owner only
 - `GET /api/backups/:filename/download` — owner only
+- `DELETE /api/backups` — owner only; deletes the archives listed in the JSON `filenames` array
 - `DELETE /api/backups/:filename` — owner only
 
 Only one backup can run per server process at a time. A second request receives HTTP `409`.

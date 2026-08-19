@@ -520,18 +520,36 @@ export async function resolveBackupArchive(filename) {
 }
 
 export async function deleteBackup(filename) {
+  await deleteBackups([filename])
+}
+
+export async function deleteBackups(filenames) {
+  if (!Array.isArray(filenames) || filenames.length === 0) {
+    throw Object.assign(new Error('Select at least one backup to delete'), { status: 400 })
+  }
+  if (filenames.length > 100) {
+    throw Object.assign(new Error('No more than 100 backups can be deleted at once'), { status: 400 })
+  }
+
+  const uniqueFilenames = [...new Set(filenames)]
+  if (uniqueFilenames.some((filename) => typeof filename !== 'string' || !backupNamePattern.test(filename))) {
+    throw Object.assign(new Error('Invalid backup filename'), { status: 400 })
+  }
+
   const config = backupConfig()
-  const filepath = await resolveBackupArchive(filename)
-  await Promise.all([
+  const filepaths = await Promise.all(uniqueFilenames.map((filename) => resolveBackupArchive(filename)))
+  await Promise.all(filepaths.flatMap((filepath) => [
     fs.rm(filepath, { force: true }),
     fs.rm(`${filepath}.meta.json`, { force: true }),
-  ])
+  ]))
 
   const remaining = await listBackupMetadata(config)
   await updateState({
     lastSuccessAt: remaining[0]?.completedAt || null,
     lastSuccessfulFilename: remaining[0]?.filename || null,
   }, config)
+
+  return uniqueFilenames
 }
 
 export async function readBackupArchive(filepath) {

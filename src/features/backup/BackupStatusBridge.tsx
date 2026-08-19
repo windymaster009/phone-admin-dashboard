@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle, BadgeCheck, Download, RefreshCcw, Trash2, X } from 'lucide-react'
+import { AlertTriangle, BadgeCheck, Check, Download, RefreshCcw, Trash2, X } from 'lucide-react'
 import { api } from '../../lib/api'
 
 type BackupMetadata = {
@@ -52,6 +52,8 @@ export default function BackupStatusBridge() {
   const [busy, setBusy] = useState(false)
   const [downloadBusy, setDownloadBusy] = useState('')
   const [deleteBusy, setDeleteBusy] = useState('')
+  const [selectedBackups, setSelectedBackups] = useState<Set<string>>(() => new Set())
+  const [bulkDeleteBusy, setBulkDeleteBusy] = useState(false)
 
   useEffect(() => {
     const locate = () => setHost(document.querySelector<HTMLElement>('.sidebar-footer .support-card'))
@@ -115,11 +117,14 @@ export default function BackupStatusBridge() {
   async function refreshList() {
     const result = await api<{ backups: BackupMetadata[] }>('/backups')
     setBackups(result.backups)
+    const availableFilenames = new Set(result.backups.map((backup) => backup.filename))
+    setSelectedBackups((current) => new Set([...current].filter((filename) => availableFilenames.has(filename))))
   }
 
   async function openManager() {
     if (!status?.canRun) return
     setManagerOpen(true)
+    setSelectedBackups(new Set())
     setError('')
     try {
       await Promise.all([refreshStatus(), refreshList()])
@@ -191,6 +196,50 @@ export default function BackupStatusBridge() {
     }
   }
 
+  function toggleBackupSelection(filename: string) {
+    if (bulkDeleteBusy) return
+    setSelectedBackups((current) => {
+      const next = new Set(current)
+      if (next.has(filename)) next.delete(filename)
+      else next.add(filename)
+      return next
+    })
+  }
+
+  function toggleSelectAll() {
+    if (bulkDeleteBusy) return
+    setSelectedBackups((current) => (
+      current.size === backups.length
+        ? new Set()
+        : new Set(backups.map((backup) => backup.filename))
+    ))
+  }
+
+  async function removeSelectedBackups() {
+    const filenames = backups
+      .filter((backup) => selectedBackups.has(backup.filename))
+      .map((backup) => backup.filename)
+    if (filenames.length === 0 || bulkDeleteBusy) return
+
+    const label = filenames.length === 1 ? 'backup' : 'backups'
+    if (!window.confirm(`Delete ${filenames.length} selected ${label}? This cannot be undone.`)) return
+
+    setBulkDeleteBusy(true)
+    setError('')
+    try {
+      await api('/backups', {
+        method: 'DELETE',
+        body: JSON.stringify({ filenames }),
+      })
+      setSelectedBackups(new Set())
+      await Promise.all([refreshStatus(), refreshList()])
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to delete selected backups')
+    } finally {
+      setBulkDeleteBusy(false)
+    }
+  }
+
   const view = useMemo(() => {
     if (error || status?.lastError) {
       return {
@@ -219,6 +268,8 @@ export default function BackupStatusBridge() {
 
   if (!host) return null
   const Icon = view.Icon
+  const selectedCount = selectedBackups.size
+  const allBackupsSelected = backups.length > 0 && selectedCount === backups.length
 
   return (
     <>
@@ -272,27 +323,54 @@ export default function BackupStatusBridge() {
             <div className="backup-manager-list">
               <div className="backup-manager-list-heading">
                 <div><span className="eyebrow">Archives</span><h3>Available backups</h3></div>
-                <button className="ghost-button" onClick={() => Promise.all([refreshStatus(), refreshList()]).catch((reason: Error) => setError(reason.message))}><RefreshCcw size={15} />Refresh</button>
+                <div className="backup-manager-list-actions">
+                  {selectedCount > 0 && <span className="backup-manager-selection-count">{selectedCount} selected</span>}
+                  {backups.length > 0 && (
+                    <button className="ghost-button" onClick={toggleSelectAll} disabled={bulkDeleteBusy}>
+                      {allBackupsSelected ? 'Clear selection' : 'Select all'}
+                    </button>
+                  )}
+                  {selectedCount > 0 && (
+                    <button className="backup-manager-delete-selected" onClick={removeSelectedBackups} disabled={bulkDeleteBusy}>
+                      {bulkDeleteBusy ? <RefreshCcw className="backup-button-spin" size={15} /> : <Trash2 size={15} />}
+                      {bulkDeleteBusy ? 'Deleting…' : 'Delete selected'}
+                    </button>
+                  )}
+                  <button className="ghost-button" onClick={() => Promise.all([refreshStatus(), refreshList()]).catch((reason: Error) => setError(reason.message))} disabled={bulkDeleteBusy}><RefreshCcw size={15} />Refresh</button>
+                </div>
               </div>
 
-              {backups.map((backup) => (
-                <article className="backup-manager-row" key={backup.filename}>
-                  <span className="backup-manager-row-icon"><BadgeCheck size={18} /></span>
-                  <div className="backup-manager-row-copy">
-                    <strong>{backupTime(backup.completedAt)}</strong>
-                    <small>{fileSize(backup.compressedBytes)} · {backup.documentCount} records · {backup.uploadCount} images · {backup.trigger.toLowerCase()}</small>
-                    <code title={backup.sha256}>{backup.sha256.slice(0, 16)}…</code>
-                  </div>
-                  <div className="backup-manager-row-actions">
-                    <button className="icon-button" onClick={() => downloadBackup(backup)} disabled={downloadBusy === backup.filename} aria-label={`Download backup from ${backupTime(backup.completedAt)}`}>
-                      {downloadBusy === backup.filename ? <RefreshCcw className="backup-button-spin" size={16} /> : <Download size={16} />}
+              {backups.map((backup) => {
+                const selected = selectedBackups.has(backup.filename)
+                return (
+                  <article className={`backup-manager-row${selected ? ' is-selected' : ''}`} key={backup.filename}>
+                    <button
+                      type="button"
+                      className="backup-manager-row-select"
+                      onClick={() => toggleBackupSelection(backup.filename)}
+                      disabled={bulkDeleteBusy}
+                      aria-pressed={selected}
+                      aria-label={`${selected ? 'Deselect' : 'Select'} backup from ${backupTime(backup.completedAt)}`}
+                      title={`${selected ? 'Deselect' : 'Select'} this backup`}
+                    >
+                      {selected ? <Check size={19} strokeWidth={3} /> : <BadgeCheck size={18} />}
                     </button>
-                    <button className="icon-button danger-button" onClick={() => removeBackup(backup)} disabled={deleteBusy === backup.filename} aria-label={`Delete backup from ${backupTime(backup.completedAt)}`}>
-                      {deleteBusy === backup.filename ? <RefreshCcw className="backup-button-spin" size={16} /> : <Trash2 size={16} />}
-                    </button>
-                  </div>
-                </article>
-              ))}
+                    <div className="backup-manager-row-copy">
+                      <strong>{backupTime(backup.completedAt)}</strong>
+                      <small>{fileSize(backup.compressedBytes)} · {backup.documentCount} records · {backup.uploadCount} images · {backup.trigger.toLowerCase()}</small>
+                      <code title={backup.sha256}>{backup.sha256.slice(0, 16)}…</code>
+                    </div>
+                    <div className="backup-manager-row-actions">
+                      <button className="icon-button" onClick={() => downloadBackup(backup)} disabled={bulkDeleteBusy || downloadBusy === backup.filename} aria-label={`Download backup from ${backupTime(backup.completedAt)}`}>
+                        {downloadBusy === backup.filename ? <RefreshCcw className="backup-button-spin" size={16} /> : <Download size={16} />}
+                      </button>
+                      <button className="icon-button danger-button" onClick={() => removeBackup(backup)} disabled={bulkDeleteBusy || deleteBusy === backup.filename} aria-label={`Delete backup from ${backupTime(backup.completedAt)}`}>
+                        {deleteBusy === backup.filename ? <RefreshCcw className="backup-button-spin" size={16} /> : <Trash2 size={16} />}
+                      </button>
+                    </div>
+                  </article>
+                )
+              })}
 
               {backups.length === 0 && <div className="backup-manager-empty">No backups exist yet. Run the first backup now.</div>}
             </div>
