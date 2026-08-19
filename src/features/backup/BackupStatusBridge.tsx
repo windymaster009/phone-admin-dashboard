@@ -360,14 +360,16 @@ export default function BackupStatusBridge() {
                       <small>{fileSize(backup.compressedBytes)} · {backup.documentCount} records · {backup.uploadCount} images · {backup.trigger.toLowerCase()}</small>
                       <code title={backup.sha256}>{backup.sha256.slice(0, 16)}…</code>
                     </div>
-                    <div className="backup-manager-row-actions">
-                      <button className="icon-button" onClick={() => downloadBackup(backup)} disabled={bulkDeleteBusy || downloadBusy === backup.filename} aria-label={`Download backup from ${backupTime(backup.completedAt)}`}>
-                        {downloadBusy === backup.filename ? <RefreshCcw className="backup-button-spin" size={16} /> : <Download size={16} />}
-                      </button>
-                      <button className="icon-button danger-button" onClick={() => removeBackup(backup)} disabled={bulkDeleteBusy || deleteBusy === backup.filename} aria-label={`Delete backup from ${backupTime(backup.completedAt)}`}>
-                        {deleteBusy === backup.filename ? <RefreshCcw className="backup-button-spin" size={16} /> : <Trash2 size={16} />}
-                      </button>
-                    </div>
+                    {selectedCount === 0 && (
+                      <div className="backup-manager-row-actions">
+                        <button className="icon-button" onClick={() => downloadBackup(backup)} disabled={downloadBusy === backup.filename} aria-label={`Download backup from ${backupTime(backup.completedAt)}`}>
+                          {downloadBusy === backup.filename ? <RefreshCcw className="backup-button-spin" size={16} /> : <Download size={16} />}
+                        </button>
+                        <button className="icon-button danger-button" onClick={() => removeBackup(backup)} disabled={deleteBusy === backup.filename} aria-label={`Delete backup from ${backupTime(backup.completedAt)}`}>
+                          {deleteBusy === backup.filename ? <RefreshCcw className="backup-button-spin" size={16} /> : <Trash2 size={16} />}
+                        </button>
+                      </div>
+                    )}
                   </article>
                 )
               })}
