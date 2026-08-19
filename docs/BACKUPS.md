@@ -43,6 +43,7 @@ The sidebar backup card shows live server status. Owners can open it to:
 - view backup date, size, record count, image count, and checksum
 - download an archive
 - delete an archive
+- open the restore guide and copy the guarded server restore command
 
 Managers and other staff can see backup health but cannot create, download, list, or delete archives.
 
