@@ -267,6 +267,13 @@ function requestError(status, message) {
   return error
 }
 
+function requirePaywayFeature() {
+  const config = paywayConfiguration()
+  if (!config.enabled) throw requestError(503, 'ABA PayWay is disabled')
+  if (!config.configured) throw requestError(503, 'ABA PayWay is not configured')
+  return config
+}
+
 function decodeImageDataUrl(value) {
   const raw = clean(value)
   const match = /^data:(image\/(?:jpeg|png|webp));base64,([a-zA-Z0-9+/=]+)$/.exec(raw || '')
@@ -2449,6 +2456,7 @@ router.get('/payway/config', requireAuth, asyncRoute(async (_req, res) => {
 }))
 
 router.post('/payway/khqr', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
+  const config = requirePaywayFeature()
   const {
     inventoryItem,
     customer,
@@ -2489,7 +2497,6 @@ router.post('/payway/khqr', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER
     },
     items: [{ name: item.name, quantity, price: unitPrice }],
   })
-  const config = paywayConfiguration()
   const expiresAt = new Date(Date.now() + config.qrLifetimeMinutes * 60_000)
   await PaywayIntent.create({
     transactionId,
@@ -2517,6 +2524,7 @@ router.post('/payway/khqr', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER
 }))
 
 router.get('/payway/khqr/:transactionId/status', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
+  requirePaywayFeature()
   const intent = await authorizedPaywayIntent(req, req.params.transactionId)
   if (intent.status === 'COMPLETED') {
     return res.json({ approved: true, paymentStatus: 'APPROVED', amount: intent.amount, currency: intent.currency })
@@ -2542,6 +2550,7 @@ router.get('/payway/khqr/:transactionId/status', requireAuth, allowRoles('OWNER'
 }))
 
 router.post('/payway/khqr/:transactionId/close', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
+  requirePaywayFeature()
   const intent = await authorizedPaywayIntent(req, req.params.transactionId)
   if (intent.status === 'COMPLETED') throw requestError(409, 'A completed payment request cannot be cancelled')
   await closePaywayTransaction(intent.transactionId)
@@ -2565,6 +2574,7 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
   if (!['CASH', 'KHQR', 'BANK', 'CARD', 'OTHER'].includes(paymentMethod)) {
     throw requestError(400, 'Invalid payment method')
   }
+  if (paymentMethod === 'KHQR') requirePaywayFeature()
   if (paymentMethod === 'KHQR' && !paywayTransactionId) throw requestError(400, 'PayWay transaction ID is required')
   if (paywayTransactionId && await Trade.exists({ paywayTransactionId })) {
     throw requestError(409, 'This KHQR payment has already been recorded')

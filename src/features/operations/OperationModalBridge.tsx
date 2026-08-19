@@ -637,7 +637,15 @@ export default function OperationModalBridge() {
         .catch((reason: Error) => setError(reason.message))
         .finally(() => setSaleInventoryLoading(false))
       api<{ enabled: boolean; configured: boolean }>('/payway/config')
-        .then((result) => setPaywayAvailable(result.enabled && result.configured))
+        .then((result) => {
+          const available = result.enabled && result.configured
+          setPaywayAvailable(available)
+          if (!available) {
+            setSalePaymentMethod('CASH')
+            setSaleKhqr(null)
+            setSaleDraft(null)
+          }
+        })
         .catch(() => setPaywayAvailable(false))
     }
     if (kind === 'purchase') {
@@ -1660,14 +1668,14 @@ export default function OperationModalBridge() {
           <label>Selling price<input type="number" min="0" step="0.01" value={saleUnitPrice} disabled={!saleItemId} onChange={(event) => setSaleUnitPrice(event.target.value)} placeholder="Select a product first" /></label>
           <label>Discount<input type="number" min="0" max={effectiveSaleQuantity * (Number(saleUnitPrice) || 0)} step="0.01" value={saleDiscount} disabled={!saleItemId} onChange={(event) => setSaleDiscount(event.target.value)} /></label>
           {salePaymentMethod === 'CASH' && <label>Amount paid <small className="optional-marker">Defaults to total</small><input type="number" min="0" max={saleTotal || undefined} step="0.01" value={saleAmountPaid} onChange={(event) => setSaleAmountPaid(event.target.value)} placeholder={saleTotal.toFixed(2)} /></label>}
-          <fieldset className="sale-payment-method operation-wide">
+          <fieldset className={`sale-payment-method operation-wide${paywayAvailable ? '' : ' cash-only'}`}>
             <legend>How will the customer pay?</legend>
             <button type="button" className={salePaymentMethod === 'CASH' ? 'active cash' : 'cash'} onClick={() => setSalePaymentMethod('CASH')}>
               <span><Banknote size={20} /></span><p><strong>Pay with cash</strong><small>Record payment immediately</small></p>{salePaymentMethod === 'CASH' && <CheckCircle2 size={18} />}
             </button>
-            <button type="button" className={salePaymentMethod === 'KHQR' ? 'active khqr' : 'khqr'} onClick={() => setSalePaymentMethod('KHQR')} disabled={!paywayAvailable}>
+            {paywayAvailable && <button type="button" className={salePaymentMethod === 'KHQR' ? 'active khqr' : 'khqr'} onClick={() => setSalePaymentMethod('KHQR')}>
               <span className="khqr-payment-option-logo"><img src={khqrLogo} alt="" /></span><p><strong>Pay with KHQR</strong><small>{paywayAvailable ? 'ABA PayWay sandbox' : 'PayWay unavailable'}</small></p>{salePaymentMethod === 'KHQR' && <CheckCircle2 size={18} />}
-            </button>
+            </button>}
           </fieldset>
           <label className="operation-wide">Notes <small className="optional-marker">Optional</small><textarea rows={3} value={saleNotes} onChange={(event) => setSaleNotes(event.target.value)} /></label>
         </div>

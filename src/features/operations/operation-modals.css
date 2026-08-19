@@ -970,6 +970,7 @@ body.operation-modal-open {
   border: 1px solid var(--border, rgba(255,255,255,.08));
   border-radius: 13px;
 }
+.sale-payment-method.cash-only { grid-template-columns: 1fr; }
 .sale-payment-method legend {
   padding: 0 6px;
   color: var(--muted, #8f9bb4);
@@ -1233,6 +1234,7 @@ body.operation-modal-open {
   font-size: 9px;
   font-weight: 700;
 }
+
 .pawn-contract-summary .daily-fee-summary strong {
   overflow: visible;
   line-height: 1.35;
