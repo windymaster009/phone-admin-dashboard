@@ -7,6 +7,16 @@
   outline-offset: 2px;
 }
 
+.secure-upload-card label:has(> .optional-marker) {
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  column-gap: 6px;
+}
+
+.secure-upload-card label:has(> .optional-marker) > input {
+  grid-column: 1 / -1;
+}
+
 :root[data-theme='light'] .secure-document-stats p,
 :root[data-theme='light'] .secure-upload-card label,
 :root[data-theme='light'] .secure-upload-summary,

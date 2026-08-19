@@ -388,6 +388,17 @@
   font-size: 0.71rem;
 }
 
+.loan-payment-form label:has(> .optional-marker) {
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  column-gap: 6px;
+}
+
+.loan-payment-form label:has(> .optional-marker) > input,
+.loan-payment-form label:has(> .optional-marker) > textarea {
+  grid-column: 1 / -1;
+}
+
 .loan-due-form input,
 .loan-payment-form input,
 .loan-payment-form select,

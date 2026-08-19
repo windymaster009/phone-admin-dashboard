@@ -308,8 +308,8 @@ function VaultWorkspace() {
           <form onSubmit={uploadDocument}>
             <label>Document type<select value={category} onChange={(event) => setCategory(event.target.value as DocumentCategory)}>{categories.map((item) => <option value={item} key={item}>{categoryLabels[item]}</option>)}</select></label>
             <label>File<input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" onChange={(event) => setFile(event.target.files?.[0] || null)} required /></label>
-            <label>Pawn or transaction reference<input value={relatedReference} onChange={(event) => setRelatedReference(event.target.value)} placeholder="Optional: PW-… or BY-/SL-…" /></label>
-            <label>Note<input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Optional private note" /></label>
+            <label>Pawn or transaction reference <small className="optional-marker">Optional</small><input value={relatedReference} onChange={(event) => setRelatedReference(event.target.value)} placeholder="PW-… or BY-/SL-…" /></label>
+            <label>Note <small className="optional-marker">Optional</small><input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Private note" /></label>
             <div className="secure-upload-summary"><span>{file ? `${file.name} · ${bytes(file.size)}` : `JPEG, PNG, WebP or PDF · max ${bytes(status?.maximumBytes || 5 * 1024 * 1024)}`}</span><button className="primary-button" disabled={!selectedCustomer || !file || busy || !status?.configured}><Upload size={16} /> {busy ? 'Encrypting…' : 'Encrypt & upload'}</button></div>
           </form>
         </article>

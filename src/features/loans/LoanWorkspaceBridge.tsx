@@ -194,8 +194,8 @@ function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
       <div className="operation-form-grid">
         <label>Borrower name<input name="borrowerName" autoFocus required placeholder="Full name" /></label>
         <label>Phone number<input name="borrowerPhone" required placeholder="012 345 678" /></label>
-        <label>National ID<input name="nationalIdNumber" placeholder="Optional" /></label>
-        <label>Address<input name="address" placeholder="Village, district, province" /></label>
+        <label>National ID <small className="optional-marker">Optional</small><input name="nationalIdNumber" placeholder="ID number" /></label>
+        <label>Address <small className="optional-marker">Optional</small><input name="address" placeholder="Village, district, province" /></label>
         <label>Loan amount<input name="principal" type="number" min={currency === 'KHR' ? '1' : '0.01'} step={currency === 'KHR' ? '1' : '0.01'} inputMode={currency === 'KHR' ? 'numeric' : 'decimal'} value={principal || ''} required onChange={(event) => setPrincipal(Number(event.target.value) || 0)} /></label>
         <label>Currency<select name="currency" value={currency} onChange={(event) => {
           const nextCurrency = event.target.value as Currency
@@ -210,8 +210,8 @@ function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
         <label>Loan date<input name="loanDate" type="date" required defaultValue={dateInput(new Date())} /></label>
         <label>Due date<input name="dueDate" type="date" required defaultValue={dateInput(due)} /></label>
         <label>Remind before due<select name="reminderDays" defaultValue="3"><option value="0">On due date</option><option value="1">1 day before</option><option value="3">3 days before</option><option value="7">7 days before</option><option value="14">14 days before</option></select></label>
-        <label>Reason<input name="reason" placeholder="Emergency, business, personal..." /></label>
-        <label className="operation-wide">Notes<textarea name="notes" rows={3} placeholder="Agreement details or anything the owner should remember" /></label>
+        <label>Reason <small className="optional-marker">Optional</small><input name="reason" placeholder="Emergency, business, personal..." /></label>
+        <label className="operation-wide">Notes <small className="optional-marker">Optional</small><textarea name="notes" rows={3} placeholder="Agreement details or anything the owner should remember" /></label>
       </div>
       <div className="loan-preview">
         <div><span>Principal</span><strong>{money(principal, currency)}</strong></div>
@@ -269,8 +269,8 @@ function LoanDetailModal({ detail, user, busy, error, onClose, onPayment, onDueD
             <label>Amount<input name="amount" type="number" min={loan.currency === 'KHR' ? '1' : '0.01'} max={loan.remainingBalance} step={loan.currency === 'KHR' ? '1' : '0.01'} inputMode={loan.currency === 'KHR' ? 'numeric' : 'decimal'} required placeholder={String(loan.remainingBalance)} /></label>
             <label>Payment method<select name="paymentMethod" defaultValue="CASH"><option value="CASH">Cash</option><option value="KHQR">KHQR</option><option value="BANK">Bank transfer</option><option value="CARD">Card</option><option value="OTHER">Other</option></select></label>
             <label>Payment date<input name="paidAt" type="date" required defaultValue={dateInput(new Date())} /></label>
-            <label>Reference<input name="reference" placeholder="Optional receipt or transfer reference" /></label>
-            <label className="loan-payment-note">Note<textarea name="note" rows={2} placeholder="Optional payment note" /></label>
+            <label>Reference <small className="optional-marker">Optional</small><input name="reference" placeholder="Receipt or transfer reference" /></label>
+            <label className="loan-payment-note">Note <small className="optional-marker">Optional</small><textarea name="note" rows={2} placeholder="Payment note" /></label>
             <button className="primary-button" disabled={busy}>{busy ? 'Recording...' : 'Record payment'}</button>
           </form> : <div className="loan-payment-complete"><BadgeCheck size={28} /><strong>{loan.status === 'PAID' ? 'Loan paid in full' : loan.status === 'CANCELLED' ? 'Loan cancelled' : 'You cannot record payments'}</strong></div>}
         </article>

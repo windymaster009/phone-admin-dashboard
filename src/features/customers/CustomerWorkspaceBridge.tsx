@@ -102,9 +102,9 @@ function CustomerModal({
           <div className="operation-form-grid">
             <label>Full name<input name="name" required autoFocus defaultValue={customer?.name || ''} placeholder="Customer full name" /></label>
             <label>Phone number<input name="phone" required defaultValue={customer?.phone || ''} placeholder="012 345 678" /></label>
-            <label>National ID number<input name="nationalIdNumber" defaultValue={customer?.nationalIdNumber || ''} placeholder="Optional for normal sale" /></label>
-            <label>Address<input name="address" defaultValue={customer?.address || ''} placeholder="Village, district, province" /></label>
-            <label className="operation-wide">Notes<textarea name="notes" rows={4} defaultValue={customer?.notes || ''} placeholder="Ownership details, contact notes, or other information" /></label>
+            <label>National ID number <small className="optional-marker">Optional</small><input name="nationalIdNumber" defaultValue={customer?.nationalIdNumber || ''} placeholder="ID number" /></label>
+            <label>Address <small className="optional-marker">Optional</small><input name="address" defaultValue={customer?.address || ''} placeholder="Village, district, province" /></label>
+            <label className="operation-wide">Notes <small className="optional-marker">Optional</small><textarea name="notes" rows={4} defaultValue={customer?.notes || ''} placeholder="Ownership details, contact notes, or other information" /></label>
           </div>
           <footer className="operation-modal-actions">
             <button type="button" className="ghost-button" onClick={onClose} disabled={busy}>Cancel</button>

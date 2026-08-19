@@ -1001,6 +1001,8 @@ td strong { color: var(--text); }
 .pawn-action-form label { min-width: 0; display: flex; flex-direction: column; gap: 7px; color: var(--muted); font-size: 10px; font-weight: 700; }
 .pawn-action-form label > span { display: flex; align-items: center; gap: 5px; }
 .pawn-action-form label small { color: var(--purple-soft); font-size: 8px; }
+.optional-marker { color: #a78bfa !important; font-size: 8px; font-weight: 700; line-height: 1; }
+:root[data-theme='light'] .optional-marker { color: #7c3aed !important; }
 .pawn-action-form label > input,
 .pawn-action-form select,
 .pawn-action-form textarea { width: 100%; border: 1px solid var(--border-strong); border-radius: 10px; outline: 0; color: var(--text); background: var(--bg-soft); transition: border-color .18s ease, box-shadow .18s ease; }
