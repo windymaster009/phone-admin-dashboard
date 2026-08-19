@@ -777,25 +777,81 @@ async function writeRestoredUploads(backup, targetRoot) {
   }
 }
 
-async function replaceUploads(stagedUploads, uploadsDirectory) {
+async function clearDirectoryContents(directory) {
+  await fs.mkdir(directory, { recursive: true })
+  const entries = await fs.readdir(directory, { withFileTypes: true })
+  for (const entry of entries) {
+    await fs.rm(path.join(directory, entry.name), {
+      recursive: true,
+      force: true,
+      maxRetries: 5,
+      retryDelay: 100,
+    })
+  }
+}
+
+async function copyDirectoryContents(source, destination) {
+  await fs.mkdir(destination, { recursive: true })
+  const entries = await fs.readdir(source, { withFileTypes: true })
+  for (const entry of entries) {
+    await fs.cp(path.join(source, entry.name), path.join(destination, entry.name), {
+      recursive: true,
+      force: true,
+      errorOnExist: false,
+    })
+  }
+}
+
+async function prepareUploadsReplacement(stagedUploads, uploadsDirectory) {
   const previousUploads = `${uploadsDirectory}.pre-restore-${randomUUID()}`
-  let movedPrevious = false
+  let originalUploadsExisted = true
   try {
     try {
-      await fs.rename(uploadsDirectory, previousUploads)
-      movedPrevious = true
+      await fs.access(uploadsDirectory)
     } catch (error) {
-      if (error?.code !== 'ENOENT') throw error
+      if (error?.code === 'ENOENT') originalUploadsExisted = false
+      else throw error
     }
-    await fs.rename(stagedUploads, uploadsDirectory)
-    if (movedPrevious) await fs.rm(previousUploads, { recursive: true, force: true })
+
+    await fs.mkdir(previousUploads, { recursive: true })
+    if (originalUploadsExisted) await copyDirectoryContents(uploadsDirectory, previousUploads)
+    await clearDirectoryContents(uploadsDirectory)
+    await copyDirectoryContents(stagedUploads, uploadsDirectory)
   } catch (error) {
-    if (movedPrevious) {
-      await fs.rm(uploadsDirectory, { recursive: true, force: true }).catch(() => undefined)
-      await fs.rename(previousUploads, uploadsDirectory).catch(() => undefined)
-    }
+    await clearDirectoryContents(uploadsDirectory).catch(() => undefined)
+    if (originalUploadsExisted) await copyDirectoryContents(previousUploads, uploadsDirectory).catch(() => undefined)
+    else await fs.rm(uploadsDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }).catch(() => undefined)
+    await fs.rm(previousUploads, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }).catch(() => undefined)
     throw error
   }
+
+  let settled = false
+  return {
+    async commit() {
+      if (settled) return
+      settled = true
+      await Promise.allSettled([
+        fs.rm(previousUploads, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
+        fs.rm(stagedUploads, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
+      ])
+    },
+    async rollback() {
+      if (settled) return
+      settled = true
+      await clearDirectoryContents(uploadsDirectory)
+      if (originalUploadsExisted) await copyDirectoryContents(previousUploads, uploadsDirectory)
+      else await fs.rm(uploadsDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+      await Promise.all([
+        fs.rm(previousUploads, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
+        fs.rm(stagedUploads, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
+      ])
+    },
+  }
+}
+
+export async function replaceUploadsForRestore(stagedUploads, uploadsDirectory) {
+  const replacement = await prepareUploadsReplacement(stagedUploads, uploadsDirectory)
+  await replacement.commit()
 }
 
 async function performRestore(filepath, { source, requestedBy }) {
@@ -805,12 +861,15 @@ async function performRestore(filepath, { source, requestedBy }) {
 
   await writeRestoredUploads(backup, stagedUploads)
   let safetyBackup
+  let uploadsReplacement
   try {
     safetyBackup = await runBackup({
       trigger: 'MANUAL',
       requestedBy: { ...requestedBy, reason: 'PRE_RESTORE_SAFETY_BACKUP' },
       allowDuringRestore: true,
     })
+
+    uploadsReplacement = await prepareUploadsReplacement(stagedUploads, config.uploadsDirectory)
 
     const db = mongoose.connection.db
     if (!db || mongoose.connection.readyState !== 1) throw new Error('MongoDB must be connected before restoring a backup')
@@ -832,7 +891,7 @@ async function performRestore(filepath, { source, requestedBy }) {
       if (exists) await db.collection(collectionName).deleteMany({})
     }
 
-    await replaceUploads(stagedUploads, config.uploadsDirectory)
+    await uploadsReplacement.commit()
     await updateState({
       running: false,
       lastRestoreAt: new Date().toISOString(),
@@ -842,6 +901,9 @@ async function performRestore(filepath, { source, requestedBy }) {
 
     return { restored: preview, safetyBackup: publicMetadata(safetyBackup), sessionsRevoked: true }
   } catch (error) {
+    await uploadsReplacement?.rollback().catch((rollbackError) => {
+      console.error('Unable to roll back uploads after restore failure:', rollbackError.message)
+    })
     await fs.rm(stagedUploads, { recursive: true, force: true }).catch(() => undefined)
     throw error
   }

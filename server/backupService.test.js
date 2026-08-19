@@ -5,7 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
 import { gzipSync } from 'node:zlib'
-import { inspectBackupForRestore } from './backupService.js'
+import { inspectBackupForRestore, replaceUploadsForRestore } from './backupService.js'
 
 function archivePayload({ uploadHash } = {}) {
   const data = Buffer.from('phoneflow-image')
@@ -59,4 +59,24 @@ test('restore inspection rejects an upload checksum mismatch', async () => {
       /Upload checksum mismatch/,
     )
   })
+})
+
+test('restore replaces upload contents without renaming the active uploads directory', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'phoneflow-upload-restore-test-'))
+  const uploads = path.join(directory, 'uploads')
+  const staged = path.join(directory, 'uploads.restore-staged')
+  try {
+    await fs.mkdir(path.join(uploads, 'old'), { recursive: true })
+    await fs.writeFile(path.join(uploads, 'old', 'removed.jpg'), 'old image')
+    await fs.mkdir(path.join(staged, 'inventory'), { recursive: true })
+    await fs.writeFile(path.join(staged, 'inventory', 'restored.jpg'), 'restored image')
+
+    await replaceUploadsForRestore(staged, uploads)
+
+    assert.equal(await fs.readFile(path.join(uploads, 'inventory', 'restored.jpg'), 'utf8'), 'restored image')
+    await assert.rejects(fs.access(path.join(uploads, 'old', 'removed.jpg')), { code: 'ENOENT' })
+    await assert.rejects(fs.access(staged), { code: 'ENOENT' })
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true })
+  }
 })
