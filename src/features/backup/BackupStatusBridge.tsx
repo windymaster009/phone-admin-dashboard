@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle, BadgeCheck, Check, Clipboard, Download, RefreshCcw, RotateCcw, Trash2, X } from 'lucide-react'
-import { api } from '../../lib/api'
+import { AlertTriangle, BadgeCheck, Check, Download, FileUp, RefreshCcw, RotateCcw, Trash2, X } from 'lucide-react'
+import { api, setToken } from '../../lib/api'
 
 type BackupMetadata = {
   filename: string
@@ -17,6 +17,7 @@ type BackupMetadata = {
 type BackupStatus = {
   enabled: boolean
   running: boolean
+  restoring: boolean
   schedule: string
   timezone: string
   retentionCount: number
@@ -29,6 +30,18 @@ type BackupStatus = {
 type DeleteConfirmation =
   | { kind: 'single'; backup: BackupMetadata }
   | { kind: 'bulk'; filenames: string[] }
+
+type RestorePreview = BackupMetadata & {
+  token?: string
+  collectionCount: number
+  uncompressedUploadBytes: number
+  database: string | null
+}
+
+type RestoreCandidate = {
+  source: 'server' | 'upload'
+  backup: RestorePreview
+}
 
 function backupTime(value?: string) {
   if (!value) return 'No successful backup yet'
@@ -47,6 +60,21 @@ function fileSize(bytes = 0) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
+function backupAge(candidateDate: string, latestDate?: string) {
+  if (!latestDate) return { tone: 'neutral', label: 'No newer server backup to compare', detail: '' }
+  const difference = new Date(candidateDate).getTime() - new Date(latestDate).getTime()
+  if (Math.abs(difference) < 60_000) {
+    return { tone: 'same', label: 'This is the latest backup', detail: `Matches ${backupTime(latestDate)}` }
+  }
+
+  const hours = Math.max(1, Math.round(Math.abs(difference) / (60 * 60 * 1000)))
+  const days = Math.floor(hours / 24)
+  const distance = days >= 1 ? `${days} ${days === 1 ? 'day' : 'days'}` : `${hours} ${hours === 1 ? 'hour' : 'hours'}`
+  return difference < 0
+    ? { tone: 'older', label: `${distance} older than the latest`, detail: `Latest is ${backupTime(latestDate)}` }
+    : { tone: 'newer', label: `${distance} newer than the latest`, detail: `Latest is ${backupTime(latestDate)}` }
+}
+
 export default function BackupStatusBridge() {
   const [host, setHost] = useState<HTMLElement | null>(null)
   const [status, setStatus] = useState<BackupStatus | null>(null)
@@ -59,8 +87,12 @@ export default function BackupStatusBridge() {
   const [selectedBackups, setSelectedBackups] = useState<Set<string>>(() => new Set())
   const [bulkDeleteBusy, setBulkDeleteBusy] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState<DeleteConfirmation | null>(null)
-  const [restoreHelpOpen, setRestoreHelpOpen] = useState(false)
-  const [restoreCommandCopied, setRestoreCommandCopied] = useState(false)
+  const [restoreCandidate, setRestoreCandidate] = useState<RestoreCandidate | null>(null)
+  const [restoreInspectBusy, setRestoreInspectBusy] = useState(false)
+  const [restoreBusy, setRestoreBusy] = useState(false)
+  const [restoreConfirmation, setRestoreConfirmation] = useState('')
+  const [restoreError, setRestoreError] = useState('')
+  const restoreFileInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const locate = () => setHost(document.querySelector<HTMLElement>('.sidebar-footer .support-card'))
@@ -113,15 +145,15 @@ export default function BackupStatusBridge() {
         if (!bulkDeleteBusy && !deleteBusy) setDeleteConfirmation(null)
         return
       }
-      if (restoreHelpOpen) {
-        setRestoreHelpOpen(false)
+      if (restoreCandidate) {
+        if (!restoreBusy) setRestoreCandidate(null)
         return
       }
       setManagerOpen(false)
     }
     document.addEventListener('keydown', closeOnEscape)
     return () => document.removeEventListener('keydown', closeOnEscape)
-  }, [bulkDeleteBusy, deleteBusy, deleteConfirmation, managerOpen, restoreHelpOpen])
+  }, [bulkDeleteBusy, deleteBusy, deleteConfirmation, managerOpen, restoreBusy, restoreCandidate])
 
   async function refreshStatus() {
     const result = await api<BackupStatus>('/backups/status')
@@ -142,7 +174,7 @@ export default function BackupStatusBridge() {
     setManagerOpen(true)
     setSelectedBackups(new Set())
     setDeleteConfirmation(null)
-    setRestoreHelpOpen(false)
+    setRestoreCandidate(null)
     setError('')
     try {
       await Promise.all([refreshStatus(), refreshList()])
@@ -266,14 +298,62 @@ export default function BackupStatusBridge() {
     }
   }
 
-  async function copyRestoreCommand() {
-    const command = 'npm run backup:restore -- "/path/to/phoneflow-backup.json.gz" --confirm --drop'
+  function requestServerRestore(backup: BackupMetadata) {
+    setRestoreConfirmation('')
+    setRestoreError('')
+    setRestoreCandidate({
+      source: 'server',
+      backup: { ...backup, collectionCount: 0, uncompressedUploadBytes: 0, database: null },
+    })
+  }
+
+  async function inspectLocalBackup(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    if (!file.name.toLowerCase().endsWith('.json.gz')) {
+      setError('Choose a PhoneFlow backup ending in .json.gz')
+      return
+    }
+
+    setRestoreInspectBusy(true)
+    setRestoreError('')
+    setError('')
     try {
-      await navigator.clipboard.writeText(command)
-      setRestoreCommandCopied(true)
-      window.setTimeout(() => setRestoreCommandCopied(false), 2000)
-    } catch {
-      setError('Unable to copy the restore command. Select and copy it manually.')
+      const result = await api<{ backup: RestorePreview }>('/backups/restore/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/gzip',
+          'X-Backup-Filename': file.name.replace(/[^\x20-\x7E]/g, '_'),
+        },
+        body: file,
+      })
+      setRestoreConfirmation('')
+      setRestoreCandidate({ source: 'upload', backup: result.backup })
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to inspect the selected backup')
+    } finally {
+      setRestoreInspectBusy(false)
+    }
+  }
+
+  async function confirmRestore() {
+    if (!restoreCandidate || restoreConfirmation !== 'RESTORE' || restoreBusy) return
+    setRestoreBusy(true)
+    setRestoreError('')
+    try {
+      const endpoint = restoreCandidate.source === 'upload'
+        ? `/backups/restore/upload/${encodeURIComponent(restoreCandidate.backup.token || '')}`
+        : `/backups/restore/server/${encodeURIComponent(restoreCandidate.backup.filename)}`
+      await api(endpoint, {
+        method: 'POST',
+        body: JSON.stringify({ confirmation: restoreConfirmation }),
+      })
+      setToken(null)
+      window.location.reload()
+    } catch (reason) {
+      setRestoreError(reason instanceof Error ? reason.message : 'Unable to restore this backup')
+      setRestoreBusy(false)
     }
   }
 
@@ -291,6 +371,9 @@ export default function BackupStatusBridge() {
     }
     if (!status.enabled) {
       return { tone: 'disabled', Icon: AlertTriangle, title: 'Daily backup disabled', detail: 'Manual backup is still available' }
+    }
+    if (status.restoring) {
+      return { tone: 'running', Icon: RotateCcw, title: 'Restoring shop', detail: 'Replacing database and uploaded images…' }
     }
     if (busy || status.running) {
       return { tone: 'running', Icon: RefreshCcw, title: 'Backing up shop', detail: 'Database and images are being saved…' }
@@ -310,6 +393,9 @@ export default function BackupStatusBridge() {
   const confirmationCount = deleteConfirmation?.kind === 'bulk' ? deleteConfirmation.filenames.length : 1
   const confirmationPlural = confirmationCount === 1 ? 'backup' : 'backups'
   const deleteConfirmationBusy = bulkDeleteBusy || Boolean(deleteBusy)
+  const restoreAge = restoreCandidate
+    ? backupAge(restoreCandidate.backup.createdAt, status?.latest?.createdAt)
+    : null
 
   return (
     <>
@@ -342,8 +428,17 @@ export default function BackupStatusBridge() {
                 <p>MongoDB collections and uploaded inventory images are saved together.</p>
               </div>
               <div className="backup-manager-header-actions">
-                <button className="backup-manager-restore-button" onClick={() => setRestoreHelpOpen(true)}>
-                  <RotateCcw size={15} />Restore backup
+                <input
+                  ref={restoreFileInput}
+                  className="backup-restore-file-input"
+                  type="file"
+                  accept=".json.gz,application/gzip"
+                  onChange={inspectLocalBackup}
+                  tabIndex={-1}
+                />
+                <button className="backup-manager-restore-button" onClick={() => restoreFileInput.current?.click()} disabled={restoreInspectBusy || restoreBusy || status?.running || status?.restoring}>
+                  {restoreInspectBusy ? <RefreshCcw className="backup-button-spin" size={15} /> : <FileUp size={15} />}
+                  {restoreInspectBusy ? 'Checking file…' : 'Restore local file'}
                 </button>
                 <button className="icon-button" onClick={() => setManagerOpen(false)} aria-label="Close backup manager"><X size={18} /></button>
               </div>
@@ -355,7 +450,7 @@ export default function BackupStatusBridge() {
               <div><span>Schedule</span><strong>{status?.enabled ? `${status.schedule} · ${status.timezone}` : 'Disabled'}</strong></div>
               <div><span>Retention</span><strong>{status?.retentionCount || 0} archives</strong></div>
               <div><span>Latest</span><strong>{backupTime(status?.latest?.completedAt)}</strong></div>
-              <button className="primary-button" onClick={runNow} disabled={busy || status?.running}>
+              <button className="primary-button" onClick={runNow} disabled={busy || status?.running || status?.restoring}>
                 <RefreshCcw size={16} className={busy || status?.running ? 'backup-button-spin' : ''} />
                 {busy || status?.running ? 'Backing up…' : 'Back up now'}
               </button>
@@ -407,6 +502,9 @@ export default function BackupStatusBridge() {
                     </div>
                     {selectedCount === 0 && (
                       <div className="backup-manager-row-actions">
+                        <button className="icon-button backup-row-restore-button" onClick={() => requestServerRestore(backup)} disabled={restoreBusy || status?.running || status?.restoring} aria-label={`Restore backup from ${backupTime(backup.completedAt)}`} title={`Restore shop to ${backupTime(backup.completedAt)}`}>
+                          <RotateCcw size={16} />
+                        </button>
                         <button className="icon-button" onClick={() => downloadBackup(backup)} disabled={downloadBusy === backup.filename} aria-label={`Download backup from ${backupTime(backup.completedAt)}`}>
                           {downloadBusy === backup.filename ? <RefreshCcw className="backup-button-spin" size={16} /> : <Download size={16} />}
                         </button>
@@ -460,13 +558,13 @@ export default function BackupStatusBridge() {
         document.body,
       )}
 
-      {restoreHelpOpen && createPortal(
+      {restoreCandidate && restoreAge && createPortal(
         <div className="backup-restore-backdrop" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) setRestoreHelpOpen(false)
+          if (event.target === event.currentTarget && !restoreBusy) setRestoreCandidate(null)
         }}>
           <section
             className="backup-restore-dialog surface-card"
-            role="dialog"
+            role="alertdialog"
             aria-modal="true"
             aria-labelledby="backup-restore-title"
           >
@@ -474,37 +572,54 @@ export default function BackupStatusBridge() {
               <div className="backup-restore-dialog-heading">
                 <span className="backup-restore-dialog-icon"><RotateCcw size={20} /></span>
                 <div>
-                  <span className="eyebrow">Recovery guide</span>
-                  <h3 id="backup-restore-title">Restore a downloaded backup</h3>
+                  <span className="eyebrow">Restore preview</span>
+                  <h3 id="backup-restore-title">Restore this backup?</h3>
                 </div>
               </div>
-              <button className="icon-button" onClick={() => setRestoreHelpOpen(false)} aria-label="Close restore guide"><X size={18} /></button>
+              <button className="icon-button" onClick={() => setRestoreCandidate(null)} disabled={restoreBusy} aria-label="Close restore confirmation"><X size={18} /></button>
             </header>
 
             <div className="backup-restore-warning">
               <AlertTriangle size={17} />
-              <span><strong>This replaces all current shop data and uploaded images.</strong> Run it only when staff have stopped using PhoneFlow.</span>
+              <span><strong>This replaces all current shop data and uploaded images.</strong> PhoneFlow creates a safety backup first, then signs everyone out after the restore.</span>
             </div>
 
-            <ol className="backup-restore-steps">
-              <li><span>1</span><div><strong>Stop PhoneFlow</strong><small>Stop the server or normal user traffic before restoring.</small></div></li>
-              <li><span>2</span><div><strong>Keep a safety copy</strong><small>Create and download a fresh backup of the current data when possible.</small></div></li>
-              <li><span>3</span><div><strong>Run the restore command</strong><small>Open a terminal in the PhoneFlow project folder and replace the example path below.</small></div></li>
-              <li><span>4</span><div><strong>Restart and verify</strong><small>Check login, customers, inventory images, pawn contracts, sales, and reports.</small></div></li>
-            </ol>
+            <div className="backup-restore-preview">
+              <div className="backup-restore-preview-file">
+                <span>{restoreCandidate.source === 'upload' ? 'Local file' : 'Saved archive'}</span>
+                <strong title={restoreCandidate.backup.filename}>{restoreCandidate.backup.filename}</strong>
+              </div>
+              <div><span>Backup date</span><strong>{backupTime(restoreCandidate.backup.createdAt)}</strong></div>
+              <div><span>Contents</span><strong>{restoreCandidate.backup.documentCount} records · {restoreCandidate.backup.uploadCount} images</strong></div>
+              <div><span>Archive size</span><strong>{fileSize(restoreCandidate.backup.compressedBytes)}</strong></div>
+            </div>
 
-            <div className="backup-restore-command">
-              <code>npm run backup:restore -- &quot;/path/to/phoneflow-backup.json.gz&quot; --confirm --drop</code>
-              <button onClick={copyRestoreCommand} aria-label="Copy restore command">
-                {restoreCommandCopied ? <Check size={16} /> : <Clipboard size={16} />}
-                {restoreCommandCopied ? 'Copied' : 'Copy'}
+            <div className={`backup-restore-age is-${restoreAge.tone}`}>
+              <RotateCcw size={17} />
+              <div><strong>{restoreAge.label}</strong>{restoreAge.detail && <small>{restoreAge.detail}</small>}</div>
+            </div>
+
+            {restoreError && <div className="backup-restore-error"><AlertTriangle size={16} />{restoreError}</div>}
+
+            <label className="backup-restore-confirmation-field">
+              <span>Type <strong>RESTORE</strong> to confirm</span>
+              <input
+                value={restoreConfirmation}
+                onChange={(event) => setRestoreConfirmation(event.target.value.toUpperCase())}
+                placeholder="RESTORE"
+                disabled={restoreBusy}
+                autoComplete="off"
+                autoFocus
+              />
+            </label>
+
+            <div className="backup-restore-dialog-actions">
+              <button className="ghost-button" onClick={() => setRestoreCandidate(null)} disabled={restoreBusy}>Cancel</button>
+              <button className="backup-restore-confirm-button" onClick={confirmRestore} disabled={restoreConfirmation !== 'RESTORE' || restoreBusy}>
+                {restoreBusy ? <RefreshCcw className="backup-button-spin" size={16} /> : <RotateCcw size={16} />}
+                {restoreBusy ? 'Creating safety backup and restoring…' : `Restore ${backupTime(restoreCandidate.backup.createdAt)}`}
               </button>
             </div>
-
-            <footer className="backup-restore-dialog-footer">
-              <small>The restore must run from the server terminal so the live database is not replaced while people are using it.</small>
-              <button className="primary-button" onClick={() => setRestoreHelpOpen(false)}>Got it</button>
-            </footer>
           </section>
         </div>,
         document.body,

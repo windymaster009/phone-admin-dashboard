@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { allowRoles, requireAuth, writeActivity } from './auth.js'
+import { allowRoles, clearSessionCookie, requireAuth, writeActivity } from './auth.js'
 import {
   BackupInProgressError,
   deleteBackup,
@@ -7,7 +7,10 @@ import {
   getBackupList,
   getBackupStatus,
   resolveBackupArchive,
+  restoreServerBackup,
+  restoreStagedBackup,
   runBackup,
+  stageRestoreUpload,
 } from './backupService.js'
 
 const router = Router()
@@ -19,6 +22,58 @@ router.get('/status', requireAuth, asyncRoute(async (req, res) => {
 
 router.get('/', requireAuth, allowRoles('OWNER'), asyncRoute(async (_req, res) => {
   res.json({ backups: await getBackupList() })
+}))
+
+function requireRestoreConfirmation(req, res) {
+  if (req.body?.confirmation !== 'RESTORE') {
+    res.status(400).json({ message: 'Type RESTORE to confirm this recovery' })
+    return false
+  }
+  return true
+}
+
+function restoreRequester(req) {
+  return {
+    type: 'USER',
+    id: req.user._id.toString(),
+    name: req.user.name,
+  }
+}
+
+router.post('/restore/upload', requireAuth, allowRoles('OWNER'), asyncRoute(async (req, res) => {
+  const staged = await stageRestoreUpload(req, {
+    filename: req.get('x-backup-filename'),
+    userId: req.user._id,
+  })
+  res.setHeader('Cache-Control', 'no-store')
+  res.status(201).json({ backup: staged })
+}))
+
+router.post('/restore/upload/:token', requireAuth, allowRoles('OWNER'), asyncRoute(async (req, res) => {
+  if (!requireRestoreConfirmation(req, res)) return
+  const result = await restoreStagedBackup(req.params.token, {
+    userId: req.user._id,
+    requestedBy: restoreRequester(req),
+  })
+  await writeActivity(req, {
+    action: 'UPDATE',
+    entity: 'BACKUP',
+    details: { restoredFrom: result.restored.filename, backupDate: result.restored.createdAt, source: 'UPLOAD' },
+  })
+  clearSessionCookie(res)
+  res.json(result)
+}))
+
+router.post('/restore/server/:filename', requireAuth, allowRoles('OWNER'), asyncRoute(async (req, res) => {
+  if (!requireRestoreConfirmation(req, res)) return
+  const result = await restoreServerBackup(req.params.filename, restoreRequester(req))
+  await writeActivity(req, {
+    action: 'UPDATE',
+    entity: 'BACKUP',
+    details: { restoredFrom: result.restored.filename, backupDate: result.restored.createdAt, source: 'SERVER' },
+  })
+  clearSessionCookie(res)
+  res.json(result)
 }))
 
 router.delete('/', requireAuth, allowRoles('OWNER'), asyncRoute(async (req, res) => {

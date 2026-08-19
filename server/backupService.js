@@ -2,7 +2,8 @@ import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream, createWriteStream } from 'node:fs'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { finished } from 'node:stream/promises'
+import { Transform } from 'node:stream'
+import { finished, pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
 import { createGzip, createGunzip } from 'node:zlib'
 import mongoose from 'mongoose'
@@ -13,14 +14,17 @@ const stateFilename = 'backup-state.json'
 const backupNamePattern = /^phoneflow-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.json\.gz$/
 
 let activeBackupPromise = null
+let activeRestorePromise = null
 let schedulerTimer = null
 let schedulerTickRunning = false
+const stagedRestores = new Map()
 
 export class BackupInProgressError extends Error {
   constructor() {
     super('A backup is already running')
     this.name = 'BackupInProgressError'
     this.status = 409
+    this.expose = true
   }
 }
 
@@ -52,6 +56,8 @@ function backupConfig() {
     uploadsDirectory: path.resolve(process.env.UPLOAD_DIR || path.join(appRoot, 'uploads')),
     retentionCount: positiveInteger(process.env.BACKUP_RETENTION_COUNT, 14),
     retryMinutes: positiveInteger(process.env.BACKUP_RETRY_MINUTES, 60),
+    restoreMaxBytes: positiveInteger(process.env.BACKUP_RESTORE_MAX_BYTES, 512 * 1024 * 1024),
+    restoreMaxUncompressedBytes: positiveInteger(process.env.BACKUP_RESTORE_MAX_UNCOMPRESSED_BYTES, 1024 * 1024 * 1024),
     schedule,
     timezone: validTimezone(process.env.BACKUP_TIMEZONE),
   }
@@ -240,7 +246,7 @@ async function applyRetention(config = backupConfig()) {
 async function clearInterruptedState(config = backupConfig()) {
   const entries = await fs.readdir(config.directory, { withFileTypes: true })
   await Promise.all(entries
-    .filter((entry) => entry.isFile() && entry.name.endsWith('.partial'))
+    .filter((entry) => entry.isFile() && (entry.name.endsWith('.partial') || entry.name.startsWith('.restore-')))
     .map((entry) => fs.rm(path.join(config.directory, entry.name), { force: true })))
 
   const state = await readState(config)
@@ -395,8 +401,13 @@ export function isBackupRunning() {
   return Boolean(activeBackupPromise)
 }
 
+export function isRestoreRunning() {
+  return Boolean(activeRestorePromise)
+}
+
 export function runBackup(options = {}) {
   if (activeBackupPromise) throw new BackupInProgressError()
+  if (activeRestorePromise && !options.allowDuringRestore) throw new RestoreInProgressError()
   activeBackupPromise = performBackup(options).finally(() => {
     activeBackupPromise = null
   })
@@ -422,7 +433,7 @@ function zonedClock(date, timezone) {
 }
 
 async function schedulerTick() {
-  if (schedulerTickRunning || isBackupRunning()) return
+  if (schedulerTickRunning || isBackupRunning() || isRestoreRunning()) return
   schedulerTickRunning = true
 
   try {
@@ -494,6 +505,7 @@ export async function getBackupStatus({ canRun = false } = {}) {
   return {
     enabled: config.enabled,
     running: isBackupRunning(),
+    restoring: isRestoreRunning(),
     schedule: config.schedule,
     timezone: config.timezone,
     retentionCount: config.retentionCount,
@@ -521,6 +533,15 @@ export async function resolveBackupArchive(filename) {
 
 export async function deleteBackup(filename) {
   await deleteBackups([filename])
+}
+
+export class RestoreInProgressError extends Error {
+  constructor() {
+    super('A backup restore is already running')
+    this.name = 'RestoreInProgressError'
+    this.status = 409
+    this.expose = true
+  }
 }
 
 export async function deleteBackups(filenames) {
@@ -552,13 +573,317 @@ export async function deleteBackups(filenames) {
   return uniqueFilenames
 }
 
-export async function readBackupArchive(filepath) {
+export async function readBackupArchive(filepath, { maxBytes = Number.POSITIVE_INFINITY } = {}) {
   const gunzip = createGunzip()
   const input = createReadStream(filepath)
   input.pipe(gunzip)
   const chunks = []
-  for await (const chunk of gunzip) chunks.push(chunk)
+  let totalBytes = 0
+  for await (const chunk of gunzip) {
+    totalBytes += chunk.length
+    if (totalBytes > maxBytes) {
+      input.destroy()
+      gunzip.destroy()
+      throw restoreRequestError(`Expanded backup data exceeds the ${Math.round(maxBytes / 1024 / 1024)} MB restore limit`, 413)
+    }
+    chunks.push(chunk)
+  }
   return JSON.parse(Buffer.concat(chunks).toString('utf8'))
+}
+
+function restoreRequestError(message, status = 400) {
+  return Object.assign(new Error(message), { status, expose: true })
+}
+
+function safeRestoreUploadPath(root, relativePath) {
+  const normalized = String(relativePath || '').replaceAll('\\', '/')
+  if (!normalized || normalized.startsWith('/') || normalized.split('/').includes('..')) {
+    throw restoreRequestError(`Unsafe upload path in backup: ${relativePath}`)
+  }
+
+  const target = path.resolve(root, normalized)
+  const relative = path.relative(root, target)
+  if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw restoreRequestError(`Unsafe upload path in backup: ${relativePath}`)
+  }
+  return target
+}
+
+function restorableIndex(index) {
+  const { v, ns, ...rest } = index
+  return rest
+}
+
+async function validatedRestoreArchive(filepath, displayFilename = path.basename(filepath)) {
+  let backup
+  try {
+    const config = backupConfig()
+    backup = await readBackupArchive(filepath, { maxBytes: config.restoreMaxUncompressedBytes })
+  } catch (error) {
+    if (error?.expose) throw error
+    throw restoreRequestError('The selected file is not a readable PhoneFlow backup archive')
+  }
+
+  if (backup?.formatVersion !== 1 || backup?.application !== 'PhoneFlow') {
+    throw restoreRequestError('The selected file is not a supported PhoneFlow backup')
+  }
+  const createdAt = new Date(backup.createdAt)
+  if (Number.isNaN(createdAt.getTime())) throw restoreRequestError('The backup does not contain a valid creation date')
+  if (!Array.isArray(backup.collections) || !Array.isArray(backup.uploads)) {
+    throw restoreRequestError('The backup archive is incomplete')
+  }
+
+  const collectionNames = new Set()
+  let documentCount = 0
+  for (const collectionBackup of backup.collections) {
+    const name = collectionBackup?.name
+    if (typeof name !== 'string' || !name || name.startsWith('system.') || !/^[A-Za-z0-9_.-]+$/.test(name)) {
+      throw restoreRequestError('The backup contains an invalid collection name')
+    }
+    if (collectionNames.has(name)) throw restoreRequestError(`The backup contains collection ${name} more than once`)
+    if (!Array.isArray(collectionBackup.documents) || !Array.isArray(collectionBackup.indexes)) {
+      throw restoreRequestError(`The backup collection ${name} is incomplete`)
+    }
+    collectionNames.add(name)
+    documentCount += collectionBackup.documents.length
+  }
+
+  let uploadBytes = 0
+  const uploadPaths = new Set()
+  const validationRoot = path.resolve(backupConfig().uploadsDirectory, '.restore-validation')
+  for (const upload of backup.uploads) {
+    const relativePath = String(upload?.path || '').replaceAll('\\', '/')
+    safeRestoreUploadPath(validationRoot, relativePath)
+    if (uploadPaths.has(relativePath)) throw restoreRequestError(`The backup contains upload ${relativePath} more than once`)
+    if (typeof upload.data !== 'string' || !/^[a-f0-9]{64}$/i.test(upload.sha256 || '')) {
+      throw restoreRequestError(`The backup upload ${relativePath} is incomplete`)
+    }
+    const data = Buffer.from(upload.data, 'base64')
+    const actualHash = createHash('sha256').update(data).digest('hex')
+    if (actualHash !== upload.sha256) throw restoreRequestError(`Upload checksum mismatch: ${relativePath}`)
+    if (Number.isFinite(upload.size) && upload.size !== data.length) {
+      throw restoreRequestError(`Upload size mismatch: ${relativePath}`)
+    }
+    uploadPaths.add(relativePath)
+    uploadBytes += data.length
+  }
+
+  const completedAt = new Date(backup.summary?.completedAt || backup.createdAt)
+  const stats = await fs.stat(filepath)
+  const sha256 = await sha256File(filepath)
+  return {
+    backup,
+    preview: {
+      filename: displayFilename,
+      createdAt: createdAt.toISOString(),
+      completedAt: Number.isNaN(completedAt.getTime()) ? createdAt.toISOString() : completedAt.toISOString(),
+      database: backup.database || null,
+      collectionCount: backup.collections.length,
+      documentCount,
+      uploadCount: backup.uploads.length,
+      uncompressedUploadBytes: uploadBytes,
+      compressedBytes: stats.size,
+      sha256,
+      formatVersion: backup.formatVersion,
+    },
+  }
+}
+
+export async function inspectBackupForRestore(filepath, displayFilename) {
+  const { preview } = await validatedRestoreArchive(filepath, displayFilename)
+  return preview
+}
+
+async function cleanupStagedRestore(token) {
+  const staged = stagedRestores.get(token)
+  if (!staged) return
+  stagedRestores.delete(token)
+  clearTimeout(staged.timer)
+  await fs.rm(staged.filepath, { force: true }).catch(() => undefined)
+}
+
+export async function stageRestoreUpload(readable, { filename, userId }) {
+  if (activeRestorePromise) throw new RestoreInProgressError()
+  const cleanFilename = path.basename(String(filename || ''))
+  if (!/\.json\.gz$/i.test(cleanFilename)) {
+    throw restoreRequestError('Choose a PhoneFlow .json.gz backup file')
+  }
+
+  const config = backupConfig()
+  await ensureBackupDirectory(config)
+  const contentLength = Number(readable.headers?.['content-length'] || 0)
+  if (contentLength > config.restoreMaxBytes) {
+    throw restoreRequestError(`Backup uploads are limited to ${Math.round(config.restoreMaxBytes / 1024 / 1024)} MB`, 413)
+  }
+
+  const token = randomUUID()
+  const filepath = path.join(config.directory, `.restore-${token}.json.gz`)
+  let receivedBytes = 0
+  const limiter = new Transform({
+    transform(chunk, _encoding, callback) {
+      receivedBytes += chunk.length
+      if (receivedBytes > config.restoreMaxBytes) {
+        callback(restoreRequestError(`Backup uploads are limited to ${Math.round(config.restoreMaxBytes / 1024 / 1024)} MB`, 413))
+      } else {
+        callback(null, chunk)
+      }
+    },
+  })
+
+  try {
+    await pipeline(readable, limiter, createWriteStream(filepath, { mode: 0o600 }))
+    if (receivedBytes === 0) throw restoreRequestError('The selected backup file is empty')
+    const { preview } = await validatedRestoreArchive(filepath, cleanFilename)
+    const timer = setTimeout(() => cleanupStagedRestore(token), 15 * 60_000)
+    timer.unref?.()
+    stagedRestores.set(token, { filepath, filename: cleanFilename, userId: String(userId), preview, timer })
+    return { token, ...preview, expiresInSeconds: 15 * 60 }
+  } catch (error) {
+    await fs.rm(filepath, { force: true }).catch(() => undefined)
+    throw error
+  }
+}
+
+async function stageServerRestore(filename) {
+  const sourcePath = await resolveBackupArchive(filename)
+  const config = backupConfig()
+  const filepath = path.join(config.directory, `.restore-${randomUUID()}.json.gz`)
+  await fs.copyFile(sourcePath, filepath)
+
+  try {
+    try {
+      const metadata = JSON.parse(await fs.readFile(`${sourcePath}.meta.json`, 'utf8'))
+      const actualHash = await sha256File(filepath)
+      if (metadata.sha256 && metadata.sha256 !== actualHash) {
+        throw restoreRequestError('Backup checksum does not match its metadata')
+      }
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+    }
+    return filepath
+  } catch (error) {
+    await fs.rm(filepath, { force: true }).catch(() => undefined)
+    throw error
+  }
+}
+
+async function writeRestoredUploads(backup, targetRoot) {
+  await fs.mkdir(targetRoot, { recursive: true })
+  for (const upload of backup.uploads) {
+    const data = Buffer.from(upload.data, 'base64')
+    const target = safeRestoreUploadPath(targetRoot, upload.path)
+    await fs.mkdir(path.dirname(target), { recursive: true })
+    await fs.writeFile(target, data, { mode: 0o600 })
+  }
+}
+
+async function replaceUploads(stagedUploads, uploadsDirectory) {
+  const previousUploads = `${uploadsDirectory}.pre-restore-${randomUUID()}`
+  let movedPrevious = false
+  try {
+    try {
+      await fs.rename(uploadsDirectory, previousUploads)
+      movedPrevious = true
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+    }
+    await fs.rename(stagedUploads, uploadsDirectory)
+    if (movedPrevious) await fs.rm(previousUploads, { recursive: true, force: true })
+  } catch (error) {
+    if (movedPrevious) {
+      await fs.rm(uploadsDirectory, { recursive: true, force: true }).catch(() => undefined)
+      await fs.rename(previousUploads, uploadsDirectory).catch(() => undefined)
+    }
+    throw error
+  }
+}
+
+async function performRestore(filepath, { source, requestedBy }) {
+  const config = backupConfig()
+  const { backup, preview } = await validatedRestoreArchive(filepath, source)
+  const stagedUploads = `${config.uploadsDirectory}.restore-${randomUUID()}`
+
+  await writeRestoredUploads(backup, stagedUploads)
+  let safetyBackup
+  try {
+    safetyBackup = await runBackup({
+      trigger: 'MANUAL',
+      requestedBy: { ...requestedBy, reason: 'PRE_RESTORE_SAFETY_BACKUP' },
+      allowDuringRestore: true,
+    })
+
+    const db = mongoose.connection.db
+    if (!db || mongoose.connection.readyState !== 1) throw new Error('MongoDB must be connected before restoring a backup')
+    await db.dropDatabase()
+
+    for (const collectionBackup of backup.collections) {
+      const collection = db.collection(collectionBackup.name)
+      const documents = collectionBackup.documents.map(decodeMongoValue)
+      if (documents.length > 0) await collection.insertMany(documents, { ordered: true })
+
+      const indexes = decodeMongoValue(collectionBackup.indexes)
+        .filter((index) => index?.name !== '_id_' && index?.key)
+        .map(restorableIndex)
+      if (indexes.length > 0) await collection.createIndexes(indexes)
+    }
+
+    for (const collectionName of ['authsessions', 'androidpairings', 'twofactorsetups', 'twofactorchallenges']) {
+      const exists = await db.listCollections({ name: collectionName }, { nameOnly: true }).hasNext()
+      if (exists) await db.collection(collectionName).deleteMany({})
+    }
+
+    await replaceUploads(stagedUploads, config.uploadsDirectory)
+    await updateState({
+      running: false,
+      lastRestoreAt: new Date().toISOString(),
+      lastRestoredBackupAt: preview.createdAt,
+      lastRestoredFilename: source,
+    }, config).catch((error) => console.error('Unable to update backup restore state:', error.message))
+
+    return { restored: preview, safetyBackup: publicMetadata(safetyBackup), sessionsRevoked: true }
+  } catch (error) {
+    await fs.rm(stagedUploads, { recursive: true, force: true }).catch(() => undefined)
+    throw error
+  }
+}
+
+function beginRestore(task) {
+  if (activeBackupPromise) throw new BackupInProgressError()
+  if (activeRestorePromise) throw new RestoreInProgressError()
+  const restorePromise = Promise.resolve().then(task).finally(() => {
+    if (activeRestorePromise === restorePromise) activeRestorePromise = null
+  })
+  activeRestorePromise = restorePromise
+  return restorePromise
+}
+
+export function restoreServerBackup(filename, requestedBy) {
+  return beginRestore(async () => {
+    const filepath = await stageServerRestore(filename)
+    try {
+      return await performRestore(filepath, { source: filename, requestedBy })
+    } finally {
+      await fs.rm(filepath, { force: true }).catch(() => undefined)
+    }
+  })
+}
+
+export function restoreStagedBackup(token, { userId, requestedBy }) {
+  const normalizedToken = String(token || '')
+  const staged = stagedRestores.get(normalizedToken)
+  if (!staged || staged.userId !== String(userId)) {
+    throw restoreRequestError('The uploaded backup has expired. Choose the file again.', 404)
+  }
+  stagedRestores.delete(normalizedToken)
+  clearTimeout(staged.timer)
+
+  return beginRestore(async () => {
+    try {
+      return await performRestore(staged.filepath, { source: staged.filename, requestedBy })
+    } finally {
+      await fs.rm(staged.filepath, { force: true }).catch(() => undefined)
+    }
+  })
 }
 
 export function getBackupRuntimeConfig() {

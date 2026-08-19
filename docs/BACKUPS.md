@@ -43,7 +43,7 @@ The sidebar backup card shows live server status. Owners can open it to:
 - view backup date, size, record count, image count, and checksum
 - download an archive
 - delete an archive
-- open the restore guide and copy the guarded server restore command
+- restore a saved archive or choose a downloaded `.json.gz` archive from the local device
 
 Managers and other staff can see backup health but cannot create, download, list, or delete archives.
 
@@ -55,31 +55,38 @@ All endpoints require authentication. Owner-only endpoints are marked below.
 - `GET /api/backups` — owner only
 - `POST /api/backups/run` — owner only
 - `GET /api/backups/:filename/download` — owner only
+- `POST /api/backups/restore/upload` — owner only; privately stages and validates a local archive
+- `POST /api/backups/restore/upload/:token` — owner only; restores a staged local archive
+- `POST /api/backups/restore/server/:filename` — owner only; restores a saved server archive
 - `DELETE /api/backups` — owner only; deletes the archives listed in the JSON `filenames` array
 - `DELETE /api/backups/:filename` — owner only
 
 Only one backup can run per server process at a time. A second request receives HTTP `409`.
 
-## Restore drill
+## Restore
 
-Restoring is intentionally unavailable in the browser. It deletes the current database and uploaded files, so it must be run from the server terminal.
+Owners can restore directly from Backup manager in two ways:
 
-1. Stop normal user traffic or stop the production app process.
-2. Save a fresh backup of the current state when possible.
-3. Put the archive and its optional `.meta.json` file on the server.
-4. Run:
+- use the restore action beside a saved archive
+- choose **Restore local file** and select a downloaded `.json.gz` archive
+
+PhoneFlow validates the archive and its embedded file checksums before showing its real creation date, contents, and whether it is older or newer than the latest saved backup. The owner must type `RESTORE` to continue. Immediately before replacing data, PhoneFlow creates a new safety backup of the current shop. Successful restoration revokes all web and Android sessions so everyone must sign in again.
+
+For offline disaster recovery, stop the production app, put the archive and its optional `.meta.json` file on the server, and run:
 
 ```bash
 npm run backup:restore -- ./backups/phoneflow-YYYY-MM-DDTHH-mm-ss-SSSZ.json.gz --confirm --drop
 ```
 
-The command:
+The browser and command-line restore processes:
 
 - verifies the archive SHA-256 checksum when the sidecar metadata exists
 - drops the current MongoDB database
 - restores documents and indexes
 - replaces the uploads directory
 - verifies every uploaded file checksum
+
+The browser flow also creates a pre-restore safety backup and revokes active sessions.
 
 Start the app and test login, inventory images, customer records, pawn contracts, purchases, sales, and reports before reopening access.
 
