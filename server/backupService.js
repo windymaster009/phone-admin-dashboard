@@ -488,6 +488,9 @@ function publicMetadata(item) {
     createdAt: item.createdAt,
     completedAt: item.completedAt,
     trigger: item.trigger,
+    purpose: item.requestedBy?.reason === 'PRE_RESTORE_SAFETY_BACKUP'
+      ? 'RESTORE_SAFETY'
+      : null,
     database: item.database,
     collectionCount: item.collectionCount,
     documentCount: item.documentCount,

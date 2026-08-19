@@ -8,6 +8,7 @@ type BackupMetadata = {
   createdAt: string
   completedAt: string
   trigger: 'MANUAL' | 'SCHEDULED'
+  purpose?: 'RESTORE_SAFETY' | null
   compressedBytes: number
   documentCount: number
   uploadCount: number
@@ -525,7 +526,7 @@ export default function BackupStatusBridge() {
                     </button>
                     <div className="backup-manager-row-copy">
                       <strong>{backupTime(backup.completedAt)}</strong>
-                      <small>{fileSize(backup.compressedBytes)} · {backup.documentCount} records · {backup.uploadCount} images · {backup.trigger.toLowerCase()}</small>
+                      <small>{fileSize(backup.compressedBytes)} · {backup.documentCount} records · {backup.uploadCount} images · {backup.purpose === 'RESTORE_SAFETY' ? 'safety before restore' : backup.trigger.toLowerCase()}</small>
                       <code title={backup.sha256}>{backup.sha256.slice(0, 16)}…</code>
                     </div>
                     {selectedCount === 0 && (
