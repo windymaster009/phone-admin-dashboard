@@ -219,6 +219,22 @@ function SecurityWorkspace() {
     }
   }
 
+  const deleteStaffUser = async (staffUser: SecurityUser) => {
+    const userId = staffUser.id || staffUser._id
+    if (!userId || staffUser.active) return
+    if (!window.confirm(`Permanently delete ${staffUser.name}? This cannot be undone.`)) return
+    setUserBusy(userId)
+    setError('')
+    try {
+      await api(`/users/${encodeURIComponent(userId)}`, { method: 'DELETE' })
+      await load()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to delete the user account')
+    } finally {
+      setUserBusy('')
+    }
+  }
+
   const rememberCopied = (name: string) => {
     setCopied(name)
     window.setTimeout(() => setCopied((current) => current === name ? '' : current), 1_500)
@@ -406,8 +422,11 @@ function SecurityWorkspace() {
             return <article key={staffUserId} className={!staffUser.active ? 'inactive' : ''}>
               <span className="security-user-avatar">{staffUser.name.slice(0, 2).toUpperCase()}</span>
               <div className="security-user-info"><div><strong>{staffUser.name}</strong>{isCurrentUser && <span className="security-current">Current</span>}<span className={`security-user-status ${staffUser.active ? 'active' : 'inactive'}`}>{staffUser.active ? 'Active' : 'Inactive'}</span></div><span>{staffUser.email}</span><small>{staffUser.lastLoginAt ? `Last signed in ${dateTime(staffUser.lastLoginAt)}` : 'Has not signed in yet'}</small></div>
-              <label className="security-user-role"><span>Role</span><select value={staffUser.role} disabled={!canManage || userBusy === staffUserId} onChange={(event) => void updateStaffUser(staffUser, { role: event.target.value as SecurityUser['role'] })}><option value="OWNER">Owner</option><option value="MANAGER">Manager</option><option value="CASHIER">Cashier</option><option value="STOCK">Stock</option></select></label>
-              {user?.role === 'OWNER' && <button type="button" className={`security-user-status-button ${staffUser.active ? 'danger' : ''}`} disabled={!canManage || userBusy === staffUserId} onClick={() => void updateStaffUser(staffUser, { active: !staffUser.active })}>{staffUser.active ? <UserX size={15} /> : <UserCheck size={15} />}{staffUser.active ? 'Deactivate' : 'Activate'}</button>}
+              <div className="security-user-actions">
+                <label className="security-user-role"><span>Role</span><select value={staffUser.role} disabled={!canManage || userBusy === staffUserId} onChange={(event) => void updateStaffUser(staffUser, { role: event.target.value as SecurityUser['role'] })}><option value="OWNER">Owner</option><option value="MANAGER">Manager</option><option value="CASHIER">Cashier</option><option value="STOCK">Stock</option></select></label>
+                {user?.role === 'OWNER' && <button type="button" className={`security-user-status-button ${staffUser.active ? 'danger' : ''}`} disabled={!canManage || userBusy === staffUserId} onClick={() => void updateStaffUser(staffUser, { active: !staffUser.active })}>{staffUser.active ? <UserX size={15} /> : <UserCheck size={15} />}{staffUser.active ? 'Deactivate' : 'Activate'}</button>}
+                {user?.role === 'OWNER' && <button type="button" className="security-user-delete-button" disabled={!canManage || staffUser.active || userBusy === staffUserId} onClick={() => void deleteStaffUser(staffUser)} aria-label={`Delete ${staffUser.name}`} title={staffUser.active ? 'Deactivate this account before deleting it' : `Permanently delete ${staffUser.name}`}><Trash2 size={15} /></button>}
+              </div>
             </article>
           })}
         </div>

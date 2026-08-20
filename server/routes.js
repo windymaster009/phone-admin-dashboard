@@ -22,6 +22,8 @@ import {
   usdKhrFromPayway,
 } from './integrations/payway/index.js'
 import { ActivityLog, Customer, InventoryItem, Pawn, PaywayIntent, Supplier, Trade, User } from './models.js'
+import { AndroidPairing, AuthSession } from './authSessionModels.js'
+import { TwoFactorChallenge, TwoFactorCredential, TwoFactorSetup } from './twoFactorModels.js'
 import { Loan } from './loanModels.js'
 import { refreshLoanStatuses } from './loanDashboardRoutes.js'
 import { preventCustomerDeletionWithDocuments } from './documentGuards.js'
@@ -746,6 +748,38 @@ router.patch('/users/:id', requireAuth, allowRoles('OWNER'), asyncRoute(async (r
     details: { role: user.role, active: user.active },
   })
   res.json({ user: publicUser(user) })
+}))
+
+router.delete('/users/:id', requireAuth, allowRoles('OWNER'), asyncRoute(async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) throw requestError(400, 'Invalid user ID')
+
+  const user = await User.findById(req.params.id).select('name role active')
+  if (!user) throw requestError(404, 'User account not found')
+  if (user._id.equals(req.user._id)) throw requestError(409, 'You cannot delete your own account')
+  if (user.active) throw requestError(409, 'Deactivate this account before deleting it')
+
+  if (user.role === 'OWNER') {
+    const otherActiveOwners = await User.countDocuments({ _id: { $ne: user._id }, role: 'OWNER', active: true })
+    if (otherActiveOwners === 0) throw requestError(409, 'At least one active Owner account is required')
+  }
+
+  const deleted = await User.deleteOne({ _id: user._id, active: false })
+  if (deleted.deletedCount !== 1) throw requestError(409, 'The account changed before it could be deleted. Refresh and try again.')
+
+  await Promise.all([
+    AuthSession.deleteMany({ user: user._id }),
+    AndroidPairing.deleteMany({ user: user._id }),
+    TwoFactorCredential.deleteMany({ user: user._id }),
+    TwoFactorSetup.deleteMany({ user: user._id }),
+    TwoFactorChallenge.deleteMany({ user: user._id }),
+  ])
+  await writeActivity(req, {
+    action: 'DELETE',
+    entity: 'USER',
+    entityId: user._id,
+    details: { name: user.name, role: user.role },
+  })
+  res.json({ deleted: true, userId: user._id })
 }))
 
 router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
