@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import QRCode from 'react-qr-code'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -459,10 +460,15 @@ function SecurityWorkspace() {
               </>
             ) : twoFactorSetup ? (
               <div className="security-2fa-setup">
-                <p>Add a new time-based account in your authenticator app using this setup key.</p>
+                <div className="security-authenticator-qr">
+                  <div className="security-authenticator-qr-code" aria-label="Google Authenticator setup QR code"><QRCode value={twoFactorSetup.otpauthUri} size={176} level="M" bgColor="#ffffff" fgColor="#050505" /></div>
+                  <strong>Scan with Google Authenticator</strong>
+                  <span>Open Google Authenticator, tap +, then choose Scan a QR code. It will generate a new 6-digit code every 30 seconds.</span>
+                </div>
+                <p className="security-manual-setup-label">Cannot scan it? Enter this setup key manually.</p>
                 <div className="security-secret"><code>{twoFactorSetup.secret}</code><button type="button" className="icon-button" onClick={() => void copyText('secret', twoFactorSetup.secret)} aria-label="Copy setup key">{copied === 'secret' ? <CheckCircle2 size={15} /> : <Copy size={15} />}</button></div>
                 <button type="button" className="secondary-button full-width" onClick={() => void copyText('uri', twoFactorSetup.otpauthUri)}>{copied === 'uri' ? <CheckCircle2 size={15} /> : <Copy size={15} />} {copied === 'uri' ? 'Setup link copied' : 'Copy authenticator setup link'}</button>
-                <label className="security-code-field">6-digit code<input value={twoFactorCode} onChange={(event) => setTwoFactorCode(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" placeholder="000000" /></label>
+                <label className="security-code-field">Enter the current 6-digit code<input value={twoFactorCode} onChange={(event) => setTwoFactorCode(event.target.value.replace(/\D/g, '').slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" placeholder="000000" /></label>
                 <button type="button" className="primary-button full-width" disabled={busy || twoFactorCode.length !== 6} onClick={() => void enableTwoFactor()}><ShieldCheck size={15} /> Verify and enable 2FA</button>
               </div>
             ) : (
@@ -473,7 +479,7 @@ function SecurityWorkspace() {
           </section>
 
           <section className="card security-panel security-pairing-panel">
-            <div className="security-panel-title"><div><h2>Pair Android</h2><p>Create a code on this trusted session, then enter it on the Android sign-in screen.</p></div><KeyRound size={21} /></div>
+            <div className="security-panel-title"><div><h2>Pair PhoneFlow Android</h2><p>Connect the PhoneFlow Android app. This is separate from Google Authenticator and login 2FA.</p></div><KeyRound size={21} /></div>
             {pairing && !pairingExpired ? (
               <div className="security-pairing-code"><span>One-time code</span><strong>{pairing.code}</strong><small>Expires in {pairingSeconds}s</small><button type="button" className="secondary-button" onClick={() => void copyText('pairing', pairing.code)}>{copied === 'pairing' ? <CheckCircle2 size={15} /> : <Copy size={15} />}{copied === 'pairing' ? 'Copied' : 'Copy code'}</button></div>
             ) : (
