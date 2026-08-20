@@ -2283,9 +2283,28 @@ function BusinessPerformanceChart({
   emptyTitle?: string
   emptyDescription?: string
 }) {
-  const width = 960
+  const chartRef = useRef<SVGSVGElement>(null)
+  const [width, setWidth] = useState(960)
   const height = 260
   const padding = { top: 22, right: 18, bottom: 42, left: 64 }
+
+  useEffect(() => {
+    const chart = chartRef.current
+    if (!chart) return
+
+    const resizeChart = () => {
+      const bounds = chart.getBoundingClientRect()
+      if (bounds.width <= 0 || bounds.height <= 0) return
+      const responsiveWidth = Math.max(520, Math.round((bounds.width / bounds.height) * height))
+      setWidth((current) => current === responsiveWidth ? current : responsiveWidth)
+    }
+
+    resizeChart()
+    const observer = new ResizeObserver(resizeChart)
+    observer.observe(chart)
+    return () => observer.disconnect()
+  }, [])
+
   const plotWidth = width - padding.left - padding.right
   const plotHeight = height - padding.top - padding.bottom
   const values = points.flatMap((point) => [point.sales, point.purchases, point.grossProfit])
@@ -2305,7 +2324,7 @@ function BusinessPerformanceChart({
         <span className="purchases">{secondLabel}</span>
         <span className="profit">{thirdLabel}</span>
       </div>
-      <svg className="overview-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={ariaLabel}>
+      <svg ref={chartRef} className="overview-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={ariaLabel}>
         {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
           const value = maximum - ratio * range
           const y = padding.top + ratio * plotHeight
