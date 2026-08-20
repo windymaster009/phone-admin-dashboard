@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { motion } from 'framer-motion'
-import { AlertTriangle, BadgeCheck, KeyRound, ShieldCheck, Smartphone } from 'lucide-react'
+import { AlertTriangle, BadgeCheck, ChevronDown, ExternalLink, Github, KeyRound, ShieldCheck, Smartphone } from 'lucide-react'
 import { ApiError, api, setToken, type SessionUser } from '../lib/api'
 
 function ErrorNotice({ message }: { message: string }) {
@@ -293,9 +293,28 @@ export default function AuthScreen({
                 ) : null}
               </>
             )}
-            <div className="auth-features" aria-label="PhoneFlow features">
+            <div className="auth-features" aria-label="PhoneFlow information">
               <span><BadgeCheck size={15} /> Revocable staff sessions</span>
-              <span>PhoneFlow v0.2</span>
+              <div className="auth-footer-actions">
+                <details className="auth-authors">
+                  <summary aria-label="Show PhoneFlow authors">
+                    <Github size={14} /> Authors <ChevronDown size={13} className="auth-authors-chevron" />
+                  </summary>
+                  <div className="auth-authors-menu">
+                    <a href="https://github.com/MEROW-git" target="_blank" rel="noreferrer">
+                      <span className="auth-author-avatar">MP</span>
+                      <span className="auth-author-name"><strong>MEAS PUTTIVIREAK</strong><small>@MEROW-git</small></span>
+                      <ExternalLink size={13} />
+                    </a>
+                    <a href="https://github.com/windymaster009" target="_blank" rel="noreferrer">
+                      <span className="auth-author-avatar">WY</span>
+                      <span className="auth-author-name"><strong>WinDY</strong><small>@windymaster009</small></span>
+                      <ExternalLink size={13} />
+                    </a>
+                  </div>
+                </details>
+                <span className="auth-version">PhoneFlow v1.8.2</span>
+              </div>
             </div>
           </motion.section>
         </div>
