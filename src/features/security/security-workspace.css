@@ -157,6 +157,179 @@
   backdrop-filter: blur(14px);
 }
 
+.security-users-panel {
+  margin-bottom: 16px;
+}
+
+.security-user-form {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(190px, 1.2fr) minmax(180px, 1fr) minmax(120px, 0.65fr) auto;
+  align-items: end;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 13px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  background: var(--bg-soft);
+}
+
+.security-user-form label,
+.security-user-role {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.security-user-form input,
+.security-user-form select,
+.security-user-role select {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  padding: 0 10px;
+  outline: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  color: var(--text);
+  background: var(--surface-solid);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.security-user-form input:focus,
+.security-user-form select:focus,
+.security-user-role select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.security-user-list {
+  display: grid;
+  gap: 8px;
+}
+
+.security-user-list > article {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) minmax(120px, 150px) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-soft);
+}
+
+.security-user-list > article.inactive {
+  opacity: 0.68;
+}
+
+.security-user-avatar {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: #c4b5fd;
+  background: color-mix(in srgb, var(--primary) 18%, transparent);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.security-user-info {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.security-user-info > div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.security-user-info strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.security-user-info > span,
+.security-user-info small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.security-user-info small {
+  color: var(--muted-2);
+  font-size: 9px;
+}
+
+.security-user-status {
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.security-user-status.active {
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+}
+
+.security-user-status.inactive {
+  color: var(--rose);
+  background: color-mix(in srgb, var(--rose) 14%, transparent);
+}
+
+.security-user-role select:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.security-user-status-button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--green) 30%, transparent);
+  border-radius: 9px;
+  color: var(--green);
+  background: color-mix(in srgb, var(--green) 10%, transparent);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.security-user-status-button.danger {
+  border-color: color-mix(in srgb, var(--rose) 30%, transparent);
+  color: var(--rose);
+  background: color-mix(in srgb, var(--rose) 10%, transparent);
+}
+
+.security-user-status-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .security-panel-title {
   display: flex;
   align-items: flex-start;
@@ -436,6 +609,14 @@
   .security-grid {
     grid-template-columns: minmax(0, 1fr) minmax(310px, 0.8fr);
   }
+
+  .security-user-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .security-user-form > button {
+    justify-self: start;
+  }
 }
 
 @media (max-width: 920px) {
@@ -474,6 +655,23 @@
 
   .security-events-toggle {
     align-self: flex-start;
+  }
+
+  .security-user-form {
+    grid-template-columns: 1fr;
+  }
+
+  .security-user-list > article {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .security-user-role,
+  .security-user-status-button {
+    grid-column: 2;
+  }
+
+  .security-user-status-button {
+    justify-self: start;
   }
 
   .security-session-list > article {

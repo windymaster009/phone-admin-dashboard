@@ -702,6 +702,52 @@ router.post('/users', requireAuth, allowRoles('OWNER'), asyncRoute(async (req, r
   res.status(201).json({ user: publicUser(user) })
 }))
 
+router.patch('/users/:id', requireAuth, allowRoles('OWNER'), asyncRoute(async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) throw requestError(400, 'Invalid user ID')
+
+  const user = await User.findById(req.params.id)
+  if (!user) throw requestError(404, 'User account not found')
+
+  const isCurrentUser = user._id.equals(req.user._id)
+  const nextRole = req.body.role === undefined ? user.role : String(req.body.role).toUpperCase()
+  const nextActive = req.body.active === undefined ? user.active : req.body.active
+
+  if (!['OWNER', 'MANAGER', 'CASHIER', 'STOCK'].includes(nextRole)) {
+    throw requestError(400, 'Select a valid staff role')
+  }
+  if (typeof nextActive !== 'boolean') throw requestError(400, 'Account status must be active or inactive')
+  if (isCurrentUser && (!nextActive || nextRole !== user.role)) {
+    throw requestError(409, 'You cannot deactivate your own account or change your own role')
+  }
+
+  if (user.role === 'OWNER' && user.active && (nextRole !== 'OWNER' || !nextActive)) {
+    const otherActiveOwners = await User.countDocuments({ _id: { $ne: user._id }, role: 'OWNER', active: true })
+    if (otherActiveOwners === 0) throw requestError(409, 'At least one active Owner account is required')
+  }
+
+  if (req.body.name !== undefined) {
+    const name = clean(req.body.name)
+    if (!name) throw requestError(400, 'User name is required')
+    user.name = name
+  }
+  if (req.body.email !== undefined) {
+    const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : ''
+    if (!email) throw requestError(400, 'A valid email is required')
+    user.email = email
+  }
+
+  user.role = nextRole
+  user.active = nextActive
+  await user.save()
+  await writeActivity(req, {
+    action: 'UPDATE',
+    entity: 'USER',
+    entityId: user._id,
+    details: { role: user.role, active: user.active },
+  })
+  res.json({ user: publicUser(user) })
+}))
+
 router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
   await refreshPawnStatuses()
   const now = new Date()

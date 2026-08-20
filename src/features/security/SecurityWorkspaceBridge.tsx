@@ -15,6 +15,9 @@ import {
   ShieldCheck,
   Smartphone,
   Trash2,
+  UserCheck,
+  UserPlus,
+  UserX,
   Users,
 } from 'lucide-react'
 import { api, getSessionUser } from '../../lib/api'
@@ -47,9 +50,17 @@ type SecurityEvent = {
 }
 
 type SecurityUser = {
-  _id: string
+  _id?: string
+  id?: string
+  name: string
+  email: string
+  role: 'OWNER' | 'MANAGER' | 'CASHIER' | 'STOCK'
   active: boolean
+  lastLoginAt?: string | null
+  createdAt?: string
 }
+
+const emptyUserForm = { name: '', email: '', password: '', role: 'CASHIER' as SecurityUser['role'] }
 
 type TwoFactorStatus = {
   configured: boolean
@@ -115,6 +126,9 @@ function SecurityWorkspace() {
   const [events, setEvents] = useState<SecurityEvent[]>([])
   const [staffUsers, setStaffUsers] = useState<SecurityUser[] | null>(null)
   const [eventsExpanded, setEventsExpanded] = useState(false)
+  const [showUserForm, setShowUserForm] = useState(false)
+  const [userForm, setUserForm] = useState(emptyUserForm)
+  const [userBusy, setUserBusy] = useState('')
   const [twoFactorStatus, setTwoFactorStatus] = useState<TwoFactorStatus | null>(null)
   const [twoFactorSetup, setTwoFactorSetup] = useState<TwoFactorSetup | null>(null)
   const [twoFactorCode, setTwoFactorCode] = useState('')
@@ -165,6 +179,44 @@ function SecurityWorkspace() {
   const otherSessions = activeSessions.filter((session) => !session.current)
   const visibleEvents = eventsExpanded ? events : events.slice(0, 4)
   const activeStaffUsers = staffUsers?.filter((staffUser) => staffUser.active).length ?? 0
+
+  const createStaffUser = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setUserBusy('create')
+    setError('')
+    try {
+      await api('/users', {
+        method: 'POST',
+        body: JSON.stringify(userForm),
+      })
+      setUserForm(emptyUserForm)
+      setShowUserForm(false)
+      await load()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to create the user account')
+    } finally {
+      setUserBusy('')
+    }
+  }
+
+  const updateStaffUser = async (staffUser: SecurityUser, changes: Partial<Pick<SecurityUser, 'role' | 'active'>>) => {
+    const userId = staffUser.id || staffUser._id
+    if (!userId) return
+    if (changes.active === false && !window.confirm(`Deactivate ${staffUser.name}? They will be signed out on their next request.`)) return
+    setUserBusy(userId)
+    setError('')
+    try {
+      await api(`/users/${encodeURIComponent(userId)}`, {
+        method: 'PATCH',
+        body: JSON.stringify(changes),
+      })
+      await load()
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to update the user account')
+    } finally {
+      setUserBusy('')
+    }
+  }
 
   const rememberCopied = (name: string) => {
     setCopied(name)
@@ -330,6 +382,35 @@ function SecurityWorkspace() {
         <article className="card"><Smartphone size={21} /><div><span>Android pairing</span><strong>One-time code</strong><small>Expires automatically</small></div></article>
         <article className="card"><Clock3 size={21} /><div><span>Session lifetime</span><strong>{activeSessions[0] ? dateTime(activeSessions[0].expiresAt) : '—'}</strong><small>Server-enforced expiry</small></div></article>
       </section>
+
+      {staffUsers && <section className="card security-panel security-users-panel" id="user-management">
+        <div className="security-panel-title">
+          <div><h2>User management</h2><p>View staff access, assign roles, and activate or deactivate accounts.</p></div>
+          {user?.role === 'OWNER' && <button type="button" className="primary-button" onClick={() => setShowUserForm((current) => !current)}><UserPlus size={15} />{showUserForm ? 'Cancel' : 'Add user'}</button>}
+        </div>
+
+        {showUserForm && <form className="security-user-form" onSubmit={(event) => void createStaffUser(event)}>
+          <label>Name<input required value={userForm.name} onChange={(event) => setUserForm((current) => ({ ...current, name: event.target.value }))} placeholder="Staff name" /></label>
+          <label>Email<input required type="email" value={userForm.email} onChange={(event) => setUserForm((current) => ({ ...current, email: event.target.value }))} placeholder="staff@example.com" /></label>
+          <label>Temporary password<input required minLength={8} type="password" value={userForm.password} onChange={(event) => setUserForm((current) => ({ ...current, password: event.target.value }))} placeholder="Minimum 8 characters" autoComplete="new-password" /></label>
+          <label>Role<select value={userForm.role} onChange={(event) => setUserForm((current) => ({ ...current, role: event.target.value as SecurityUser['role'] }))}><option value="MANAGER">Manager</option><option value="CASHIER">Cashier</option><option value="STOCK">Stock</option><option value="OWNER">Owner</option></select></label>
+          <button type="submit" className="primary-button" disabled={userBusy === 'create'}><UserPlus size={15} />{userBusy === 'create' ? 'Creating...' : 'Create user'}</button>
+        </form>}
+
+        <div className="security-user-list">
+          {staffUsers.map((staffUser) => {
+            const staffUserId = staffUser.id || staffUser._id || staffUser.email
+            const isCurrentUser = staffUserId === user?.id
+            const canManage = user?.role === 'OWNER' && !isCurrentUser
+            return <article key={staffUserId} className={!staffUser.active ? 'inactive' : ''}>
+              <span className="security-user-avatar">{staffUser.name.slice(0, 2).toUpperCase()}</span>
+              <div className="security-user-info"><div><strong>{staffUser.name}</strong>{isCurrentUser && <span className="security-current">Current</span>}<span className={`security-user-status ${staffUser.active ? 'active' : 'inactive'}`}>{staffUser.active ? 'Active' : 'Inactive'}</span></div><span>{staffUser.email}</span><small>{staffUser.lastLoginAt ? `Last signed in ${dateTime(staffUser.lastLoginAt)}` : 'Has not signed in yet'}</small></div>
+              <label className="security-user-role"><span>Role</span><select value={staffUser.role} disabled={!canManage || userBusy === staffUserId} onChange={(event) => void updateStaffUser(staffUser, { role: event.target.value as SecurityUser['role'] })}><option value="OWNER">Owner</option><option value="MANAGER">Manager</option><option value="CASHIER">Cashier</option><option value="STOCK">Stock</option></select></label>
+              {user?.role === 'OWNER' && <button type="button" className={`security-user-status-button ${staffUser.active ? 'danger' : ''}`} disabled={!canManage || userBusy === staffUserId} onClick={() => void updateStaffUser(staffUser, { active: !staffUser.active })}>{staffUser.active ? <UserX size={15} /> : <UserCheck size={15} />}{staffUser.active ? 'Deactivate' : 'Activate'}</button>}
+            </article>
+          })}
+        </div>
+      </section>}
 
       <div className="security-grid">
         <div className="security-main-stack">
