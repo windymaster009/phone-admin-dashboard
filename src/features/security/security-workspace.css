@@ -63,7 +63,7 @@
 
 .security-summary {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -103,6 +103,11 @@
 }
 
 .security-summary > article:nth-child(4) > svg {
+  color: var(--orange);
+  background: color-mix(in srgb, var(--orange) 15%, transparent);
+}
+
+.security-summary > article:nth-child(5) > svg {
   color: var(--orange);
   background: color-mix(in srgb, var(--orange) 15%, transparent);
 }
@@ -182,6 +187,30 @@
 .security-panel-title > svg {
   flex: 0 0 auto;
   color: var(--primary);
+}
+
+.security-events-toggle {
+  min-height: 32px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--muted);
+  background: var(--bg-soft);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.security-events-toggle:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
 }
 
 .security-session-list,
@@ -440,6 +469,10 @@
   }
 
   .security-panel-title .danger-button {
+    align-self: flex-start;
+  }
+
+  .security-events-toggle {
     align-self: flex-start;
   }
 

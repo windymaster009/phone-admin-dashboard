@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom'
 import {
   AlertTriangle,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Clock3,
   Copy,
   KeyRound,
@@ -13,6 +15,7 @@ import {
   ShieldCheck,
   Smartphone,
   Trash2,
+  Users,
 } from 'lucide-react'
 import { api, getSessionUser } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
@@ -41,6 +44,11 @@ type SecurityEvent = {
   details?: Record<string, unknown>
   ipAddress?: string
   createdAt: string
+}
+
+type SecurityUser = {
+  _id: string
+  active: boolean
 }
 
 type TwoFactorStatus = {
@@ -105,6 +113,8 @@ function SecurityWorkspace() {
   const user = getSessionUser()
   const [sessions, setSessions] = useState<AuthSession[]>([])
   const [events, setEvents] = useState<SecurityEvent[]>([])
+  const [staffUsers, setStaffUsers] = useState<SecurityUser[] | null>(null)
+  const [eventsExpanded, setEventsExpanded] = useState(false)
   const [twoFactorStatus, setTwoFactorStatus] = useState<TwoFactorStatus | null>(null)
   const [twoFactorSetup, setTwoFactorSetup] = useState<TwoFactorSetup | null>(null)
   const [twoFactorCode, setTwoFactorCode] = useState('')
@@ -120,14 +130,19 @@ function SecurityWorkspace() {
     setLoading(true)
     setError('')
     try {
-      const [sessionResult, eventResult, twoFactorResult] = await Promise.all([
+      const staffResultPromise = user?.role === 'OWNER' || user?.role === 'MANAGER'
+        ? api<{ users: SecurityUser[] }>('/users')
+        : Promise.resolve(null)
+      const [sessionResult, eventResult, twoFactorResult, staffResult] = await Promise.all([
         api<{ sessions: AuthSession[] }>('/security/sessions'),
         api<{ events: SecurityEvent[] }>('/security/events?limit=30'),
         api<TwoFactorStatus>('/security/two-factor'),
+        staffResultPromise,
       ])
       setSessions(sessionResult.sessions)
       setEvents(eventResult.events)
       setTwoFactorStatus(twoFactorResult)
+      setStaffUsers(staffResult?.users ?? null)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to load security information')
     } finally {
@@ -148,6 +163,8 @@ function SecurityWorkspace() {
   const pairingExpired = Boolean(pairing && pairingSeconds <= 0)
   const activeSessions = useMemo(() => sessions.filter((session) => !session.revokedAt), [sessions])
   const otherSessions = activeSessions.filter((session) => !session.current)
+  const visibleEvents = eventsExpanded ? events : events.slice(0, 4)
+  const activeStaffUsers = staffUsers?.filter((staffUser) => staffUser.active).length ?? 0
 
   const rememberCopied = (name: string) => {
     setCopied(name)
@@ -307,6 +324,7 @@ function SecurityWorkspace() {
       {error && <div className="security-error"><AlertTriangle size={17} /><span>{error}</span></div>}
 
       <section className="security-summary">
+        <article className="card security-users-summary"><Users size={21} /><div><span>Users</span><strong>{staffUsers?.length ?? 'â€”'}</strong><small>{staffUsers ? `${activeStaffUsers} active account${activeStaffUsers === 1 ? '' : 's'}` : 'Owner / Manager only'}</small></div></article>
         <article className="card"><ShieldCheck size={21} /><div><span>Active sessions</span><strong>{activeSessions.length}</strong><small>{otherSessions.length} other device{otherSessions.length === 1 ? '' : 's'}</small></div></article>
         <article className="card"><LockKeyhole size={21} /><div><span>Two-factor</span><strong>{twoFactorStatus?.enabled ? 'Enabled' : 'Not enabled'}</strong><small>{twoFactorStatus?.eligible ? `${twoFactorStatus.recoveryCodesRemaining} recovery codes` : 'Owner / Manager only'}</small></div></article>
         <article className="card"><Smartphone size={21} /><div><span>Android pairing</span><strong>One-time code</strong><small>Expires automatically</small></div></article>
@@ -332,9 +350,9 @@ function SecurityWorkspace() {
           </section>
 
           <section className="card security-panel security-events-panel">
-            <div className="security-panel-title"><div><h2>Recent security activity</h2><p>Sign-ins, 2FA, pairing, sign-outs, and session revocations for your account.</p></div></div>
+            <div className="security-panel-title"><div><h2>Recent security activity</h2><p>Sign-ins, 2FA, pairing, sign-outs, and session revocations for your account.</p></div>{events.length > 4 && <button type="button" className="security-events-toggle" onClick={() => setEventsExpanded((current) => !current)} aria-expanded={eventsExpanded}>{eventsExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}{eventsExpanded ? 'Minimize' : `Show all (${events.length})`}</button>}</div>
             <div className="security-event-list">
-              {events.map((event) => <article key={event._id}>
+              {visibleEvents.map((event) => <article key={event._id}>
                 <span className={`security-event-dot ${event.action === 'LOGIN_FAILED' ? 'danger' : ''}`} />
                 <div><strong>{eventLabel(event.action)}</strong><span>{event.ipAddress || 'IP not recorded'}</span></div>
                 <time>{dateTime(event.createdAt)}</time>
