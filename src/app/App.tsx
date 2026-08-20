@@ -1094,6 +1094,7 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
       </section>
 
       <section className="dashboard-grid">
+        <div className="dashboard-column dashboard-primary-column">
         <article className="surface-card performance-card">
           <div className="card-heading">
             <div>
@@ -1122,40 +1123,7 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
           </div>
         </article>
 
-        <article className="surface-card inventory-mix-card">
-          <div className="card-heading">
-            <div>
-              <span className="eyebrow">Stock value</span>
-              <h3>Inventory mix</h3>
-            </div>
-            <div className="card-options" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setInventoryMenuOpen(false) }}>
-              <button className={`icon-button ${inventoryMenuOpen ? 'open' : ''}`} onClick={() => setInventoryMenuOpen((current) => !current)} aria-label="Inventory options" aria-expanded={inventoryMenuOpen}><MoreHorizontal size={19} /></button>
-              {inventoryMenuOpen && <div className="card-options-menu surface-card" role="menu">
-                <button onClick={() => goTo('inventory')} role="menuitem"><Boxes size={16} />Open inventory</button>
-                <button onClick={() => { setInventoryMenuOpen(false); comingNext('Adjust stock') }} role="menuitem"><Plus size={16} />Adjust stock</button>
-                <button onClick={() => { setInventoryMenuOpen(false); void loadDashboard(true) }} role="menuitem" disabled={refreshing}><RefreshCcw size={16} />{refreshing ? 'Refreshing…' : 'Refresh values'}</button>
-              </div>}
-            </div>
-          </div>
-          <div className="donut-wrap">
-            <div className="donut-chart" style={donutStyle} aria-label={`Total inventory value ${inventoryValueText}`}>
-              <span className="donut-center">
-                <strong className={`donut-value donut-value-${inventoryValueSize}`}>{inventoryValueText}</strong>
-                {exchangeRate && <small className="donut-khr">{khrText(totalInventoryValue, exchangeRate)}</small>}
-                <small>Total value</small>
-              </span>
-            </div>
-          </div>
-          <div className="legend-list">
-            {inventoryMix.map((item, index) => (
-              <div key={item._id}><span className={`legend-dot ${['dot-violet', 'dot-blue', 'dot-orange'][index] || 'dot-violet'}`} /><p>{titleStatus(item._id)}<small>{item.count} units</small></p><span className="legend-money"><strong>{money.format(item.value)}</strong>{exchangeRate && <small>{khrText(item.value, exchangeRate)}</small>}</span></div>
-            ))}
-          </div>
-        </article>
-      </section>
-
-      <section className="dashboard-lower-grid">
-        <article className="surface-card table-card">
+        <article className="surface-card table-card dashboard-recent-contracts-card">
           <div className="card-heading table-heading">
             <div>
               <span className="eyebrow">Pawn desk</span>
@@ -1213,6 +1181,40 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
             {data?.recentPawns.length === 0 && <p className="mobile-contract-empty">No pawn contracts in the database yet.</p>}
           </div>
         </article>
+        </div>
+
+        <div className="dashboard-column dashboard-secondary-column">
+
+        <article className="surface-card inventory-mix-card">
+          <div className="card-heading">
+            <div>
+              <span className="eyebrow">Stock value</span>
+              <h3>Inventory mix</h3>
+            </div>
+            <div className="card-options" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setInventoryMenuOpen(false) }}>
+              <button className={`icon-button ${inventoryMenuOpen ? 'open' : ''}`} onClick={() => setInventoryMenuOpen((current) => !current)} aria-label="Inventory options" aria-expanded={inventoryMenuOpen}><MoreHorizontal size={19} /></button>
+              {inventoryMenuOpen && <div className="card-options-menu surface-card" role="menu">
+                <button onClick={() => goTo('inventory')} role="menuitem"><Boxes size={16} />Open inventory</button>
+                <button onClick={() => { setInventoryMenuOpen(false); comingNext('Adjust stock') }} role="menuitem"><Plus size={16} />Adjust stock</button>
+                <button onClick={() => { setInventoryMenuOpen(false); void loadDashboard(true) }} role="menuitem" disabled={refreshing}><RefreshCcw size={16} />{refreshing ? 'Refreshing…' : 'Refresh values'}</button>
+              </div>}
+            </div>
+          </div>
+          <div className="donut-wrap">
+            <div className="donut-chart" style={donutStyle} aria-label={`Total inventory value ${inventoryValueText}`}>
+              <span className="donut-center">
+                <strong className={`donut-value donut-value-${inventoryValueSize}`}>{inventoryValueText}</strong>
+                {exchangeRate && <small className="donut-khr">{khrText(totalInventoryValue, exchangeRate)}</small>}
+                <small>Total value</small>
+              </span>
+            </div>
+          </div>
+          <div className="legend-list">
+            {inventoryMix.map((item, index) => (
+              <div key={item._id}><span className={`legend-dot ${['dot-violet', 'dot-blue', 'dot-orange'][index] || 'dot-violet'}`} /><p>{titleStatus(item._id)}<small>{item.count} units</small></p><span className="legend-money"><strong>{money.format(item.value)}</strong>{exchangeRate && <small>{khrText(item.value, exchangeRate)}</small>}</span></div>
+            ))}
+          </div>
+        </article>
 
         <article className="surface-card quick-actions-card">
           <div className="card-heading">
@@ -1229,6 +1231,7 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
             <button onClick={() => goTo('depreciation')}><span className="quick-icon rose"><Calculator size={19} /></span><p>Value a phone<small>Calculate depreciation</small></p><ArrowUpRight size={17} /></button>
           </div>
         </article>
+        </div>
       </section>
       {selectedPawn && (
         <PawnDetailModal

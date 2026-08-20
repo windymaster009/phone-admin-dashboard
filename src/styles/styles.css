@@ -370,8 +370,10 @@ kbd { border: 1px solid var(--border-strong); border-radius: 6px; padding: 3px 7
 .metric-change.up { color: var(--green); }
 .metric-change.down { color: var(--orange); }
 
-.dashboard-grid { width: 100%; min-width: 0; display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(290px, 0.7fr); gap: 14px; margin-bottom: 14px; }
+.dashboard-grid { width: 100%; min-width: 0; display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(290px, 0.7fr); align-items: start; gap: 14px; margin-bottom: 14px; }
 .dashboard-grid > * { min-width: 0; max-width: 100%; }
+.dashboard-column { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
+.dashboard-column > * { width: 100%; min-width: 0; max-width: 100%; }
 .performance-card, .inventory-mix-card, .quick-actions-card, .calculator-card, .valuation-result-card { padding: 18px; }
 .card-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
 .card-heading h3 { margin: 5px 0 0; font-family: Manrope, sans-serif; font-size: 17px; }
@@ -1367,6 +1369,12 @@ a:focus-visible,
     gap: 10px;
     margin-bottom: 10px;
   }
+
+  .dashboard-column { display: contents; }
+  .dashboard-grid .performance-card { order: 1; }
+  .dashboard-grid .inventory-mix-card { order: 2; }
+  .dashboard-grid .dashboard-recent-contracts-card { order: 3; }
+  .dashboard-grid .quick-actions-card { order: 4; }
 
   .dashboard-grid .performance-card,
   .dashboard-grid .inventory-mix-card {
