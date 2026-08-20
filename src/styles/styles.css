@@ -624,13 +624,11 @@ td strong { color: var(--text); }
 .settings-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(330px, 0.65fr);
-  grid-template-areas:
-    "account environment"
-    "display valuation";
   gap: 16px;
   align-items: start;
 }
-.settings-card { overflow: hidden; }
+.settings-column { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.settings-card { width: 100%; min-width: 0; overflow: hidden; }
 .account-settings-card { grid-area: account; }
 .environment-settings-card { grid-area: environment; }
 .valuation-settings-card { grid-area: valuation; }
@@ -1398,12 +1396,19 @@ a:focus-visible,
     grid-template-areas: none;
   }
 
+  .settings-column { display: contents; }
+
   .account-settings-card,
   .environment-settings-card,
   .valuation-settings-card,
   .font-size-settings-card {
     grid-area: auto;
   }
+
+  .account-settings-card { order: 1; }
+  .environment-settings-card { order: 2; }
+  .font-size-settings-card { order: 3; }
+  .valuation-settings-card { order: 4; }
 }
 
 @media (max-width: 1180px) {

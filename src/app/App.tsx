@@ -2915,6 +2915,7 @@ function SettingsView({
     <>
       <SectionHeader eyebrow="System" title="System settings" description="Current account, environment, security, and local app preferences." />
       <section className="settings-grid">
+        <div className="settings-column settings-primary-column">
         <article className="surface-card settings-card account-settings-card">
           <div className="settings-card-heading">
             <span className="settings-icon violet"><UserRound size={20} /></span>
@@ -2948,6 +2949,42 @@ function SettingsView({
             <button className="ghost-button danger-button" onClick={onLogout}><LogOut size={15} />Log out</button>
           </div>
         </article>
+
+        <article className="surface-card settings-card font-size-settings-card">
+          <div className="settings-card-heading">
+            <span className="settings-icon violet"><Type size={20} /></span>
+            <div>
+              <h3>Display size</h3>
+              <p>Make text and controls easier to read.</p>
+            </div>
+          </div>
+          <div className="font-size-options" role="radiogroup" aria-label="Display size">
+            {fontSizeOptions.map((option) => {
+              const selected = option.value === fontSize
+              return (
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  className={`font-size-option ${selected ? 'active' : ''}`}
+                  key={option.value}
+                  onClick={() => onFontSizeChange(option.value)}
+                >
+                  <span className="font-size-preview" data-size={option.value} aria-hidden="true">Aa</span>
+                  <span className="font-size-option-copy">
+                    <span><strong>{option.label}</strong><b>{option.percentage}</b></span>
+                    <small>{option.description}</small>
+                  </span>
+                  {selected && <BadgeCheck size={18} aria-hidden="true" />}
+                </button>
+              )
+            })}
+          </div>
+          <p className="font-size-setting-note">Saved on this browser and applied immediately.</p>
+        </article>
+        </div>
+
+        <div className="settings-column settings-secondary-column">
 
         <article className="surface-card settings-card environment-settings-card">
           <div className="settings-card-heading">
@@ -2999,39 +3036,7 @@ function SettingsView({
             </button>
           </div>
         </article>
-
-        <article className="surface-card settings-card font-size-settings-card">
-          <div className="settings-card-heading">
-            <span className="settings-icon violet"><Type size={20} /></span>
-            <div>
-              <h3>Display size</h3>
-              <p>Make text and controls easier to read.</p>
-            </div>
-          </div>
-          <div className="font-size-options" role="radiogroup" aria-label="Display size">
-            {fontSizeOptions.map((option) => {
-              const selected = option.value === fontSize
-              return (
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  className={`font-size-option ${selected ? 'active' : ''}`}
-                  key={option.value}
-                  onClick={() => onFontSizeChange(option.value)}
-                >
-                  <span className="font-size-preview" data-size={option.value} aria-hidden="true">Aa</span>
-                  <span className="font-size-option-copy">
-                    <span><strong>{option.label}</strong><b>{option.percentage}</b></span>
-                    <small>{option.description}</small>
-                  </span>
-                  {selected && <BadgeCheck size={18} aria-hidden="true" />}
-                </button>
-              )
-            })}
-          </div>
-          <p className="font-size-setting-note">Saved on this browser and applied immediately.</p>
-        </article>
+        </div>
       </section>
     </>
   )
