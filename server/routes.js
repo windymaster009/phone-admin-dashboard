@@ -355,11 +355,8 @@ function saleAmountFromUsd(amount, currency, exchangeRate) {
 }
 
 function salePricing(item, role, currency = 'USD', exchangeRate = 1) {
-  const normalizedUnitPrice = roundMoney(item?.sellPrice)
-  if (!Number.isFinite(normalizedUnitPrice) || normalizedUnitPrice <= 0) {
-    throw requestError(409, `${item?.name || 'The selected item'} does not have a valid selling price`)
-  }
-  const normalizedMinimum = roundMoney(item?.minimumSellPrice)
+  const savedUsdUnitPrice = roundMoney(item?.sellPrice)
+  const savedUsdMinimum = roundMoney(item?.minimumSellPrice)
   const savedKhrUnitPrice = Number(item?.khrSellPrice)
   const savedKhrMinimum = Number(item?.khrMinimumSellPrice)
   const legacyListedInKhr = item?.pricingCurrency === 'KHR'
@@ -367,13 +364,19 @@ function salePricing(item, role, currency = 'USD', exchangeRate = 1) {
     ? roundSaleCurrency(savedKhrUnitPrice, currency)
     : currency === 'KHR' && legacyListedInKhr && Number.isFinite(Number(item?.listedSellPrice))
       ? roundSaleCurrency(item.listedSellPrice, currency)
-    : saleAmountFromUsd(normalizedUnitPrice, currency, exchangeRate)
+    : saleAmountFromUsd(savedUsdUnitPrice, currency, exchangeRate)
+  if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+    throw requestError(409, `${item?.name || 'The selected item'} does not have a valid ${currency} selling price`)
+  }
+  const normalizedUnitPrice = currency === 'KHR'
+    ? saleAmountToUsd(unitPrice, currency, exchangeRate)
+    : savedUsdUnitPrice
   const configuredMinimum = currency === 'KHR' && Number.isFinite(savedKhrMinimum)
     ? roundSaleCurrency(savedKhrMinimum, currency)
     : currency === 'KHR' && legacyListedInKhr && Number.isFinite(Number(item?.listedMinimumSellPrice))
       ? roundSaleCurrency(item.listedMinimumSellPrice, currency)
-    : saleAmountFromUsd(normalizedMinimum, currency, exchangeRate)
-  const minimumConfigured = currency === 'KHR' ? configuredMinimum > 0 : normalizedMinimum > 0
+    : saleAmountFromUsd(savedUsdMinimum, currency, exchangeRate)
+  const minimumConfigured = currency === 'KHR' ? configuredMinimum > 0 : savedUsdMinimum > 0
   const minimumUnitPrice = minimumConfigured
     ? configuredMinimum
     : role === 'CASHIER'
