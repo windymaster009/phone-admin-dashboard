@@ -86,6 +86,8 @@ const inventoryItemSchema = new Schema(
     pricingExchangeRate: { type: Number, min: 0, default: 1 },
     listedSellPrice: { type: Number, min: 0 },
     listedMinimumSellPrice: { type: Number, min: 0 },
+    khrSellPrice: { type: Number, min: 0 },
+    khrMinimumSellPrice: { type: Number, min: 0 },
     status: {
       type: String,
       enum: ['IN_STOCK', 'RESERVED', 'SOLD', 'PAWNED', 'REPAIR', 'ARCHIVED'],

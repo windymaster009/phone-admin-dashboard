@@ -139,6 +139,8 @@ type InventoryItem = {
   pricingExchangeRate?: number
   listedSellPrice?: number
   listedMinimumSellPrice?: number
+  khrSellPrice?: number
+  khrMinimumSellPrice?: number
   status: string
 }
 
@@ -657,6 +659,8 @@ function inventoryPriceCurrency(item: InventoryItem) {
 
 function inventoryListedPrice(item: InventoryItem, minimum = false) {
   if (inventoryPriceCurrency(item) !== 'KHR') return Number(minimum ? item.minimumSellPrice : item.sellPrice) || 0
+  const explicitKhr = Number(minimum ? item.khrMinimumSellPrice : item.khrSellPrice)
+  if (Number.isFinite(explicitKhr)) return explicitKhr
   const listed = Number(minimum ? item.listedMinimumSellPrice : item.listedSellPrice)
   if (Number.isFinite(listed)) return listed
   const rate = Number(item.pricingExchangeRate) > 0 ? Number(item.pricingExchangeRate) : 4100
@@ -666,6 +670,19 @@ function inventoryListedPrice(item: InventoryItem, minimum = false) {
 function inventoryPriceText(item: InventoryItem, minimum = false) {
   const value = inventoryListedPrice(item, minimum)
   return inventoryPriceCurrency(item) === 'KHR' ? `${riel.format(value)} KHR` : money.format(value)
+}
+
+function inventoryDualPriceText(item: InventoryItem, minimum = false) {
+  const usdValue = Number(minimum ? item.minimumSellPrice : item.sellPrice) || 0
+  const explicitKhr = Number(minimum ? item.khrMinimumSellPrice : item.khrSellPrice)
+  const legacyKhr = item.pricingCurrency === 'KHR' ? Number(minimum ? item.listedMinimumSellPrice : item.listedSellPrice) : Number.NaN
+  const rate = Number(item.pricingExchangeRate) > 0 ? Number(item.pricingExchangeRate) : 4100
+  const khrValue = Number.isFinite(explicitKhr)
+    ? explicitKhr
+    : Number.isFinite(legacyKhr)
+      ? legacyKhr
+      : Math.round((usdValue * rate) / 100) * 100
+  return `${money.format(usdValue)} · ${riel.format(khrValue)} KHR`
 }
 
 function pawnMoney(amount: number, currencyCode: PawnCurrency = 'USD') {
@@ -1576,8 +1593,10 @@ function InventoryView() {
   const [loading, setLoading] = useState(true)
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
   const [editingPrice, setEditingPrice] = useState(false)
-  const [sellingPriceDraft, setSellingPriceDraft] = useState('')
-  const [minimumPriceDraft, setMinimumPriceDraft] = useState('')
+  const [usdSellingPriceDraft, setUsdSellingPriceDraft] = useState('')
+  const [usdMinimumPriceDraft, setUsdMinimumPriceDraft] = useState('')
+  const [khrSellingPriceDraft, setKhrSellingPriceDraft] = useState('')
+  const [khrMinimumPriceDraft, setKhrMinimumPriceDraft] = useState('')
   const [priceCurrency, setPriceCurrency] = useState<'USD' | 'KHR'>('USD')
   const [savingPrice, setSavingPrice] = useState(false)
   const [savingPhoto, setSavingPhoto] = useState(false)
@@ -1644,41 +1663,45 @@ function InventoryView() {
   function openPriceEditor() {
     if (!selectedItem) return
     const currency = inventoryPriceCurrency(selectedItem)
+    const usdSellPrice = Number(selectedItem.sellPrice) || 0
+    const usdMinimumPrice = Number(selectedItem.minimumSellPrice) || 0
+    const savedKhrSellPrice = Number(selectedItem.khrSellPrice)
+    const savedKhrMinimumPrice = Number(selectedItem.khrMinimumSellPrice)
+    const legacyKhrSellPrice = currency === 'KHR' ? Number(selectedItem.listedSellPrice) : Number.NaN
+    const legacyKhrMinimumPrice = currency === 'KHR' ? Number(selectedItem.listedMinimumSellPrice) : Number.NaN
     setPriceCurrency(currency)
-    setSellingPriceDraft(String(inventoryListedPrice(selectedItem) || ''))
-    setMinimumPriceDraft(String(inventoryListedPrice(selectedItem, true) || ''))
+    setUsdSellingPriceDraft(usdSellPrice > 0 ? String(usdSellPrice) : '')
+    setUsdMinimumPriceDraft(usdMinimumPrice > 0 ? String(usdMinimumPrice) : '')
+    setKhrSellingPriceDraft(String(
+      (Number.isFinite(savedKhrSellPrice) ? savedKhrSellPrice : Number.isFinite(legacyKhrSellPrice) ? legacyKhrSellPrice : Math.round((usdSellPrice * usdKhrRate) / 100) * 100) || '',
+    ))
+    setKhrMinimumPriceDraft(String(
+      (Number.isFinite(savedKhrMinimumPrice) ? savedKhrMinimumPrice : Number.isFinite(legacyKhrMinimumPrice) ? legacyKhrMinimumPrice : Math.round((usdMinimumPrice * usdKhrRate) / 100) * 100) || '',
+    ))
     setError('')
     setEditingPrice(true)
   }
 
   function changePriceCurrency(currency: 'USD' | 'KHR') {
-    if (currency === priceCurrency) return
-    const convert = (value: string) => {
-      const amount = Number(value || 0)
-      if (!amount) return ''
-      return currency === 'KHR'
-        ? String(Math.round((amount * usdKhrRate) / 100) * 100)
-        : String(Math.round((amount / usdKhrRate) * 100) / 100)
-    }
-    setSellingPriceDraft(convert(sellingPriceDraft))
-    setMinimumPriceDraft(convert(minimumPriceDraft))
     setPriceCurrency(currency)
     setError('')
   }
 
   async function saveSellingPrice() {
     if (!selectedItem) return
-    const sellingPrice = Number(sellingPriceDraft || 0)
-    const minimumPrice = Number(minimumPriceDraft || 0)
-    if (!Number.isFinite(sellingPrice) || sellingPrice < 0 || !Number.isFinite(minimumPrice) || minimumPrice < 0) {
+    const usdSellingPrice = Number(usdSellingPriceDraft || 0)
+    const usdMinimumPrice = Number(usdMinimumPriceDraft || 0)
+    const khrSellingPrice = Number(khrSellingPriceDraft || 0)
+    const khrMinimumPrice = Number(khrMinimumPriceDraft || 0)
+    if ([usdSellingPrice, usdMinimumPrice, khrSellingPrice, khrMinimumPrice].some((price) => !Number.isFinite(price) || price < 0)) {
       setError('Selling prices must be valid positive amounts or zero')
       return
     }
-    if (minimumPrice > sellingPrice) {
-      setError('Minimum selling price cannot exceed the regular selling price')
+    if (usdMinimumPrice > usdSellingPrice || khrMinimumPrice > khrSellingPrice) {
+      setError('The minimum price cannot exceed the regular price in either currency')
       return
     }
-    if (priceCurrency === 'KHR' && (!Number.isInteger(sellingPrice) || sellingPrice % 100 !== 0 || !Number.isInteger(minimumPrice) || minimumPrice % 100 !== 0)) {
+    if (!Number.isInteger(khrSellingPrice) || khrSellingPrice % 100 !== 0 || !Number.isInteger(khrMinimumPrice) || khrMinimumPrice % 100 !== 0) {
       setError('KHR prices must use whole 100 KHR increments')
       return
     }
@@ -1687,7 +1710,14 @@ function InventoryView() {
     try {
       const result = await api<{ item: InventoryItem }>(`/inventory/${selectedItem._id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ sellPrice: sellingPrice, minimumSellPrice: minimumPrice, currency: priceCurrency, exchangeRate: priceCurrency === 'KHR' ? usdKhrRate : 1 }),
+        body: JSON.stringify({
+          sellPriceUsd: usdSellingPrice,
+          minimumSellPriceUsd: usdMinimumPrice,
+          sellPriceKhr: khrSellingPrice,
+          minimumSellPriceKhr: khrMinimumPrice,
+          currency: priceCurrency,
+          exchangeRate: usdKhrRate,
+        }),
       })
       setSelectedItem(result.item)
       setItems((current) => current.map((item) => item._id === result.item._id ? result.item : item))
@@ -1878,8 +1908,8 @@ function InventoryView() {
                   <div><span>Quantity</span><strong>{selectedItem.quantity}</strong></div>
                   <div><span>Low stock level</span><strong>{selectedItem.reorderLevel}</strong></div>
                   <div><span>Buy price</span><strong>{money.format(selectedItem.buyPrice)}</strong></div>
-                  <div><span>Sell price</span><strong>{inventoryPriceText(selectedItem)}</strong></div>
-                  <div><span>Minimum sell</span><strong>{inventoryPriceText(selectedItem, true)}</strong></div>
+                  <div><span>Sell price</span><strong>{inventoryDualPriceText(selectedItem)}</strong></div>
+                  <div><span>Minimum sell</span><strong>{inventoryDualPriceText(selectedItem, true)}</strong></div>
                   <div><span>Barcode</span><strong className="mono">{selectedItem.barcode || selectedItem.sku}</strong></div>
                   <div><span>Source</span><strong>{selectedItem.source ? titleStatus(selectedItem.source) : 'Not recorded'}</strong></div>
                   <div><span>Created</span><strong>{selectedItem.createdAt ? dateText(selectedItem.createdAt) : 'Not recorded'}</strong></div>
@@ -1918,11 +1948,21 @@ function InventoryView() {
               </section>
 
               {editingPrice && <div className="inventory-price-editor">
-                <div className="inventory-price-heading"><span className="eyebrow">Inventory pricing</span><h4>Set selling price</h4><p>Choose the currency customers will see. KHR prices stay exact; reports also keep a USD equivalent using 1 USD = {riel.format(usdKhrRate)} KHR.</p></div>
-                <label>Price currency<select value={priceCurrency} onChange={(event) => changePriceCurrency(event.target.value as 'USD' | 'KHR')}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Cambodian Riel</option></select></label>
-                <label>Regular selling price<div className="input-prefix"><span>{priceCurrency === 'KHR' ? '៛' : '$'}</span><MoneyInput autoFocus currency={priceCurrency} minimum={0} value={sellingPriceDraft} onValueChange={setSellingPriceDraft} placeholder={priceCurrency === 'KHR' ? '0' : '0.00'} /></div></label>
-                <label>Minimum selling price<div className="input-prefix"><span>{priceCurrency === 'KHR' ? '៛' : '$'}</span><MoneyInput currency={priceCurrency} minimum={0} maximum={Number(sellingPriceDraft || 0)} value={minimumPriceDraft} onValueChange={setMinimumPriceDraft} placeholder={priceCurrency === 'KHR' ? '0' : '0.00'} /></div><small>The sale form will not allow a discount below this price.</small></label>
-                <div className="inventory-price-actions"><button className="ghost-button" onClick={() => { setEditingPrice(false); setError('') }}>Cancel</button><button className="primary-button" onClick={() => void saveSellingPrice()} disabled={savingPrice || Number(minimumPriceDraft || 0) > Number(sellingPriceDraft || 0)}>{savingPrice ? 'Saving...' : 'Save price'}</button></div>
+                <div className="inventory-price-heading"><span className="eyebrow">Inventory pricing</span><h4>Set selling prices</h4><p>Enter the customer-facing price in both currencies. Choose which currency opens first in New Sale.</p><small>Reference rate: 1 USD = {riel.format(usdKhrRate)} KHR</small></div>
+                <div className="inventory-price-columns">
+                  <section className={`inventory-currency-column ${priceCurrency === 'USD' ? 'is-default' : ''}`} aria-labelledby="inventory-usd-price-title">
+                    <header><span className="inventory-currency-mark">$</span><div><strong id="inventory-usd-price-title">US Dollar</strong><small>USD</small></div><label className="inventory-default-currency"><input type="radio" name="default-price-currency" checked={priceCurrency === 'USD'} onChange={() => changePriceCurrency('USD')} /><span>Open first</span></label></header>
+                    <label>Regular selling price<div className="input-prefix"><span>$</span><MoneyInput autoFocus currency="USD" minimum={0} value={usdSellingPriceDraft} onValueChange={setUsdSellingPriceDraft} placeholder="0.00" aria-label="Regular selling price in US dollars" /></div></label>
+                    <label>Minimum selling price<div className="input-prefix"><span>$</span><MoneyInput currency="USD" minimum={0} maximum={Number(usdSellingPriceDraft || 0)} value={usdMinimumPriceDraft} onValueChange={setUsdMinimumPriceDraft} placeholder="0.00" aria-label="Minimum selling price in US dollars" /></div></label>
+                  </section>
+                  <section className={`inventory-currency-column ${priceCurrency === 'KHR' ? 'is-default' : ''}`} aria-labelledby="inventory-khr-price-title">
+                    <header><span className="inventory-currency-mark">៛</span><div><strong id="inventory-khr-price-title">Cambodian Riel</strong><small>KHR</small></div><label className="inventory-default-currency"><input type="radio" name="default-price-currency" checked={priceCurrency === 'KHR'} onChange={() => changePriceCurrency('KHR')} /><span>Open first</span></label></header>
+                    <label>Regular selling price<div className="input-prefix"><span>៛</span><MoneyInput currency="KHR" minimum={0} value={khrSellingPriceDraft} onValueChange={setKhrSellingPriceDraft} placeholder="0" aria-label="Regular selling price in Cambodian riel" /></div></label>
+                    <label>Minimum selling price<div className="input-prefix"><span>៛</span><MoneyInput currency="KHR" minimum={0} maximum={Number(khrSellingPriceDraft || 0)} value={khrMinimumPriceDraft} onValueChange={setKhrMinimumPriceDraft} placeholder="0" aria-label="Minimum selling price in Cambodian riel" /></div></label>
+                  </section>
+                </div>
+                <p className="inventory-price-help">Minimum prices control the largest discount allowed in each currency.</p>
+                <div className="inventory-price-actions"><button className="ghost-button" onClick={() => { setEditingPrice(false); setError('') }}>Cancel</button><button className="primary-button" onClick={() => void saveSellingPrice()} disabled={savingPrice || Number(usdMinimumPriceDraft || 0) > Number(usdSellingPriceDraft || 0) || Number(khrMinimumPriceDraft || 0) > Number(khrSellingPriceDraft || 0)}>{savingPrice ? 'Saving…' : 'Save prices'}</button></div>
               </div>}
 
               {selectedItem.notes && (

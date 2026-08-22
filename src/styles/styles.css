@@ -31,6 +31,8 @@
   --muted-text: var(--muted);
   --border-color: var(--border);
   --input-bg: var(--bg-soft);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-micro: 120ms;
   color-scheme: dark;
   color: var(--text);
   background: var(--bg);
@@ -978,19 +980,48 @@ td strong { color: var(--text); }
 .detail-line small { margin-top: 4px; color: var(--muted); font-size: 10px; }
 .detail-line > strong { color: var(--text); font-size: 12px; }
 .detail-note { margin: 0 18px 18px; }
-.inventory-price-editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 0 18px 18px; padding: 18px; border: 1px solid color-mix(in srgb, var(--primary) 36%, var(--border)); border-radius: 14px; background: linear-gradient(135deg, var(--primary-soft), var(--bg-soft)); }
-.inventory-price-heading { grid-column: 1 / -1; padding-bottom: 13px; border-bottom: 1px solid var(--border); }
+/* Hallmark · component: dual-currency price editor · genre: atmospheric · theme: PhoneFlow
+ * states: default · hover · focus · active · disabled · loading · error · success
+ * contrast: pass (40–41)
+ * pre-emit critique: P5 H5 E5 S5 R5 V4
+ */
+.inventory-price-editor { margin: 0 16px 16px; padding: 16px; border: 1px solid color-mix(in srgb, var(--primary) 36%, var(--border)); border-radius: 14px; background: linear-gradient(135deg, var(--primary-soft), var(--bg-soft)); }
+.inventory-price-heading { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+.inventory-price-heading > small { margin-top: 8px; padding: 8px; border-radius: 8px; color: var(--text); background: var(--surface-solid); font-size: 9px; font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .inventory-price-editor h4 { margin: 5px 0 4px; font: 800 15px Manrope, sans-serif; }
 .inventory-price-editor p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.inventory-price-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 16px; }
+.inventory-currency-column { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; padding-inline: 4px 16px; }
+.inventory-currency-column + .inventory-currency-column { padding-inline: 16px 4px; border-inline-start: 1px solid var(--border-strong); }
+.inventory-currency-column > header { grid-column: 1 / -1; min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.inventory-currency-mark { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 9px; color: var(--muted); background: var(--surface-solid); font: 800 14px Manrope, sans-serif; }
+.inventory-currency-column.is-default .inventory-currency-mark { color: var(--primary); background: var(--primary-soft); }
+.inventory-currency-column header > div { min-width: 0; display: grid; gap: 2px; }
+.inventory-currency-column header strong { overflow: hidden; color: var(--text); font: 800 12px Manrope, sans-serif; text-overflow: ellipsis; white-space: nowrap; }
+.inventory-currency-column header small { color: var(--muted-2); font-size: 9px; font-weight: 800; letter-spacing: .08em; }
 .inventory-price-editor label { min-width: 0; display: flex; flex-direction: column; gap: 8px; color: var(--muted); font-size: 10px; font-weight: 700; }
-.inventory-price-editor .input-prefix { width: 100%; height: 44px; transition: border-color .18s ease, box-shadow .18s ease, background .18s ease; }
-.inventory-price-editor .input-prefix:focus-within { border-color: var(--primary); background: var(--surface-solid); box-shadow: 0 0 0 3px var(--primary-soft); }
-.inventory-price-editor .input-prefix > span { flex: 0 0 auto; padding: 0 0 0 13px; color: var(--muted); font-size: 12px; font-weight: 800; }
-.inventory-price-editor .input-prefix input { min-width: 0; width: 100%; height: 100%; padding: 0 13px 0 8px; outline: 0; color: var(--text); font: 700 14px Manrope, sans-serif; appearance: textfield; }
+.inventory-default-currency { min-height: 44px; flex-direction: row !important; align-items: center; gap: 8px !important; padding-inline: 8px; border: 1px solid var(--border); border-radius: 8px; color: var(--muted-2) !important; background: var(--bg-soft); cursor: pointer; white-space: nowrap; }
+.inventory-default-currency input { width: 13px; height: 13px; margin: 0; accent-color: var(--primary); }
+.inventory-currency-column.is-default .inventory-default-currency { color: var(--text) !important; border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); background: var(--primary-soft); }
+.inventory-price-editor .input-prefix { width: 100%; height: 44px; outline: 2px solid transparent; outline-offset: 1px; transition: background-color var(--dur-micro) var(--ease-out); }
+.inventory-price-editor .input-prefix:focus-within { border-color: var(--primary); background: var(--surface-solid); }
+.inventory-price-editor .input-prefix:has(input:focus-visible) { outline-color: var(--primary); }
+.inventory-default-currency:has(input:focus-visible) { outline: 2px solid var(--primary); outline-offset: 1px; }
+.inventory-price-editor .input-prefix:has(input:invalid) { border-color: var(--rose); }
+.inventory-price-editor .input-prefix:has(input:disabled) { opacity: .55; cursor: not-allowed; }
+.inventory-price-editor .input-prefix > span { flex: 0 0 auto; padding-inline-start: 13px; color: var(--muted); font-size: 12px; font-weight: 800; }
+.inventory-price-editor .input-prefix input { min-width: 0; width: 100%; height: 100%; padding: 0 13px 0 8px; outline: 0; color: var(--text); font: 700 14px Manrope, sans-serif; font-variant-numeric: tabular-nums; appearance: textfield; }
 .inventory-price-editor .input-prefix input::placeholder { color: var(--muted-2); font-weight: 600; }
 .inventory-price-editor .input-prefix input::-webkit-inner-spin-button,
 .inventory-price-editor .input-prefix input::-webkit-outer-spin-button { margin: 0; appearance: none; }
-.inventory-price-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 9px; padding-top: 2px; }
+.inventory-price-help { min-height: 1lh; margin-top: 12px !important; }
+.inventory-price-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 16px; border-top: 1px solid var(--border); margin-top: 16px; }
+.inventory-price-actions button { white-space: nowrap; }
+.inventory-default-currency:active { background: var(--primary-soft); }
+@media (hover: hover) and (pointer: fine) {
+  .inventory-price-editor .input-prefix:hover { background: var(--surface-hover); }
+  .inventory-default-currency:hover { color: var(--text) !important; background: var(--surface-hover); }
+}
 .detail-modal-footer { display: flex; justify-content: flex-end; gap: 10px; padding: 16px 18px 18px; border-top: 1px solid var(--border); }
 .upload-photo-button { position: relative; overflow: hidden; }
 .upload-photo-button input { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
@@ -1794,7 +1825,11 @@ a:focus-visible,
   .trade-detail-modal .detail-sections { grid-template-columns: 1fr; padding: 12px; }
   .trade-detail-modal .detail-lines, .trade-detail-modal .detail-note { margin: 0 12px 12px; }
   .trade-detail-modal .detail-grid { padding: 12px; }
-  .inventory-price-editor { grid-template-columns: 1fr; margin: 0 12px 12px; padding: 13px; }
+  .inventory-price-editor { margin: 0 12px 12px; padding: 12px; }
+  .inventory-price-columns { grid-template-columns: minmax(0, 1fr); }
+  .inventory-currency-column,
+  .inventory-currency-column + .inventory-currency-column { padding-inline: 0; }
+  .inventory-currency-column + .inventory-currency-column { margin-top: 16px; padding-top: 16px; border-inline-start: 0; border-top: 1px solid var(--border-strong); }
   .inventory-price-actions { grid-column: 1; display: grid; grid-template-columns: 1fr 1fr; }
   .detail-modal:not(.pawn-detail-modal) .detail-modal-footer { flex-wrap: wrap; }
   .settings-card-heading { align-items: flex-start; padding: 17px; }
@@ -1808,6 +1843,9 @@ a:focus-visible,
 }
 
 @media (max-width: 440px) {
+  .inventory-currency-column { grid-template-columns: minmax(0, 1fr); }
+  .inventory-currency-column > header { grid-template-columns: auto minmax(0, 1fr); }
+  .inventory-default-currency { grid-column: 1 / -1; width: 100%; justify-content: center; }
   .dashboard-metrics-grid { grid-template-columns: minmax(0, 1fr); }
   .dashboard-metrics-grid .metric-card { min-height: 72px; }
   .inventory-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

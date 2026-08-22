@@ -360,14 +360,21 @@ function salePricing(item, role, currency = 'USD', exchangeRate = 1) {
     throw requestError(409, `${item?.name || 'The selected item'} does not have a valid selling price`)
   }
   const normalizedMinimum = roundMoney(item?.minimumSellPrice)
-  const listedInKhr = item?.pricingCurrency === 'KHR'
-  const unitPrice = currency === 'KHR' && listedInKhr && Number.isFinite(Number(item?.listedSellPrice))
-    ? roundSaleCurrency(item.listedSellPrice, currency)
+  const savedKhrUnitPrice = Number(item?.khrSellPrice)
+  const savedKhrMinimum = Number(item?.khrMinimumSellPrice)
+  const legacyListedInKhr = item?.pricingCurrency === 'KHR'
+  const unitPrice = currency === 'KHR' && Number.isFinite(savedKhrUnitPrice)
+    ? roundSaleCurrency(savedKhrUnitPrice, currency)
+    : currency === 'KHR' && legacyListedInKhr && Number.isFinite(Number(item?.listedSellPrice))
+      ? roundSaleCurrency(item.listedSellPrice, currency)
     : saleAmountFromUsd(normalizedUnitPrice, currency, exchangeRate)
-  const configuredMinimum = currency === 'KHR' && listedInKhr && Number.isFinite(Number(item?.listedMinimumSellPrice))
-    ? roundSaleCurrency(item.listedMinimumSellPrice, currency)
+  const configuredMinimum = currency === 'KHR' && Number.isFinite(savedKhrMinimum)
+    ? roundSaleCurrency(savedKhrMinimum, currency)
+    : currency === 'KHR' && legacyListedInKhr && Number.isFinite(Number(item?.listedMinimumSellPrice))
+      ? roundSaleCurrency(item.listedMinimumSellPrice, currency)
     : saleAmountFromUsd(normalizedMinimum, currency, exchangeRate)
-  const minimumUnitPrice = normalizedMinimum > 0
+  const minimumConfigured = currency === 'KHR' ? configuredMinimum > 0 : normalizedMinimum > 0
+  const minimumUnitPrice = minimumConfigured
     ? configuredMinimum
     : role === 'CASHIER'
       ? unitPrice
@@ -1828,10 +1835,12 @@ router.post('/inventory', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), 
 }))
 
 router.patch('/inventory/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
-  if (req.body.sellPrice === undefined && req.body.minimumSellPrice === undefined) {
+  const hasDualCurrencyPrices = ['sellPriceUsd', 'minimumSellPriceUsd', 'sellPriceKhr', 'minimumSellPriceKhr']
+    .some((field) => req.body[field] !== undefined)
+  if (req.body.sellPrice === undefined && req.body.minimumSellPrice === undefined && !hasDualCurrencyPrices) {
     return res.status(400).json({ message: 'Use the stock adjustment, photo, purchase, sale, or pawn workflow for this change' })
   }
-  const current = await InventoryItem.findById(req.params.id).select('sellPrice minimumSellPrice pricingCurrency pricingExchangeRate listedSellPrice listedMinimumSellPrice')
+  const current = await InventoryItem.findById(req.params.id).select('sellPrice minimumSellPrice pricingCurrency pricingExchangeRate listedSellPrice listedMinimumSellPrice khrSellPrice khrMinimumSellPrice')
   if (!current) return res.status(404).json({ message: 'Inventory item not found' })
   const currency = req.body.currency === undefined
     ? saleCurrencyCode(current.pricingCurrency)
@@ -1840,7 +1849,7 @@ router.patch('/inventory/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOC
     return res.status(400).json({ message: 'Pricing currency must be USD or KHR' })
   }
   const exchangeRateInput = req.body.exchangeRate || (current.pricingCurrency === 'KHR' ? current.pricingExchangeRate : undefined)
-  const exchangeRate = saleExchangeRate(currency, exchangeRateInput)
+  const exchangeRate = saleExchangeRate(hasDualCurrencyPrices ? 'KHR' : currency, exchangeRateInput)
   const currentSellPrice = currency === 'KHR'
     ? current.pricingCurrency === 'KHR' && Number.isFinite(Number(current.listedSellPrice))
       ? Number(current.listedSellPrice)
@@ -1851,18 +1860,41 @@ router.patch('/inventory/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOC
       ? Number(current.listedMinimumSellPrice)
       : saleAmountFromUsd(current.minimumSellPrice, currency, exchangeRate)
     : Number(current.minimumSellPrice)
-  const nextListedSellPrice = saleCurrencyAmount(req.body.sellPrice === undefined ? currentSellPrice : req.body.sellPrice, currency, 'Regular selling price')
-  const nextListedMinimumPrice = saleCurrencyAmount(req.body.minimumSellPrice === undefined ? currentMinimumPrice : req.body.minimumSellPrice, currency, 'Minimum selling price')
-  if (nextListedMinimumPrice > nextListedSellPrice) {
-    return res.status(400).json({ message: 'Discount or minimum price cannot exceed the regular selling price' })
+  let nextUsdSellPrice
+  let nextUsdMinimumPrice
+  let nextKhrSellPrice
+  let nextKhrMinimumPrice
+  if (hasDualCurrencyPrices) {
+    const legacyKhrSellPrice = current.pricingCurrency === 'KHR' && Number.isFinite(Number(current.listedSellPrice))
+      ? Number(current.listedSellPrice)
+      : saleAmountFromUsd(current.sellPrice, 'KHR', exchangeRate)
+    const legacyKhrMinimumPrice = current.pricingCurrency === 'KHR' && Number.isFinite(Number(current.listedMinimumSellPrice))
+      ? Number(current.listedMinimumSellPrice)
+      : saleAmountFromUsd(current.minimumSellPrice, 'KHR', exchangeRate)
+    nextUsdSellPrice = saleCurrencyAmount(req.body.sellPriceUsd ?? current.sellPrice, 'USD', 'USD regular selling price')
+    nextUsdMinimumPrice = saleCurrencyAmount(req.body.minimumSellPriceUsd ?? current.minimumSellPrice, 'USD', 'USD minimum selling price')
+    nextKhrSellPrice = saleCurrencyAmount(req.body.sellPriceKhr ?? current.khrSellPrice ?? legacyKhrSellPrice, 'KHR', 'KHR regular selling price')
+    nextKhrMinimumPrice = saleCurrencyAmount(req.body.minimumSellPriceKhr ?? current.khrMinimumSellPrice ?? legacyKhrMinimumPrice, 'KHR', 'KHR minimum selling price')
+  } else {
+    const nextListedSellPrice = saleCurrencyAmount(req.body.sellPrice === undefined ? currentSellPrice : req.body.sellPrice, currency, 'Regular selling price')
+    const nextListedMinimumPrice = saleCurrencyAmount(req.body.minimumSellPrice === undefined ? currentMinimumPrice : req.body.minimumSellPrice, currency, 'Minimum selling price')
+    nextUsdSellPrice = saleAmountToUsd(nextListedSellPrice, currency, exchangeRate)
+    nextUsdMinimumPrice = saleAmountToUsd(nextListedMinimumPrice, currency, exchangeRate)
+    nextKhrSellPrice = currency === 'KHR' ? nextListedSellPrice : saleAmountFromUsd(nextListedSellPrice, 'KHR', exchangeRate)
+    nextKhrMinimumPrice = currency === 'KHR' ? nextListedMinimumPrice : saleAmountFromUsd(nextListedMinimumPrice, 'KHR', exchangeRate)
+  }
+  if (nextUsdMinimumPrice > nextUsdSellPrice || nextKhrMinimumPrice > nextKhrSellPrice) {
+    return res.status(400).json({ message: 'The minimum price cannot exceed the regular price in either currency' })
   }
   const update = {
-    sellPrice: saleAmountToUsd(nextListedSellPrice, currency, exchangeRate),
-    minimumSellPrice: saleAmountToUsd(nextListedMinimumPrice, currency, exchangeRate),
+    sellPrice: nextUsdSellPrice,
+    minimumSellPrice: nextUsdMinimumPrice,
+    khrSellPrice: nextKhrSellPrice,
+    khrMinimumSellPrice: nextKhrMinimumPrice,
     pricingCurrency: currency,
     pricingExchangeRate: exchangeRate,
-    listedSellPrice: nextListedSellPrice,
-    listedMinimumSellPrice: nextListedMinimumPrice,
+    listedSellPrice: currency === 'KHR' ? nextKhrSellPrice : nextUsdSellPrice,
+    listedMinimumSellPrice: currency === 'KHR' ? nextKhrMinimumPrice : nextUsdMinimumPrice,
   }
   const item = await InventoryItem.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true })
   await writeActivity(req, { action: 'UPDATE', entity: 'INVENTORY', entityId: item._id, details: update })

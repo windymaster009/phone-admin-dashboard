@@ -52,6 +52,8 @@ type InventoryItem = {
   pricingExchangeRate?: number
   listedSellPrice?: number
   listedMinimumSellPrice?: number
+  khrSellPrice?: number
+  khrMinimumSellPrice?: number
   buyPrice?: number
   barcode?: string
   brand?: string
@@ -217,6 +219,8 @@ function inventorySalePrice(item: InventoryItem | undefined, currency: SaleCurre
   if (!item) return 0
   const normalizedUsd = Math.max(0, Number(minimum ? item.minimumSellPrice : item.sellPrice) || 0)
   if (currency === 'USD') return normalizedUsd
+  const explicitKhr = Number(minimum ? item.khrMinimumSellPrice : item.khrSellPrice)
+  if (Number.isFinite(explicitKhr)) return Math.max(0, explicitKhr)
   const listed = Number(minimum ? item.listedMinimumSellPrice : item.listedSellPrice)
   if (item.pricingCurrency === 'KHR' && Number.isFinite(listed)) return Math.max(0, listed)
   return Math.round((normalizedUsd * exchangeRate) / 100) * 100
