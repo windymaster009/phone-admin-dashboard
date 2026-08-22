@@ -318,12 +318,23 @@ router.get('/payments', requireAuth, allowRoles(...reportRoles), asyncRoute(asyn
   tradeDateBranches.unshift(currency === 'KHR'
     ? { type: 'SELL', currency: 'KHR', createdAt: { $gte: period.from, $lt: period.to } }
     : { type: 'SELL', currency: { $ne: 'KHR' }, createdAt: { $gte: period.from, $lt: period.to } })
+  const saleCurrencyMatch = currency === 'KHR' ? { currency: 'KHR' } : { currency: { $ne: 'KHR' } }
   const [trades, loanPayments, pawnRecords] = await Promise.all([
     Trade.find({
-      status: 'COMPLETED',
       ...methodMatch,
-      $or: tradeDateBranches,
-    }).populate('customer', 'name').populate('supplier', 'name').populate('createdBy', 'name').lean(),
+      $or: [
+        { status: 'COMPLETED', $or: tradeDateBranches },
+        {
+          status: 'RETURNED',
+          type: 'SELL',
+          ...saleCurrencyMatch,
+          $or: [
+            { createdAt: { $gte: period.from, $lt: period.to } },
+            { 'refund.refundedAt': { $gte: period.from, $lt: period.to } },
+          ],
+        },
+      ],
+    }).populate('customer', 'name').populate('supplier', 'name').populate('createdBy', 'name').populate('refund.refundedBy', 'name').lean(),
     LoanPayment.find({ paidAt: { $gte: period.from, $lt: period.to }, ...methodMatch })
       .populate({ path: 'loan', select: 'loanNo borrower currency' }).populate('receivedBy', 'name').lean(),
     method === 'ALL' || method === 'OTHER'
@@ -338,12 +349,26 @@ router.get('/payments', requireAuth, allowRoles(...reportRoles), asyncRoute(asyn
     const amount = currency === 'KHR'
       ? Number(trade.transactionAmountPaid || 0)
       : Number(trade.amountPaid || 0)
-    entries.push({
-      id: trade._id, date: trade.purchaseDate || trade.createdAt, reference: trade.tradeNo,
-      party: isPurchase ? trade.supplier?.name || trade.sellerSnapshot?.name || trade.customer?.name || 'Walk-in seller' : trade.customer?.name || 'Walk-in customer',
-      source: isPurchase ? 'PURCHASE' : 'SALE', direction: isPurchase ? 'OUT' : 'IN', method: trade.paymentMethod,
-      amount, staff: publicStaff(trade.createdBy), status: 'COMPLETED',
-    })
+    const transactionDate = new Date(trade.purchaseDate || trade.createdAt)
+    const transactionInPeriod = transactionDate >= period.from && transactionDate < period.to
+    const party = isPurchase ? trade.supplier?.name || trade.sellerSnapshot?.name || trade.customer?.name || 'Walk-in seller' : trade.customer?.name || 'Walk-in customer'
+    if (transactionInPeriod) {
+      entries.push({
+        id: trade._id, date: transactionDate, reference: trade.tradeNo,
+        party, source: isPurchase ? 'PURCHASE' : 'SALE', direction: isPurchase ? 'OUT' : 'IN', method: trade.paymentMethod,
+        amount, staff: publicStaff(trade.createdBy), status: 'COMPLETED',
+      })
+    }
+    if (trade.status === 'RETURNED' && trade.refund?.refundedAt) {
+      const refundedAt = new Date(trade.refund.refundedAt)
+      if (refundedAt >= period.from && refundedAt < period.to) {
+        entries.push({
+          id: `${trade._id}-refund`, date: refundedAt, reference: trade.tradeNo,
+          party, source: 'REFUND', direction: 'OUT', method: trade.paymentMethod,
+          amount: Number(trade.refund.amount || 0), staff: publicStaff(trade.refund.refundedBy), status: 'RETURNED',
+        })
+      }
+    }
   }
   for (const payment of loanPayments) {
     if (!payment.loan || payment.loan.currency !== currency) continue
@@ -379,7 +404,7 @@ router.get('/payments', requireAuth, allowRoles(...reportRoles), asyncRoute(asyn
     filters: { currency, method, direction },
     summary: [
       { label: 'Money In', value: inflow, format: 'currency', detail: period.label, tone: 'blue' },
-      { label: 'Money Out', value: outflow, format: 'currency', detail: 'Purchase payments', tone: 'orange' },
+      { label: 'Money Out', value: outflow, format: 'currency', detail: 'Purchases and refunds', tone: 'orange' },
       { label: 'Net Movement', value: roundMoney(inflow - outflow), format: 'currency', detail: 'Money in minus money out', tone: 'violet' },
       { label: 'Payments', value: filtered.length, format: 'number', detail: 'Recorded entries', tone: 'blue' },
       { label: 'Cash Volume', value: roundMoney(filtered.filter((entry) => entry.method === 'CASH').reduce((sum, entry) => sum + Number(entry.amount || 0), 0)), format: 'currency', detail: 'Cash handled', tone: 'violet' },
@@ -387,7 +412,7 @@ router.get('/payments', requireAuth, allowRoles(...reportRoles), asyncRoute(asyn
     ],
     breakdowns: [
       { title: 'Volume by Method', description: 'Total payment volume by recorded method.', format: 'currency', rows: methodRows },
-      { title: 'Net by Source', description: 'Incoming sources minus purchase payouts.', format: 'currency', rows: sourceRows },
+      { title: 'Net by Source', description: 'Incoming sources minus purchases and refunds.', format: 'currency', rows: sourceRows },
     ],
     columns: [
       { key: 'date', label: 'Date', format: 'dateTime' }, { key: 'reference', label: 'Reference' }, { key: 'party', label: 'Customer / Seller' },

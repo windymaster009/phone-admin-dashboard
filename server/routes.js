@@ -27,6 +27,7 @@ import { TwoFactorChallenge, TwoFactorCredential, TwoFactorSetup } from './twoFa
 import { Loan } from './loanModels.js'
 import { refreshLoanStatuses } from './loanDashboardRoutes.js'
 import { preventCustomerDeletionWithDocuments } from './documentGuards.js'
+import { normalizeTradeRefundRequest, restoreReturnedInventory } from './tradeRefundService.js'
 import {
   DAILY_PAWN_FEE_RATE,
   addPawnDays,
@@ -2646,6 +2647,60 @@ router.get('/trades', requireAuth, asyncRoute(async (req, res) => {
     .sort({ createdAt: -1 })
     .limit(300)
   res.json({ trades })
+}))
+
+router.post('/trades/:id/refund', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) throw requestError(400, 'Sale transaction is invalid')
+
+  const session = await mongoose.startSession()
+  let trade
+  let refund
+  try {
+    await session.withTransaction(async () => {
+      trade = await Trade.findById(req.params.id).session(session)
+      if (!trade) throw requestError(404, 'Sale transaction was not found')
+
+      refund = normalizeTradeRefundRequest(req.body, trade)
+      if (refund.inventoryDisposition === 'RESTOCK') {
+        for (const line of trade.items) {
+          const inventoryItem = await InventoryItem.findById(line.inventoryItem).session(session)
+          if (!inventoryItem) throw requestError(409, `${line.name || 'A returned item'} is no longer linked to inventory`)
+          restoreReturnedInventory(inventoryItem, line.quantity)
+          await inventoryItem.save({ session })
+        }
+      }
+
+      trade.status = 'RETURNED'
+      trade.refund = {
+        ...refund,
+        refundedAt: new Date(),
+        refundedBy: req.user._id,
+      }
+      await trade.save({ session })
+      await ActivityLog.create([{
+        user: req.user._id,
+        action: 'REFUND',
+        entity: 'TRADE',
+        entityId: trade._id,
+        details: {
+          tradeNo: trade.tradeNo,
+          amount: refund.amount,
+          currency: trade.currency || 'USD',
+          inventoryDisposition: refund.inventoryDisposition,
+          paymentMethod: trade.paymentMethod,
+          externalReference: refund.externalReference,
+          reason: refund.reason,
+        },
+        ipAddress: req.ip,
+      }], { session })
+    })
+  } finally {
+    await session.endSession()
+  }
+  await trade.populate('customer', 'name phone')
+  await trade.populate('supplier', 'name phone nationalIdNumber')
+  await trade.populate('refund.refundedBy', 'name email role')
+  res.json({ trade })
 }))
 
 router.get('/payway/config', requireAuth, asyncRoute(async (_req, res) => {

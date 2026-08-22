@@ -43,7 +43,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { api, type SessionUser } from '../lib/api'
+import { api, getSessionUser, type SessionUser } from '../lib/api'
 import { getPawnAutoCalculatePreference, PAWN_AUTO_CALCULATE_EVENT, savePawnAutoCalculatePreference } from '../lib/pawnPreferences'
 import LoadingState from '../components/LoadingState'
 import MoneyInput from '../components/MoneyInput'
@@ -234,6 +234,14 @@ type Trade = {
   balance: number
   paymentMethod: string
   status: string
+  refund?: {
+    amount: number
+    reason: string
+    inventoryDisposition: 'RESTOCK' | 'NO_RESTOCK'
+    externalReference?: string
+    refundedAt: string
+    refundedBy?: { _id: string; name: string; email?: string; role?: string }
+  }
   notes?: string
   createdAt: string
   createdBy?: { _id: string; name: string; email?: string; role?: string }
@@ -1414,7 +1422,15 @@ function TradeView() {
   const [loading, setLoading] = useState(true)
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null)
   const [error, setError] = useState('')
+  const [refundOpen, setRefundOpen] = useState(false)
+  const [refundReason, setRefundReason] = useState('')
+  const [refundDisposition, setRefundDisposition] = useState<'' | 'RESTOCK' | 'NO_RESTOCK'>('')
+  const [refundReference, setRefundReference] = useState('')
+  const [refundConfirmation, setRefundConfirmation] = useState('')
+  const [refundError, setRefundError] = useState('')
+  const [refundBusy, setRefundBusy] = useState(false)
   const [transactionsCollapsed, setTransactionsCollapsed] = useState(() => window.matchMedia('(max-width: 640px)').matches)
+  const canRefund = ['OWNER', 'MANAGER'].includes(getSessionUser()?.role || '')
 
   useEffect(() => {
     api<{ trades: Trade[] }>('/trades')
@@ -1449,6 +1465,46 @@ function TradeView() {
     link.download = `phoneflow-transactions-${new Date().toISOString().slice(0, 10)}.csv`
     link.click()
     URL.revokeObjectURL(url)
+  }
+
+  function resetRefundForm() {
+    setRefundOpen(false)
+    setRefundReason('')
+    setRefundDisposition('')
+    setRefundReference('')
+    setRefundConfirmation('')
+    setRefundError('')
+  }
+
+  function closeTradeDetails() {
+    if (refundBusy) return
+    resetRefundForm()
+    setSelectedTrade(null)
+  }
+
+  async function refundTrade(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selectedTrade || refundBusy) return
+    setRefundBusy(true)
+    setRefundError('')
+    try {
+      const result = await api<{ trade: Trade }>(`/trades/${encodeURIComponent(selectedTrade._id)}/refund`, {
+        method: 'POST',
+        body: JSON.stringify({
+          reason: refundReason,
+          inventoryDisposition: refundDisposition,
+          externalReference: refundReference,
+          confirmation: refundConfirmation,
+        }),
+      })
+      setTrades((current) => current.map((trade) => trade._id === result.trade._id ? result.trade : trade))
+      setSelectedTrade(result.trade)
+      resetRefundForm()
+    } catch (reason) {
+      setRefundError(reason instanceof Error ? reason.message : 'Unable to refund this sale')
+    } finally {
+      setRefundBusy(false)
+    }
   }
 
   return (
@@ -1495,7 +1551,7 @@ function TradeView() {
         </div>}
       </article>
       {selectedTrade && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setSelectedTrade(null)}>
+        <div className="modal-backdrop" role="presentation" onClick={closeTradeDetails}>
           <section className="detail-modal trade-detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="trade-detail-title" onClick={(event) => event.stopPropagation()}>
             <header className="detail-modal-header">
               <div>
@@ -1503,7 +1559,7 @@ function TradeView() {
                 <h3 id="trade-detail-title">{selectedTrade.tradeNo}</h3>
                 <p>{tradePartyName(selectedTrade)} - {dateText(selectedTrade.purchaseDate || selectedTrade.createdAt)}</p>
               </div>
-              <button className="icon-button" onClick={() => setSelectedTrade(null)} aria-label="Close details"><X size={18} /></button>
+              <button className="icon-button" onClick={closeTradeDetails} disabled={refundBusy} aria-label="Close details"><X size={18} /></button>
             </header>
 
             <div className="detail-grid">
@@ -1547,8 +1603,29 @@ function TradeView() {
               </div>
             )}
 
+            {selectedTrade.refund && (
+              <div className="trade-refund-record" role="status">
+                <span><RefreshCcw size={17} /></span>
+                <div><strong>Refund recorded</strong><small>{tradeTransactionMoney(selectedTrade, selectedTrade.refund.amount, selectedTrade.refund.amount)} · {selectedTrade.refund.inventoryDisposition === 'RESTOCK' ? 'Items restored to stock' : 'Items not returned to saleable stock'}</small><p>{selectedTrade.refund.reason}</p>{selectedTrade.refund.externalReference && <small>External reference: {selectedTrade.refund.externalReference}</small>}</div>
+              </div>
+            )}
+
+            {refundOpen && (
+              <form className="trade-refund-form" onSubmit={refundTrade}>
+                <header><div><span className="eyebrow">Controlled operation</span><h4>Refund entire sale</h4><p>This records a full refund and marks the sale as returned. For cash, hand the amount back before confirming. Partial refunds are not supported.</p></div><strong>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionAmountPaid, selectedTrade.amountPaid)}</strong></header>
+                {selectedTrade.paymentMethod === 'KHQR' && <div className="trade-refund-warning"><AlertTriangle size={17} /><p><strong>Refund in ABA PayWay first</strong><small>PhoneFlow cannot send the money back through the current PayWay connection. Enter the completed ABA refund reference below before recording it here.</small></p></div>}
+                <label>Reason<textarea required minLength={5} maxLength={500} rows={2} value={refundReason} onChange={(event) => setRefundReason(event.target.value)} placeholder="Why is this sale being refunded?" /></label>
+                <label>Returned inventory<select required value={refundDisposition} onChange={(event) => setRefundDisposition(event.target.value as '' | 'RESTOCK' | 'NO_RESTOCK')}><option value="" disabled>Choose after inspecting the items</option><option value="RESTOCK">Restore items to available stock</option><option value="NO_RESTOCK">Do not return items to saleable stock</option></select><small>Only choose restore after confirming every returned item is present and resaleable.</small></label>
+                {selectedTrade.paymentMethod === 'KHQR' && <label>ABA refund reference<input required minLength={4} maxLength={120} value={refundReference} onChange={(event) => setRefundReference(event.target.value)} placeholder="PayWay or ABA refund reference" /></label>}
+                <label className="trade-refund-confirmation">Type <strong>{selectedTrade.tradeNo}</strong> to confirm<input required autoComplete="off" value={refundConfirmation} onChange={(event) => setRefundConfirmation(event.target.value)} /></label>
+                {refundError && <p className="trade-refund-error" role="alert"><AlertTriangle size={15} /> {refundError}</p>}
+                <footer><button type="button" className="ghost-button" onClick={resetRefundForm} disabled={refundBusy}>Cancel</button><button type="submit" className="primary-button danger-button" disabled={refundBusy || refundReason.trim().length < 5 || !refundDisposition || refundConfirmation !== selectedTrade.tradeNo || (selectedTrade.paymentMethod === 'KHQR' && refundReference.trim().length < 4)}>{refundBusy ? 'Recording refund...' : 'Confirm full refund'}</button></footer>
+              </form>
+            )}
+
             <footer className="detail-modal-footer">
-              <button className="ghost-button" onClick={() => setSelectedTrade(null)}>Close</button>
+              {canRefund && selectedTrade.type === 'SELL' && selectedTrade.status === 'COMPLETED' && !refundOpen && <button className="primary-button danger-button" onClick={() => { setRefundError(''); setRefundOpen(true) }}><RefreshCcw size={15} /> Refund sale</button>}
+              <button className="ghost-button" onClick={closeTradeDetails} disabled={refundBusy}>Close</button>
             </footer>
           </section>
         </div>
