@@ -1578,6 +1578,12 @@ function TradeView() {
 
 type RefundQueueFilter = 'ALL' | 'COMPLETED' | 'RETURNED'
 
+function RefundStatusBadge({ status }: { status: Trade['status'] }) {
+  const refunded = status === 'RETURNED'
+  const Icon = refunded ? BadgeCheck : RefreshCcw
+  return <span className={`refund-status ${refunded ? 'refund-status-refunded' : 'refund-status-open'}`}><Icon size={14} aria-hidden="true" />{refunded ? 'Refunded' : 'Not refunded'}</span>
+}
+
 function RefundsView({ user }: { user: SessionUser }) {
   const [trades, setTrades] = useState<Trade[]>([])
   const [loading, setLoading] = useState(true)
@@ -1591,6 +1597,7 @@ function RefundsView({ user }: { user: SessionUser }) {
   const [actionError, setActionError] = useState('')
   const [actionBusy, setActionBusy] = useState(false)
   const [completedTradeNo, setCompletedTradeNo] = useState('')
+  const selectedRefundRowRef = useRef<HTMLButtonElement>(null)
   const hasAccess = user.role === 'OWNER' || user.role === 'MANAGER'
 
   useEffect(() => {
@@ -1631,6 +1638,7 @@ function RefundsView({ user }: { user: SessionUser }) {
     })
   }, [filter, search, trades])
   const selectedTrade = trades.find((trade) => trade._id === selectedId)
+  const queueHeading = filter === 'COMPLETED' ? 'Not refunded' : filter === 'RETURNED' ? 'Refunded' : 'All sales'
   const canSubmit = Boolean(
     selectedTrade
     && selectedTrade.status === 'COMPLETED'
@@ -1656,6 +1664,7 @@ function RefundsView({ user }: { user: SessionUser }) {
       })
       setTrades((current) => current.map((trade) => trade._id === result.trade._id ? result.trade : trade))
       setCompletedTradeNo(result.trade.tradeNo)
+      setFilter('RETURNED')
       setReason('')
       setInventoryDisposition('')
       setConfirmation('')
@@ -1665,6 +1674,12 @@ function RefundsView({ user }: { user: SessionUser }) {
       setActionBusy(false)
     }
   }
+
+  useEffect(() => {
+    if (!completedTradeNo || filter !== 'RETURNED') return
+    const frame = window.requestAnimationFrame(() => selectedRefundRowRef.current?.scrollIntoView({ block: 'nearest' }))
+    return () => window.cancelAnimationFrame(frame)
+  }, [completedTradeNo, filter])
 
   if (!hasAccess) {
     return (
@@ -1691,26 +1706,26 @@ function RefundsView({ user }: { user: SessionUser }) {
         <label className="refund-search"><span className="sr-only">Search sales</span><Search size={17} aria-hidden="true" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search receipt, customer, phone, or item" /></label>
         <div className="refund-filters" aria-label="Filter refund queue">
           {([
-            ['COMPLETED', 'Ready'],
-            ['RETURNED', 'Refunded'],
-            ['ALL', 'All'],
-          ] as [RefundQueueFilter, string][]).map(([value, label]) => (
-            <button key={value} type="button" className={filter === value ? 'active' : ''} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>
+            ['COMPLETED', 'Not refunded', eligibleCount],
+            ['RETURNED', 'Refunded', refundedCount],
+            ['ALL', 'All', trades.length],
+          ] as [RefundQueueFilter, string, number][]).map(([value, label, count]) => (
+            <button key={value} type="button" className={filter === value ? 'active' : ''} aria-pressed={filter === value} onClick={() => setFilter(value)}><span>{label}</span><strong>{count}</strong></button>
           ))}
         </div>
       </div>
 
       <div className="refund-workbench">
         <aside className="surface-card refund-queue" aria-label="Sale refund queue">
-          <header><h3>Sales</h3><span>{filteredTrades.length} shown</span></header>
+          <header><h3>{queueHeading}</h3><span>{filteredTrades.length} sale{filteredTrades.length === 1 ? '' : 's'}</span></header>
           <div className="refund-queue-list">
             {loading && <LoadingState compact label="Loading refundable sales" detail="Reading completed and refunded transactions…" />}
             {!loading && filteredTrades.map((trade) => (
-              <button key={trade._id} type="button" className={selectedId === trade._id ? 'refund-queue-item active' : 'refund-queue-item'} onClick={() => setSelectedId(trade._id)} aria-pressed={selectedId === trade._id}>
-                <span className="refund-queue-item-top"><strong>{trade.tradeNo}</strong><StatusBadge status={trade.status} /></span>
+              <button ref={selectedId === trade._id ? selectedRefundRowRef : undefined} key={trade._id} type="button" className={`refund-queue-item ${trade.status === 'RETURNED' ? 'refund-queue-item-refunded' : 'refund-queue-item-open'} ${selectedId === trade._id ? 'active' : ''}`} onClick={() => setSelectedId(trade._id)} aria-pressed={selectedId === trade._id}>
+                <span className="refund-queue-item-top"><strong>{trade.tradeNo}</strong><RefundStatusBadge status={trade.status} /></span>
                 <span className="refund-queue-party">{tradePartyName(trade)}</span>
                 <span className="refund-queue-items">{trade.items.map((item) => `${item.name} ×${item.quantity}`).join(', ')}</span>
-                <span className="refund-queue-item-bottom"><small>{dateText(trade.createdAt)}</small><strong>{tradeTransactionMoney(trade, trade.transactionAmountPaid, trade.amountPaid)}</strong></span>
+                <span className="refund-queue-item-bottom"><small>{trade.status === 'RETURNED' && trade.refund ? `Refunded ${dateText(trade.refund.refundedAt)} · ${trade.refund.refundedBy?.name || 'manager'}` : `Sold ${dateText(trade.createdAt)}`}</small><strong>{tradeTransactionMoney(trade, trade.transactionAmountPaid, trade.amountPaid)}</strong></span>
               </button>
             ))}
             {!loading && filteredTrades.length === 0 && <div className="refund-empty"><RefreshCcw size={22} /><strong>No sales match this view</strong><p>Change the filter or search terms to see other sales.</p></div>}
@@ -1723,7 +1738,7 @@ function RefundsView({ user }: { user: SessionUser }) {
             <>
               <header className="refund-review-header">
                 <div><h3>{selectedTrade.tradeNo}</h3><p>{tradePartyName(selectedTrade)} · {dateText(selectedTrade.createdAt)}</p></div>
-                <StatusBadge status={selectedTrade.status} />
+                <RefundStatusBadge status={selectedTrade.status} />
               </header>
 
               <dl className="refund-summary">
