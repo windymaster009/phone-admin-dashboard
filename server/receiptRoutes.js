@@ -152,7 +152,7 @@ function buildTradeSnapshot(trade, documentType) {
     exchangeRate: Number(trade.exchangeRate || 1),
     items,
     subtotal,
-    discount: roundMoney(trade.discount),
+    discount: currency === 'KHR' ? roundMoney(Math.max(0, subtotal - total)) : roundMoney(trade.discount),
     total,
     amountPaid,
     balance,

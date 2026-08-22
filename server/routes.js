@@ -318,13 +318,56 @@ function pawnAmountToUsd(amount, currency, exchangeRate) {
   return roundMoney(currency === 'KHR' ? Number(amount || 0) / exchangeRate : amount)
 }
 
-function salePricing(item, role) {
-  const unitPrice = roundMoney(item?.sellPrice)
-  if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+function saleCurrencyCode(value) {
+  return String(value || '').toUpperCase() === 'KHR' ? 'KHR' : 'USD'
+}
+
+function saleExchangeRate(currency, value) {
+  if (currency !== 'KHR') return 1
+  const rate = Number(value || fallbackExchangeRate())
+  if (!Number.isFinite(rate) || rate < 1000 || rate > 10000) throw requestError(400, 'A valid USD/KHR exchange rate is required')
+  return rate
+}
+
+function roundSaleCurrency(value, currency) {
+  return currency === 'KHR'
+    ? Math.round((Number(value) || 0) / 100) * 100
+    : roundMoney(value)
+}
+
+function saleCurrencyAmount(value, currency, fieldName, allowZero = true) {
+  const amount = Number(value)
+  if (!Number.isFinite(amount) || amount < 0 || (!allowZero && amount <= 0)) {
+    throw requestError(400, `${fieldName} must be ${allowZero ? 'zero or greater' : 'greater than zero'}`)
+  }
+  if (currency === 'KHR' && (!Number.isInteger(amount) || amount % 100 !== 0)) {
+    throw requestError(400, `${fieldName} must use whole 100 KHR increments`)
+  }
+  return roundSaleCurrency(amount, currency)
+}
+
+function saleAmountToUsd(amount, currency, exchangeRate) {
+  return roundMoney(currency === 'KHR' ? Number(amount || 0) / exchangeRate : amount)
+}
+
+function saleAmountFromUsd(amount, currency, exchangeRate) {
+  return roundSaleCurrency(currency === 'KHR' ? Number(amount || 0) * exchangeRate : amount, currency)
+}
+
+function salePricing(item, role, currency = 'USD', exchangeRate = 1) {
+  const normalizedUnitPrice = roundMoney(item?.sellPrice)
+  if (!Number.isFinite(normalizedUnitPrice) || normalizedUnitPrice <= 0) {
     throw requestError(409, `${item?.name || 'The selected item'} does not have a valid selling price`)
   }
-  const configuredMinimum = roundMoney(item?.minimumSellPrice)
-  const minimumUnitPrice = Number.isFinite(configuredMinimum) && configuredMinimum > 0
+  const normalizedMinimum = roundMoney(item?.minimumSellPrice)
+  const listedInKhr = item?.pricingCurrency === 'KHR'
+  const unitPrice = currency === 'KHR' && listedInKhr && Number.isFinite(Number(item?.listedSellPrice))
+    ? roundSaleCurrency(item.listedSellPrice, currency)
+    : saleAmountFromUsd(normalizedUnitPrice, currency, exchangeRate)
+  const configuredMinimum = currency === 'KHR' && listedInKhr && Number.isFinite(Number(item?.listedMinimumSellPrice))
+    ? roundSaleCurrency(item.listedMinimumSellPrice, currency)
+    : saleAmountFromUsd(normalizedMinimum, currency, exchangeRate)
+  const minimumUnitPrice = normalizedMinimum > 0
     ? configuredMinimum
     : role === 'CASHIER'
       ? unitPrice
@@ -332,20 +375,21 @@ function salePricing(item, role) {
   if (minimumUnitPrice > unitPrice) {
     throw requestError(409, `${item.name} has an invalid minimum selling price`)
   }
-  return { unitPrice, minimumUnitPrice }
+  return { unitPrice, minimumUnitPrice, normalizedUnitPrice }
 }
 
-function saleDiscount(value, subtotal, minimumTotal) {
-  const discount = roundMoney(value || 0)
-  const maximumDiscount = roundMoney(Math.max(0, subtotal - minimumTotal))
-  if (!Number.isFinite(discount) || discount < 0) throw requestError(400, 'Discount is invalid')
-  if (discount > maximumDiscount + 0.001) {
-    throw requestError(400, `Discount cannot exceed ${maximumDiscount.toFixed(2)} without changing the minimum selling price`)
+function saleDiscount(value, subtotal, minimumTotal, currency = 'USD') {
+  const discount = saleCurrencyAmount(value || 0, currency, 'Discount')
+  const maximumDiscount = roundSaleCurrency(Math.max(0, subtotal - minimumTotal), currency)
+  const tolerance = currency === 'KHR' ? 0 : 0.001
+  if (discount > maximumDiscount + tolerance) {
+    const maximumText = currency === 'KHR' ? `${maximumDiscount.toLocaleString()} KHR` : `$${maximumDiscount.toFixed(2)}`
+    throw requestError(400, `Discount cannot exceed ${maximumText} without changing the minimum selling price`)
   }
   return discount
 }
 
-async function buildSaleQuote(lines, session, role) {
+async function buildSaleQuote(lines, session, role, currency = 'USD', exchangeRate = 1) {
   if (!Array.isArray(lines) || lines.length === 0 || lines.length > 100) {
     throw requestError(400, 'Add between 1 and 100 sale items')
   }
@@ -366,19 +410,22 @@ async function buildSaleQuote(lines, session, role) {
     if (!item || item.status !== 'IN_STOCK' || item.quantity < quantity) {
       throw requestError(409, `${line.name || 'Item'} does not have enough available stock`)
     }
-    const { unitPrice, minimumUnitPrice } = salePricing(item, role)
-    if (line.unitPrice !== undefined && Math.abs(Number(line.unitPrice) - unitPrice) > 0.001) {
+    const { unitPrice, minimumUnitPrice, normalizedUnitPrice } = salePricing(item, role, currency, exchangeRate)
+    const tolerance = currency === 'KHR' ? 0 : 0.001
+    if (line.unitPrice !== undefined && Math.abs(Number(line.unitPrice) - unitPrice) > tolerance) {
       throw requestError(409, `${item.name} has a new selling price. Refresh and try again`)
     }
-    subtotal = roundMoney(subtotal + quantity * unitPrice)
-    minimumTotal = roundMoney(minimumTotal + quantity * minimumUnitPrice)
+    subtotal = roundSaleCurrency(subtotal + quantity * unitPrice, currency)
+    minimumTotal = roundSaleCurrency(minimumTotal + quantity * minimumUnitPrice, currency)
     inventoryUpdates.push({ item, quantity })
     tradeItems.push({
       inventoryItem: item._id,
       name: item.name,
       quantity,
-      unitPrice,
+      unitPrice: normalizedUnitPrice,
       costPrice: Number(item.buyPrice) || 0,
+      originalUnitPrice: currency === 'KHR' ? unitPrice : undefined,
+      currency,
     })
   }
   return { tradeItems, inventoryUpdates, subtotal, minimumTotal }
@@ -1781,20 +1828,41 @@ router.post('/inventory', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), 
 }))
 
 router.patch('/inventory/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
-  const allowed = ['sellPrice', 'minimumSellPrice']
-  const update = Object.fromEntries(Object.entries(req.body).filter(([key]) => allowed.includes(key)))
-  if (Object.keys(update).length === 0) {
+  if (req.body.sellPrice === undefined && req.body.minimumSellPrice === undefined) {
     return res.status(400).json({ message: 'Use the stock adjustment, photo, purchase, sale, or pawn workflow for this change' })
   }
-  const current = await InventoryItem.findById(req.params.id).select('sellPrice minimumSellPrice')
+  const current = await InventoryItem.findById(req.params.id).select('sellPrice minimumSellPrice pricingCurrency pricingExchangeRate listedSellPrice listedMinimumSellPrice')
   if (!current) return res.status(404).json({ message: 'Inventory item not found' })
-  const nextSellPrice = update.sellPrice === undefined ? current.sellPrice : Number(update.sellPrice)
-  const nextMinimumPrice = update.minimumSellPrice === undefined ? current.minimumSellPrice : Number(update.minimumSellPrice)
-  if (!Number.isFinite(nextSellPrice) || nextSellPrice < 0 || !Number.isFinite(nextMinimumPrice) || nextMinimumPrice < 0) {
-    return res.status(400).json({ message: 'Selling prices must be valid positive amounts or zero' })
+  const currency = req.body.currency === undefined
+    ? saleCurrencyCode(current.pricingCurrency)
+    : saleCurrencyCode(req.body.currency)
+  if (req.body.currency !== undefined && !['USD', 'KHR'].includes(String(req.body.currency).toUpperCase())) {
+    return res.status(400).json({ message: 'Pricing currency must be USD or KHR' })
   }
-  if (nextMinimumPrice > nextSellPrice) {
+  const exchangeRateInput = req.body.exchangeRate || (current.pricingCurrency === 'KHR' ? current.pricingExchangeRate : undefined)
+  const exchangeRate = saleExchangeRate(currency, exchangeRateInput)
+  const currentSellPrice = currency === 'KHR'
+    ? current.pricingCurrency === 'KHR' && Number.isFinite(Number(current.listedSellPrice))
+      ? Number(current.listedSellPrice)
+      : saleAmountFromUsd(current.sellPrice, currency, exchangeRate)
+    : Number(current.sellPrice)
+  const currentMinimumPrice = currency === 'KHR'
+    ? current.pricingCurrency === 'KHR' && Number.isFinite(Number(current.listedMinimumSellPrice))
+      ? Number(current.listedMinimumSellPrice)
+      : saleAmountFromUsd(current.minimumSellPrice, currency, exchangeRate)
+    : Number(current.minimumSellPrice)
+  const nextListedSellPrice = saleCurrencyAmount(req.body.sellPrice === undefined ? currentSellPrice : req.body.sellPrice, currency, 'Regular selling price')
+  const nextListedMinimumPrice = saleCurrencyAmount(req.body.minimumSellPrice === undefined ? currentMinimumPrice : req.body.minimumSellPrice, currency, 'Minimum selling price')
+  if (nextListedMinimumPrice > nextListedSellPrice) {
     return res.status(400).json({ message: 'Discount or minimum price cannot exceed the regular selling price' })
+  }
+  const update = {
+    sellPrice: saleAmountToUsd(nextListedSellPrice, currency, exchangeRate),
+    minimumSellPrice: saleAmountToUsd(nextListedMinimumPrice, currency, exchangeRate),
+    pricingCurrency: currency,
+    pricingExchangeRate: exchangeRate,
+    listedSellPrice: nextListedSellPrice,
+    listedMinimumSellPrice: nextListedMinimumPrice,
   }
   const item = await InventoryItem.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true })
   await writeActivity(req, { action: 'UPDATE', entity: 'INVENTORY', entityId: item._id, details: update })
@@ -2653,6 +2721,8 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
     discount = 0,
     amountPaid,
     paymentMethod = 'CASH',
+    currency: requestedCurrency = 'USD',
+    exchangeRate: requestedExchangeRate,
     paywayTransactionId,
     notes,
   } = req.body
@@ -2660,15 +2730,20 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
   if (!['CASH', 'KHQR', 'BANK', 'CARD', 'OTHER'].includes(paymentMethod)) {
     throw requestError(400, 'Invalid payment method')
   }
+  if (!['USD', 'KHR'].includes(String(requestedCurrency).toUpperCase())) throw requestError(400, 'Sale currency must be USD or KHR')
+  const currency = saleCurrencyCode(requestedCurrency)
+  if (paymentMethod === 'KHQR' && currency !== 'USD') throw requestError(400, 'KHQR sales currently support USD only')
+  const exchangeRate = saleExchangeRate(currency, requestedExchangeRate)
   if (paymentMethod === 'KHQR') requirePaywayFeature()
   if (paymentMethod === 'KHQR' && !paywayTransactionId) throw requestError(400, 'PayWay transaction ID is required')
   if (paywayTransactionId && await Trade.exists({ paywayTransactionId })) {
     throw requestError(409, 'This KHQR payment has already been recorded')
   }
-  const initialQuote = await buildSaleQuote(items, undefined, req.user.role)
-  const verifiedDiscount = saleDiscount(discount, initialQuote.subtotal, initialQuote.minimumTotal)
-  const total = roundMoney(initialQuote.subtotal - verifiedDiscount)
-  if (total < 0.01) throw requestError(400, 'Sale total must be at least $0.01')
+  const initialQuote = await buildSaleQuote(items, undefined, req.user.role, currency, exchangeRate)
+  const verifiedDiscount = saleDiscount(discount, initialQuote.subtotal, initialQuote.minimumTotal, currency)
+  const transactionTotal = roundSaleCurrency(initialQuote.subtotal - verifiedDiscount, currency)
+  const minimumSaleTotal = currency === 'KHR' ? 100 : 0.01
+  if (transactionTotal < minimumSaleTotal) throw requestError(400, `Sale total must be at least ${currency === 'KHR' ? '100 KHR' : '$0.01'}`)
   let paymentIntent
   if (paymentMethod === 'KHQR') {
     paymentIntent = await authorizedPaywayIntent(req, paywayTransactionId)
@@ -2678,7 +2753,7 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
     if (items.length !== 1
       || String(paymentIntent.inventoryItem) !== String(items[0].inventoryItem)
       || Number(paymentIntent.quantity) !== Number(items[0].quantity || 1)
-      || Math.abs(Number(paymentIntent.amount) - total) > 0.001) {
+      || Math.abs(Number(paymentIntent.amount) - transactionTotal) > 0.001) {
       throw requestError(409, 'KHQR payment request does not match this sale')
     }
     const payment = await checkPaywayTransaction(paymentIntent.transactionId)
@@ -2686,16 +2761,18 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
     const approved = Number(paymentData.payment_status_code) === 0
       && String(paymentData.payment_status || '').toUpperCase() === 'APPROVED'
     const paidAmount = Number(paymentData.original_amount ?? paymentData.total_amount)
-    const paidCurrency = String(paymentData.original_currency || paymentData.payment_currency || '').toUpperCase()
+    const providerCurrency = String(paymentData.original_currency || paymentData.payment_currency || '').toUpperCase()
     if (!approved) throw requestError(409, 'KHQR payment has not been approved yet')
-    if (paidCurrency !== 'USD' || !Number.isFinite(paidAmount) || Math.abs(paidAmount - total) > 0.001) {
+    if (providerCurrency !== 'USD' || !Number.isFinite(paidAmount) || Math.abs(paidAmount - transactionTotal) > 0.001) {
       throw requestError(409, 'KHQR payment amount or currency does not match this sale')
     }
   }
-  const paid = paymentMethod === 'KHQR' ? total : amountPaid === undefined ? total : Number(amountPaid)
-  if (!Number.isFinite(paid) || paid < 0 || paid > total + 0.001) {
+  const paid = saleCurrencyAmount(paymentMethod === 'KHQR' || amountPaid === undefined ? transactionTotal : amountPaid, currency, 'Amount paid')
+  const paymentTolerance = currency === 'KHR' ? 0 : 0.001
+  if (paid > transactionTotal + paymentTolerance) {
     throw requestError(400, 'Amount paid must be between zero and the sale total')
   }
+  const transactionBalance = roundSaleCurrency(Math.max(0, transactionTotal - paid), currency)
 
   const session = await mongoose.startSession()
   let trade
@@ -2710,10 +2787,10 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
         throw requestError(409, 'This KHQR payment has already been recorded')
       }
 
-      const quote = await buildSaleQuote(items, session, req.user.role)
-      const currentDiscount = saleDiscount(discount, quote.subtotal, quote.minimumTotal)
-      const currentTotal = roundMoney(quote.subtotal - currentDiscount)
-      if (Math.abs(currentTotal - total) > 0.001) throw requestError(409, 'Sale pricing changed. Refresh and try again')
+      const quote = await buildSaleQuote(items, session, req.user.role, currency, exchangeRate)
+      const currentDiscount = saleDiscount(discount, quote.subtotal, quote.minimumTotal, currency)
+      const currentTransactionTotal = roundSaleCurrency(quote.subtotal - currentDiscount, currency)
+      if (Math.abs(currentTransactionTotal - transactionTotal) > paymentTolerance) throw requestError(409, 'Sale pricing changed. Refresh and try again')
 
       for (const { item, quantity } of quote.inventoryUpdates) {
         item.quantity -= quantity
@@ -2726,12 +2803,18 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
         type: 'SELL',
         customer: customer || undefined,
         items: quote.tradeItems,
-        subtotal: quote.subtotal,
-        discount: currentDiscount,
-        total: currentTotal,
-        amountPaid: roundMoney(paid),
-        balance: roundMoney(Math.max(0, currentTotal - paid)),
-        paymentStatus: paymentState(currentTotal, paid),
+        currency,
+        exchangeRate,
+        transactionSubtotal: quote.subtotal,
+        transactionTotal: currentTransactionTotal,
+        transactionAmountPaid: paid,
+        transactionBalance,
+        subtotal: saleAmountToUsd(quote.subtotal, currency, exchangeRate),
+        discount: saleAmountToUsd(currentDiscount, currency, exchangeRate),
+        total: saleAmountToUsd(currentTransactionTotal, currency, exchangeRate),
+        amountPaid: saleAmountToUsd(paid, currency, exchangeRate),
+        balance: saleAmountToUsd(transactionBalance, currency, exchangeRate),
+        paymentStatus: paymentState(currentTransactionTotal, paid),
         paymentMethod,
         paywayTransactionId: paywayTransactionId || undefined,
         notes: clean(notes),
@@ -2754,7 +2837,7 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
       console.error(`Unable to close completed PayWay transaction ${paywayTransactionId}:`, error.message)
     })
   }
-  await writeActivity(req, { action: 'CREATE', entity: 'TRADE', entityId: trade._id, details: { tradeNo: trade.tradeNo, type: 'SELL', total } })
+  await writeActivity(req, { action: 'CREATE', entity: 'TRADE', entityId: trade._id, details: { tradeNo: trade.tradeNo, type: 'SELL', currency, total: transactionTotal } })
   await trade.populate('customer', 'name phone')
   await trade.populate('items.inventoryItem', 'sku barcode name category brand model imei1 condition quantity buyPrice sellPrice status')
   res.status(201).json({ trade })

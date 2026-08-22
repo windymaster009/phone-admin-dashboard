@@ -135,6 +135,10 @@ type InventoryItem = {
   buyPrice: number
   sellPrice: number
   minimumSellPrice?: number
+  pricingCurrency?: 'USD' | 'KHR'
+  pricingExchangeRate?: number
+  listedSellPrice?: number
+  listedMinimumSellPrice?: number
   status: string
 }
 
@@ -642,10 +646,27 @@ const purchaseSourceLabel = (sellerType?: string) => {
   if (sellerType === 'WALK_IN') return 'Walk-in'
   return 'Legacy'
 }
-const tradeTransactionMoney = (trade: Trade, original: number | undefined, fallback: number) => trade.type === 'BUY' && trade.currency === 'KHR' && original !== undefined
-  ? `${Math.round(original).toLocaleString()} ៛`
+const tradeTransactionMoney = (trade: Trade, original: number | undefined, fallback: number) => trade.currency === 'KHR' && original !== undefined
+  ? `${Math.round(original).toLocaleString()} KHR`
   : money.format(original ?? fallback)
 const riel = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
+
+function inventoryPriceCurrency(item: InventoryItem) {
+  return item.pricingCurrency === 'KHR' ? 'KHR' : 'USD'
+}
+
+function inventoryListedPrice(item: InventoryItem, minimum = false) {
+  if (inventoryPriceCurrency(item) !== 'KHR') return Number(minimum ? item.minimumSellPrice : item.sellPrice) || 0
+  const listed = Number(minimum ? item.listedMinimumSellPrice : item.listedSellPrice)
+  if (Number.isFinite(listed)) return listed
+  const rate = Number(item.pricingExchangeRate) > 0 ? Number(item.pricingExchangeRate) : 4100
+  return Math.round(((Number(minimum ? item.minimumSellPrice : item.sellPrice) || 0) * rate) / 100) * 100
+}
+
+function inventoryPriceText(item: InventoryItem, minimum = false) {
+  const value = inventoryListedPrice(item, minimum)
+  return inventoryPriceCurrency(item) === 'KHR' ? `${riel.format(value)} KHR` : money.format(value)
+}
 
 function pawnMoney(amount: number, currencyCode: PawnCurrency = 'USD') {
   return currencyCode === 'KHR'
@@ -1448,7 +1469,7 @@ function TradeView() {
               <span className={`transaction-icon ${transaction.type === 'SELL' ? 'sale' : 'purchase'}`}>{transaction.type === 'SELL' ? <ArrowUpRight /> : <ArrowDownRight />}</span>
               <p><strong>{transaction.items.map((item) => `${item.name} x${item.quantity}`).join(', ')}</strong><small>{transaction.tradeNo} - {tradePartyName(transaction)} - {dateText(transaction.purchaseDate || transaction.createdAt)}</small></p>
               <StatusBadge status={transaction.type === 'SELL' ? 'Sale' : 'Purchase'} />
-              <strong className={transaction.type === 'SELL' ? 'money-in' : 'money-out'}>{transaction.type === 'SELL' ? '+' : '-'}{money.format(transaction.total)}</strong>
+              <strong className={transaction.type === 'SELL' ? 'money-in' : 'money-out'}>{transaction.type === 'SELL' ? '+' : '-'}{tradeTransactionMoney(transaction, transaction.transactionTotal, transaction.total)}</strong>
               <button className="icon-button" onClick={() => setSelectedTrade(transaction)} aria-label={`View ${transaction.tradeNo}`}><MoreHorizontal size={18} /></button>
             </div>
           ))}
@@ -1557,6 +1578,7 @@ function InventoryView() {
   const [editingPrice, setEditingPrice] = useState(false)
   const [sellingPriceDraft, setSellingPriceDraft] = useState('')
   const [minimumPriceDraft, setMinimumPriceDraft] = useState('')
+  const [priceCurrency, setPriceCurrency] = useState<'USD' | 'KHR'>('USD')
   const [savingPrice, setSavingPrice] = useState(false)
   const [savingPhoto, setSavingPhoto] = useState(false)
   const [search, setSearch] = useState('')
@@ -1564,6 +1586,8 @@ function InventoryView() {
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [inventoryView, setInventoryView] = useState<'large' | 'details'>(() => localStorage.getItem('phoneflow_inventory_view') === 'details' ? 'details' : 'large')
   const [error, setError] = useState('')
+  const exchangeRate = useExchangeRate()
+  const usdKhrRate = Number(exchangeRate?.usdKhr) > 0 ? Number(exchangeRate?.usdKhr) : 4100
 
   useEffect(() => {
     api<{ items: InventoryItem[] }>('/inventory')
@@ -1619,10 +1643,27 @@ function InventoryView() {
 
   function openPriceEditor() {
     if (!selectedItem) return
-    setSellingPriceDraft(String(selectedItem.sellPrice || ''))
-    setMinimumPriceDraft(String(selectedItem.minimumSellPrice || ''))
+    const currency = inventoryPriceCurrency(selectedItem)
+    setPriceCurrency(currency)
+    setSellingPriceDraft(String(inventoryListedPrice(selectedItem) || ''))
+    setMinimumPriceDraft(String(inventoryListedPrice(selectedItem, true) || ''))
     setError('')
     setEditingPrice(true)
+  }
+
+  function changePriceCurrency(currency: 'USD' | 'KHR') {
+    if (currency === priceCurrency) return
+    const convert = (value: string) => {
+      const amount = Number(value || 0)
+      if (!amount) return ''
+      return currency === 'KHR'
+        ? String(Math.round((amount * usdKhrRate) / 100) * 100)
+        : String(Math.round((amount / usdKhrRate) * 100) / 100)
+    }
+    setSellingPriceDraft(convert(sellingPriceDraft))
+    setMinimumPriceDraft(convert(minimumPriceDraft))
+    setPriceCurrency(currency)
+    setError('')
   }
 
   async function saveSellingPrice() {
@@ -1637,12 +1678,16 @@ function InventoryView() {
       setError('Minimum selling price cannot exceed the regular selling price')
       return
     }
+    if (priceCurrency === 'KHR' && (!Number.isInteger(sellingPrice) || sellingPrice % 100 !== 0 || !Number.isInteger(minimumPrice) || minimumPrice % 100 !== 0)) {
+      setError('KHR prices must use whole 100 KHR increments')
+      return
+    }
     setSavingPrice(true)
     setError('')
     try {
       const result = await api<{ item: InventoryItem }>(`/inventory/${selectedItem._id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ sellPrice: sellingPrice, minimumSellPrice: minimumPrice }),
+        body: JSON.stringify({ sellPrice: sellingPrice, minimumSellPrice: minimumPrice, currency: priceCurrency, exchangeRate: priceCurrency === 'KHR' ? usdKhrRate : 1 }),
       })
       setSelectedItem(result.item)
       setItems((current) => current.map((item) => item._id === result.item._id ? result.item : item))
@@ -1765,7 +1810,7 @@ function InventoryView() {
                   <strong>{item.name}</strong>
                   <small>{inventorySubtitle(item)}</small>
                 </div>
-                <footer><strong>{money.format(item.sellPrice || item.buyPrice)}</strong><small>{item.quantity} in stock</small></footer>
+                <footer><strong>{item.sellPrice > 0 ? inventoryPriceText(item) : money.format(item.buyPrice)}</strong><small>{item.quantity} in stock</small></footer>
               </button>
             ))}
             {loading && <LoadingState label="Loading inventory" detail="Reading stock counts and product records…" />}
@@ -1784,7 +1829,7 @@ function InventoryView() {
                       <td>{titleStatus(row.category)}</td>
                       <td><strong>{row.quantity}</strong></td>
                       <td>{money.format(row.buyPrice)}</td>
-                      <td>{money.format(row.sellPrice)}</td>
+                      <td>{inventoryPriceText(row)}</td>
                       <td><StatusBadge status={row.status} /></td>
                       <td><button className="icon-button" onClick={() => setSelectedItem(row)} aria-label={`View ${row.sku}`}><MoreHorizontal size={18} /></button></td>
                     </tr>
@@ -1799,7 +1844,7 @@ function InventoryView() {
                 <article className="mobile-record-card" key={row._id}>
                   <div className="mobile-record-heading"><InventoryPhoto item={row} size="small" /><p><strong>{row.name}</strong><small>{row.sku} · {inventorySubtitle(row)}</small></p><StatusBadge status={row.status} /></div>
                   <div className="mobile-record-details">
-                    <div><span>Category</span><strong>{titleStatus(row.category)}</strong></div><div><span>In stock</span><strong>{row.quantity}</strong></div><div><span>Sell price</span><strong>{money.format(row.sellPrice)}</strong></div>
+                    <div><span>Category</span><strong>{titleStatus(row.category)}</strong></div><div><span>In stock</span><strong>{row.quantity}</strong></div><div><span>Sell price</span><strong>{inventoryPriceText(row)}</strong></div>
                     <button className="icon-button" onClick={() => setSelectedItem(row)} aria-label={`View ${row.sku}`}><MoreHorizontal size={18} /></button>
                   </div>
                 </article>
@@ -1833,8 +1878,8 @@ function InventoryView() {
                   <div><span>Quantity</span><strong>{selectedItem.quantity}</strong></div>
                   <div><span>Low stock level</span><strong>{selectedItem.reorderLevel}</strong></div>
                   <div><span>Buy price</span><strong>{money.format(selectedItem.buyPrice)}</strong></div>
-                  <div><span>Sell price</span><strong>{money.format(selectedItem.sellPrice)}</strong></div>
-                  <div><span>Minimum sell</span><strong>{money.format(selectedItem.minimumSellPrice || 0)}</strong></div>
+                  <div><span>Sell price</span><strong>{inventoryPriceText(selectedItem)}</strong></div>
+                  <div><span>Minimum sell</span><strong>{inventoryPriceText(selectedItem, true)}</strong></div>
                   <div><span>Barcode</span><strong className="mono">{selectedItem.barcode || selectedItem.sku}</strong></div>
                   <div><span>Source</span><strong>{selectedItem.source ? titleStatus(selectedItem.source) : 'Not recorded'}</strong></div>
                   <div><span>Created</span><strong>{selectedItem.createdAt ? dateText(selectedItem.createdAt) : 'Not recorded'}</strong></div>
@@ -1873,9 +1918,10 @@ function InventoryView() {
               </section>
 
               {editingPrice && <div className="inventory-price-editor">
-                <div className="inventory-price-heading"><span className="eyebrow">Inventory pricing</span><h4>Set selling price</h4><p>Prices are stored in USD. KHR purchase costs are converted using the purchase transaction's exchange rate.</p></div>
-                <label>Regular selling price<div className="input-prefix"><span>$</span><MoneyInput autoFocus currency="USD" minimum={0} value={sellingPriceDraft} onValueChange={setSellingPriceDraft} placeholder="0.00" /></div></label>
-                <label>Minimum selling price<div className="input-prefix"><span>$</span><MoneyInput currency="USD" minimum={0} maximum={Number(sellingPriceDraft || 0)} value={minimumPriceDraft} onValueChange={setMinimumPriceDraft} placeholder="0.00" /></div><small>The sale form will not allow a discount below this price.</small></label>
+                <div className="inventory-price-heading"><span className="eyebrow">Inventory pricing</span><h4>Set selling price</h4><p>Choose the currency customers will see. KHR prices stay exact; reports also keep a USD equivalent using 1 USD = {riel.format(usdKhrRate)} KHR.</p></div>
+                <label>Price currency<select value={priceCurrency} onChange={(event) => changePriceCurrency(event.target.value as 'USD' | 'KHR')}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Cambodian Riel</option></select></label>
+                <label>Regular selling price<div className="input-prefix"><span>{priceCurrency === 'KHR' ? '៛' : '$'}</span><MoneyInput autoFocus currency={priceCurrency} minimum={0} value={sellingPriceDraft} onValueChange={setSellingPriceDraft} placeholder={priceCurrency === 'KHR' ? '0' : '0.00'} /></div></label>
+                <label>Minimum selling price<div className="input-prefix"><span>{priceCurrency === 'KHR' ? '៛' : '$'}</span><MoneyInput currency={priceCurrency} minimum={0} maximum={Number(sellingPriceDraft || 0)} value={minimumPriceDraft} onValueChange={setMinimumPriceDraft} placeholder={priceCurrency === 'KHR' ? '0' : '0.00'} /></div><small>The sale form will not allow a discount below this price.</small></label>
                 <div className="inventory-price-actions"><button className="ghost-button" onClick={() => { setEditingPrice(false); setError('') }}>Cancel</button><button className="primary-button" onClick={() => void saveSellingPrice()} disabled={savingPrice || Number(minimumPriceDraft || 0) > Number(sellingPriceDraft || 0)}>{savingPrice ? 'Saving...' : 'Save price'}</button></div>
               </div>}
 

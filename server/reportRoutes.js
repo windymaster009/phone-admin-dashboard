@@ -315,9 +315,9 @@ router.get('/payments', requireAuth, allowRoles(...reportRoles), asyncRoute(asyn
     { type: 'BUY', currency, purchaseDate: { $gte: period.from, $lt: period.to } },
     { type: 'BUY', currency, purchaseDate: null, createdAt: { $gte: period.from, $lt: period.to } },
   ]
-  if (currency === 'USD') {
-    tradeDateBranches.unshift({ type: 'SELL', createdAt: { $gte: period.from, $lt: period.to } })
-  }
+  tradeDateBranches.unshift(currency === 'KHR'
+    ? { type: 'SELL', currency: 'KHR', createdAt: { $gte: period.from, $lt: period.to } }
+    : { type: 'SELL', currency: { $ne: 'KHR' }, createdAt: { $gte: period.from, $lt: period.to } })
   const [trades, loanPayments, pawnRecords] = await Promise.all([
     Trade.find({
       status: 'COMPLETED',
@@ -335,7 +335,7 @@ router.get('/payments', requireAuth, allowRoles(...reportRoles), asyncRoute(asyn
   const entries = []
   for (const trade of trades) {
     const isPurchase = trade.type === 'BUY'
-    const amount = isPurchase && currency === 'KHR'
+    const amount = currency === 'KHR'
       ? Number(trade.transactionAmountPaid || 0)
       : Number(trade.amountPaid || 0)
     entries.push({

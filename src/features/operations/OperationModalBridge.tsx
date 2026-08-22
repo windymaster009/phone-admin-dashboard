@@ -48,6 +48,10 @@ type InventoryItem = {
   quantity: number
   sellPrice: number
   minimumSellPrice?: number
+  pricingCurrency?: 'USD' | 'KHR'
+  pricingExchangeRate?: number
+  listedSellPrice?: number
+  listedMinimumSellPrice?: number
   buyPrice?: number
   barcode?: string
   brand?: string
@@ -66,6 +70,7 @@ type Supplier = {
 
 type SellerType = 'EXISTING_CUSTOMER' | 'EXISTING_SUPPLIER' | 'WALK_IN' | 'NEW_CUSTOMER' | 'NEW_SUPPLIER'
 type PurchaseCurrency = 'USD' | 'KHR'
+type SaleCurrency = PurchaseCurrency
 type PawnCurrency = 'USD' | 'KHR'
 type PurchaseInventoryMode = 'NEW' | 'EXISTING'
 type PawnCustomerMode = 'EXISTING' | 'NEW'
@@ -114,6 +119,8 @@ type SaleDraft = {
   discount: number
   amountPaid: number
   paymentMethod: SalePaymentMethod
+  currency: SaleCurrency
+  exchangeRate: number
   notes: string
 }
 
@@ -199,6 +206,27 @@ const money = new Intl.NumberFormat('en-US', {
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
 })
+
+const riel = new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 })
+
+function saleAmountText(value: number, currency: SaleCurrency) {
+  return currency === 'KHR' ? `${riel.format(Math.round(value))} KHR` : money.format(value)
+}
+
+function inventorySalePrice(item: InventoryItem | undefined, currency: SaleCurrency, exchangeRate: number, minimum = false) {
+  if (!item) return 0
+  const normalizedUsd = Math.max(0, Number(minimum ? item.minimumSellPrice : item.sellPrice) || 0)
+  if (currency === 'USD') return normalizedUsd
+  const listed = Number(minimum ? item.listedMinimumSellPrice : item.listedSellPrice)
+  if (item.pricingCurrency === 'KHR' && Number.isFinite(listed)) return Math.max(0, listed)
+  return Math.round((normalizedUsd * exchangeRate) / 100) * 100
+}
+
+function inventoryNativeSalePriceText(item: InventoryItem) {
+  const currency: SaleCurrency = item.pricingCurrency === 'KHR' ? 'KHR' : 'USD'
+  const rate = Number(item.pricingExchangeRate) > 0 ? Number(item.pricingExchangeRate) : 4100
+  return saleAmountText(inventorySalePrice(item, currency, rate), currency)
+}
 
 const modalMeta: Record<ModalKind, { title: string; description: string; icon: ReactNode }> = {
   stock: {
@@ -409,6 +437,7 @@ export default function OperationModalBridge() {
   const [saleAmountPaid, setSaleAmountPaid] = useState('')
   const [saleNotes, setSaleNotes] = useState('')
   const [salePaymentMethod, setSalePaymentMethod] = useState<SalePaymentMethod>('CASH')
+  const [saleCurrency, setSaleCurrency] = useState<SaleCurrency>('USD')
   const [saleKhqr, setSaleKhqr] = useState<SaleKhqr | null>(null)
   const [saleQrZoomed, setSaleQrZoomed] = useState(false)
   const [saleDraft, setSaleDraft] = useState<SaleDraft | null>(null)
@@ -574,9 +603,9 @@ export default function OperationModalBridge() {
         && Number(resultingStockQuantity) >= 0),
   )
   const effectiveSaleQuantity = selectedSaleItem?.category === 'PHONE' ? 1 : Math.max(1, Number(saleQuantity) || 1)
-  const saleUnitPrice = Math.max(0, Number(selectedSaleItem?.sellPrice) || 0)
+  const saleUnitPrice = inventorySalePrice(selectedSaleItem, saleCurrency, usdKhrRate)
   const saleSubtotal = effectiveSaleQuantity * saleUnitPrice
-  const configuredMinimumSalePrice = Math.max(0, Number(selectedSaleItem?.minimumSellPrice) || 0)
+  const configuredMinimumSalePrice = inventorySalePrice(selectedSaleItem, saleCurrency, usdKhrRate, true)
   const effectiveMinimumSalePrice = configuredMinimumSalePrice > 0
     ? configuredMinimumSalePrice
     : getSessionUser()?.role === 'CASHIER'
@@ -589,7 +618,9 @@ export default function OperationModalBridge() {
   const salePriceInvalid = Boolean(selectedSaleItem && saleUnitPrice <= 0)
   const saleStockPricingInvalid = configuredMinimumSalePrice > saleUnitPrice
   const saleDiscountInvalid = saleDiscountAmount > saleMaximumDiscount
-  const salePaidInvalid = salePaymentMethod === 'CASH' && salePaidAmount > saleTotal
+    || (saleCurrency === 'KHR' && (!Number.isInteger(saleDiscountAmount) || saleDiscountAmount % 100 !== 0))
+  const salePaidInvalid = salePaymentMethod === 'CASH' && (salePaidAmount > saleTotal
+    || (saleCurrency === 'KHR' && (!Number.isInteger(salePaidAmount) || salePaidAmount % 100 !== 0)))
   const saleActionDisabled = busy
     || saleInventoryLoading
     || !saleItemId
@@ -597,7 +628,7 @@ export default function OperationModalBridge() {
     || saleStockPricingInvalid
     || saleDiscountInvalid
     || salePaidInvalid
-    || saleTotal < 0.01
+    || saleTotal < (saleCurrency === 'KHR' ? 100 : 0.01)
   const saleActionLabel = busy
     ? salePaymentMethod === 'KHQR' ? 'Generating KHQR...' : 'Saving sale...'
     : saleInventoryLoading
@@ -612,7 +643,7 @@ export default function OperationModalBridge() {
               ? 'Reduce discount'
               : salePaidInvalid
                 ? 'Check amount paid'
-                : saleTotal < 0.01
+                : saleTotal < (saleCurrency === 'KHR' ? 100 : 0.01)
                   ? 'Enter a valid amount'
                   : salePaymentMethod === 'KHQR'
                     ? 'Generate KHQR'
@@ -675,6 +706,9 @@ export default function OperationModalBridge() {
         .then((result) => setInventory(result.items.filter((item) => item.quantity > 0)))
         .catch((reason: Error) => setError(reason.message))
         .finally(() => setSaleInventoryLoading(false))
+      api<{ usdKhr: number }>('/exchange-rates')
+        .then((result) => setUsdKhrRate(result.usdKhr))
+        .catch(() => setUsdKhrRate(4100))
       api<{ enabled: boolean; configured: boolean }>('/payway/config')
         .then((result) => {
           const available = result.enabled && result.configured
@@ -800,6 +834,7 @@ export default function OperationModalBridge() {
     setSaleAmountPaid('')
     setSaleNotes('')
     setSalePaymentMethod('CASH')
+    setSaleCurrency('USD')
     setSaleKhqr(null)
     setSaleQrZoomed(false)
     setSaleDraft(null)
@@ -902,6 +937,7 @@ export default function OperationModalBridge() {
     if (!scannedItem || scannedItem.status !== 'IN_STOCK' || scannedItem.quantity < 1 || scannedItem.sellPrice <= 0) return
     setInventory((current) => current.some((item) => item._id === scannedItem._id) ? current : [scannedItem, ...current])
     setSaleItemId(scannedItem._id)
+    setSaleCurrency(scannedItem.pricingCurrency === 'KHR' ? 'KHR' : 'USD')
     setSaleDiscount('0')
     setSaleAmountPaid('')
     setError('')
@@ -1094,11 +1130,12 @@ export default function OperationModalBridge() {
       return
     }
     const quantity = selected.category === 'PHONE' ? 1 : Number(saleQuantity || 1)
-    const unitPrice = Number(selected.sellPrice)
+    const unitPrice = inventorySalePrice(selected, saleCurrency, usdKhrRate)
     const discount = Number(saleDiscount || 0)
     const total = Math.max(0, quantity * unitPrice - discount)
-    const minimumUnitPrice = Number(selected.minimumSellPrice) > 0
-      ? Number(selected.minimumSellPrice)
+    const configuredMinimum = inventorySalePrice(selected, saleCurrency, usdKhrRate, true)
+    const minimumUnitPrice = configuredMinimum > 0
+      ? configuredMinimum
       : getSessionUser()?.role === 'CASHIER'
         ? unitPrice
         : 0
@@ -1108,13 +1145,22 @@ export default function OperationModalBridge() {
       setError(`Quantity must be between 1 and ${selected.quantity}`)
       return
     }
-    if (!Number.isFinite(unitPrice) || unitPrice <= 0 || minimumUnitPrice > unitPrice || !Number.isFinite(discount) || discount < 0 || discount > maximumDiscount) {
+    const invalidKhrAmount = saleCurrency === 'KHR' && (!Number.isInteger(unitPrice) || unitPrice % 100 !== 0 || !Number.isInteger(discount) || discount % 100 !== 0)
+    if (!Number.isFinite(unitPrice) || unitPrice <= 0 || minimumUnitPrice > unitPrice || !Number.isFinite(discount) || discount < 0 || discount > maximumDiscount || invalidKhrAmount) {
       setBusy(false)
       setError(minimumUnitPrice > unitPrice
         ? 'Fix this product\'s minimum selling price in Stock Information before completing the sale'
         : discount > maximumDiscount
-        ? `Discount cannot exceed $${maximumDiscount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-        : 'Set a valid selling price in Stock Information before completing this sale')
+        ? `Discount cannot exceed ${saleAmountText(maximumDiscount, saleCurrency)}`
+        : invalidKhrAmount
+          ? 'KHR prices and discounts must use whole 100 KHR increments'
+          : 'Set a valid selling price in Stock Information before completing this sale')
+      return
+    }
+    const amountPaid = salePaymentMethod === 'KHQR' ? total : saleAmountPaid === '' ? total : Number(saleAmountPaid)
+    if (!Number.isFinite(amountPaid) || amountPaid < 0 || amountPaid > total || (saleCurrency === 'KHR' && (!Number.isInteger(amountPaid) || amountPaid % 100 !== 0))) {
+      setBusy(false)
+      setError(saleCurrency === 'KHR' ? 'Amount paid must use whole 100 KHR increments and cannot exceed the total' : 'Amount paid cannot be greater than the sale total')
       return
     }
     const payload: SaleDraft = {
@@ -1122,8 +1168,10 @@ export default function OperationModalBridge() {
       customer: saleCustomerId || undefined,
       items: [{ inventoryItem: selected._id, name: selected.name, quantity, unitPrice }],
       discount,
-      amountPaid: salePaymentMethod === 'KHQR' ? total : saleAmountPaid === '' ? total : Number(saleAmountPaid),
+      amountPaid,
       paymentMethod: salePaymentMethod,
+      currency: saleCurrency,
+      exchangeRate: saleCurrency === 'KHR' ? usdKhrRate : 1,
       notes: saleNotes,
     }
     try {
@@ -1711,27 +1759,37 @@ export default function OperationModalBridge() {
         <div className="operation-form-grid">
           <label>Customer<select value={saleCustomerId} onChange={(event) => setSaleCustomerId(event.target.value)}><option value="">Walk-in customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name}{customer.phone ? ` — ${customer.phone}` : ' — No phone recorded'}</option>)}</select></label>
           <label className="operation-wide">Inventory item<select required value={saleItemId} disabled={saleInventoryLoading || (!saleInventoryLoading && inventory.length === 0)} onChange={(event) => {
-            setSaleItemId(event.target.value)
+            const nextId = event.target.value
+            const nextItem = inventory.find((item) => item._id === nextId)
+            setSaleItemId(nextId)
+            setSaleCurrency(nextItem?.pricingCurrency === 'KHR' ? 'KHR' : 'USD')
+            setSalePaymentMethod('CASH')
             setSaleQuantity('1')
             setSaleDiscount('0')
             setSaleAmountPaid('')
-          }}><option value="" disabled>{saleInventoryLoading ? 'Loading available stock...' : inventory.length === 0 ? 'No stock available to sell' : 'Select available stock'}</option>{inventory.map((item) => <option key={item._id} value={item._id}>{item.name}{item.imei1 ? ` — ${item.imei1}` : ''} — Qty {item.quantity} — ${money.format(item.sellPrice)}</option>)}</select>{!saleInventoryLoading && inventory.length === 0 && <small>Add an in-stock product before creating a sale.</small>}</label>
+          }}><option value="" disabled>{saleInventoryLoading ? 'Loading available stock...' : inventory.length === 0 ? 'No stock available to sell' : 'Select available stock'}</option>{inventory.map((item) => <option key={item._id} value={item._id}>{item.name}{item.imei1 ? ` — ${item.imei1}` : ''} — Qty {item.quantity} — {inventoryNativeSalePriceText(item)}</option>)}</select>{!saleInventoryLoading && inventory.length === 0 && <small>Add an in-stock product before creating a sale.</small>}</label>
+          <label>Currency<select value={saleCurrency} onChange={(event) => {
+            setSaleCurrency(event.target.value as SaleCurrency)
+            setSalePaymentMethod('CASH')
+            setSaleDiscount('0')
+            setSaleAmountPaid('')
+          }}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Cambodian Riel</option></select><small>1 USD = {riel.format(usdKhrRate)} KHR</small></label>
           <label>Quantity<input type="number" min="1" max={selectedSaleItem?.quantity} value={effectiveSaleQuantity} disabled={!saleItemId || selectedSaleItem?.category === 'PHONE'} onChange={(event) => { setSaleQuantity(event.target.value); setSaleDiscount('0'); setSaleAmountPaid('') }} /></label>
-          <label>Selling price (USD)<MoneyInput currency="USD" readOnly value={saleUnitPrice || ''} onValueChange={() => undefined} placeholder="Set in Stock Information" /><small>{selectedSaleItem ? 'Controlled by Stock Information' : 'Select a product first'}</small></label>
-          <label className={saleDiscountInvalid ? 'field-invalid' : ''}>Discount (USD)<MoneyInput currency="USD" minimum={0} maximum={saleMaximumDiscount} value={saleDiscount} disabled={!saleItemId} onValueChange={setSaleDiscount} placeholder="0.00" />{selectedSaleItem && <small>{saleDiscountInvalid ? `Maximum discount is ${money.format(saleMaximumDiscount)}` : `Maximum allowed: ${money.format(saleMaximumDiscount)}`}</small>}</label>
-          {salePaymentMethod === 'CASH' && <label className={salePaidInvalid ? 'field-invalid' : ''}>Amount paid (USD) <small className="optional-marker">Defaults to total</small><MoneyInput currency="USD" minimum={0} maximum={saleTotal || undefined} value={saleAmountPaid} onValueChange={setSaleAmountPaid} placeholder={saleTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} />{salePaidInvalid && <small>Amount paid cannot exceed {money.format(saleTotal)}</small>}</label>}
-          <fieldset className={`sale-payment-method operation-wide${paywayAvailable ? '' : ' cash-only'}`}>
+          <label>Selling price ({saleCurrency})<MoneyInput currency={saleCurrency} readOnly value={saleUnitPrice || ''} onValueChange={() => undefined} placeholder="Set in Stock Information" /><small>{selectedSaleItem ? 'Controlled by Stock Information' : 'Select a product first'}</small></label>
+          <label className={saleDiscountInvalid ? 'field-invalid' : ''}>Discount ({saleCurrency})<MoneyInput currency={saleCurrency} minimum={0} maximum={saleMaximumDiscount} value={saleDiscount} disabled={!saleItemId} onValueChange={setSaleDiscount} placeholder={saleCurrency === 'KHR' ? '0' : '0.00'} />{selectedSaleItem && <small>{saleCurrency === 'KHR' && saleDiscountAmount % 100 !== 0 ? 'Use a whole KHR amount in increments of 100' : `${saleDiscountInvalid ? 'Maximum discount is' : 'Maximum allowed:'} ${saleAmountText(saleMaximumDiscount, saleCurrency)}`}</small>}</label>
+          {salePaymentMethod === 'CASH' && <label className={salePaidInvalid ? 'field-invalid' : ''}>Amount paid ({saleCurrency}) <small className="optional-marker">Defaults to total</small><MoneyInput currency={saleCurrency} minimum={0} maximum={saleTotal || undefined} value={saleAmountPaid} onValueChange={setSaleAmountPaid} placeholder={saleCurrency === 'KHR' ? String(Math.round(saleTotal)) : saleTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} />{salePaidInvalid && <small>{saleCurrency === 'KHR' && salePaidAmount % 100 !== 0 ? 'Use a whole KHR amount in increments of 100' : `Amount paid cannot exceed ${saleAmountText(saleTotal, saleCurrency)}`}</small>}</label>}
+          <fieldset className={`sale-payment-method operation-wide${paywayAvailable && saleCurrency === 'USD' ? '' : ' cash-only'}`}>
             <legend>How will the customer pay?</legend>
             <button type="button" className={salePaymentMethod === 'CASH' ? 'active cash' : 'cash'} onClick={() => setSalePaymentMethod('CASH')}>
               <span><Banknote size={20} /></span><p><strong>Pay with cash</strong><small>Record payment immediately</small></p>{salePaymentMethod === 'CASH' && <CheckCircle2 size={18} />}
             </button>
-            {paywayAvailable && <button type="button" className={salePaymentMethod === 'KHQR' ? 'active khqr' : 'khqr'} onClick={() => setSalePaymentMethod('KHQR')}>
+            {paywayAvailable && saleCurrency === 'USD' && <button type="button" className={salePaymentMethod === 'KHQR' ? 'active khqr' : 'khqr'} onClick={() => setSalePaymentMethod('KHQR')}>
               <span className="khqr-payment-option-logo"><img src={khqrLogo} alt="" /></span><p><strong>Pay with KHQR</strong><small>{paywayAvailable ? 'ABA PayWay sandbox' : 'PayWay unavailable'}</small></p>{salePaymentMethod === 'KHQR' && <CheckCircle2 size={18} />}
             </button>}
           </fieldset>
           <label className="operation-wide">Notes <small className="optional-marker">Optional</small><textarea rows={3} value={saleNotes} onChange={(event) => setSaleNotes(event.target.value)} /></label>
         </div>
-        <footer className="operation-modal-actions"><div className="sale-total"><span>Total</span><strong>{money.format(saleTotal)}</strong></div><button type="button" className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={saleActionDisabled} title={!saleItemId ? 'Choose an inventory product before continuing' : undefined}>{busy || saleInventoryLoading ? <LoaderCircle className="spinning" size={17} /> : salePaymentMethod === 'KHQR' ? <img className="khqr-action-logo" src={khqrLogo} alt="" /> : <Banknote size={17} />}{saleActionLabel}</button></footer>
+        <footer className="operation-modal-actions"><div className="sale-total"><span>Total</span><strong>{saleAmountText(saleTotal, saleCurrency)}</strong></div><button type="button" className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={saleActionDisabled} title={!saleItemId ? 'Choose an inventory product before continuing' : undefined}>{busy || saleInventoryLoading ? <LoaderCircle className="spinning" size={17} /> : salePaymentMethod === 'KHQR' ? <img className="khqr-action-logo" src={khqrLogo} alt="" /> : <Banknote size={17} />}{saleActionLabel}</button></footer>
       </form>}
 
       {kind === 'sale' && saleKhqr && <section className={`sale-khqr-workflow payment-${salePaymentPhase.toLowerCase()}`}>
