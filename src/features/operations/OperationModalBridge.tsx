@@ -218,11 +218,19 @@ function saleAmountText(value: number, currency: SaleCurrency) {
 function inventorySalePrice(item: InventoryItem | undefined, currency: SaleCurrency, exchangeRate: number, minimum = false) {
   if (!item) return 0
   const normalizedUsd = Math.max(0, Number(minimum ? item.minimumSellPrice : item.sellPrice) || 0)
-  if (currency === 'USD') return normalizedUsd
   const explicitKhr = Number(minimum ? item.khrMinimumSellPrice : item.khrSellPrice)
-  if (Number.isFinite(explicitKhr)) return Math.max(0, explicitKhr)
   const listed = Number(minimum ? item.listedMinimumSellPrice : item.listedSellPrice)
-  if (item.pricingCurrency === 'KHR' && Number.isFinite(listed)) return Math.max(0, listed)
+  const savedKhr = Number.isFinite(explicitKhr)
+    ? Math.max(0, explicitKhr)
+    : item.pricingCurrency === 'KHR' && Number.isFinite(listed)
+      ? Math.max(0, listed)
+      : 0
+  if (currency === 'USD') {
+    if (normalizedUsd > 0) return normalizedUsd
+    const savedExchangeRate = Number(item.pricingExchangeRate) > 0 ? Number(item.pricingExchangeRate) : exchangeRate
+    return savedKhr > 0 ? Math.round((savedKhr / savedExchangeRate) * 100) / 100 : 0
+  }
+  if (savedKhr > 0) return savedKhr
   return Math.round((normalizedUsd * exchangeRate) / 100) * 100
 }
 

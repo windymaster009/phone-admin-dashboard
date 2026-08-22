@@ -360,23 +360,37 @@ function salePricing(item, role, currency = 'USD', exchangeRate = 1) {
   const savedKhrUnitPrice = Number(item?.khrSellPrice)
   const savedKhrMinimum = Number(item?.khrMinimumSellPrice)
   const legacyListedInKhr = item?.pricingCurrency === 'KHR'
-  const unitPrice = currency === 'KHR' && Number.isFinite(savedKhrUnitPrice)
-    ? roundSaleCurrency(savedKhrUnitPrice, currency)
-    : currency === 'KHR' && legacyListedInKhr && Number.isFinite(Number(item?.listedSellPrice))
-      ? roundSaleCurrency(item.listedSellPrice, currency)
-    : saleAmountFromUsd(savedUsdUnitPrice, currency, exchangeRate)
+  const savedExchangeRate = Number(item?.pricingExchangeRate)
+  const khrExchangeRate = savedExchangeRate >= 1000 && savedExchangeRate <= 10000
+    ? savedExchangeRate
+    : fallbackExchangeRate()
+  const effectiveKhrUnitPrice = Number.isFinite(savedKhrUnitPrice)
+    ? roundSaleCurrency(savedKhrUnitPrice, 'KHR')
+    : legacyListedInKhr && Number.isFinite(Number(item?.listedSellPrice))
+      ? roundSaleCurrency(item.listedSellPrice, 'KHR')
+      : saleAmountFromUsd(savedUsdUnitPrice, 'KHR', khrExchangeRate)
+  const effectiveKhrMinimum = Number.isFinite(savedKhrMinimum)
+    ? roundSaleCurrency(savedKhrMinimum, 'KHR')
+    : legacyListedInKhr && Number.isFinite(Number(item?.listedMinimumSellPrice))
+      ? roundSaleCurrency(item.listedMinimumSellPrice, 'KHR')
+      : saleAmountFromUsd(savedUsdMinimum, 'KHR', khrExchangeRate)
+  const unitPrice = currency === 'KHR'
+    ? effectiveKhrUnitPrice
+    : savedUsdUnitPrice > 0
+      ? savedUsdUnitPrice
+      : saleAmountToUsd(effectiveKhrUnitPrice, 'KHR', khrExchangeRate)
   if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
     throw requestError(409, `${item?.name || 'The selected item'} does not have a valid ${currency} selling price`)
   }
   const normalizedUnitPrice = currency === 'KHR'
     ? saleAmountToUsd(unitPrice, currency, exchangeRate)
-    : savedUsdUnitPrice
-  const configuredMinimum = currency === 'KHR' && Number.isFinite(savedKhrMinimum)
-    ? roundSaleCurrency(savedKhrMinimum, currency)
-    : currency === 'KHR' && legacyListedInKhr && Number.isFinite(Number(item?.listedMinimumSellPrice))
-      ? roundSaleCurrency(item.listedMinimumSellPrice, currency)
-    : saleAmountFromUsd(savedUsdMinimum, currency, exchangeRate)
-  const minimumConfigured = currency === 'KHR' ? configuredMinimum > 0 : savedUsdMinimum > 0
+    : unitPrice
+  const configuredMinimum = currency === 'KHR'
+    ? effectiveKhrMinimum
+    : savedUsdMinimum > 0
+      ? savedUsdMinimum
+      : saleAmountToUsd(effectiveKhrMinimum, 'KHR', khrExchangeRate)
+  const minimumConfigured = configuredMinimum > 0
   const minimumUnitPrice = minimumConfigured
     ? configuredMinimum
     : role === 'CASHIER'
