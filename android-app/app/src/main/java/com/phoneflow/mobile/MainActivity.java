@@ -155,36 +155,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String normalizeServerUrl(String rawUrl) {
-        String candidate = rawUrl == null ? "" : rawUrl.trim();
-        if (candidate.isEmpty()) throw new IllegalArgumentException("Enter the PhoneFlow app URL");
-        if (!candidate.contains("://")) candidate = "http://" + candidate;
-        candidate = candidate.replaceAll("/+$", "");
-
-        Uri uri = Uri.parse(candidate);
-        String scheme = uri.getScheme();
-        String host = uri.getHost();
-        if (host == null || host.isBlank() || (!("http".equalsIgnoreCase(scheme)) && !("https".equalsIgnoreCase(scheme)))) {
-            throw new IllegalArgumentException("Use an HTTP or HTTPS PhoneFlow address");
-        }
-        if ("http".equalsIgnoreCase(scheme) && !isPrivateDevelopmentHost(host)) {
-            throw new IllegalArgumentException("Public PhoneFlow servers must use HTTPS");
-        }
-        return candidate;
-    }
-
-    private boolean isPrivateDevelopmentHost(String host) {
-        String value = host.toLowerCase(Locale.US);
-        if (value.equals("localhost") || value.equals("10.0.2.2") || value.startsWith("127.")) return true;
-        if (value.startsWith("10.") || value.startsWith("192.168.")) return true;
-        if (!value.startsWith("172.")) return false;
-        String[] parts = value.split("\\.");
-        if (parts.length < 2) return false;
-        try {
-            int second = Integer.parseInt(parts[1]);
-            return second >= 16 && second <= 31;
-        } catch (NumberFormatException ignored) {
-            return false;
-        }
+        return ServerUrlPolicy.normalizeBaseUrl(rawUrl, BuildConfig.DEBUG);
     }
 
     private String deriveApiBaseUrl(String appUrl) {

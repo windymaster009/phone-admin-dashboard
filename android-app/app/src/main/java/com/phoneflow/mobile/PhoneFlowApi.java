@@ -32,7 +32,10 @@ final class PhoneFlowApi {
             HttpURLConnection connection = null;
             try {
                 String encoded = URLEncoder.encode(code, StandardCharsets.UTF_8.name()).replace("+", "%20");
-                URL url = new URL(baseUrl + "/api/inventory/scan/" + encoded);
+                URL url = ServerUrlPolicy.requireAllowedUrl(
+                    baseUrl + "/api/inventory/scan/" + encoded,
+                    BuildConfig.DEBUG
+                );
                 connection = (HttpURLConnection) url.openConnection();
                 connection.setRequestMethod("GET");
                 connection.setConnectTimeout(12_000);

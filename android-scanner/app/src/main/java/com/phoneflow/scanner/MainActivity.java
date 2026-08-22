@@ -25,6 +25,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.OptIn;
 import androidx.activity.ComponentActivity;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.ExperimentalGetImage;
@@ -51,7 +52,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
-import java.net.URL;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.text.NumberFormat;
@@ -59,10 +59,11 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+@OptIn(markerClass = ExperimentalGetImage.class)
 public class MainActivity extends ComponentActivity {
     private static final int CAMERA_PERMISSION_REQUEST = 2104;
     private static final String PREFS = "phoneflow_scanner";
-    private static final String DEFAULT_BASE_URL = "http://10.0.2.2:5000";
+    private static final String DEFAULT_BASE_URL = BuildConfig.DEBUG ? "http://10.0.2.2:5000" : "";
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService io = Executors.newSingleThreadExecutor();
@@ -82,8 +83,16 @@ public class MainActivity extends ComponentActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         preferences = getSharedPreferences(PREFS, Context.MODE_PRIVATE);
-        baseUrl = preferences.getString("baseUrl", DEFAULT_BASE_URL);
-        token = preferences.getString("token", "");
+        String savedBaseUrl = preferences.getString("baseUrl", DEFAULT_BASE_URL);
+        String savedToken = preferences.getString("token", "");
+        try {
+            baseUrl = ServerUrlPolicy.normalizeBaseUrl(savedBaseUrl, BuildConfig.DEBUG);
+            token = savedToken;
+        } catch (IllegalArgumentException error) {
+            baseUrl = DEFAULT_BASE_URL;
+            token = "";
+            preferences.edit().remove("baseUrl").remove("token").apply();
+        }
         showRoot();
     }
 
@@ -130,7 +139,13 @@ public class MainActivity extends ComponentActivity {
         root.addView(progress);
 
         login.setOnClickListener((view) -> {
-            String nextBaseUrl = url.getText().toString().trim().replaceAll("/+$", "");
+            final String nextBaseUrl;
+            try {
+                nextBaseUrl = ServerUrlPolicy.normalizeBaseUrl(url.getText().toString(), BuildConfig.DEBUG);
+            } catch (IllegalArgumentException error) {
+                toast(error.getMessage());
+                return;
+            }
             String nextEmail = email.getText().toString().trim();
             String nextPassword = password.getText().toString();
             if (nextBaseUrl.isEmpty() || nextEmail.isEmpty() || nextPassword.isEmpty()) {
@@ -235,7 +250,6 @@ public class MainActivity extends ComponentActivity {
         }
     }
 
-    @ExperimentalGetImage
     private void analyzeBarcode(@NonNull ImageProxy proxy) {
         if (!scanning || resolvingScan || proxy.getImage() == null) {
             proxy.close();
@@ -316,7 +330,9 @@ public class MainActivity extends ComponentActivity {
     }
 
     private JSONObject requestJson(String url, String method, String body, String authToken) throws Exception {
-        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        HttpURLConnection connection = (HttpURLConnection) ServerUrlPolicy
+            .requireAllowedUrl(url, BuildConfig.DEBUG)
+            .openConnection();
         connection.setRequestMethod(method);
         connection.setConnectTimeout(12000);
         connection.setReadTimeout(12000);
@@ -344,7 +360,7 @@ public class MainActivity extends ComponentActivity {
 
     private void loadImage(String url, ImageView image) {
         io.execute(() -> {
-            try (InputStream stream = new URL(url).openStream()) {
+            try (InputStream stream = ServerUrlPolicy.requireAllowedUrl(url, BuildConfig.DEBUG).openStream()) {
                 Bitmap bitmap = BitmapFactory.decodeStream(stream);
                 main.post(() -> image.setImageBitmap(bitmap));
             } catch (Exception ignored) {

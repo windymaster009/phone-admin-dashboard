@@ -16,7 +16,7 @@ This architecture keeps the Android client aligned with the web dashboard: new P
 - DownloadManager support for normal HTTP/HTTPS files
 - Open-current-page-in-browser action
 - Clear-session and change-server controls
-- Public HTTP rejection; HTTP is accepted only for localhost, emulator, and private LAN addresses
+- Release builds require HTTPS; debug HTTP is limited to localhost and emulator endpoints
 
 ## Architecture
 
@@ -35,7 +35,7 @@ The Android app does not save a second native copy of the JWT. The scanner reads
 
 ## Server setup
 
-### Production-like local server
+### Production-like server
 
 Build the web app and let Express serve both the frontend and API from port 5000:
 
@@ -45,10 +45,10 @@ npm run build
 NODE_ENV=production npm start
 ```
 
-Enter this in Android:
+Expose the server through HTTPS and enter its URL in Android:
 
 ```text
-http://YOUR_COMPUTER_LAN_IP:5000
+https://YOUR_PHONEFLOW_SERVER
 ```
 
 For the Android emulator:
@@ -57,22 +57,22 @@ For the Android emulator:
 http://10.0.2.2:5000
 ```
 
-### Vite hot reload
+### Vite hot reload on an emulator or USB-connected debug device
 
-Run the API and expose Vite to the LAN:
+Run the API and Vite locally:
 
 ```bash
 npm run dev:server
-npm run dev:client -- --host 0.0.0.0
+npm run dev:client
 ```
 
-Enter the Vite URL in Android:
+For an emulator, enter:
 
 ```text
-http://YOUR_COMPUTER_LAN_IP:5173
+http://10.0.2.2:5173
 ```
 
-When the app URL uses port 5173, the native scanner automatically sends API lookups to the same host on port 5000.
+For a USB-connected debug device, reverse ports 5173 and 5000 with ADB and use `http://127.0.0.1:5173`. When the app URL uses port 5173, the native scanner automatically sends API lookups to the same host on port 5000. Direct LAN HTTP is rejected; use HTTPS when ADB forwarding is unavailable.
 
 ## Build With Android Studio
 
@@ -142,8 +142,8 @@ The product dialog displays stock, price, SKU/barcode, brand/model, storage/colo
 
 ## Security rules
 
-- Use HTTPS for every public or production server.
-- HTTP is accepted only for emulator, localhost, and RFC1918 private LAN hosts.
+- Release builds require HTTPS for every server.
+- Debug builds accept HTTP only for localhost, `127.0.0.1`, and the Android emulator host `10.0.2.2`.
 - Navigation to another host leaves the app and opens the system browser.
 - File-scheme access and universal file URL access are disabled.
 - Third-party cookies are disabled.

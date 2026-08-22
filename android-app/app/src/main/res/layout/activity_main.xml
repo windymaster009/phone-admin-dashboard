@@ -80,7 +80,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="20dp"
-                android:text="Emulator: http://10.0.2.2:5000\nReal phone: http://YOUR_COMPUTER_LAN_IP:5000"
+                android:text="Debug emulator: http://10.0.2.2:5000\nRelease or LAN server: https://YOUR_SERVER"
                 android:textColor="@color/phoneflow_muted"
                 android:textIsSelectable="true"
                 android:textSize="12sp" />

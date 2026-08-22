@@ -19,19 +19,13 @@ npm run dev
 
 The backend should be reachable on port `5000`.
 
-For a real Android phone, do not use `localhost` inside the Android app. `localhost` means the phone itself. Use your computer LAN IP:
-
-```bash
-hostname -I
-```
-
-Example API URL to enter in the app:
+For a real Android phone, expose the backend through HTTPS and enter its HTTPS URL:
 
 ```text
-http://192.168.1.25:5000
+https://YOUR_PHONEFLOW_SERVER
 ```
 
-For Android Emulator only:
+For a debug build on the Android Emulator only:
 
 ```text
 http://10.0.2.2:5000
@@ -155,7 +149,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 Open the app and enter:
 
-- API URL: `http://YOUR_COMPUTER_IP:5000`
+- API URL: your HTTPS PhoneFlow server, or `http://10.0.2.2:5000` in an emulator debug build
 - Email: your PhoneFlow login email
 - Password: your PhoneFlow password
 
@@ -175,8 +169,8 @@ Then:
 
 `Network error` or timeout
 
-- Phone and computer must be on same Wi-Fi.
-- Use computer IP, not `localhost`.
+- Release and direct LAN connections must use HTTPS.
+- Debug HTTP is limited to localhost and the emulator endpoint `10.0.2.2`.
 - Make sure backend is running on port `5000`.
 - Windows firewall may need to allow port `5000`.
 
