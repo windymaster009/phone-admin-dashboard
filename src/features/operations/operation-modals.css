@@ -1,3 +1,6 @@
+/* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V4
+   Genre: operational product UI · Tone: calm cashier workflow · Anchor: existing violet
+   Hallmark · macrostructure: cashier-ledger · selection → payment → summary → receipt · contrast: pass (40–41) · mobile: pass (34, 49–57) */
 body.operation-modal-open {
   overflow: hidden;
 }
@@ -959,16 +962,25 @@ body.operation-modal-open {
 .operation-modal-purchase,
 .operation-modal-pawn { width: min(1080px, 100%); }
 .operation-modal-sale { width: min(920px, 100%); }
-.sale-form { padding-top: 20px; }
+.sale-form { padding-top: 18px; }
+.sale-form .operation-form-grid { gap: 16px; }
+.sale-form label { font-size: 12px; }
+.sale-form label > small { font-size: 10px; line-height: 1.45; }
+.sale-form input,
+.sale-form select { min-height: 46px; font-size: 13px; }
+.sale-inventory-field { order: -2; }
+.sale-customer-field { order: -1; }
+.sale-price-display { min-width: 0; display: flex; flex-direction: column; gap: 7px; color: var(--muted, #8f9bb4); font-size: 12px; font-weight: 700; }
+.sale-price-display strong { min-height: 46px; display: flex; align-items: center; padding: 0 13px; border: 1px solid var(--border-strong, rgba(255,255,255,.12)); border-radius: 11px; color: var(--text, #f4f6fb); background: color-mix(in srgb, var(--bg-soft, #10172a) 78%, transparent); font-size: 15px; }
+.sale-price-display small { color: var(--primary, #a78bfa); font-size: 10px; font-weight: 700; }
 .sale-payment-method {
   min-width: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   margin: 2px 0 0;
-  padding: 12px;
-  border: 1px solid var(--border, rgba(255,255,255,.08));
-  border-radius: 13px;
+  padding: 0;
+  border: 0;
 }
 .sale-payment-method.cash-only { grid-template-columns: 1fr; }
 .sale-payment-method legend {
@@ -1010,6 +1022,27 @@ body.operation-modal-open {
 .sale-payment-method button.active { border-color: rgba(139,92,246,.65); background: rgba(139,92,246,.09); box-shadow: 0 0 0 3px rgba(139,92,246,.08); }
 .sale-payment-method button.khqr.active { border-color: rgba(56,189,248,.55); background: rgba(14,165,233,.07); box-shadow: 0 0 0 3px rgba(14,165,233,.07); }
 .sale-payment-method button:disabled { cursor: not-allowed; opacity: .45; }
+.sale-amount-received { padding: 14px; border: 1px solid color-mix(in srgb, var(--primary, #8b5cf6) 28%, transparent); border-radius: 13px; background: color-mix(in srgb, var(--primary-soft, rgba(139,92,246,.12)) 58%, transparent); }
+.sale-summary { overflow: hidden; border: 1px solid var(--border, rgba(255,255,255,.08)); border-radius: 14px; background: color-mix(in srgb, var(--bg-soft, #10172a) 75%, transparent); }
+.sale-summary > header { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px 15px; border-bottom: 1px solid var(--border, rgba(255,255,255,.08)); }
+.sale-summary > header > div { min-width: 0; display: grid; gap: 4px; }
+.sale-summary > header span { color: var(--primary, #a78bfa); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; }
+.sale-summary > header strong { overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.sale-summary > header b { flex: 0 0 auto; padding: 5px 8px; border-radius: 7px; color: var(--muted, #8f9bb4); background: var(--surface-solid, #151e34); font-size: 9px; }
+.sale-summary-calculation { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 1px; background: var(--border, rgba(255,255,255,.08)); }
+.sale-summary-calculation > span { min-width: 0; display: grid; gap: 7px; padding: 12px 13px; background: var(--surface-solid, #151e34); }
+.sale-summary-calculation small { color: var(--muted, #8f9bb4); font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.sale-summary-calculation strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.sale-summary-calculation .total strong { color: var(--primary, #a78bfa); }
+.sale-summary-calculation .settled strong { color: #34d399; }
+.sale-summary-calculation .due strong { color: #fb923c; }
+.sale-notes { display: grid; gap: 10px; }
+.sale-note-toggle { width: 100%; min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--border, rgba(255,255,255,.08)); border-radius: 11px; color: var(--text, #f4f6fb); background: transparent; text-align: left; }
+.sale-note-toggle:hover { border-color: var(--border-strong, rgba(255,255,255,.14)); background: var(--surface-hover, rgba(255,255,255,.04)); }
+.sale-note-toggle > span { display: grid; gap: 3px; }
+.sale-note-toggle strong { font-size: 11px; }
+.sale-note-toggle small { color: var(--muted, #8f9bb4); font-size: 9px; }
+.sale-notes label { display: grid; gap: 7px; }
 .khqr-action-logo { display: block; width: 34px; height: 21px; object-fit: contain; }
 .sale-total { margin-right: auto; display: flex; flex-direction: column; gap: 3px; }
 .sale-total span { color: var(--muted, #8f9bb4); font-size: 9px; font-weight: 700; }
@@ -1116,6 +1149,13 @@ body.operation-modal-open {
 .record-created-card dt { color: var(--muted-2,#667085); font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; }
 .record-created-card dd { min-width: 0; margin: 0; overflow: hidden; font-size: 11px; font-weight: 800; text-overflow: ellipsis; white-space: nowrap; }
 .record-created-card dd span { color: #34d399; }
+.sale-complete-card { width: min(540px, calc(100% - 36px)); }
+.sale-complete-card .record-created-check { animation: none; }
+.sale-complete-card > div > p { max-width: 390px; margin: 0; color: var(--muted, #8f9bb4); font-size: 11px; line-height: 1.55; }
+.sale-complete-card dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.sale-complete-item { width: 100%; display: flex !important; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: 11px; background: var(--surface-solid, #151e34); text-align: left; }
+.sale-complete-item strong { overflow: hidden; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.sale-complete-item small { flex: 0 0 auto; color: var(--muted, #8f9bb4); font-size: 9px; }
 .record-created-workflow > .operation-modal-actions { position: static; flex: 0 0 auto; margin: 0; padding: 12px 18px; }
 .record-created-actions { gap: 10px; }
 .record-created-done { min-width: 150px; margin-left: auto; }
@@ -1506,8 +1546,14 @@ body.operation-modal-open {
   }
 
   .sale-payment-method { grid-template-columns: 1fr; }
-  .sale-total { display: none; }
-  .sale-form .operation-modal-actions button { flex: 1; min-width: 0; }
+  .sale-summary-calculation { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sale-summary-calculation .total { grid-column: 1 / -1; grid-row: 2; }
+  .sale-form .operation-modal-actions { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); }
+  .sale-form .sale-total { grid-column: 1 / -1; width: 100%; display: flex; flex-direction: row; align-items: baseline; justify-content: space-between; padding-bottom: 9px; }
+  .sale-form .operation-modal-actions button { min-width: 0; }
+  .sale-complete-card { margin: 16px auto; padding: 22px 18px; }
+  .sale-complete-workflow .record-created-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .sale-complete-workflow .record-created-actions button { min-width: 0; margin: 0; }
   .operation-modal-compact { width: 100%; height: min(100dvh,720px); max-height: 100dvh; border-radius: 16px 16px 0 0; }
   .operation-modal-pawn.operation-modal-compact { height: auto; }
   .operation-modal-compact .operation-modal-header { padding: 10px 12px; }

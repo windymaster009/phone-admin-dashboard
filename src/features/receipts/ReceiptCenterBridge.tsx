@@ -226,6 +226,7 @@ export default function ReceiptCenterBridge() {
   const [active, setActive] = useState(() => window.location.pathname === '/receipts')
   const [picker, setPicker] = useState<ReceiptOptionResponse | null>(null)
   const [viewer, setViewer] = useState<ViewerState | null>(null)
+  const [reloadAfterViewerClose, setReloadAfterViewerClose] = useState(false)
   const [busy, setBusy] = useState(false)
   const [pendingOptionKey, setPendingOptionKey] = useState<string | null>(null)
   const [error, setError] = useState('')
@@ -360,6 +361,7 @@ export default function ReceiptCenterBridge() {
       const detail = (event as CustomEvent<{ reference?: string; sourceSubId?: string }>).detail
       const reference = detail?.reference?.trim()
       if (!reference) return
+      setReloadAfterViewerClose(false)
       const sourceSubId = detail?.sourceSubId?.trim() || 'latest-contract'
       void generate(
         { sourceType: 'PAWN', reference },
@@ -367,9 +369,32 @@ export default function ReceiptCenterBridge() {
         'THERMAL',
       )
     }
+    const openTradeReceipt = (event: Event) => {
+      const detail = (event as CustomEvent<{ reference?: string; currency?: 'USD' | 'KHR'; refreshOnClose?: boolean }>).detail
+      const reference = detail?.reference?.trim()
+      if (!reference) return
+      setReloadAfterViewerClose(Boolean(detail?.refreshOnClose))
+      void generate(
+        { sourceType: 'TRADE', reference },
+        { documentType: 'SALE_RECEIPT', sourceSubId: 'trade', label: 'Sales receipt / invoice', issuedAt: new Date().toISOString(), amount: 0, currency: detail?.currency === 'KHR' ? 'KHR' : 'USD' },
+        'THERMAL',
+      )
+    }
     window.addEventListener('phoneflow:open-pawn-ticket', openPawnTicket)
-    return () => window.removeEventListener('phoneflow:open-pawn-ticket', openPawnTicket)
+    window.addEventListener('phoneflow:open-trade-receipt', openTradeReceipt)
+    return () => {
+      window.removeEventListener('phoneflow:open-pawn-ticket', openPawnTicket)
+      window.removeEventListener('phoneflow:open-trade-receipt', openTradeReceipt)
+    }
   }, [generate])
+
+  const closeViewer = useCallback(() => {
+    setViewer(null)
+    if (reloadAfterViewerClose) {
+      setReloadAfterViewerClose(false)
+      window.location.reload()
+    }
+  }, [reloadAfterViewerClose])
 
   const closePicker = useCallback(() => {
     generationClosed.current = true
@@ -397,9 +422,9 @@ export default function ReceiptCenterBridge() {
   return <>
     {navTarget && createPortal(<button className={active ? 'active' : ''} onClick={openPage}><ReceiptText size={19} /><span>Receipts</span></button>, navTarget)}
     {actionTarget && context && createPortal(<button className="secondary-button receipt-detail-action" onClick={() => void openDocuments()} disabled={busy}><Printer size={15} /> {busy ? 'Loading...' : context.sourceType === 'TRADE' ? 'Print receipt' : 'Documents'}</button>, actionTarget)}
-    {active && mainTarget && createPortal(<Workspace refreshVersion={version} onOpen={(receipt) => setViewer({ receipt })} />, mainTarget)}
+    {active && mainTarget && createPortal(<Workspace refreshVersion={version} onOpen={(receipt) => { setReloadAfterViewerClose(false); setViewer({ receipt }) }} />, mainTarget)}
     {picker && context && <OptionPicker response={picker} busy={busy} pendingOptionKey={pendingOptionKey} error={error} onSelect={(option) => void generate(context, option)} onClose={closePicker} />}
-    {viewer && <Viewer key={viewer.receipt._id} initialReceipt={viewer.receipt} initialLayout={viewer.initialLayout} onClose={() => setViewer(null)} onUpdated={(receipt) => { setViewer((current) => current ? { ...current, receipt } : null); setVersion((value) => value + 1) }} />}
+    {viewer && <Viewer key={viewer.receipt._id} initialReceipt={viewer.receipt} initialLayout={viewer.initialLayout} onClose={closeViewer} onUpdated={(receipt) => { setViewer((current) => current ? { ...current, receipt } : null); setVersion((value) => value + 1) }} />}
     {!picker && !viewer && error && createPortal(<div className="receipt-toast"><AlertTriangle size={16} /> {error}<button onClick={() => setError('')}><X size={14} /></button></div>, document.body)}
   </>
 }

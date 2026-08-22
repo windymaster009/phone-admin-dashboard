@@ -137,6 +137,46 @@ type SaleKhqr = {
   environment: 'sandbox' | 'production'
 }
 
+type CreatedSaleTrade = {
+  tradeNo: string
+  currency?: SaleCurrency
+  transactionTotal?: number
+  transactionAmountPaid?: number
+  transactionBalance?: number
+  total: number
+  amountPaid: number
+  balance: number
+  paymentMethod?: string
+  items?: Array<{ name?: string; quantity?: number }>
+}
+
+type CompletedSale = {
+  tradeNo: string
+  currency: SaleCurrency
+  total: number
+  amountPaid: number
+  balance: number
+  paymentMethod: SalePaymentMethod
+  itemName: string
+  quantity: number
+}
+
+function completedSaleFromTrade(
+  trade: CreatedSaleTrade,
+  fallback: Pick<CompletedSale, 'currency' | 'paymentMethod' | 'itemName' | 'quantity'>,
+): CompletedSale {
+  return {
+    tradeNo: trade.tradeNo,
+    currency: trade.currency === 'KHR' || trade.currency === 'USD' ? trade.currency : fallback.currency,
+    total: Number(trade.transactionTotal ?? trade.total) || 0,
+    amountPaid: Number(trade.transactionAmountPaid ?? trade.amountPaid) || 0,
+    balance: Number(trade.transactionBalance ?? trade.balance) || 0,
+    paymentMethod: trade.paymentMethod === 'KHQR' ? 'KHQR' : fallback.paymentMethod,
+    itemName: trade.items?.[0]?.name || fallback.itemName,
+    quantity: Number(trade.items?.[0]?.quantity) || fallback.quantity,
+  }
+}
+
 function paywayImageSource(value: string) {
   const source = value.trim()
   if (!source || /^(data:|https?:|blob:)/i.test(source)) return source
@@ -304,6 +344,7 @@ function ModalShell({
   children: ReactNode
 }) {
   const meta = modalMeta[kind]
+  const dialogRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -317,11 +358,42 @@ function ModalShell({
     }
   }, [busy, dismissible, dismissOnEscape, onClose])
 
+  useEffect(() => {
+    const dialog = dialogRef.current
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const focusableSelector = 'button:not([disabled]), select:not([disabled]), input:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>(focusableSelector) || [])
+    const frame = window.requestAnimationFrame(() => {
+      const preferred = dialog?.querySelector<HTMLElement>('[data-modal-initial-focus]')
+      ;(preferred || focusable()[0])?.focus()
+    })
+    const trapFocus = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return
+      const elements = focusable()
+      if (!elements.length) return
+      const first = elements[0]
+      const last = elements[elements.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    dialog?.addEventListener('keydown', trapFocus)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      dialog?.removeEventListener('keydown', trapFocus)
+      if (previouslyFocused?.isConnected) previouslyFocused.focus()
+    }
+  }, [kind, compact])
+
   return (
     <div className="operation-modal-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget && !busy && dismissible && dismissOnBackdrop) onClose()
     }}>
-      <section className={`operation-modal operation-modal-${kind}${compact ? ' operation-modal-compact' : ''}`} role="dialog" aria-modal="true" aria-label={meta.title}>
+      <section ref={dialogRef} className={`operation-modal operation-modal-${kind}${compact ? ' operation-modal-compact' : ''}`} role="dialog" aria-modal="true" aria-label={meta.title}>
         <header className="operation-modal-header">
           <span className="operation-modal-icon">{meta.icon}</span>
           <div>
@@ -448,6 +520,7 @@ export default function OperationModalBridge() {
   const [saleDiscount, setSaleDiscount] = useState('0')
   const [saleAmountPaid, setSaleAmountPaid] = useState('')
   const [saleNotes, setSaleNotes] = useState('')
+  const [saleNotesOpen, setSaleNotesOpen] = useState(false)
   const [salePaymentMethod, setSalePaymentMethod] = useState<SalePaymentMethod>('CASH')
   const [saleCurrency, setSaleCurrency] = useState<SaleCurrency>('USD')
   const [saleKhqr, setSaleKhqr] = useState<SaleKhqr | null>(null)
@@ -455,6 +528,7 @@ export default function OperationModalBridge() {
   const [saleDraft, setSaleDraft] = useState<SaleDraft | null>(null)
   const [salePaymentStatus, setSalePaymentStatus] = useState('Waiting for payment')
   const [salePaymentPhase, setSalePaymentPhase] = useState<SalePaymentPhase>('WAITING')
+  const [saleCompleted, setSaleCompleted] = useState<CompletedSale | null>(null)
   const [paywayAvailable, setPaywayAvailable] = useState(false)
   const [saleInventoryLoading, setSaleInventoryLoading] = useState(false)
   const khqrFinalizing = useRef(false)
@@ -627,6 +701,7 @@ export default function OperationModalBridge() {
   const saleDiscountAmount = Math.max(0, Number(saleDiscount) || 0)
   const saleTotal = Math.max(0, saleSubtotal - saleDiscountAmount)
   const salePaidAmount = saleAmountPaid === '' ? saleTotal : Math.max(0, Number(saleAmountPaid) || 0)
+  const saleBalance = Math.max(0, saleTotal - salePaidAmount)
   const salePriceInvalid = Boolean(selectedSaleItem && saleUnitPrice <= 0)
   const saleStockPricingInvalid = configuredMinimumSalePrice > saleUnitPrice
   const saleDiscountInvalid = saleDiscountAmount > saleMaximumDiscount
@@ -659,7 +734,12 @@ export default function OperationModalBridge() {
                   ? 'Enter a valid amount'
                   : salePaymentMethod === 'KHQR'
                     ? 'Generate KHQR'
-                    : 'Complete cash sale'
+                    : 'Complete sale'
+
+  useEffect(() => {
+    if (kind !== 'sale' || salePaymentMethod !== 'CASH' || !saleItemId) return
+    setSaleAmountPaid(saleTotal > 0 ? String(saleTotal) : '')
+  }, [kind, saleItemId, salePaymentMethod, saleTotal])
 
   useEffect(() => {
     const originalAlert = window.alert.bind(window)
@@ -845,6 +925,7 @@ export default function OperationModalBridge() {
     setSaleDiscount('0')
     setSaleAmountPaid('')
     setSaleNotes('')
+    setSaleNotesOpen(false)
     setSalePaymentMethod('CASH')
     setSaleCurrency('USD')
     setSaleKhqr(null)
@@ -852,6 +933,7 @@ export default function OperationModalBridge() {
     setSaleDraft(null)
     setSalePaymentStatus('Waiting for payment')
     setSalePaymentPhase('WAITING')
+    setSaleCompleted(null)
     setPaywayAvailable(false)
     setSaleInventoryLoading(false)
     khqrFinalizing.current = false
@@ -882,6 +964,10 @@ export default function OperationModalBridge() {
     }
     if (saleQrZoomed) {
       setSaleQrZoomed(false)
+      return
+    }
+    if (kind === 'sale' && saleCompleted) {
+      window.location.reload()
       return
     }
     if (kind === 'sale' && saleKhqr) {
@@ -919,6 +1005,18 @@ export default function OperationModalBridge() {
     window.requestAnimationFrame(() => {
       window.dispatchEvent(new CustomEvent('phoneflow:open-pawn-ticket', {
         detail: { reference },
+      }))
+    })
+  }
+
+  const printCompletedSaleReceipt = () => {
+    if (!saleCompleted) return
+    const { tradeNo: reference, currency } = saleCompleted
+
+    resetAndClose()
+    window.requestAnimationFrame(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-trade-receipt', {
+        detail: { reference, currency, refreshOnClose: true },
       }))
     })
   }
@@ -1206,9 +1304,14 @@ export default function OperationModalBridge() {
         setSalePaymentPhase('WAITING')
       } else {
         if (payload.amountPaid > total) throw new Error('Amount paid cannot be greater than the sale total')
-        await api('/trades', { method: 'POST', body: JSON.stringify(payload) })
-        resetAndClose()
-        window.location.reload()
+        const result = await api<{ trade: CreatedSaleTrade }>('/trades', { method: 'POST', body: JSON.stringify(payload) })
+        setSaleCompleted(completedSaleFromTrade(result.trade, {
+          currency: saleCurrency,
+          paymentMethod: 'CASH',
+          itemName: selected.name,
+          quantity,
+        }))
+        setSalePaymentPhase('COMPLETED')
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to complete sale')
@@ -1249,7 +1352,7 @@ export default function OperationModalBridge() {
       khqrFinalizing.current = true
       setSalePaymentPhase('APPROVED')
       setBusy(true)
-      await api('/trades', {
+      const result = await api<{ trade: CreatedSaleTrade }>('/trades', {
         method: 'POST',
         body: JSON.stringify({
           ...saleDraft,
@@ -1258,6 +1361,12 @@ export default function OperationModalBridge() {
           paywayTransactionId: saleKhqr.transactionId,
         }),
       })
+      setSaleCompleted(completedSaleFromTrade(result.trade, {
+        currency: saleDraft.currency,
+        paymentMethod: 'KHQR',
+        itemName: saleDraft.items[0]?.name || 'Sold item',
+        quantity: saleDraft.items[0]?.quantity || 1,
+      }))
       setSalePaymentStatus('Payment successful')
       setSalePaymentPhase('COMPLETED')
       setBusy(false)
@@ -1423,8 +1532,8 @@ export default function OperationModalBridge() {
       kind={kind}
       error={error}
       busy={busy}
-      compact={(kind === 'sale' && Boolean(saleKhqr)) || (kind === 'pawn' && Boolean(pawnCreated))}
-      dismissible={!(kind === 'sale' && saleKhqr)}
+      compact={(kind === 'sale' && Boolean(saleKhqr || saleCompleted)) || (kind === 'pawn' && Boolean(pawnCreated))}
+      dismissible={!(kind === 'sale' && saleKhqr && !saleCompleted)}
       dismissOnBackdrop={!['pawn', 'purchase', 'scan', 'stock'].includes(kind)}
       dismissOnEscape={kind !== 'pawn'}
       onClose={close}
@@ -1767,10 +1876,32 @@ export default function OperationModalBridge() {
         </>}
       </form>}
 
-      {kind === 'sale' && !saleKhqr && <form className="operation-form sale-form" onSubmit={submitSale}>
+      {kind === 'sale' && saleCompleted && <section className="record-created-workflow sale-complete-workflow" role="status" aria-live="polite">
+        <div className="record-created-card sale-complete-card">
+          <span className="record-created-check"><CheckCircle2 size={34} /></span>
+          <div>
+            <span className="eyebrow">Sale saved</span>
+            <h3>{saleCompleted.balance > 0 ? 'Sale recorded' : 'Payment successful'}</h3>
+            <p>{saleCompleted.balance > 0 ? `${saleAmountText(saleCompleted.balance, saleCompleted.currency)} remains to be paid.` : 'The payment was received and inventory has been updated.'}</p>
+          </div>
+          <dl>
+            <div><dt>Sale number</dt><dd>{saleCompleted.tradeNo}</dd></div>
+            <div><dt>Total</dt><dd>{saleAmountText(saleCompleted.total, saleCompleted.currency)}</dd></div>
+            <div><dt>Received</dt><dd>{saleAmountText(saleCompleted.amountPaid, saleCompleted.currency)}</dd></div>
+            <div><dt>Balance</dt><dd><span>{saleAmountText(saleCompleted.balance, saleCompleted.currency)}</span></dd></div>
+          </dl>
+          <div className="sale-complete-item"><strong>{saleCompleted.itemName} × {saleCompleted.quantity}</strong><small>{saleCompleted.paymentMethod === 'KHQR' ? 'ABA KHQR payment' : 'Cash payment'}</small></div>
+        </div>
+        <footer className="operation-modal-actions record-created-actions">
+          <button type="button" className="secondary-button" onClick={printCompletedSaleReceipt} data-modal-initial-focus><Printer size={16} /> Print receipt</button>
+          <button type="button" className="primary-button record-created-done" onClick={() => window.location.reload()}><CheckCircle2 size={16} /> Done</button>
+        </footer>
+      </section>}
+
+      {kind === 'sale' && !saleKhqr && !saleCompleted && <form className="operation-form sale-form" onSubmit={submitSale}>
         <div className="operation-form-grid">
-          <label>Customer<select value={saleCustomerId} onChange={(event) => setSaleCustomerId(event.target.value)}><option value="">Walk-in customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name}{customer.phone ? ` — ${customer.phone}` : ' — No phone recorded'}</option>)}</select></label>
-          <label className="operation-wide">Inventory item<select required value={saleItemId} disabled={saleInventoryLoading || (!saleInventoryLoading && inventory.length === 0)} onChange={(event) => {
+          <label className="sale-customer-field">Customer<select value={saleCustomerId} onChange={(event) => setSaleCustomerId(event.target.value)}><option value="">Walk-in customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name}{customer.phone ? ` — ${customer.phone}` : ' — No phone recorded'}</option>)}</select></label>
+          <label className="operation-wide sale-inventory-field">Inventory item<select data-modal-initial-focus required value={saleItemId} disabled={saleInventoryLoading || (!saleInventoryLoading && inventory.length === 0)} onChange={(event) => {
             const nextId = event.target.value
             const nextItem = inventory.find((item) => item._id === nextId)
             setSaleItemId(nextId)
@@ -1787,24 +1918,37 @@ export default function OperationModalBridge() {
             setSaleAmountPaid('')
           }}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Cambodian Riel</option></select><small>1 USD = {riel.format(usdKhrRate)} KHR</small></label>
           <label>Quantity<input type="number" min="1" max={selectedSaleItem?.quantity} value={effectiveSaleQuantity} disabled={!saleItemId || selectedSaleItem?.category === 'PHONE'} onChange={(event) => { setSaleQuantity(event.target.value); setSaleDiscount('0'); setSaleAmountPaid('') }} /></label>
-          <label>Selling price ({saleCurrency})<MoneyInput currency={saleCurrency} readOnly value={saleUnitPrice || ''} onValueChange={() => undefined} placeholder="Set in Stock Information" /><small>{selectedSaleItem ? 'Controlled by Stock Information' : 'Select a product first'}</small></label>
+          <div className="sale-price-display" role="group" aria-label={`Selling price in ${saleCurrency}`}><span>Selling price ({saleCurrency})</span><strong>{selectedSaleItem ? saleAmountText(saleUnitPrice, saleCurrency) : 'Select a product'}</strong><small>{selectedSaleItem ? 'Set in Stock Information' : 'Choose inventory first'}</small></div>
           <label className={saleDiscountInvalid ? 'field-invalid' : ''}>Discount ({saleCurrency})<MoneyInput currency={saleCurrency} minimum={0} maximum={saleMaximumDiscount} value={saleDiscount} disabled={!saleItemId} onValueChange={setSaleDiscount} placeholder={saleCurrency === 'KHR' ? '0' : '0.00'} />{selectedSaleItem && <small>{saleCurrency === 'KHR' && saleDiscountAmount % 100 !== 0 ? 'Use a whole KHR amount in increments of 100' : `${saleDiscountInvalid ? 'Maximum discount is' : 'Maximum allowed:'} ${saleAmountText(saleMaximumDiscount, saleCurrency)}`}</small>}</label>
-          {salePaymentMethod === 'CASH' && <label className={salePaidInvalid ? 'field-invalid' : ''}>Amount paid ({saleCurrency}) <small className="optional-marker">Defaults to total</small><MoneyInput currency={saleCurrency} minimum={0} maximum={saleTotal || undefined} value={saleAmountPaid} onValueChange={setSaleAmountPaid} placeholder={saleCurrency === 'KHR' ? String(Math.round(saleTotal)) : saleTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} />{salePaidInvalid && <small>{saleCurrency === 'KHR' && salePaidAmount % 100 !== 0 ? 'Use a whole KHR amount in increments of 100' : `Amount paid cannot exceed ${saleAmountText(saleTotal, saleCurrency)}`}</small>}</label>}
-          <fieldset className={`sale-payment-method operation-wide${paywayAvailable && saleCurrency === 'USD' ? '' : ' cash-only'}`}>
+          {paywayAvailable && saleCurrency === 'USD' && <fieldset className="sale-payment-method operation-wide">
             <legend>How will the customer pay?</legend>
             <button type="button" className={salePaymentMethod === 'CASH' ? 'active cash' : 'cash'} onClick={() => setSalePaymentMethod('CASH')}>
               <span><Banknote size={20} /></span><p><strong>Pay with cash</strong><small>Record payment immediately</small></p>{salePaymentMethod === 'CASH' && <CheckCircle2 size={18} />}
             </button>
-            {paywayAvailable && saleCurrency === 'USD' && <button type="button" className={salePaymentMethod === 'KHQR' ? 'active khqr' : 'khqr'} onClick={() => setSalePaymentMethod('KHQR')}>
+            <button type="button" className={salePaymentMethod === 'KHQR' ? 'active khqr' : 'khqr'} onClick={() => setSalePaymentMethod('KHQR')}>
               <span className="khqr-payment-option-logo"><img src={khqrLogo} alt="" /></span><p><strong>Pay with KHQR</strong><small>{paywayAvailable ? 'ABA PayWay sandbox' : 'PayWay unavailable'}</small></p>{salePaymentMethod === 'KHQR' && <CheckCircle2 size={18} />}
-            </button>}
-          </fieldset>
-          <label className="operation-wide">Notes <small className="optional-marker">Optional</small><textarea rows={3} value={saleNotes} onChange={(event) => setSaleNotes(event.target.value)} /></label>
+            </button>
+          </fieldset>}
+          {salePaymentMethod === 'CASH' && <label className={`sale-amount-received operation-wide${salePaidInvalid ? ' field-invalid' : ''}`}>Amount received ({saleCurrency}) <small className="optional-marker">Defaults to total</small><MoneyInput currency={saleCurrency} minimum={0} maximum={saleTotal || undefined} value={saleAmountPaid} onValueChange={setSaleAmountPaid} placeholder={saleCurrency === 'KHR' ? riel.format(Math.round(saleTotal)) : saleTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} />{salePaidInvalid && <small>{saleCurrency === 'KHR' && salePaidAmount % 100 !== 0 ? 'Use a whole KHR amount in increments of 100' : `Amount received cannot exceed ${saleAmountText(saleTotal, saleCurrency)}`}</small>}</label>}
+          <section className="sale-summary operation-wide" aria-labelledby="sale-summary-title">
+            <header><div><span>Sale summary</span><strong id="sale-summary-title">{selectedSaleItem ? `${selectedSaleItem.name} × ${effectiveSaleQuantity}` : 'No item selected'}</strong></div><b>{salePaymentMethod === 'KHQR' ? 'KHQR' : 'Cash'}</b></header>
+            <div className="sale-summary-calculation">
+              <span><small>Subtotal</small><strong>{saleAmountText(saleSubtotal, saleCurrency)}</strong></span>
+              <span><small>Discount</small><strong>− {saleAmountText(saleDiscountAmount, saleCurrency)}</strong></span>
+              <span className="total"><small>Total</small><strong>{saleAmountText(saleTotal, saleCurrency)}</strong></span>
+              <span><small>Received</small><strong>{saleAmountText(salePaymentMethod === 'KHQR' ? saleTotal : salePaidAmount, saleCurrency)}</strong></span>
+              <span className={salePaymentMethod === 'KHQR' || saleBalance <= 0 ? 'settled' : 'due'}><small>Balance</small><strong>{saleAmountText(salePaymentMethod === 'KHQR' ? 0 : saleBalance, saleCurrency)}</strong></span>
+            </div>
+          </section>
+          <div className="sale-notes operation-wide">
+            <button type="button" className="sale-note-toggle" aria-expanded={saleNotesOpen} onClick={() => setSaleNotesOpen((open) => !open)}><span><strong>{saleNotesOpen ? 'Sale note' : 'Add sale note'}</strong><small>Optional details for this transaction</small></span>{saleNotesOpen ? <ChevronUp size={17} /> : <ChevronDown size={17} />}</button>
+            {saleNotesOpen && <label>Notes<textarea rows={3} value={saleNotes} onChange={(event) => setSaleNotes(event.target.value)} /></label>}
+          </div>
         </div>
         <footer className="operation-modal-actions"><div className="sale-total"><span>Total</span><strong>{saleAmountText(saleTotal, saleCurrency)}</strong></div><button type="button" className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={saleActionDisabled} title={!saleItemId ? 'Choose an inventory product before continuing' : undefined}>{busy || saleInventoryLoading ? <LoaderCircle className="spinning" size={17} /> : salePaymentMethod === 'KHQR' ? <img className="khqr-action-logo" src={khqrLogo} alt="" /> : <Banknote size={17} />}{saleActionLabel}</button></footer>
       </form>}
 
-      {kind === 'sale' && saleKhqr && <section className={`sale-khqr-workflow payment-${salePaymentPhase.toLowerCase()}`}>
+      {kind === 'sale' && saleKhqr && !saleCompleted && <section className={`sale-khqr-workflow payment-${salePaymentPhase.toLowerCase()}`}>
         <div className="khqr-heading">
           <span><img src={khqrLogo} alt="" /></span>
           <div><span className="eyebrow">ABA KHQR</span><h3>{salePaymentPhase === 'COMPLETED' ? 'Payment successful' : salePaymentPhase === 'CANCELLED' ? 'Payment cancelled' : `Scan to pay $${saleKhqr.amount.toFixed(2)}`}</h3>{salePaymentPhase !== 'COMPLETED' && <p>{salePaymentPhase === 'CANCELLED' ? 'This QR has been closed and can no longer accept payment.' : 'Keep this window open. The sale completes automatically after PayWay approves the payment.'}</p>}</div>
