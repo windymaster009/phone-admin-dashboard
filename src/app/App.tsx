@@ -43,7 +43,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { api, getSessionUser, type SessionUser } from '../lib/api'
+import { api, type SessionUser } from '../lib/api'
 import { getPawnAutoCalculatePreference, PAWN_AUTO_CALCULATE_EVENT, savePawnAutoCalculatePreference } from '../lib/pawnPreferences'
 import LoadingState from '../components/LoadingState'
 import MoneyInput from '../components/MoneyInput'
@@ -51,6 +51,7 @@ import { printInventoryLabel } from '../features/inventory/barcode'
 import BackupStatusBridge from '../features/backup/BackupStatusBridge'
 import SupplierWorkspace from '../features/suppliers/SupplierWorkspace'
 import '../features/backup/backup-status.css'
+import '../features/refunds/refund-page.css'
 
 type NavKey =
   | 'dashboard'
@@ -60,6 +61,7 @@ type NavKey =
   | 'customers'
   | 'suppliers'
   | 'depreciation'
+  | 'refunds'
   | 'businessOverview'
   | 'reports'
   | 'settings'
@@ -69,6 +71,7 @@ type NavItem = {
   label: string
   icon: LucideIcon
   badge?: string
+  roles?: SessionUser['role'][]
 }
 
 type AppFontSize = 'default' | 'comfortable' | 'large'
@@ -81,6 +84,7 @@ const viewPaths: Record<NavKey, string> = {
   customers: '/customers',
   suppliers: '/suppliers',
   depreciation: '/depreciation',
+  refunds: '/refunds',
   businessOverview: '/business-overview',
   reports: '/reports',
   settings: '/settings',
@@ -238,7 +242,6 @@ type Trade = {
     amount: number
     reason: string
     inventoryDisposition: 'RESTOCK' | 'NO_RESTOCK'
-    externalReference?: string
     refundedAt: string
     refundedBy?: { _id: string; name: string; email?: string; role?: string }
   }
@@ -500,6 +503,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     label: 'Finance & Control',
     items: [
       { key: 'depreciation', label: 'Depreciation', icon: TrendingDown },
+      { key: 'refunds', label: 'Refunds', icon: RefreshCcw, roles: ['OWNER', 'MANAGER'] },
       { key: 'businessOverview', label: 'Business Overview', icon: BarChart3 },
       { key: 'reports', label: 'Reports', icon: FileText },
       { key: 'settings', label: 'Settings', icon: Settings },
@@ -1422,15 +1426,7 @@ function TradeView() {
   const [loading, setLoading] = useState(true)
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null)
   const [error, setError] = useState('')
-  const [refundOpen, setRefundOpen] = useState(false)
-  const [refundReason, setRefundReason] = useState('')
-  const [refundDisposition, setRefundDisposition] = useState<'' | 'RESTOCK' | 'NO_RESTOCK'>('')
-  const [refundReference, setRefundReference] = useState('')
-  const [refundConfirmation, setRefundConfirmation] = useState('')
-  const [refundError, setRefundError] = useState('')
-  const [refundBusy, setRefundBusy] = useState(false)
   const [transactionsCollapsed, setTransactionsCollapsed] = useState(() => window.matchMedia('(max-width: 640px)').matches)
-  const canRefund = ['OWNER', 'MANAGER'].includes(getSessionUser()?.role || '')
 
   useEffect(() => {
     api<{ trades: Trade[] }>('/trades')
@@ -1465,46 +1461,6 @@ function TradeView() {
     link.download = `phoneflow-transactions-${new Date().toISOString().slice(0, 10)}.csv`
     link.click()
     URL.revokeObjectURL(url)
-  }
-
-  function resetRefundForm() {
-    setRefundOpen(false)
-    setRefundReason('')
-    setRefundDisposition('')
-    setRefundReference('')
-    setRefundConfirmation('')
-    setRefundError('')
-  }
-
-  function closeTradeDetails() {
-    if (refundBusy) return
-    resetRefundForm()
-    setSelectedTrade(null)
-  }
-
-  async function refundTrade(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    if (!selectedTrade || refundBusy) return
-    setRefundBusy(true)
-    setRefundError('')
-    try {
-      const result = await api<{ trade: Trade }>(`/trades/${encodeURIComponent(selectedTrade._id)}/refund`, {
-        method: 'POST',
-        body: JSON.stringify({
-          reason: refundReason,
-          inventoryDisposition: refundDisposition,
-          externalReference: refundReference,
-          confirmation: refundConfirmation,
-        }),
-      })
-      setTrades((current) => current.map((trade) => trade._id === result.trade._id ? result.trade : trade))
-      setSelectedTrade(result.trade)
-      resetRefundForm()
-    } catch (reason) {
-      setRefundError(reason instanceof Error ? reason.message : 'Unable to refund this sale')
-    } finally {
-      setRefundBusy(false)
-    }
   }
 
   return (
@@ -1551,7 +1507,7 @@ function TradeView() {
         </div>}
       </article>
       {selectedTrade && (
-        <div className="modal-backdrop" role="presentation" onClick={closeTradeDetails}>
+        <div className="modal-backdrop" role="presentation" onClick={() => setSelectedTrade(null)}>
           <section className="detail-modal trade-detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="trade-detail-title" onClick={(event) => event.stopPropagation()}>
             <header className="detail-modal-header">
               <div>
@@ -1559,7 +1515,7 @@ function TradeView() {
                 <h3 id="trade-detail-title">{selectedTrade.tradeNo}</h3>
                 <p>{tradePartyName(selectedTrade)} - {dateText(selectedTrade.purchaseDate || selectedTrade.createdAt)}</p>
               </div>
-              <button className="icon-button" onClick={closeTradeDetails} disabled={refundBusy} aria-label="Close details"><X size={18} /></button>
+              <button className="icon-button" onClick={() => setSelectedTrade(null)} aria-label="Close details"><X size={18} /></button>
             </header>
 
             <div className="detail-grid">
@@ -1606,31 +1562,208 @@ function TradeView() {
             {selectedTrade.refund && (
               <div className="trade-refund-record" role="status">
                 <span><RefreshCcw size={17} /></span>
-                <div><strong>Refund recorded</strong><small>{tradeTransactionMoney(selectedTrade, selectedTrade.refund.amount, selectedTrade.refund.amount)} · {selectedTrade.refund.inventoryDisposition === 'RESTOCK' ? 'Items restored to stock' : 'Items not returned to saleable stock'}</small><p>{selectedTrade.refund.reason}</p>{selectedTrade.refund.externalReference && <small>External reference: {selectedTrade.refund.externalReference}</small>}</div>
+                <div><strong>Refund recorded</strong><small>{tradeTransactionMoney(selectedTrade, selectedTrade.refund.amount, selectedTrade.refund.amount)} · {selectedTrade.refund.inventoryDisposition === 'RESTOCK' ? 'Items restored to stock' : 'Items not returned to saleable stock'}</small><p>{selectedTrade.refund.reason}</p></div>
               </div>
             )}
 
-            {refundOpen && (
-              <form className="trade-refund-form" onSubmit={refundTrade}>
-                <header><div><span className="eyebrow">Controlled operation</span><h4>Refund entire sale</h4><p>This records a full refund and marks the sale as returned. For cash, hand the amount back before confirming. Partial refunds are not supported.</p></div><strong>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionAmountPaid, selectedTrade.amountPaid)}</strong></header>
-                {selectedTrade.paymentMethod === 'KHQR' && <div className="trade-refund-warning"><AlertTriangle size={17} /><p><strong>Refund in ABA PayWay first</strong><small>PhoneFlow cannot send the money back through the current PayWay connection. Enter the completed ABA refund reference below before recording it here.</small></p></div>}
-                <label>Reason<textarea required minLength={5} maxLength={500} rows={2} value={refundReason} onChange={(event) => setRefundReason(event.target.value)} placeholder="Why is this sale being refunded?" /></label>
-                <label>Returned inventory<select required value={refundDisposition} onChange={(event) => setRefundDisposition(event.target.value as '' | 'RESTOCK' | 'NO_RESTOCK')}><option value="" disabled>Choose after inspecting the items</option><option value="RESTOCK">Restore items to available stock</option><option value="NO_RESTOCK">Do not return items to saleable stock</option></select><small>Only choose restore after confirming every returned item is present and resaleable.</small></label>
-                {selectedTrade.paymentMethod === 'KHQR' && <label>ABA refund reference<input required minLength={4} maxLength={120} value={refundReference} onChange={(event) => setRefundReference(event.target.value)} placeholder="PayWay or ABA refund reference" /></label>}
-                <label className="trade-refund-confirmation">Type <strong>{selectedTrade.tradeNo}</strong> to confirm<input required autoComplete="off" value={refundConfirmation} onChange={(event) => setRefundConfirmation(event.target.value)} /></label>
-                {refundError && <p className="trade-refund-error" role="alert"><AlertTriangle size={15} /> {refundError}</p>}
-                <footer><button type="button" className="ghost-button" onClick={resetRefundForm} disabled={refundBusy}>Cancel</button><button type="submit" className="primary-button danger-button" disabled={refundBusy || refundReason.trim().length < 5 || !refundDisposition || refundConfirmation !== selectedTrade.tradeNo || (selectedTrade.paymentMethod === 'KHQR' && refundReference.trim().length < 4)}>{refundBusy ? 'Recording refund...' : 'Confirm full refund'}</button></footer>
-              </form>
-            )}
-
             <footer className="detail-modal-footer">
-              {canRefund && selectedTrade.type === 'SELL' && selectedTrade.status === 'COMPLETED' && !refundOpen && <button className="primary-button danger-button" onClick={() => { setRefundError(''); setRefundOpen(true) }}><RefreshCcw size={15} /> Refund sale</button>}
-              <button className="ghost-button" onClick={closeTradeDetails} disabled={refundBusy}>Close</button>
+              <button className="ghost-button" onClick={() => setSelectedTrade(null)}>Close</button>
             </footer>
           </section>
         </div>
       )}
     </>
+  )
+}
+
+type RefundQueueFilter = 'ALL' | 'COMPLETED' | 'RETURNED'
+
+function RefundsView({ user }: { user: SessionUser }) {
+  const [trades, setTrades] = useState<Trade[]>([])
+  const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState('')
+  const [search, setSearch] = useState('')
+  const [filter, setFilter] = useState<RefundQueueFilter>('COMPLETED')
+  const [selectedId, setSelectedId] = useState('')
+  const [reason, setReason] = useState('')
+  const [inventoryDisposition, setInventoryDisposition] = useState<'' | 'RESTOCK' | 'NO_RESTOCK'>('')
+  const [confirmation, setConfirmation] = useState('')
+  const [actionError, setActionError] = useState('')
+  const [actionBusy, setActionBusy] = useState(false)
+  const [completedTradeNo, setCompletedTradeNo] = useState('')
+  const hasAccess = user.role === 'OWNER' || user.role === 'MANAGER'
+
+  useEffect(() => {
+    if (!hasAccess) {
+      setLoading(false)
+      return
+    }
+    api<{ trades: Trade[] }>('/refunds')
+      .then((result) => {
+        setTrades(result.trades)
+        setSelectedId((current) => current || result.trades.find((trade) => trade.status === 'COMPLETED')?._id || result.trades[0]?._id || '')
+      })
+      .catch((error: Error) => setLoadError(error.message))
+      .finally(() => setLoading(false))
+  }, [hasAccess])
+
+  useEffect(() => {
+    setReason('')
+    setInventoryDisposition('')
+    setConfirmation('')
+    setActionError('')
+    setCompletedTradeNo('')
+  }, [selectedId])
+
+  const eligibleCount = trades.filter((trade) => trade.status === 'COMPLETED').length
+  const refundedCount = trades.filter((trade) => trade.status === 'RETURNED').length
+  const filteredTrades = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    return trades.filter((trade) => {
+      if (filter !== 'ALL' && trade.status !== filter) return false
+      if (!query) return true
+      return [
+        trade.tradeNo,
+        tradePartyName(trade),
+        tradePartyPhone(trade),
+        trade.items.map((item) => item.name).join(' '),
+      ].filter(Boolean).some((value) => String(value).toLowerCase().includes(query))
+    })
+  }, [filter, search, trades])
+  const selectedTrade = trades.find((trade) => trade._id === selectedId)
+  const canSubmit = Boolean(
+    selectedTrade
+    && selectedTrade.status === 'COMPLETED'
+    && reason.trim().length >= 5
+    && inventoryDisposition
+    && confirmation === selectedTrade.tradeNo
+    && !actionBusy,
+  )
+
+  async function recordRefund(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selectedTrade || !canSubmit) return
+    setActionBusy(true)
+    setActionError('')
+    try {
+      const result = await api<{ trade: Trade }>(`/trades/${encodeURIComponent(selectedTrade._id)}/refund`, {
+        method: 'POST',
+        body: JSON.stringify({
+          reason,
+          inventoryDisposition,
+          confirmation,
+        }),
+      })
+      setTrades((current) => current.map((trade) => trade._id === result.trade._id ? result.trade : trade))
+      setCompletedTradeNo(result.trade.tradeNo)
+      setReason('')
+      setInventoryDisposition('')
+      setConfirmation('')
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'The refund was not recorded. Review the sale and try again.')
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  if (!hasAccess) {
+    return (
+      <>
+        <SectionHeader title="Refunds" description="Only owners and managers can review or record refunds." />
+        <article className="surface-card refund-access-message">
+          <AlertTriangle size={20} />
+          <div><h3>Manager access required</h3><p>Ask an owner or manager to open this page and review the sale.</p></div>
+        </article>
+      </>
+    )
+  }
+
+  return (
+    <section className="refund-page" aria-label="Refunds">
+      <SectionHeader
+        title="Refunds"
+        description={loadError || 'Review a completed sale, return the customer’s money, and decide whether inspected items go back to stock.'}
+        className="refund-page-heading"
+        action={<div className="refund-counts" aria-label="Refund queue totals"><span><strong>{eligibleCount}</strong> ready</span><span><strong>{refundedCount}</strong> refunded</span></div>}
+      />
+
+      <div className="refund-toolbar surface-card">
+        <label className="refund-search"><span className="sr-only">Search sales</span><Search size={17} aria-hidden="true" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search receipt, customer, phone, or item" /></label>
+        <div className="refund-filters" aria-label="Filter refund queue">
+          {([
+            ['COMPLETED', 'Ready'],
+            ['RETURNED', 'Refunded'],
+            ['ALL', 'All'],
+          ] as [RefundQueueFilter, string][]).map(([value, label]) => (
+            <button key={value} type="button" className={filter === value ? 'active' : ''} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>
+          ))}
+        </div>
+      </div>
+
+      <div className="refund-workbench">
+        <aside className="surface-card refund-queue" aria-label="Sale refund queue">
+          <header><h3>Sales</h3><span>{filteredTrades.length} shown</span></header>
+          <div className="refund-queue-list">
+            {loading && <LoadingState compact label="Loading refundable sales" detail="Reading completed and refunded transactions…" />}
+            {!loading && filteredTrades.map((trade) => (
+              <button key={trade._id} type="button" className={selectedId === trade._id ? 'refund-queue-item active' : 'refund-queue-item'} onClick={() => setSelectedId(trade._id)} aria-pressed={selectedId === trade._id}>
+                <span className="refund-queue-item-top"><strong>{trade.tradeNo}</strong><StatusBadge status={trade.status} /></span>
+                <span className="refund-queue-party">{tradePartyName(trade)}</span>
+                <span className="refund-queue-items">{trade.items.map((item) => `${item.name} ×${item.quantity}`).join(', ')}</span>
+                <span className="refund-queue-item-bottom"><small>{dateText(trade.createdAt)}</small><strong>{tradeTransactionMoney(trade, trade.transactionAmountPaid, trade.amountPaid)}</strong></span>
+              </button>
+            ))}
+            {!loading && filteredTrades.length === 0 && <div className="refund-empty"><RefreshCcw size={22} /><strong>No sales match this view</strong><p>Change the filter or search terms to see other sales.</p></div>}
+          </div>
+        </aside>
+
+        <article className="surface-card refund-review" aria-live="polite">
+          {!selectedTrade && !loading && <div className="refund-empty refund-review-empty"><Search size={24} /><strong>Select a sale to review</strong><p>Choose a receipt from the queue before recording a refund.</p></div>}
+          {selectedTrade && (
+            <>
+              <header className="refund-review-header">
+                <div><h3>{selectedTrade.tradeNo}</h3><p>{tradePartyName(selectedTrade)} · {dateText(selectedTrade.createdAt)}</p></div>
+                <StatusBadge status={selectedTrade.status} />
+              </header>
+
+              <dl className="refund-summary">
+                <div><dt>Refund amount</dt><dd>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionAmountPaid, selectedTrade.amountPaid)}</dd></div>
+                <div><dt>Payment recorded</dt><dd>{titleStatus(selectedTrade.paymentMethod)}</dd></div>
+                <div><dt>Sale total</dt><dd>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionTotal, selectedTrade.total)}</dd></div>
+                <div><dt>Recorded by</dt><dd>{selectedTrade.createdBy?.name || 'Staff member'}</dd></div>
+              </dl>
+
+              <section className="refund-items" aria-labelledby="refund-items-title">
+                <h4 id="refund-items-title">Items in this sale</h4>
+                {selectedTrade.items.map((item, index) => (
+                  <div key={`${item.name}-${index}`}><span><strong>{item.name}</strong><small>Quantity {item.quantity}</small></span><strong>{tradeTransactionMoney(selectedTrade, item.originalUnitPrice === undefined ? undefined : item.originalUnitPrice * item.quantity, item.unitPrice * item.quantity)}</strong></div>
+                ))}
+              </section>
+
+              {selectedTrade.status === 'RETURNED' && selectedTrade.refund ? (
+                <section className="refund-complete" role="status">
+                  <span><BadgeCheck size={20} /></span>
+                  <div>
+                    <h4>{completedTradeNo === selectedTrade.tradeNo ? 'Refund recorded successfully' : 'Refund already recorded'}</h4>
+                    <p>{selectedTrade.refund.reason}</p>
+                    <dl><div><dt>Stock</dt><dd>{selectedTrade.refund.inventoryDisposition === 'RESTOCK' ? 'Restored to available stock' : 'Not returned to saleable stock'}</dd></div><div><dt>Recorded</dt><dd>{dateText(selectedTrade.refund.refundedAt)} by {selectedTrade.refund.refundedBy?.name || 'manager'}</dd></div></dl>
+                  </div>
+                </section>
+              ) : (
+                <form className="refund-form" onSubmit={recordRefund}>
+                  <div className="refund-record-only"><AlertTriangle size={18} /><p><strong>Return the money before confirming</strong><span>PhoneFlow records the refund and stock change only. Give the customer {tradeTransactionMoney(selectedTrade, selectedTrade.transactionAmountPaid, selectedTrade.amountPaid)} using your shop’s current process.</span></p></div>
+                  <label><span>Refund reason</span><textarea required minLength={5} maxLength={500} rows={3} value={reason} aria-invalid={reason.length > 0 && reason.trim().length < 5} onChange={(event) => setReason(event.target.value)} placeholder="Describe why the customer returned this sale" /><small>Use a specific reason so the refund is clear in the audit history.</small></label>
+                  <label><span>Returned inventory</span><select required value={inventoryDisposition} onChange={(event) => setInventoryDisposition(event.target.value as '' | 'RESTOCK' | 'NO_RESTOCK')}><option value="" disabled>Choose after inspecting every item</option><option value="RESTOCK">Restore all items to available stock</option><option value="NO_RESTOCK">Do not return items to saleable stock</option></select><small>Restore stock only when every returned item is present, correct, and resaleable.</small></label>
+                  <label className="refund-confirm"><span>Type <strong>{selectedTrade.tradeNo}</strong> to confirm</span><input required autoComplete="off" value={confirmation} aria-invalid={confirmation.length > 0 && confirmation !== selectedTrade.tradeNo} onChange={(event) => setConfirmation(event.target.value)} /><small>This check prevents a refund from being recorded against the wrong receipt.</small></label>
+                  {actionError && <p className="refund-error" role="alert"><AlertTriangle size={16} /> {actionError}</p>}
+                  <footer><button type="button" className="ghost-button" onClick={() => { setReason(''); setInventoryDisposition(''); setConfirmation(''); setActionError('') }} disabled={actionBusy}>Clear</button><button type="submit" className="primary-button danger-button" disabled={!canSubmit}>{actionBusy ? 'Recording refund…' : 'Record full refund'}</button></footer>
+                </form>
+              )}
+            </>
+          )}
+        </article>
+      </div>
+    </section>
   )
 }
 
@@ -3408,6 +3541,7 @@ function App({
       case 'customers': return <CustomersView />
       case 'suppliers': return <SupplierWorkspace />
       case 'depreciation': return <DepreciationView goTo={changePage} />
+      case 'refunds': return <RefundsView user={user} />
       case 'businessOverview': return <BusinessOverviewView />
       case 'reports': return <ReportsView />
       case 'settings': return <SettingsView user={user} onLogout={onLogout} fontSize={fontSize} onFontSizeChange={onFontSizeChange} />
@@ -3433,7 +3567,7 @@ function App({
           {navGroups.map((group) => (
             <div className="nav-group" key={group.label}>
               <span className="nav-group-label">{group.label}</span>
-              {group.items.map((item) => {
+              {group.items.filter((item) => !item.roles || item.roles.includes(user.role)).map((item) => {
                 const Icon = item.icon
                 const badge = item.key === 'pawn'
                   ? String(sidebarCounts.pawns)

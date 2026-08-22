@@ -2649,6 +2649,16 @@ router.get('/trades', requireAuth, asyncRoute(async (req, res) => {
   res.json({ trades })
 }))
 
+router.get('/refunds', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (_req, res) => {
+  const trades = await Trade.find({ type: 'SELL', status: { $in: ['COMPLETED', 'RETURNED'] } })
+    .populate('customer', 'name phone')
+    .populate('createdBy', 'name email role')
+    .populate('refund.refundedBy', 'name email role')
+    .sort({ createdAt: -1 })
+    .limit(500)
+  res.json({ trades })
+}))
+
 router.post('/trades/:id/refund', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) throw requestError(400, 'Sale transaction is invalid')
 
@@ -2688,7 +2698,6 @@ router.post('/trades/:id/refund', requireAuth, allowRoles('OWNER', 'MANAGER'), a
           currency: trade.currency || 'USD',
           inventoryDisposition: refund.inventoryDisposition,
           paymentMethod: trade.paymentMethod,
-          externalReference: refund.externalReference,
           reason: refund.reason,
         },
         ipAddress: req.ip,
@@ -2699,6 +2708,7 @@ router.post('/trades/:id/refund', requireAuth, allowRoles('OWNER', 'MANAGER'), a
   }
   await trade.populate('customer', 'name phone')
   await trade.populate('supplier', 'name phone nationalIdNumber')
+  await trade.populate('createdBy', 'name email role')
   await trade.populate('refund.refundedBy', 'name email role')
   res.json({ trade })
 }))

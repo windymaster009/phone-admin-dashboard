@@ -20,7 +20,6 @@ test('normalizes an explicitly confirmed full cash refund', () => {
     amount: 25,
     reason: 'Customer returned item',
     inventoryDisposition: 'RESTOCK',
-    externalReference: undefined,
   })
 })
 
@@ -31,11 +30,16 @@ test('rejects a repeated refund', () => {
   )
 })
 
-test('requires an external reference before recording a KHQR refund', () => {
-  assert.throws(
-    () => normalizeTradeRefundRequest({ reason: 'Returned item', confirmation: sale.tradeNo, inventoryDisposition: 'NO_RESTOCK' }, { ...sale, paymentMethod: 'KHQR' }),
-    /ABA PayWay/,
-  )
+test('uses the same record-only refund rules for a historical non-cash sale', () => {
+  assert.deepEqual(normalizeTradeRefundRequest({
+    reason: 'Customer returned item',
+    confirmation: sale.tradeNo,
+    inventoryDisposition: 'NO_RESTOCK',
+  }, { ...sale, paymentMethod: 'KHQR' }), {
+    amount: 25,
+    reason: 'Customer returned item',
+    inventoryDisposition: 'NO_RESTOCK',
+  })
 })
 
 test('restores serialized and quantity-based inventory safely', () => {

@@ -1,0 +1,9 @@
+{
+  "date": "2026-08-22",
+  "font_stack": "Inter body with Manrope display",
+  "palette": "Existing dark/light PhoneFlow tokens in src/styles/styles.css",
+  "motion": "Framer Motion installed; refund page uses restrained CSS state transitions",
+  "spacing": "Existing compact operational spacing; refund page uses a 4pt token scale",
+  "framework": "React 19 with Vite 7",
+  "preserve": ["font stack", "palette", "navigation", "surface language"]
+}

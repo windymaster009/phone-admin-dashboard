@@ -289,7 +289,6 @@ const tradeSchema = new Schema(
       amount: { type: Number, min: 0 },
       reason: { type: String, trim: true },
       inventoryDisposition: { type: String, enum: ['RESTOCK', 'NO_RESTOCK'] },
-      externalReference: { type: String, trim: true },
       refundedAt: Date,
       refundedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     },

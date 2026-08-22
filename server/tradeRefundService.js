@@ -12,22 +12,17 @@ export function normalizeTradeRefundRequest(input, trade) {
   const reason = cleanText(input?.reason, 500)
   const confirmation = cleanText(input?.confirmation, 80)
   const inventoryDisposition = String(input?.inventoryDisposition || '').trim().toUpperCase()
-  const externalReference = cleanText(input?.externalReference, 120)
 
   if (!trade || trade.type !== 'SELL') throw refundError(409, 'Only sale transactions can be refunded')
   if (trade.status !== 'COMPLETED') throw refundError(409, trade.status === 'RETURNED' ? 'This sale has already been refunded' : 'Only completed sales can be refunded')
   if (reason.length < 5) throw refundError(400, 'Enter a refund reason of at least 5 characters')
   if (confirmation !== trade.tradeNo) throw refundError(400, `Type ${trade.tradeNo} to confirm this refund`)
   if (!['RESTOCK', 'NO_RESTOCK'].includes(inventoryDisposition)) throw refundError(400, 'Choose whether returned items should be restored to available stock')
-  if (trade.paymentMethod === 'KHQR' && externalReference.length < 4) {
-    throw refundError(400, 'Complete the refund in ABA PayWay first, then enter its refund reference')
-  }
 
   return {
     amount: Math.max(0, Number(trade.transactionAmountPaid ?? trade.amountPaid) || 0),
     reason,
     inventoryDisposition,
-    externalReference: externalReference || undefined,
   }
 }
 

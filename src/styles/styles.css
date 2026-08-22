@@ -75,8 +75,8 @@
 }
 
 * { box-sizing: border-box; }
-html, body { width: 100%; min-height: 100%; }
-body { margin: 0; min-width: 320px; min-height: 100vh; overflow-x: hidden; color: var(--text); background: var(--bg); }
+html, body { width: 100%; min-height: 100%; overflow-x: clip; }
+body { margin: 0; min-width: 320px; min-height: 100vh; color: var(--text); background: var(--bg); }
 button, input, select { font: inherit; }
 button { cursor: pointer; }
 
@@ -824,7 +824,6 @@ td strong { color: var(--text); }
 .trade-detail-modal .detail-grid,
 .trade-detail-modal .detail-note,
 .trade-detail-modal .trade-refund-record,
-.trade-detail-modal .trade-refund-form,
 .trade-detail-modal .detail-modal-footer { grid-column: 1 / -1; }
 .trade-detail-modal .detail-modal-header { padding: 19px 21px; }
 .trade-detail-modal .detail-modal-header h3 { margin: 4px 0; font-size: 21px; }
@@ -842,32 +841,6 @@ td strong { color: var(--text); }
 .trade-refund-record strong { color: var(--text); font-size: 12px; }
 .trade-refund-record small { color: var(--muted); font-size: 9px; line-height: 1.45; }
 .trade-refund-record p { margin: 2px 0; color: var(--text); font-size: 10px; line-height: 1.5; }
-.trade-refund-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin: 0 18px 14px; padding: 18px; border: 1px solid color-mix(in srgb, var(--rose) 38%, var(--border)); border-radius: 14px; background: color-mix(in srgb, var(--rose) 5%, var(--surface-solid)); }
-.trade-refund-form > header { grid-column: 1 / -1; display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
-.trade-refund-form > header > div { min-width: 0; }
-.trade-refund-form h4 { margin: 4px 0; font: 800 16px Manrope, sans-serif; }
-.trade-refund-form header p { max-width: 62ch; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
-.trade-refund-form > header > strong { flex: 0 0 auto; color: var(--rose); font-size: 16px; }
-.trade-refund-form label { min-width: 0; display: flex; flex-direction: column; gap: 7px; color: var(--muted); font-size: 10px; font-weight: 700; }
-.trade-refund-form input,
-.trade-refund-form select,
-.trade-refund-form textarea { width: 100%; border: 1px solid var(--border-strong); border-radius: 10px; outline: 2px solid transparent; outline-offset: 1px; color: var(--text); background: var(--bg-soft); font: inherit; }
-.trade-refund-form input,
-.trade-refund-form select { min-height: 44px; padding: 0 12px; }
-.trade-refund-form textarea { min-height: 72px; padding: 11px 12px; resize: vertical; }
-.trade-refund-form input:focus-visible,
-.trade-refund-form select:focus-visible,
-.trade-refund-form textarea:focus-visible { border-color: var(--rose); outline-color: color-mix(in srgb, var(--rose) 72%, transparent); }
-.trade-refund-form label > small { min-height: 1lh; color: var(--muted-2); font-size: 8px; line-height: 1.45; }
-.trade-refund-confirmation { grid-column: 1 / -1; padding: 12px; border: 1px solid color-mix(in srgb, var(--rose) 20%, var(--border)); border-radius: 10px; background: var(--bg-soft); }
-.trade-refund-confirmation strong { color: var(--text); }
-.trade-refund-warning { grid-column: 1 / -1; display: flex; align-items: flex-start; gap: 10px; padding: 12px; border: 1px solid color-mix(in srgb, var(--orange) 32%, var(--border)); border-radius: 10px; color: var(--orange); background: color-mix(in srgb, var(--orange) 7%, var(--bg-soft)); }
-.trade-refund-warning svg { flex: 0 0 auto; }
-.trade-refund-warning p { display: grid; gap: 4px; margin: 0; }
-.trade-refund-warning strong { color: var(--text); font-size: 10px; }
-.trade-refund-warning small { color: var(--muted); font-size: 9px; line-height: 1.5; }
-.trade-refund-error { grid-column: 1 / -1; display: flex; align-items: center; gap: 7px; margin: 0; color: var(--rose); font-size: 10px; }
-.trade-refund-form > footer { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; padding-top: 14px; border-top: 1px solid var(--border); }
 .detail-modal-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 22px; border-bottom: 1px solid var(--border); background: linear-gradient(135deg, var(--primary-soft), transparent); }
 .detail-modal-header h3 { margin: 6px 0; font: 800 24px Manrope, sans-serif; }
 .detail-modal-header p { margin: 0; color: var(--muted); font-size: 12px; }
@@ -1864,15 +1837,6 @@ a:focus-visible,
   .trade-detail-modal .detail-sections { grid-template-columns: 1fr; padding: 12px; }
   .trade-detail-modal .detail-lines, .trade-detail-modal .detail-note, .trade-refund-record { margin: 0 12px 12px; }
   .trade-detail-modal .detail-grid { padding: 12px; }
-  .trade-refund-form { grid-template-columns: minmax(0, 1fr); margin: 0 12px 12px; padding: 14px; }
-  .trade-refund-form > header { flex-direction: column; gap: 8px; }
-  .trade-refund-form > header,
-  .trade-refund-warning,
-  .trade-refund-confirmation,
-  .trade-refund-error,
-  .trade-refund-form > footer { grid-column: 1; }
-  .trade-refund-form > footer { display: grid; grid-template-columns: minmax(0, .7fr) minmax(0, 1.3fr); }
-  .trade-refund-form > footer button { min-width: 0; }
   .inventory-price-editor { margin: 0 12px 12px; padding: 12px; }
   .inventory-price-columns { grid-template-columns: minmax(0, 1fr); }
   .inventory-currency-column,
