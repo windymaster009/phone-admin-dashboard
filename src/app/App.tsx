@@ -497,13 +497,13 @@ const navGroups: { label: string; items: NavItem[] }[] = [
       { key: 'inventory', label: 'Stock Information', icon: Boxes },
       { key: 'customers', label: 'Customers', icon: Users },
       { key: 'suppliers', label: 'Suppliers', icon: Building2 },
+      { key: 'refunds', label: 'Refunds', icon: RefreshCcw, roles: ['OWNER', 'MANAGER'] },
     ],
   },
   {
     label: 'Finance & Control',
     items: [
       { key: 'depreciation', label: 'Depreciation', icon: TrendingDown },
-      { key: 'refunds', label: 'Refunds', icon: RefreshCcw, roles: ['OWNER', 'MANAGER'] },
       { key: 'businessOverview', label: 'Business Overview', icon: BarChart3 },
       { key: 'reports', label: 'Reports', icon: FileText },
       { key: 'settings', label: 'Settings', icon: Settings },
