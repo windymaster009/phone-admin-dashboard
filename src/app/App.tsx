@@ -1577,6 +1577,21 @@ function TradeView() {
 }
 
 type RefundQueueFilter = 'ALL' | 'COMPLETED' | 'RETURNED'
+type RefundWarningStage = {
+  number: 1 | 2 | 3 | 4
+  label: string
+  message: string
+  saleAgeDays: number
+}
+
+function refundWarningStage(trade: Trade): RefundWarningStage {
+  const soldAt = new Date(trade.createdAt).getTime()
+  const saleAgeDays = Number.isFinite(soldAt) ? Math.max(0, Math.floor((Date.now() - soldAt) / 86_400_000)) : 0
+  if (saleAgeDays <= 3) return { number: 1, label: 'Full refund review', message: 'Inspect the product condition, identifiers, quantity, and included accessories before recording a full refund.', saleAgeDays }
+  if (saleAgeDays <= 7) return { number: 2, label: 'Defect review', message: 'Check whether the return is caused by a verified product defect before recording a full refund.', saleAgeDays }
+  if (saleAgeDays <= 14) return { number: 3, label: 'Warranty review', message: 'Review repair or exchange options with the customer before deciding on a full refund.', saleAgeDays }
+  return { number: 4, label: 'Late return review', message: 'This sale is outside the normal return period. Review the reason and product condition carefully before continuing.', saleAgeDays }
+}
 
 function RefundStatusBadge({ status }: { status: Trade['status'] }) {
   const refunded = status === 'RETURNED'
@@ -1638,6 +1653,7 @@ function RefundsView({ user }: { user: SessionUser }) {
     })
   }, [filter, search, trades])
   const selectedTrade = trades.find((trade) => trade._id === selectedId)
+  const selectedWarningStage = selectedTrade ? refundWarningStage(selectedTrade) : null
   const queueHeading = filter === 'COMPLETED' ? 'Not refunded' : filter === 'RETURNED' ? 'Refunded' : 'All sales'
   const canSubmit = Boolean(
     selectedTrade
@@ -1720,14 +1736,18 @@ function RefundsView({ user }: { user: SessionUser }) {
           <header><h3>{queueHeading}</h3><span>{filteredTrades.length} sale{filteredTrades.length === 1 ? '' : 's'}</span></header>
           <div className="refund-queue-list">
             {loading && <LoadingState compact label="Loading refundable sales" detail="Reading completed and refunded transactions…" />}
-            {!loading && filteredTrades.map((trade) => (
-              <button ref={selectedId === trade._id ? selectedRefundRowRef : undefined} key={trade._id} type="button" className={`refund-queue-item ${trade.status === 'RETURNED' ? 'refund-queue-item-refunded' : 'refund-queue-item-open'} ${selectedId === trade._id ? 'active' : ''}`} onClick={() => setSelectedId(trade._id)} aria-pressed={selectedId === trade._id}>
-                <span className="refund-queue-item-top"><strong>{trade.tradeNo}</strong><RefundStatusBadge status={trade.status} /></span>
-                <span className="refund-queue-party">{tradePartyName(trade)}</span>
-                <span className="refund-queue-items">{trade.items.map((item) => `${item.name} ×${item.quantity}`).join(', ')}</span>
-                <span className="refund-queue-item-bottom"><small>{trade.status === 'RETURNED' && trade.refund ? `Refunded ${dateText(trade.refund.refundedAt)} · ${trade.refund.refundedBy?.name || 'manager'}` : `Sold ${dateText(trade.createdAt)}`}</small><strong>{tradeTransactionMoney(trade, trade.transactionAmountPaid, trade.amountPaid)}</strong></span>
-              </button>
-            ))}
+            {!loading && filteredTrades.map((trade) => {
+              const warningStage = refundWarningStage(trade)
+              return (
+                <button ref={selectedId === trade._id ? selectedRefundRowRef : undefined} key={trade._id} type="button" className={`refund-queue-item ${trade.status === 'RETURNED' ? 'refund-queue-item-refunded' : 'refund-queue-item-open'} ${selectedId === trade._id ? 'active' : ''}`} onClick={() => setSelectedId(trade._id)} aria-pressed={selectedId === trade._id}>
+                  <span className="refund-queue-item-top"><strong>{trade.tradeNo}</strong><RefundStatusBadge status={trade.status} /></span>
+                  <span className="refund-queue-party">{tradePartyName(trade)}</span>
+                  <span className="refund-queue-items">{trade.items.map((item) => `${item.name} ×${item.quantity}`).join(', ')}</span>
+                  <span className={`refund-stage-label refund-stage-${warningStage.number}`}><AlertTriangle size={12} aria-hidden="true" />Stage {warningStage.number} · {warningStage.label}</span>
+                  <span className="refund-queue-item-bottom"><small>{trade.status === 'RETURNED' && trade.refund ? `Refunded ${dateText(trade.refund.refundedAt)} · ${trade.refund.refundedBy?.name || 'manager'}` : `Sold ${dateText(trade.createdAt)}`}</small><strong>{tradeTransactionMoney(trade, trade.transactionAmountPaid, trade.amountPaid)}</strong></span>
+                </button>
+              )
+            })}
             {!loading && filteredTrades.length === 0 && <div className="refund-empty"><RefreshCcw size={22} /><strong>No sales match this view</strong><p>Change the filter or search terms to see other sales.</p></div>}
           </div>
         </aside>
@@ -1766,7 +1786,7 @@ function RefundsView({ user }: { user: SessionUser }) {
                 </section>
               ) : (
                 <form className="refund-form" onSubmit={recordRefund}>
-                  <div className="refund-record-only"><AlertTriangle size={18} /><p><strong>Return the money before confirming</strong><span>PhoneFlow records the refund and stock change only. Give the customer {tradeTransactionMoney(selectedTrade, selectedTrade.transactionAmountPaid, selectedTrade.amountPaid)} using your shop’s current process.</span></p></div>
+                  {selectedWarningStage && <div className={`refund-record-only refund-stage-warning refund-stage-${selectedWarningStage.number}`}><AlertTriangle size={18} /><p><strong>Stage {selectedWarningStage.number} · {selectedWarningStage.label}</strong><span>{selectedWarningStage.message}</span><small>Sold {selectedWarningStage.saleAgeDays === 0 ? 'today' : `${selectedWarningStage.saleAgeDays} day${selectedWarningStage.saleAgeDays === 1 ? '' : 's'} ago`}. PhoneFlow records the refund and stock change only; return {tradeTransactionMoney(selectedTrade, selectedTrade.transactionAmountPaid, selectedTrade.amountPaid)} to the customer using your shop’s current process.</small></p></div>}
                   <label><span>Refund reason</span><textarea required minLength={5} maxLength={500} rows={3} value={reason} aria-invalid={reason.length > 0 && reason.trim().length < 5} onChange={(event) => setReason(event.target.value)} placeholder="Describe why the customer returned this sale" /><small>Use a specific reason so the refund is clear in the audit history.</small></label>
                   <label><span>Returned inventory</span><select required value={inventoryDisposition} onChange={(event) => setInventoryDisposition(event.target.value as '' | 'RESTOCK' | 'NO_RESTOCK')}><option value="" disabled>Choose after inspecting every item</option><option value="RESTOCK">Restore all items to available stock</option><option value="NO_RESTOCK">Do not return items to saleable stock</option></select><small>Restore stock only when every returned item is present, correct, and resaleable.</small></label>
                   <label className="refund-confirm"><span>Type <strong>{selectedTrade.tradeNo}</strong> to confirm</span><input required autoComplete="off" value={confirmation} aria-invalid={confirmation.length > 0 && confirmation !== selectedTrade.tradeNo} onChange={(event) => setConfirmation(event.target.value)} /><small>This check prevents a refund from being recorded against the wrong receipt.</small></label>

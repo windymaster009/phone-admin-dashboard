@@ -324,6 +324,41 @@
   white-space: nowrap;
 }
 
+.refund-stage-1 {
+  --refund-stage-color: var(--color-refund-success);
+}
+
+.refund-stage-2 {
+  --refund-stage-color: var(--color-refund-warning);
+}
+
+.refund-stage-3 {
+  --refund-stage-color: var(--color-refund-accent);
+}
+
+.refund-stage-4 {
+  --refund-stage-color: var(--color-refund-danger);
+}
+
+.refund-stage-label {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: var(--space-refund-2xs);
+  overflow: hidden;
+  color: var(--refund-stage-color);
+  font-size: var(--text-refund-xs);
+  font-weight: 800;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.refund-stage-label svg {
+  flex: 0 0 auto;
+}
+
 .refund-queue-item-bottom small {
   min-width: 0;
   overflow: hidden;
@@ -488,6 +523,20 @@
   max-width: 65ch;
   color: var(--color-refund-muted);
   font-size: var(--text-refund-xs);
+  line-height: 1.55;
+}
+
+.refund-stage-warning {
+  border-inline-start-color: var(--refund-stage-color);
+  color: var(--refund-stage-color);
+  background: color-mix(in srgb, var(--refund-stage-color) 7%, var(--color-refund-input));
+}
+
+.refund-stage-warning small {
+  max-width: 70ch;
+  color: var(--color-refund-muted);
+  font-size: var(--text-refund-xs);
+  font-weight: 500;
   line-height: 1.55;
 }
 
