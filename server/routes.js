@@ -2731,6 +2731,7 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
         total: currentTotal,
         amountPaid: roundMoney(paid),
         balance: roundMoney(Math.max(0, currentTotal - paid)),
+        paymentStatus: paymentState(currentTotal, paid),
         paymentMethod,
         paywayTransactionId: paywayTransactionId || undefined,
         notes: clean(notes),
