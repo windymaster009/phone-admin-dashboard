@@ -1793,7 +1793,7 @@ router.patch('/inventory/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOC
   if (!Number.isFinite(nextSellPrice) || nextSellPrice < 0 || !Number.isFinite(nextMinimumPrice) || nextMinimumPrice < 0) {
     return res.status(400).json({ message: 'Selling prices must be valid positive amounts or zero' })
   }
-  if (nextSellPrice > 0 && nextMinimumPrice > nextSellPrice) {
+  if (nextMinimumPrice > nextSellPrice) {
     return res.status(400).json({ message: 'Discount or minimum price cannot exceed the regular selling price' })
   }
   const item = await InventoryItem.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true })
@@ -2316,6 +2316,9 @@ async function createMultiDevicePurchase(req, res) {
     }
     if (!serialized && (!Number.isInteger(quantity) || quantity < 1)) throw requestError(400, `${label}: quantity must be a whole number greater than zero`)
     if (!Number.isFinite(purchasePrice) || purchasePrice < 0) throw requestError(400, `${label}: unit purchase price is invalid`)
+    if (currency === 'KHR' && (!Number.isInteger(purchasePrice) || purchasePrice % 100 !== 0)) {
+      throw requestError(400, `${label}: unit purchase price must use whole 100 KHR increments`)
+    }
     if (clean(item.ram) && !ram) throw requestError(400, `${label}: RAM must be a positive GB value`)
     const batteryHealth = item.batteryHealth === '' || item.batteryHealth === undefined ? undefined : Number(item.batteryHealth)
     if (batteryHealth !== undefined && (!Number.isFinite(batteryHealth) || batteryHealth < 0 || batteryHealth > 100)) {
@@ -2356,6 +2359,9 @@ async function createMultiDevicePurchase(req, res) {
   const transactionTotal = normalizedItems.reduce((sum, item) => sum + item.purchasePrice * item.quantity, 0)
   const transactionPaid = Number(amountPaid || 0)
   if (!Number.isFinite(transactionPaid) || transactionPaid < 0) throw requestError(400, 'Amount paid is invalid')
+  if (currency === 'KHR' && (!Number.isInteger(transactionPaid) || transactionPaid % 100 !== 0)) {
+    throw requestError(400, 'Amount paid must use whole 100 KHR increments')
+  }
   if (transactionPaid > transactionTotal + 0.000001) throw requestError(400, 'Amount paid cannot exceed the total amount')
   const transactionBalance = Math.max(0, transactionTotal - transactionPaid)
   const toUsd = (amount) => currency === 'KHR' ? amount / usdKhrRate : amount

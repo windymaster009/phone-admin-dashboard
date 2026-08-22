@@ -1621,17 +1621,28 @@ function InventoryView() {
     if (!selectedItem) return
     setSellingPriceDraft(String(selectedItem.sellPrice || ''))
     setMinimumPriceDraft(String(selectedItem.minimumSellPrice || ''))
+    setError('')
     setEditingPrice(true)
   }
 
   async function saveSellingPrice() {
     if (!selectedItem) return
+    const sellingPrice = Number(sellingPriceDraft || 0)
+    const minimumPrice = Number(minimumPriceDraft || 0)
+    if (!Number.isFinite(sellingPrice) || sellingPrice < 0 || !Number.isFinite(minimumPrice) || minimumPrice < 0) {
+      setError('Selling prices must be valid positive amounts or zero')
+      return
+    }
+    if (minimumPrice > sellingPrice) {
+      setError('Minimum selling price cannot exceed the regular selling price')
+      return
+    }
     setSavingPrice(true)
     setError('')
     try {
       const result = await api<{ item: InventoryItem }>(`/inventory/${selectedItem._id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ sellPrice: Number(sellingPriceDraft || 0), minimumSellPrice: Number(minimumPriceDraft || 0) }),
+        body: JSON.stringify({ sellPrice: sellingPrice, minimumSellPrice: minimumPrice }),
       })
       setSelectedItem(result.item)
       setItems((current) => current.map((item) => item._id === result.item._id ? result.item : item))
@@ -1862,10 +1873,10 @@ function InventoryView() {
               </section>
 
               {editingPrice && <div className="inventory-price-editor">
-                <div className="inventory-price-heading"><span className="eyebrow">Inventory pricing</span><h4>Set selling price</h4><p>Changing these values does not modify the original purchase transaction.</p></div>
-                <label>Regular selling price<div className="input-prefix"><span>$</span><input autoFocus type="number" min="0" step="0.01" inputMode="decimal" placeholder="0.00" value={sellingPriceDraft} onChange={(event) => setSellingPriceDraft(event.target.value)} /></div></label>
-                <label>Discount / minimum price<div className="input-prefix"><span>$</span><input type="number" min="0" step="0.01" inputMode="decimal" placeholder="0.00" value={minimumPriceDraft} onChange={(event) => setMinimumPriceDraft(event.target.value)} /></div></label>
-                <div className="inventory-price-actions"><button className="ghost-button" onClick={() => setEditingPrice(false)}>Cancel</button><button className="primary-button" onClick={() => void saveSellingPrice()} disabled={savingPrice}>{savingPrice ? 'Saving...' : 'Save price'}</button></div>
+                <div className="inventory-price-heading"><span className="eyebrow">Inventory pricing</span><h4>Set selling price</h4><p>Prices are stored in USD. KHR purchase costs are converted using the purchase transaction's exchange rate.</p></div>
+                <label>Regular selling price<div className="input-prefix"><span>$</span><MoneyInput autoFocus currency="USD" minimum={0} value={sellingPriceDraft} onValueChange={setSellingPriceDraft} placeholder="0.00" /></div></label>
+                <label>Minimum selling price<div className="input-prefix"><span>$</span><MoneyInput currency="USD" minimum={0} maximum={Number(sellingPriceDraft || 0)} value={minimumPriceDraft} onValueChange={setMinimumPriceDraft} placeholder="0.00" /></div><small>The sale form will not allow a discount below this price.</small></label>
+                <div className="inventory-price-actions"><button className="ghost-button" onClick={() => { setEditingPrice(false); setError('') }}>Cancel</button><button className="primary-button" onClick={() => void saveSellingPrice()} disabled={savingPrice || Number(minimumPriceDraft || 0) > Number(sellingPriceDraft || 0)}>{savingPrice ? 'Saving...' : 'Save price'}</button></div>
               </div>}
 
               {selectedItem.notes && (

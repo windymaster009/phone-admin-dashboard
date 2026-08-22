@@ -25,7 +25,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react'
-import { api } from '../../lib/api'
+import { api, getSessionUser } from '../../lib/api'
 import MoneyInput from '../../components/MoneyInput'
 import { getPawnAutoCalculatePreference, PAWN_AUTO_CALCULATE_EVENT, savePawnAutoCalculatePreference } from '../../lib/pawnPreferences'
 import { BarcodeGraphic, printInventoryLabels } from '../inventory/barcode'
@@ -47,6 +47,7 @@ type InventoryItem = {
   category: StockCategory
   quantity: number
   sellPrice: number
+  minimumSellPrice?: number
   buyPrice?: number
   barcode?: string
   brand?: string
@@ -191,6 +192,13 @@ function pawnEquivalentAmountText(value: number, currency: PawnCurrency, usdKhrR
     ? `≈ $${((Number(value) || 0) / usdKhrRate).toFixed(2)}`
     : `≈ ${(Math.round(((Number(value) || 0) * usdKhrRate) / 100) * 100).toLocaleString()} KHR`
 }
+
+const money = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
 
 const modalMeta: Record<ModalKind, { title: string; description: string; icon: ReactNode }> = {
   stock: {
@@ -395,7 +403,6 @@ export default function OperationModalBridge() {
   const [scannedItem, setScannedItem] = useState<InventoryItem | null>(null)
   const [labelItems, setLabelItems] = useState<InventoryItem[]>([])
   const [saleItemId, setSaleItemId] = useState('')
-  const [saleUnitPrice, setSaleUnitPrice] = useState('')
   const [saleCustomerId, setSaleCustomerId] = useState('')
   const [saleQuantity, setSaleQuantity] = useState('1')
   const [saleDiscount, setSaleDiscount] = useState('0')
@@ -536,6 +543,8 @@ export default function OperationModalBridge() {
   const purchasePaid = Math.max(0, Number(purchaseAmountPaid) || 0)
   const purchaseBalance = Math.max(0, purchaseTotal - purchasePaid)
   const purchasePaymentStatus = purchasePaid <= 0 ? 'UNPAID' : purchasePaid < purchaseTotal ? 'PARTIAL' : 'PAID'
+  const purchasePaidInvalid = purchasePaid > purchaseTotal
+    || (purchaseCurrency === 'KHR' && (!Number.isInteger(purchasePaid) || purchasePaid % 100 !== 0))
   const selectedSaleItem = inventory.find((item) => item._id === saleItemId)
   const stockMatches = useMemo(() => {
     const search = stockSearch.trim().toLowerCase()
@@ -565,19 +574,49 @@ export default function OperationModalBridge() {
         && Number(resultingStockQuantity) >= 0),
   )
   const effectiveSaleQuantity = selectedSaleItem?.category === 'PHONE' ? 1 : Math.max(1, Number(saleQuantity) || 1)
-  const saleTotal = Math.max(0, effectiveSaleQuantity * (Number(saleUnitPrice) || 0) - (Number(saleDiscount) || 0))
-  const saleActionDisabled = busy || saleInventoryLoading || !saleItemId || (salePaymentMethod === 'KHQR' && saleTotal < 0.01)
+  const saleUnitPrice = Math.max(0, Number(selectedSaleItem?.sellPrice) || 0)
+  const saleSubtotal = effectiveSaleQuantity * saleUnitPrice
+  const configuredMinimumSalePrice = Math.max(0, Number(selectedSaleItem?.minimumSellPrice) || 0)
+  const effectiveMinimumSalePrice = configuredMinimumSalePrice > 0
+    ? configuredMinimumSalePrice
+    : getSessionUser()?.role === 'CASHIER'
+      ? saleUnitPrice
+      : 0
+  const saleMaximumDiscount = Math.max(0, saleSubtotal - effectiveSaleQuantity * effectiveMinimumSalePrice)
+  const saleDiscountAmount = Math.max(0, Number(saleDiscount) || 0)
+  const saleTotal = Math.max(0, saleSubtotal - saleDiscountAmount)
+  const salePaidAmount = saleAmountPaid === '' ? saleTotal : Math.max(0, Number(saleAmountPaid) || 0)
+  const salePriceInvalid = Boolean(selectedSaleItem && saleUnitPrice <= 0)
+  const saleStockPricingInvalid = configuredMinimumSalePrice > saleUnitPrice
+  const saleDiscountInvalid = saleDiscountAmount > saleMaximumDiscount
+  const salePaidInvalid = salePaymentMethod === 'CASH' && salePaidAmount > saleTotal
+  const saleActionDisabled = busy
+    || saleInventoryLoading
+    || !saleItemId
+    || salePriceInvalid
+    || saleStockPricingInvalid
+    || saleDiscountInvalid
+    || salePaidInvalid
+    || saleTotal < 0.01
   const saleActionLabel = busy
     ? salePaymentMethod === 'KHQR' ? 'Generating KHQR...' : 'Saving sale...'
     : saleInventoryLoading
       ? 'Loading stock...'
       : !saleItemId
         ? 'Select a product first'
-        : salePaymentMethod === 'KHQR' && saleTotal < 0.01
-          ? 'Enter a valid amount'
-          : salePaymentMethod === 'KHQR'
-            ? 'Generate KHQR'
-            : 'Complete cash sale'
+        : salePriceInvalid
+          ? 'Set stock selling price'
+          : saleStockPricingInvalid
+            ? 'Fix stock pricing'
+            : saleDiscountInvalid
+              ? 'Reduce discount'
+              : salePaidInvalid
+                ? 'Check amount paid'
+                : saleTotal < 0.01
+                  ? 'Enter a valid amount'
+                  : salePaymentMethod === 'KHQR'
+                    ? 'Generate KHQR'
+                    : 'Complete cash sale'
 
   useEffect(() => {
     const originalAlert = window.alert.bind(window)
@@ -755,7 +794,6 @@ export default function OperationModalBridge() {
     setScannedItem(null)
     setLabelItems([])
     setSaleItemId('')
-    setSaleUnitPrice('')
     setSaleCustomerId('')
     setSaleQuantity('1')
     setSaleDiscount('0')
@@ -864,7 +902,8 @@ export default function OperationModalBridge() {
     if (!scannedItem || scannedItem.status !== 'IN_STOCK' || scannedItem.quantity < 1 || scannedItem.sellPrice <= 0) return
     setInventory((current) => current.some((item) => item._id === scannedItem._id) ? current : [scannedItem, ...current])
     setSaleItemId(scannedItem._id)
-    setSaleUnitPrice(String(scannedItem.sellPrice))
+    setSaleDiscount('0')
+    setSaleAmountPaid('')
     setError('')
     setKind('sale')
   }
@@ -932,6 +971,7 @@ export default function OperationModalBridge() {
     const quantity = Number(item.quantity)
     const validGigabytes = (value: string) => Number.isFinite(Number(value)) && Number(value) > 0
     if (!Number.isFinite(price) || price < 0 || item.purchasePrice === '') errors.purchasePrice = 'Enter a valid unit purchase price'
+    else if (purchaseCurrency === 'KHR' && (!Number.isInteger(price) || price % 100 !== 0)) errors.purchasePrice = 'Use a whole KHR amount in increments of 100'
     if (item.category !== 'PHONE' && (!Number.isInteger(quantity) || quantity < 1)) errors.quantity = 'Quantity must be at least 1'
     if (item.inventoryMode === 'EXISTING') {
       if (!canRestockExisting(item.category)) errors.existingInventoryItem = 'Phones and tablets must be entered as new units'
@@ -994,12 +1034,14 @@ export default function OperationModalBridge() {
       setError('Complete the required seller information before continuing')
       return
     }
-    if (!purchaseItemsValid || purchasePaid > purchaseTotal) {
+    if (!purchaseItemsValid || purchasePaidInvalid) {
       const firstInvalid = purchaseDevices.find((item) => Object.keys(purchaseItemErrors(item)).length > 0)
       setPurchaseStep(2)
       if (firstInvalid) openPurchaseItem(firstInvalid.id)
       setError(purchasePaid > purchaseTotal
         ? 'Amount paid cannot exceed the purchase total'
+        : purchaseCurrency === 'KHR' && (!Number.isInteger(purchasePaid) || purchasePaid % 100 !== 0)
+          ? 'Amount paid must use whole 100 KHR increments'
         : new Set(existingPurchaseIds).size !== existingPurchaseIds.length
           ? 'Add each existing product only once per purchase'
           : 'Complete the highlighted item fields')
@@ -1052,17 +1094,27 @@ export default function OperationModalBridge() {
       return
     }
     const quantity = selected.category === 'PHONE' ? 1 : Number(saleQuantity || 1)
-    const unitPrice = Number(saleUnitPrice || selected.sellPrice)
+    const unitPrice = Number(selected.sellPrice)
     const discount = Number(saleDiscount || 0)
     const total = Math.max(0, quantity * unitPrice - discount)
+    const minimumUnitPrice = Number(selected.minimumSellPrice) > 0
+      ? Number(selected.minimumSellPrice)
+      : getSessionUser()?.role === 'CASHIER'
+        ? unitPrice
+        : 0
+    const maximumDiscount = Math.max(0, quantity * (unitPrice - minimumUnitPrice))
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > selected.quantity) {
       setBusy(false)
       setError(`Quantity must be between 1 and ${selected.quantity}`)
       return
     }
-    if (!Number.isFinite(unitPrice) || unitPrice < 0 || !Number.isFinite(discount) || discount < 0 || discount > quantity * unitPrice) {
+    if (!Number.isFinite(unitPrice) || unitPrice <= 0 || minimumUnitPrice > unitPrice || !Number.isFinite(discount) || discount < 0 || discount > maximumDiscount) {
       setBusy(false)
-      setError('Check the selling price and discount')
+      setError(minimumUnitPrice > unitPrice
+        ? 'Fix this product\'s minimum selling price in Stock Information before completing the sale'
+        : discount > maximumDiscount
+        ? `Discount cannot exceed $${maximumDiscount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+        : 'Set a valid selling price in Stock Information before completing this sale')
       return
     }
     const payload: SaleDraft = {
@@ -1070,7 +1122,7 @@ export default function OperationModalBridge() {
       customer: saleCustomerId || undefined,
       items: [{ inventoryItem: selected._id, name: selected.name, quantity, unitPrice }],
       discount,
-      amountPaid: salePaymentMethod === 'KHQR' ? total : Number(saleAmountPaid || total),
+      amountPaid: salePaymentMethod === 'KHQR' ? total : saleAmountPaid === '' ? total : Number(saleAmountPaid),
       paymentMethod: salePaymentMethod,
       notes: saleNotes,
     }
@@ -1374,7 +1426,7 @@ export default function OperationModalBridge() {
         <footer className="operation-modal-actions"><button type="button" className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={busy || !stockAdjustmentValid}>{busy ? 'Saving adjustment...' : selectedStockItem ? 'Update stock' : 'Select an item first'}</button></footer>
       </form>}
 
-      {kind === 'purchase' && <form className="operation-form purchase-workflow-form" onSubmit={submitPurchase}>
+      {kind === 'purchase' && <form className="operation-form purchase-workflow-form" noValidate onSubmit={submitPurchase}>
         <div className="purchase-stepper" role="group" aria-label="Purchase progress">
           <div aria-current={purchaseStep === 1 ? 'step' : undefined} aria-label="Step 1 of 2: Seller and purchase details" className={`purchase-step ${purchaseStep === 1 ? 'active' : purchaseSellerValid ? 'complete' : ''}`}><span>{purchaseSellerValid ? <CheckCircle2 size={17} /> : '1'}</span><p><strong>Seller & purchase</strong><small>Step 1 · Seller and payment details</small></p></div>
           <i />
@@ -1466,7 +1518,7 @@ export default function OperationModalBridge() {
                 </>}
                 <div className="device-group-label"><span>Condition & purchase</span><small>Stock condition, cost, and optional notes</small></div>
                 {device.inventoryMode === 'NEW' && <label>Condition<select value={device.condition} onChange={(event) => updatePurchaseDevice(device.id, { condition: event.target.value })}><option value="NEW">New</option><option value="LIKE_NEW">Like new</option><option value="GOOD">Good</option><option value="FAIR">Fair</option><option value="DAMAGED">Damaged</option></select></label>}
-                <label className={purchaseAttempted && itemErrors.purchasePrice ? 'field-invalid' : ''}>Unit purchase price ({purchaseCurrency})<input required type="number" min="0" step={purchaseCurrency === 'KHR' ? '100' : '0.01'} value={device.purchasePrice} onChange={(event) => updatePurchaseDevice(device.id, { purchasePrice: event.target.value })} />{purchaseAttempted && itemErrors.purchasePrice && <small>{itemErrors.purchasePrice}</small>}</label>
+                <label className={purchaseAttempted && itemErrors.purchasePrice ? 'field-invalid' : ''}>Unit purchase price ({purchaseCurrency})<MoneyInput required currency={purchaseCurrency} minimum={0} value={device.purchasePrice} onValueChange={(value) => updatePurchaseDevice(device.id, { purchasePrice: value })} placeholder={purchaseCurrency === 'KHR' ? '0' : '0.00'} />{purchaseAttempted && itemErrors.purchasePrice && <small>{itemErrors.purchasePrice}</small>}</label>
                 {device.inventoryMode === 'NEW' && <label className="device-notes-field">Item notes <small className="optional-marker">Optional</small><textarea rows={2} value={device.notes} onChange={(event) => updatePurchaseDevice(device.id, { notes: event.target.value })} /></label>}
               </div>}
             </article>})}
@@ -1475,7 +1527,7 @@ export default function OperationModalBridge() {
         </section>
         <section className="purchase-section-card purchase-settlement-card">
           <div className="purchase-section-heading"><span><CheckCircle2 size={17} /></span><div><h3>Payment settlement</h3><p>Confirm what was paid after reviewing the complete purchase total.</p></div></div>
-          <div className="operation-form-grid purchase-fields-grid"><label className={purchasePaid > purchaseTotal ? 'field-invalid' : ''}>Amount paid ({purchaseCurrency})<input type="number" min="0" max={purchaseTotal || undefined} step={purchaseCurrency === 'KHR' ? '100' : '0.01'} value={purchaseAmountPaid} onChange={(event) => setPurchaseAmountPaid(event.target.value)} />{purchasePaid > purchaseTotal && <small>Amount paid cannot exceed the total</small>}</label></div>
+          <div className="operation-form-grid purchase-fields-grid"><label className={purchasePaidInvalid ? 'field-invalid' : ''}>Amount paid ({purchaseCurrency})<MoneyInput currency={purchaseCurrency} minimum={0} maximum={purchaseTotal || undefined} value={purchaseAmountPaid} onValueChange={setPurchaseAmountPaid} placeholder={purchaseCurrency === 'KHR' ? '0' : '0.00'} />{purchasePaid > purchaseTotal ? <small>Amount paid cannot exceed the total</small> : purchaseCurrency === 'KHR' && purchasePaidInvalid ? <small>Use a whole KHR amount in increments of 100</small> : null}</label></div>
           <div className="purchase-payment-summary">
             <div><span>Total amount</span><strong>{purchaseCurrency === 'KHR' ? `${purchaseTotal.toLocaleString()} ៛` : `$${purchaseTotal.toFixed(2)}`}</strong></div>
             <div><span>Amount paid</span><strong>{purchaseCurrency === 'KHR' ? `${purchasePaid.toLocaleString()} ៛` : `$${purchasePaid.toFixed(2)}`}</strong></div>
@@ -1484,7 +1536,7 @@ export default function OperationModalBridge() {
           </div>
         </section>
         </div>
-        <footer className="operation-modal-actions"><div className="purchase-submit-summary"><span>Step 2 of 2 · {purchaseDevices.length} item{purchaseDevices.length === 1 ? '' : 's'}</span><strong>{purchaseCurrency === 'KHR' ? `${purchaseTotal.toLocaleString()} ៛` : `$${purchaseTotal.toFixed(2)}`}</strong></div><button type="button" className="ghost-button" onClick={() => { setError(''); setPurchaseAttempted(false); setPurchaseStep(1) }}>Back</button><button className="primary-button" disabled={busy} aria-disabled={!purchaseItemsValid || purchasePaid > purchaseTotal}>{busy ? 'Saving purchase...' : purchaseItemsValid ? 'Complete purchase' : 'Complete required fields'}</button></footer>
+        <footer className="operation-modal-actions"><div className="purchase-submit-summary"><span>Step 2 of 2 · {purchaseDevices.length} item{purchaseDevices.length === 1 ? '' : 's'}</span><strong>{purchaseCurrency === 'KHR' ? `${purchaseTotal.toLocaleString()} ៛` : `$${purchaseTotal.toFixed(2)}`}</strong></div><button type="button" className="ghost-button" onClick={() => { setError(''); setPurchaseAttempted(false); setPurchaseStep(1) }}>Back</button><button className="primary-button" disabled={busy} aria-disabled={!purchaseItemsValid || purchasePaidInvalid}>{busy ? 'Saving purchase...' : purchaseItemsValid && !purchasePaidInvalid ? 'Complete purchase' : 'Complete required fields'}</button></footer>
         </>}
       </form>}
 
@@ -1659,15 +1711,15 @@ export default function OperationModalBridge() {
         <div className="operation-form-grid">
           <label>Customer<select value={saleCustomerId} onChange={(event) => setSaleCustomerId(event.target.value)}><option value="">Walk-in customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name}{customer.phone ? ` — ${customer.phone}` : ' — No phone recorded'}</option>)}</select></label>
           <label className="operation-wide">Inventory item<select required value={saleItemId} disabled={saleInventoryLoading || (!saleInventoryLoading && inventory.length === 0)} onChange={(event) => {
-            const item = inventory.find((entry) => entry._id === event.target.value)
             setSaleItemId(event.target.value)
-            setSaleUnitPrice(item ? String(item.sellPrice) : '')
             setSaleQuantity('1')
-          }}><option value="" disabled>{saleInventoryLoading ? 'Loading available stock...' : inventory.length === 0 ? 'No stock available to sell' : 'Select available stock'}</option>{inventory.map((item) => <option key={item._id} value={item._id}>{item.name}{item.imei1 ? ` — ${item.imei1}` : ''} — Qty ${item.quantity} — $${item.sellPrice.toFixed(2)}</option>)}</select>{!saleInventoryLoading && inventory.length === 0 && <small>Add an in-stock product before creating a sale.</small>}</label>
-          <label>Quantity<input type="number" min="1" max={selectedSaleItem?.quantity} value={effectiveSaleQuantity} disabled={!saleItemId || selectedSaleItem?.category === 'PHONE'} onChange={(event) => setSaleQuantity(event.target.value)} /></label>
-          <label>Selling price<input type="number" min="0" step="0.01" value={saleUnitPrice} disabled={!saleItemId} onChange={(event) => setSaleUnitPrice(event.target.value)} placeholder="Select a product first" /></label>
-          <label>Discount<input type="number" min="0" max={effectiveSaleQuantity * (Number(saleUnitPrice) || 0)} step="0.01" value={saleDiscount} disabled={!saleItemId} onChange={(event) => setSaleDiscount(event.target.value)} /></label>
-          {salePaymentMethod === 'CASH' && <label>Amount paid <small className="optional-marker">Defaults to total</small><input type="number" min="0" max={saleTotal || undefined} step="0.01" value={saleAmountPaid} onChange={(event) => setSaleAmountPaid(event.target.value)} placeholder={saleTotal.toFixed(2)} /></label>}
+            setSaleDiscount('0')
+            setSaleAmountPaid('')
+          }}><option value="" disabled>{saleInventoryLoading ? 'Loading available stock...' : inventory.length === 0 ? 'No stock available to sell' : 'Select available stock'}</option>{inventory.map((item) => <option key={item._id} value={item._id}>{item.name}{item.imei1 ? ` — ${item.imei1}` : ''} — Qty {item.quantity} — ${money.format(item.sellPrice)}</option>)}</select>{!saleInventoryLoading && inventory.length === 0 && <small>Add an in-stock product before creating a sale.</small>}</label>
+          <label>Quantity<input type="number" min="1" max={selectedSaleItem?.quantity} value={effectiveSaleQuantity} disabled={!saleItemId || selectedSaleItem?.category === 'PHONE'} onChange={(event) => { setSaleQuantity(event.target.value); setSaleDiscount('0'); setSaleAmountPaid('') }} /></label>
+          <label>Selling price (USD)<MoneyInput currency="USD" readOnly value={saleUnitPrice || ''} onValueChange={() => undefined} placeholder="Set in Stock Information" /><small>{selectedSaleItem ? 'Controlled by Stock Information' : 'Select a product first'}</small></label>
+          <label className={saleDiscountInvalid ? 'field-invalid' : ''}>Discount (USD)<MoneyInput currency="USD" minimum={0} maximum={saleMaximumDiscount} value={saleDiscount} disabled={!saleItemId} onValueChange={setSaleDiscount} placeholder="0.00" />{selectedSaleItem && <small>{saleDiscountInvalid ? `Maximum discount is ${money.format(saleMaximumDiscount)}` : `Maximum allowed: ${money.format(saleMaximumDiscount)}`}</small>}</label>
+          {salePaymentMethod === 'CASH' && <label className={salePaidInvalid ? 'field-invalid' : ''}>Amount paid (USD) <small className="optional-marker">Defaults to total</small><MoneyInput currency="USD" minimum={0} maximum={saleTotal || undefined} value={saleAmountPaid} onValueChange={setSaleAmountPaid} placeholder={saleTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} />{salePaidInvalid && <small>Amount paid cannot exceed {money.format(saleTotal)}</small>}</label>}
           <fieldset className={`sale-payment-method operation-wide${paywayAvailable ? '' : ' cash-only'}`}>
             <legend>How will the customer pay?</legend>
             <button type="button" className={salePaymentMethod === 'CASH' ? 'active cash' : 'cash'} onClick={() => setSalePaymentMethod('CASH')}>
@@ -1679,7 +1731,7 @@ export default function OperationModalBridge() {
           </fieldset>
           <label className="operation-wide">Notes <small className="optional-marker">Optional</small><textarea rows={3} value={saleNotes} onChange={(event) => setSaleNotes(event.target.value)} /></label>
         </div>
-        <footer className="operation-modal-actions"><div className="sale-total"><span>Total</span><strong>${saleTotal.toFixed(2)}</strong></div><button type="button" className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={saleActionDisabled} title={!saleItemId ? 'Choose an inventory product before continuing' : undefined}>{busy || saleInventoryLoading ? <LoaderCircle className="spinning" size={17} /> : salePaymentMethod === 'KHQR' ? <img className="khqr-action-logo" src={khqrLogo} alt="" /> : <Banknote size={17} />}{saleActionLabel}</button></footer>
+        <footer className="operation-modal-actions"><div className="sale-total"><span>Total</span><strong>{money.format(saleTotal)}</strong></div><button type="button" className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={saleActionDisabled} title={!saleItemId ? 'Choose an inventory product before continuing' : undefined}>{busy || saleInventoryLoading ? <LoaderCircle className="spinning" size={17} /> : salePaymentMethod === 'KHQR' ? <img className="khqr-action-logo" src={khqrLogo} alt="" /> : <Banknote size={17} />}{saleActionLabel}</button></footer>
       </form>}
 
       {kind === 'sale' && saleKhqr && <section className={`sale-khqr-workflow payment-${salePaymentPhase.toLowerCase()}`}>
