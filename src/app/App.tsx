@@ -2877,6 +2877,7 @@ const reportSections = [
   { slug: 'pawns', title: 'Pawn', description: 'Outstanding principal, overdue, redeemed, and claimed collateral', icon: HandCoins, tone: 'violet' },
   { slug: 'loans', title: 'Loans', description: 'Outstanding loans, repayments, and overdue balances', icon: WalletCards, tone: 'blue' },
   { slug: 'payments', title: 'Payments', description: 'Cash, KHQR, bank, card, and daily closing', icon: Banknote, tone: 'rose' },
+  { slug: 'customers', title: 'Customer report', description: 'Customer profiles, contact records, and transaction history', icon: Users, tone: 'blue' },
   { slug: 'activity', title: 'Activity', description: 'Staff actions and audit history', icon: FileText, tone: 'orange' },
 ] as const
 
