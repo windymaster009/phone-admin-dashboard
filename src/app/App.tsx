@@ -2877,22 +2877,28 @@ const reportSections = [
   { slug: 'pawns', title: 'Pawn', description: 'Outstanding principal, overdue, redeemed, and claimed collateral', icon: HandCoins, tone: 'violet' },
   { slug: 'loans', title: 'Loans', description: 'Outstanding loans, repayments, and overdue balances', icon: WalletCards, tone: 'blue' },
   { slug: 'payments', title: 'Payments', description: 'Cash, KHQR, bank, card, and daily closing', icon: Banknote, tone: 'rose' },
-  { slug: 'customers', title: 'Customer report', description: 'Customer profiles, contact records, and transaction history', icon: Users, tone: 'blue', upcoming: true },
+  { slug: 'customers', title: 'Customer report', description: 'Customer profiles, contact records, and transaction history', icon: Users, tone: 'blue' },
   { slug: 'activity', title: 'Activity', description: 'Staff actions and audit history', icon: FileText, tone: 'orange' },
 ] as const
 
 function ReportLanding({ navigate }: { navigate: (path: string) => void }) {
+  const [customerReportOpen, setCustomerReportOpen] = useState(false)
   const financialReports = reportSections.filter((report) => ['sales', 'purchases', 'payments'].includes(report.slug))
   const operationalReports = reportSections.filter((report) => !['sales', 'purchases', 'payments'].includes(report.slug))
   const reportCard = (report: typeof reportSections[number]) => {
     const { slug, title, description, icon: Icon, tone } = report
-    const upcoming = 'upcoming' in report && report.upcoming
 
     return (
-      <button type="button" className="surface-card report-hub-card" key={slug} onClick={() => navigate(`/reports/${slug}`)}>
+      <button
+        type="button"
+        className="surface-card report-hub-card"
+        key={slug}
+        onClick={() => slug === 'customers' ? setCustomerReportOpen(true) : navigate(`/reports/${slug}`)}
+        aria-haspopup={slug === 'customers' ? 'dialog' : undefined}
+      >
         <span className={`metric-icon tone-${tone}`}><Icon size={21} /></span>
         <span className="report-hub-copy"><strong>{title}</strong><small>{description}</small></span>
-        {upcoming ? <span className="report-card-status">Coming soon</span> : <ArrowUpRight size={18} />}
+        <ArrowUpRight size={18} />
       </button>
     )
   }
@@ -2913,6 +2919,71 @@ function ReportLanding({ navigate }: { navigate: (path: string) => void }) {
         </div>
       </section>
       <p className="report-hub-note"><AlertTriangle size={15} />Exports will be added only after all report calculations and workflows are verified.</p>
+      {customerReportOpen && <CustomerReportModal onClose={() => setCustomerReportOpen(false)} />}
+    </div>
+  )
+}
+
+function CustomerReportModal({ onClose }: { onClose: () => void }) {
+  const [customers, setCustomers] = useState<Customer[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const [idFilter, setIdFilter] = useState<'all' | 'recorded' | 'missing'>('all')
+
+  useEffect(() => {
+    api<{ customers: Customer[] }>('/customers')
+      .then((result) => setCustomers(result.customers))
+      .catch((reason: Error) => setError(reason.message))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const filteredCustomers = useMemo(() => customers.filter((customer) => {
+    const term = search.trim().toLowerCase()
+    const matchesSearch = !term || [customer.name, customer.phone, customer.nationalIdNumber, customer.address]
+      .some((value) => String(value || '').toLowerCase().includes(term))
+    const hasId = Boolean(customer.nationalIdNumber)
+    const matchesIdFilter = idFilter === 'all' || (idFilter === 'recorded' ? hasId : !hasId)
+    return matchesSearch && matchesIdFilter
+  }), [customers, idFilter, search])
+
+  return (
+    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+      <section className="detail-modal surface-card customer-report-modal" role="dialog" aria-modal="true" aria-labelledby="customer-report-title" onClick={(event) => event.stopPropagation()}>
+        <header className="detail-modal-header">
+          <div>
+            <span className="eyebrow">Customer report</span>
+            <h3 id="customer-report-title">Customer directory</h3>
+            <p>Find a customer record before reviewing their transaction history.</p>
+          </div>
+          <button className="icon-button" onClick={onClose} aria-label="Close customer report"><X size={18} /></button>
+        </header>
+        <div className="customer-report-filters">
+          <div className="search-field"><Search size={17} /><input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, phone, National ID, or address" /></div>
+          <label>
+            <span>ID status</span>
+            <select value={idFilter} onChange={(event) => setIdFilter(event.target.value as typeof idFilter)}>
+              <option value="all">All customers</option>
+              <option value="recorded">ID recorded</option>
+              <option value="missing">Needs ID</option>
+            </select>
+          </label>
+        </div>
+        <div className="customer-report-list" aria-live="polite">
+          <p className="customer-report-count">{loading ? 'Loading customers…' : `${filteredCustomers.length} customer${filteredCustomers.length === 1 ? '' : 's'} found`}</p>
+          {error && <p className="customer-report-error">{error}</p>}
+          {!loading && !error && filteredCustomers.map((customer) => (
+            <article className="customer-report-row" key={customer._id}>
+              <span className="avatar">{customer.name.slice(0, 2).toUpperCase()}</span>
+              <div className="customer-report-identity"><strong>{customer.name}</strong><span>{customer.phone || 'No phone recorded'}</span></div>
+              <div className="customer-report-meta"><span>National ID</span><strong>{customer.nationalIdNumber || 'Not recorded'}</strong></div>
+              <div className="customer-report-meta"><span>Added</span><strong>{customer.createdAt ? dateText(customer.createdAt) : 'Not recorded'}</strong></div>
+            </article>
+          ))}
+          {!loading && !error && filteredCustomers.length === 0 && <p className="customer-report-empty">No customer records match this search or filter.</p>}
+        </div>
+        <footer className="detail-modal-footer"><button className="ghost-button" onClick={onClose}>Close</button></footer>
+      </section>
     </div>
   )
 }
