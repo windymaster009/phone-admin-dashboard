@@ -1613,6 +1613,7 @@ function RefundsView({ user }: { user: SessionUser }) {
   const [actionError, setActionError] = useState('')
   const [actionBusy, setActionBusy] = useState(false)
   const [completedTradeNo, setCompletedTradeNo] = useState('')
+  const [mobileRefundStep, setMobileRefundStep] = useState<'queue' | 'review'>('queue')
   const selectedRefundRowRef = useRef<HTMLButtonElement>(null)
   const hasAccess = user.role === 'OWNER' || user.role === 'MANAGER'
 
@@ -1732,15 +1733,16 @@ function RefundsView({ user }: { user: SessionUser }) {
         </div>
       </div>
 
-      <div className="refund-workbench">
+      <div className={`refund-workbench ${mobileRefundStep === 'review' ? 'refund-workbench-reviewing' : 'refund-workbench-choosing'}`}>
         <aside className="surface-card refund-queue" aria-label="Sale refund queue">
+          <p className="refund-mobile-step"><span>Step 1 of 2</span>Select a sale to review</p>
           <header><h3>{queueHeading}</h3><span>{filteredTrades.length} sale{filteredTrades.length === 1 ? '' : 's'}</span></header>
           <div className="refund-queue-list">
             {loading && <LoadingState compact label="Loading refundable sales" detail="Reading completed and refunded transactions…" />}
             {!loading && filteredTrades.map((trade) => {
               const warningStage = refundWarningStage(trade)
               return (
-                <button ref={selectedId === trade._id ? selectedRefundRowRef : undefined} key={trade._id} type="button" className={`refund-queue-item ${trade.status === 'RETURNED' ? 'refund-queue-item-refunded' : 'refund-queue-item-open'} ${selectedId === trade._id ? 'active' : ''}`} onClick={() => setSelectedId(trade._id)} aria-pressed={selectedId === trade._id}>
+                <button ref={selectedId === trade._id ? selectedRefundRowRef : undefined} key={trade._id} type="button" className={`refund-queue-item ${trade.status === 'RETURNED' ? 'refund-queue-item-refunded' : 'refund-queue-item-open'} ${selectedId === trade._id ? 'active' : ''}`} onClick={() => { setSelectedId(trade._id); setMobileRefundStep('review') }} aria-pressed={selectedId === trade._id}>
                   <span className="refund-queue-item-top"><strong>{trade.tradeNo}</strong><RefundStatusBadge status={trade.status} /></span>
                   <span className="refund-queue-party">{tradePartyName(trade)}</span>
                   <span className="refund-queue-items">{trade.items.map((item) => `${item.name} ×${item.quantity}`).join(', ')}</span>
@@ -1758,6 +1760,7 @@ function RefundsView({ user }: { user: SessionUser }) {
           {selectedTrade && (
             <>
               <header className="refund-review-header">
+                <button type="button" className="refund-mobile-back" onClick={() => setMobileRefundStep('queue')}><ArrowLeft size={15} /> Change sale</button>
                 <div><h3>{selectedTrade.tradeNo}</h3><p>{tradePartyName(selectedTrade)} · {dateText(selectedTrade.createdAt)}</p></div>
                 <RefundStatusBadge status={selectedTrade.status} />
               </header>
