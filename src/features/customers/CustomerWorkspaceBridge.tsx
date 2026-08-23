@@ -96,9 +96,8 @@ function CustomerModal({
           </button>
         </header>
 
-        {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
-
-        <form className="operation-form" onSubmit={onSubmit} key={customer?._id || 'new'}>
+        <form id="customer-record-form" className="operation-form" onSubmit={onSubmit} key={customer?._id || 'new'}>
+          {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
           <div className="operation-form-grid">
             <label>Full name<input name="name" required autoFocus defaultValue={customer?.name || ''} placeholder="Customer full name" /></label>
             <label>Phone number<input name="phone" required defaultValue={customer?.phone || ''} placeholder="012 345 678" /></label>
@@ -106,11 +105,11 @@ function CustomerModal({
             <label>Address <small className="optional-marker">Optional</small><input name="address" defaultValue={customer?.address || ''} placeholder="Village, district, province" /></label>
             <label className="operation-wide">Notes <small className="optional-marker">Optional</small><textarea name="notes" rows={4} defaultValue={customer?.notes || ''} placeholder="Ownership details, contact notes, or other information" /></label>
           </div>
-          <footer className="operation-modal-actions">
-            <button type="button" className="ghost-button" onClick={onClose} disabled={busy}>Cancel</button>
-            <button className="primary-button" disabled={busy}>{busy ? 'Saving...' : customer ? 'Save changes' : 'Save customer'}</button>
-          </footer>
         </form>
+        <footer className="operation-modal-actions customer-modal-actions">
+          <button type="button" className="ghost-button" onClick={onClose} disabled={busy}>Cancel</button>
+          <button type="submit" form="customer-record-form" className="primary-button" disabled={busy}>{busy ? 'Saving...' : customer ? 'Save changes' : 'Save customer'}</button>
+        </footer>
       </section>
     </div>
   )
