@@ -1,3 +1,4 @@
+/* Hallmark · component: supplier mobile sheet · tone: calm operational flow · anchor hue: existing violet · pre-emit: P5 H5 E5 S5 R5 V4 */
 .supplier-stats-grid { margin-bottom: 18px; }
 .supplier-table-card { min-height: 400px; }
 .supplier-filter-row { justify-content: space-between; }
@@ -45,20 +46,31 @@
 .supplier-mobile-list { display: none; }
 
 @media (max-width: 760px) {
-  .supplier-modal.operation-modal {
-    height: 100dvh;
-    max-height: 100dvh;
-    border-radius: 0;
+  .operation-modal-backdrop:has(.supplier-modal) {
+    align-items: center;
+    padding: 16px;
   }
+  .supplier-modal.operation-modal {
+    height: min(80dvh, 640px);
+    max-height: calc(100dvh - 32px);
+    box-sizing: border-box;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    border-radius: 20px;
+  }
+  /* Zoom scales fixed sheets too; reduce their CSS height so all three Display size choices fit the physical viewport. */
+  .app[data-font-size='comfortable'] .supplier-modal.operation-modal { height: min(72.7273dvh, 582px); max-height: calc(90.9091dvh - 29px); }
+  .app[data-font-size='large'] .supplier-modal.operation-modal { height: min(66.6667dvh, 533px); max-height: calc(83.3333dvh - 27px); }
   .supplier-modal .operation-modal-header { flex: 0 0 auto; padding: max(15px, env(safe-area-inset-top)) 17px 15px; }
   .supplier-modal .operation-modal-header h2 { margin: 3px 0; font-size: 19px; }
   .supplier-modal .operation-modal-header p { font-size: 10px; line-height: 1.45; }
-  .supplier-modal .operation-form { min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 14px 17px 0; }
-  .supplier-modal .operation-form-grid { min-height: 0; flex: 1; align-content: start; gap: 12px; overflow-y: auto; padding-bottom: 14px; }
+  .supplier-modal .operation-form { min-height: 0; overflow-y: auto; padding: 14px 17px; }
+  .supplier-modal .operation-form-grid { align-content: start; gap: 12px; padding-bottom: 2px; }
   .supplier-modal .operation-form label { gap: 5px; font-size: 10px; }
   .supplier-modal .operation-form input { min-height: 40px; }
   .supplier-modal .operation-form textarea { min-height: 74px; }
-  .supplier-modal .operation-modal-actions { position: static; flex: 0 0 auto; display: grid; grid-template-columns: minmax(0, .75fr) minmax(0, 1.25fr); gap: 8px; margin: 0 -17px; padding: 12px 17px max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--surface-solid); box-shadow: 0 -10px 24px color-mix(in srgb, var(--text) 12%, transparent); }
+  .supplier-modal .operation-modal-error { margin: 0 0 12px; }
+  .supplier-modal .supplier-modal-actions { position: static; display: grid; grid-template-columns: minmax(0, .75fr) minmax(0, 1.25fr); gap: 8px; margin: 0; padding: 12px 17px max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--surface-solid); box-shadow: 0 -10px 24px color-mix(in srgb, var(--text) 12%, transparent); }
   .supplier-modal .operation-modal-actions button { min-width: 0; min-height: 42px; }
   .supplier-workspace > .section-header {
     margin-bottom: 12px;

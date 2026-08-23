@@ -68,16 +68,16 @@ function SupplierModal({ supplier, busy, error, onClose, onSubmit }: {
         <div><span className="eyebrow">Supplier record</span><h2>{supplier ? 'Edit supplier' : 'Add supplier'}</h2><p>Maintain sellers that can be selected during a new purchase.</p></div>
         <button type="button" className="operation-modal-close" onClick={onClose} disabled={busy} aria-label="Close"><X size={19} /></button>
       </header>
-      {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
-      <form className="operation-form" onSubmit={onSubmit} key={supplier?._id || 'new'}>
+      <form id="supplier-record-form" className="operation-form" onSubmit={onSubmit} key={supplier?._id || 'new'}>
+        {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
         <div className="operation-form-grid">
           <label>Supplier name<input name="name" required autoFocus defaultValue={supplier?.name || ''} placeholder="Business or supplier name" /></label>
           <label>Phone number <small className="optional-marker">Optional</small><input name="phone" defaultValue={supplier?.phone || ''} placeholder="012 345 678" /></label>
           <label>National ID <small className="optional-marker">Optional</small><input name="nationalIdNumber" defaultValue={supplier?.nationalIdNumber || ''} /></label>
           <label className="operation-wide">Notes <small className="optional-marker">Optional</small><textarea name="notes" rows={4} defaultValue={supplier?.notes || ''} placeholder="Products supplied, payment terms, or contact notes" /></label>
         </div>
-        <footer className="operation-modal-actions"><button type="button" className="ghost-button" onClick={onClose} disabled={busy}>Cancel</button><button className="primary-button" disabled={busy}>{busy ? 'Saving...' : supplier ? 'Save changes' : 'Save supplier'}</button></footer>
       </form>
+      <footer className="operation-modal-actions supplier-modal-actions"><button type="button" className="ghost-button" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" form="supplier-record-form" className="primary-button" disabled={busy}>{busy ? 'Saving...' : supplier ? 'Save changes' : 'Save supplier'}</button></footer>
     </section>
   </div>
 }
