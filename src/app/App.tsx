@@ -3001,6 +3001,7 @@ function CustomerReportModal({ onClose, onOpenCustomers }: { onClose: () => void
           </aside>
           <section className={`customer-report-profile ${selectedCustomer ? 'has-selection' : ''}`} aria-live="polite">
             {selectedCustomer ? <>
+              <button type="button" className="customer-report-dismiss" onClick={() => setSelectedCustomer(null)}><ChevronDown size={16} /> Back to list</button>
               <div className="customer-report-profile-heading">
                 <span className="avatar">{selectedCustomer.name.slice(0, 2).toUpperCase()}</span>
                 <div><span className="eyebrow">Customer profile</span><h4>{selectedCustomer.name}</h4><p>{selectedCustomer.phone || 'No phone recorded'}</p></div>
