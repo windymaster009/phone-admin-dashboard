@@ -43,6 +43,7 @@
 .supplier-delete-confirm:hover { background: #ef4444; }
 .supplier-delete-confirm:disabled { cursor: not-allowed; opacity: .6; }
 .supplier-modal { max-width: 760px; }
+.supplier-modal .supplier-modal-actions { position: static; flex: 0 0 auto; margin: 0; padding: 16px 24px; border-top: 1px solid var(--border); background: var(--surface-solid); }
 .supplier-mobile-list { display: none; }
 
 @media (max-width: 760px) {
