@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import {
   AlertTriangle,
+  ArrowLeft,
   ArrowDownRight,
   ArrowUpRight,
   BadgeCheck,
@@ -3026,10 +3027,14 @@ function UpcomingReportView({ slug, navigate }: { slug: string; navigate: (path:
   const Icon = report?.icon || FileText
   return (
     <div className="reports-placeholder-page">
-      <SectionHeader eyebrow="Reports & analytics" title={`${report?.title || 'Report'} Report`} description={report?.description || 'This report is planned for a later step.'} action={<button className="ghost-button" onClick={() => navigate('/reports')}>Back to reports</button>} />
+      <SectionHeader eyebrow="Reports & analytics" title={`${report?.title || 'Report'} Report`} description={report?.description || 'This report is planned for a later step.'} action={<ReportBackButton navigate={navigate} />} />
       <section className="surface-card report-placeholder-card"><span className="metric-icon tone-violet"><Icon size={24} /></span><h3>Report not found</h3><p>Return to Reports & Analytics and choose one of the available report cards.</p></section>
     </div>
   )
+}
+
+function ReportBackButton({ navigate }: { navigate: (path: string) => void }) {
+  return <button className="ghost-button report-back-button" onClick={() => navigate('/reports')}><ArrowLeft size={16} /> Back to reports</button>
 }
 
 function SalesReportView({ navigate }: { navigate: (path: string) => void }) {
@@ -3088,12 +3093,12 @@ function SalesReportView({ navigate }: { navigate: (path: string) => void }) {
   ]
 
   if (loading && !data) {
-    return <><SectionHeader eyebrow="Reports & analytics" title="Sales Report" description="Calculating revenue, cost, profit, products, and payment performance." /><section className="surface-card"><LoadingState label="Loading sales report" detail="Reading completed sales and stored item costs…" /></section></>
+    return <><SectionHeader eyebrow="Reports & analytics" title="Sales Report" description="Calculating revenue, cost, profit, products, and payment performance." action={<ReportBackButton navigate={navigate} />} /><section className="surface-card"><LoadingState label="Loading sales report" detail="Reading completed sales and stored item costs…" /></section></>
   }
 
   return (
     <div className="sales-report-page">
-      <SectionHeader eyebrow="Reports & analytics" title="Sales Report" description="Revenue, cost of goods sold, gross profit, products, and payment performance." action={<button className="ghost-button" onClick={() => navigate('/reports')}>Back to reports</button>} />
+      <SectionHeader eyebrow="Reports & analytics" title="Sales Report" description="Revenue, cost of goods sold, gross profit, products, and payment performance." action={<ReportBackButton navigate={navigate} />} />
 
       <section className="surface-card sales-report-filters" aria-label="Sales report filters">
         <label><span>Period</span><select value={period} onChange={(event) => setPeriod(event.target.value as BusinessOverviewPeriod)}>{periodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
@@ -3190,12 +3195,12 @@ function PurchasesReportView({ navigate }: { navigate: (path: string) => void })
   ]
 
   if (loading && !data) {
-    return <><SectionHeader eyebrow="Reports & analytics" title="Purchases Report" description="Calculating purchase costs, payments, sellers, and product volume." /><section className="surface-card"><LoadingState label="Loading purchases report" detail="Reading purchase transactions and normalized currency totals…" /></section></>
+    return <><SectionHeader eyebrow="Reports & analytics" title="Purchases Report" description="Calculating purchase costs, payments, sellers, and product volume." action={<ReportBackButton navigate={navigate} />} /><section className="surface-card"><LoadingState label="Loading purchases report" detail="Reading purchase transactions and normalized currency totals…" /></section></>
   }
 
   return (
     <div className="sales-report-page purchases-report-page">
-      <SectionHeader eyebrow="Reports & analytics" title="Purchases Report" description="Purchase cost, stock acquired, seller sources, balances, and payment performance." action={<button className="ghost-button" onClick={() => navigate('/reports')}>Back to reports</button>} />
+      <SectionHeader eyebrow="Reports & analytics" title="Purchases Report" description="Purchase cost, stock acquired, seller sources, balances, and payment performance." action={<ReportBackButton navigate={navigate} />} />
 
       <section className="surface-card sales-report-filters purchases-report-filters" aria-label="Purchases report filters">
         <label><span>Period</span><select value={period} onChange={(event) => setPeriod(event.target.value as BusinessOverviewPeriod)}>{periodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
@@ -3323,12 +3328,12 @@ function OperationalReportView({ kind, navigate }: { kind: OperationalReportKind
   }
 
   if (loading && !data) {
-    return <><SectionHeader eyebrow="Reports & analytics" title={`${titleStatus(kind)} Report`} description="Calculating verified report totals and operational details." /><section className="surface-card"><LoadingState label={`Loading ${kind} report`} detail="Reading current records and audit history…" /></section></>
+    return <><SectionHeader eyebrow="Reports & analytics" title={`${titleStatus(kind)} Report`} description="Calculating verified report totals and operational details." action={<ReportBackButton navigate={navigate} />} /><section className="surface-card"><LoadingState label={`Loading ${kind} report`} detail="Reading current records and audit history…" /></section></>
   }
 
   return (
     <div className="sales-report-page operational-report-page">
-      <SectionHeader eyebrow="Reports & analytics" title={data?.title || `${titleStatus(kind)} Report`} description={data?.description || 'Operational reporting.'} action={<button className="ghost-button" onClick={() => navigate('/reports')}>Back to reports</button>} />
+      <SectionHeader eyebrow="Reports & analytics" title={data?.title || `${titleStatus(kind)} Report`} description={data?.description || 'Operational reporting.'} action={<ReportBackButton navigate={navigate} />} />
 
       <section className="surface-card sales-report-filters operational-report-filters" aria-label={`${kind} report filters`}>
         {kind !== 'inventory' && <label><span>Period</span><select value={period} onChange={(event) => setPeriod(event.target.value as BusinessOverviewPeriod | 'all_time')}>{periodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>}
