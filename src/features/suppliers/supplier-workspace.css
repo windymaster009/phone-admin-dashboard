@@ -45,6 +45,21 @@
 .supplier-mobile-list { display: none; }
 
 @media (max-width: 760px) {
+  .supplier-modal.operation-modal {
+    height: 100dvh;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+  .supplier-modal .operation-modal-header { flex: 0 0 auto; padding: max(15px, env(safe-area-inset-top)) 17px 15px; }
+  .supplier-modal .operation-modal-header h2 { margin: 3px 0; font-size: 19px; }
+  .supplier-modal .operation-modal-header p { font-size: 10px; line-height: 1.45; }
+  .supplier-modal .operation-form { min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: hidden; padding: 14px 17px 0; }
+  .supplier-modal .operation-form-grid { min-height: 0; flex: 1; align-content: start; gap: 12px; overflow-y: auto; padding-bottom: 14px; }
+  .supplier-modal .operation-form label { gap: 5px; font-size: 10px; }
+  .supplier-modal .operation-form input { min-height: 40px; }
+  .supplier-modal .operation-form textarea { min-height: 74px; }
+  .supplier-modal .operation-modal-actions { position: static; flex: 0 0 auto; display: grid; grid-template-columns: minmax(0, .75fr) minmax(0, 1.25fr); gap: 8px; margin: 0 -17px; padding: 12px 17px max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: var(--surface-solid); box-shadow: 0 -10px 24px color-mix(in srgb, var(--text) 12%, transparent); }
+  .supplier-modal .operation-modal-actions button { min-width: 0; min-height: 42px; }
   .supplier-workspace > .section-header {
     margin-bottom: 12px;
     align-items: center;
