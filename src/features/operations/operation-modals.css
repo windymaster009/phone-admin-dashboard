@@ -1554,6 +1554,83 @@ body.operation-modal-open {
   .app[data-font-size='large'] .operation-modal-stock { height: min(66.6667dvh, 533px); max-height: calc(83.3333dvh - 27px); }
   .operation-modal-stock .operation-form { min-height: 0; overflow-y: auto; }
 
+  .operation-modal-stock .operation-modal-header {
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+
+  .operation-modal-stock .operation-modal-header h2 {
+    margin: 3px 0;
+    font-size: 19px;
+  }
+
+  .operation-modal-stock .operation-modal-header p {
+    font-size: 10px;
+    line-height: 1.45;
+  }
+
+  .operation-modal-stock .stock-adjustment-form:has(.stock-adjustment-results) {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    overflow: hidden;
+    padding-top: 12px;
+    padding-bottom: 0;
+  }
+
+  .operation-modal-stock .stock-adjustment-form:has(.stock-adjustment-results) .stock-adjustment-intro {
+    display: none;
+  }
+
+  .operation-modal-stock .stock-adjustment-form:has(.stock-adjustment-results) .stock-adjustment-search {
+    grid-row: 1;
+    display: grid;
+    gap: 6px;
+    padding-bottom: 10px;
+    color: var(--muted, #8f9bb4);
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  .operation-modal-stock .stock-adjustment-form:has(.stock-adjustment-results) .stock-adjustment-search-label::before {
+    content: 'Step 1 of 2';
+    display: block;
+    margin-bottom: 3px;
+    color: #a78bfa;
+    font-size: 8px;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+  }
+
+  .operation-modal-stock .stock-adjustment-form:has(.stock-adjustment-results) .stock-adjustment-results {
+    grid-row: 2;
+    min-height: 0;
+    max-height: none;
+    margin-top: 0;
+    padding-bottom: 10px;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+
+  .operation-modal-stock .stock-adjustment-form:has(.stock-adjustment-results) .operation-modal-actions {
+    position: static;
+    grid-row: 3;
+    display: grid;
+    grid-template-columns: minmax(0, .75fr) minmax(0, 1.25fr);
+    gap: 8px;
+    margin: 0 -17px;
+    padding: 12px 17px max(12px, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border);
+    background: var(--surface-solid);
+    box-shadow: 0 -10px 24px color-mix(in srgb, var(--text) 12%, transparent);
+  }
+
+  .operation-modal-stock .stock-adjustment-form:has(.stock-adjustment-results) .operation-modal-actions button {
+    min-width: 0;
+    min-height: 42px;
+  }
+
   .operation-modal-header,
   .operation-form {
     padding-left: 17px;

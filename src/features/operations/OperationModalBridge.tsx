@@ -1544,7 +1544,7 @@ export default function OperationModalBridge() {
             <span><Search size={19} /></span>
             <div><h3>Find an existing product</h3><p>Search by product name, SKU, barcode, IMEI, or serial number. A USB scanner can type directly into this field.</p></div>
           </section>
-          <label className="stock-adjustment-search">Search inventory
+          <label className="stock-adjustment-search"><span className="stock-adjustment-search-label">Search inventory</span>
             <div><Search size={17} /><input autoFocus value={stockSearch} onChange={(event) => setStockSearch(event.target.value)} placeholder="Search or scan a product code" /></div>
           </label>
           <div className="stock-adjustment-results" role="list" aria-label="Matching inventory items">
