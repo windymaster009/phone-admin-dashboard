@@ -1726,19 +1726,18 @@ a:focus-visible,
   .trade-transactions-card .transaction-row p strong { font-size: 10px; }
   .trade-transactions-card .transaction-row p small { margin-top: 2px; font-size: 8px; }
   .trade-transactions-card .transaction-row .icon-button { width: 32px; height: 32px; }
-  .stock-category-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; }
-  .stock-category { min-width: 0; min-height: 68px; grid-column: span 2; padding: 8px 4px; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; gap: 0; text-align: center; }
-  .stock-category:nth-child(n + 4) { grid-column: span 3; }
+  .stock-category-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
+  .stock-category { min-width: 0; min-height: 74px; padding: 8px 4px; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; gap: 0; text-align: center; }
   .stock-category > svg { display: none; }
-  .stock-category .stock-icon { width: 20px; height: 20px; flex: 0 0 auto; padding: 4px; border-radius: 7px; }
-  .stock-category .stock-icon svg { width: 12px; }
+  .stock-category .stock-icon { width: 26px; height: 26px; flex: 0 0 auto; padding: 5px; border-radius: 8px; }
+  .stock-category .stock-icon svg { width: 16px; height: 16px; }
   .stock-category p { width: 100%; min-width: 0; align-items: center; overflow: hidden; font-size: 8px; line-height: 1.1; white-space: nowrap; text-overflow: ellipsis; }
   .stock-category strong { margin: 2px 0 0; font-size: 16px; }
   .stock-category small { display: none; }
-  .app[data-font-size='comfortable'] .stock-category { min-height: 64px; }
+  .app[data-font-size='comfortable'] .stock-category { min-height: 68px; }
   .app[data-font-size='large'] .stock-category { min-height: 64px; padding: 7px 4px; }
   .app[data-font-size='comfortable'] .stock-category .stock-icon,
-  .app[data-font-size='large'] .stock-category .stock-icon { width: 18px; height: 18px; padding: 4px; }
+  .app[data-font-size='large'] .stock-category .stock-icon { width: 24px; height: 24px; padding: 5px; }
   .inventory-catalog-card { margin-bottom: 10px; }
   .inventory-catalog-card .table-heading { align-items: center; padding: 13px 14px 10px; }
   .inventory-catalog-card .table-heading .eyebrow { display: none; }
