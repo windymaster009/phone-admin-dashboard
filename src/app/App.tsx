@@ -2884,13 +2884,18 @@ const reportSections = [
 function ReportLanding({ navigate }: { navigate: (path: string) => void }) {
   const financialReports = reportSections.filter((report) => ['sales', 'purchases', 'payments'].includes(report.slug))
   const operationalReports = reportSections.filter((report) => !['sales', 'purchases', 'payments'].includes(report.slug))
-  const reportCard = ({ slug, title, description, icon: Icon, tone, upcoming }: typeof reportSections[number]) => (
-    <button type="button" className="surface-card report-hub-card" key={slug} onClick={() => navigate(`/reports/${slug}`)}>
-      <span className={`metric-icon tone-${tone}`}><Icon size={21} /></span>
-      <span className="report-hub-copy"><strong>{title}</strong><small>{description}</small></span>
-      {upcoming ? <span className="report-card-status">Coming soon</span> : <ArrowUpRight size={18} />}
-    </button>
-  )
+  const reportCard = (report: typeof reportSections[number]) => {
+    const { slug, title, description, icon: Icon, tone } = report
+    const upcoming = 'upcoming' in report && report.upcoming
+
+    return (
+      <button type="button" className="surface-card report-hub-card" key={slug} onClick={() => navigate(`/reports/${slug}`)}>
+        <span className={`metric-icon tone-${tone}`}><Icon size={21} /></span>
+        <span className="report-hub-copy"><strong>{title}</strong><small>{description}</small></span>
+        {upcoming ? <span className="report-card-status">Coming soon</span> : <ArrowUpRight size={18} />}
+      </button>
+    )
+  }
 
   return (
     <div className="reports-hub-page">
