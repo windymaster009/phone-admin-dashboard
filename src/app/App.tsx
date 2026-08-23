@@ -2482,39 +2482,41 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
           <div className={`notice-box ${result.eligible ? '' : 'danger'}`}><AlertTriangle size={18} /><p><strong>{result.eligible ? 'Physical inspection is still required' : 'Do not accept this phone as collateral'}</strong><span>{result.eligible ? 'Confirm IMEI ownership, display, cameras, speakers, charging, Face ID or fingerprint, and repair estimate before approval.' : 'Activation-locked or iCloud-locked phones should have no pawn value until the owner removes the lock in front of staff.'}</span></p></div>
         </article>
 
-        <article className={`surface-card valuation-result-card ${result.eligible ? '' : 'valuation-ineligible'}`}>
-          <div className="valuation-result-heading"><span className="eyebrow">{autoCalculate ? 'Recommended offer' : 'Manual offer'}</span><span className={`valuation-status ${result.eligible ? 'eligible' : 'blocked'}`}>{result.eligible ? 'Eligible' : 'Blocked'}</span></div>
-          <div className="valuation-hero">
-            <small>{result.eligible ? autoCalculate ? 'Maximum pawn principal' : 'Manual maximum principal' : 'Offer unavailable'}</small>
-            <strong>{result.eligible ? pawnMoney(result.maximumPawn, valuationCurrency) : pawnMoney(0, valuationCurrency)}</strong>
-            <div className="khr-equivalent">
-              {result.eligible ? exchangeRate ? pawnEquivalentText(result.maximumPawn, valuationCurrency, exchangeRate) : 'Loading exchange rate...' : 'Remove activation lock before valuation'}
+        <div className="valuation-side">
+          <article className={`surface-card valuation-result-card ${result.eligible ? '' : 'valuation-ineligible'}`}>
+            <div className="valuation-result-heading"><span className="eyebrow">{autoCalculate ? 'Recommended offer' : 'Manual offer'}</span><span className={`valuation-status ${result.eligible ? 'eligible' : 'blocked'}`}>{result.eligible ? 'Eligible' : 'Blocked'}</span></div>
+            <div className="valuation-hero">
+              <small>{result.eligible ? autoCalculate ? 'Maximum pawn principal' : 'Manual maximum principal' : 'Offer unavailable'}</small>
+              <strong>{result.eligible ? pawnMoney(result.maximumPawn, valuationCurrency) : pawnMoney(0, valuationCurrency)}</strong>
+              <div className="khr-equivalent">
+                {result.eligible ? exchangeRate ? pawnEquivalentText(result.maximumPawn, valuationCurrency, exchangeRate) : 'Loading exchange rate...' : 'Remove activation lock before valuation'}
+              </div>
+              <span>{result.eligible ? `${pawnRate}% of ${autoCalculate ? 'adjusted' : 'manually entered'} resale value` : 'Activation lock failed the eligibility check'}</span>
+              {exchangeRate && (
+                <span className="exchange-rate-source">
+                  1 USD = {riel.format(exchangeRate.usdKhr)} KHR - {exchangeRate.source === 'ABA PayWay' ? `ABA PayWay ${exchangeRate.side || 'bank'} rate` : 'ABA configured fallback'}
+                </span>
+              )}
             </div>
-            <span>{result.eligible ? `${pawnRate}% of ${autoCalculate ? 'adjusted' : 'manually entered'} resale value` : 'Activation lock failed the eligibility check'}</span>
-            {exchangeRate && (
-              <span className="exchange-rate-source">
-                1 USD = {riel.format(exchangeRate.usdKhr)} KHR - {exchangeRate.source === 'ABA PayWay' ? `ABA PayWay ${exchangeRate.side || 'bank'} rate` : 'ABA configured fallback'}
-              </span>
-            )}
-          </div>
-          {autoCalculate && <div className="calculation-breakdown">
-            <div><span>Resale value</span><strong>{pawnMoney(marketPrice, valuationCurrency)}</strong></div>
-            <div><span>Age ({Math.round(result.ageRate * 100)}%)</span><strong>-{pawnMoney(result.ageDeduction, valuationCurrency)}</strong></div>
-            <div><span>Condition ({Math.round(result.conditionRate * 100)}%)</span><strong>-{pawnMoney(result.conditionDeduction, valuationCurrency)}</strong></div>
-            <div><span>Battery ({Math.round(result.batteryRate * 100)}%)</span><strong>-{pawnMoney(result.batteryDeduction, valuationCurrency)}</strong></div>
-            <div><span>Lock and accessories</span><strong>-{pawnMoney(result.carrierLockDeduction + result.accessoryDeduction, valuationCurrency)}</strong></div>
-            <div><span>Repair cost</span><strong>-{pawnMoney(Math.max(repairCost, 0), valuationCurrency)}</strong></div>
-            <div className="estimated-row"><span>{autoCalculate ? 'Estimated resale value' : 'Resale value'}</span><strong>{pawnMoney(result.estimatedValue, valuationCurrency)}</strong></div>
-            <div className="reserve-row"><span>Shop risk reserve after loan</span><strong>{pawnMoney(result.riskReserve, valuationCurrency)}</strong></div>
-          </div>}
-          <button className="primary-button full-width" onClick={useForPawn} disabled={!result.eligible || result.maximumPawn <= 0}><HandCoins size={17} /> Start pawn with this offer</button>
-          <button className="ghost-button full-width" onClick={saveValuation}><FileText size={16} /> Save valuation only</button>
-        </article>
-      </section>
-      <section className="surface-card workflow-note valuation-checklist">
-        <span className="workflow-note-icon"><ScanLine /></span>
-        <div><span className="eyebrow">Before releasing money</span><h3>Complete the acceptance checklist</h3><p>The calculator recommends an amount; staff verification decides whether the phone can be accepted.</p></div>
-        <div className="verification-chips"><span>IMEI clear</span><span>Ownership confirmed</span><span>ID optional</span><span>Activation lock off</span><span>Hardware tested</span></div>
+            {autoCalculate && <div className="calculation-breakdown">
+              <div><span>Resale value</span><strong>{pawnMoney(marketPrice, valuationCurrency)}</strong></div>
+              <div><span>Age ({Math.round(result.ageRate * 100)}%)</span><strong>-{pawnMoney(result.ageDeduction, valuationCurrency)}</strong></div>
+              <div><span>Condition ({Math.round(result.conditionRate * 100)}%)</span><strong>-{pawnMoney(result.conditionDeduction, valuationCurrency)}</strong></div>
+              <div><span>Battery ({Math.round(result.batteryRate * 100)}%)</span><strong>-{pawnMoney(result.batteryDeduction, valuationCurrency)}</strong></div>
+              <div><span>Lock and accessories</span><strong>-{pawnMoney(result.carrierLockDeduction + result.accessoryDeduction, valuationCurrency)}</strong></div>
+              <div><span>Repair cost</span><strong>-{pawnMoney(Math.max(repairCost, 0), valuationCurrency)}</strong></div>
+              <div className="estimated-row"><span>{autoCalculate ? 'Estimated resale value' : 'Resale value'}</span><strong>{pawnMoney(result.estimatedValue, valuationCurrency)}</strong></div>
+              <div className="reserve-row"><span>Shop risk reserve after loan</span><strong>{pawnMoney(result.riskReserve, valuationCurrency)}</strong></div>
+            </div>}
+            <button className="primary-button full-width" onClick={useForPawn} disabled={!result.eligible || result.maximumPawn <= 0}><HandCoins size={17} /> Start pawn with this offer</button>
+            <button className="ghost-button full-width" onClick={saveValuation}><FileText size={16} /> Save valuation only</button>
+          </article>
+          <section className="surface-card workflow-note valuation-checklist" aria-labelledby="valuation-checklist-title">
+            <span className="workflow-note-icon"><ScanLine /></span>
+            <div><span className="eyebrow">Before releasing money</span><h3 id="valuation-checklist-title">Complete the acceptance checklist</h3><p>The calculator recommends an amount; staff verification decides whether the phone can be accepted.</p></div>
+            <div className="verification-chips"><span>IMEI clear</span><span>Ownership confirmed</span><span>ID optional</span><span>Activation lock off</span><span>Hardware tested</span></div>
+          </section>
+        </div>
       </section>
     </>
   )
