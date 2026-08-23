@@ -194,14 +194,20 @@
 
   .customer-workspace-bridge > .section-header h2 {
     margin: 0;
-    font-size: 21px;
+    font-size: 20px;
   }
 
   .customer-workspace-bridge > .section-header .primary-button {
     width: auto;
-    min-height: 39px;
+    min-height: 36px;
     flex: 0 0 auto;
-    padding-inline: 12px;
+    padding-inline: 10px;
+    font-size: 9px;
+  }
+
+  .customer-workspace-bridge > .section-header .primary-button svg {
+    width: 15px;
+    height: 15px;
   }
 
   .customer-workspace-bridge .customer-stats-grid {
@@ -211,8 +217,8 @@
   }
 
   .customer-workspace-bridge .customer-stats-grid .mini-stat {
-    min-height: 74px;
-    padding: 10px 5px;
+    min-height: 68px;
+    padding: 8px 4px;
     display: grid;
     place-items: center;
     text-align: center;
@@ -227,18 +233,18 @@
     width: 100%;
     align-items: center;
     overflow: hidden;
-    font-size: 7px;
+    font-size: 8px;
     white-space: nowrap;
     text-overflow: ellipsis;
   }
 
   .customer-workspace-bridge .customer-stats-grid .mini-stat strong {
-    margin: 5px 0 0;
-    font-size: 18px;
+    margin: 3px 0 0;
+    font-size: 16px;
   }
 
   .customer-filter-row {
-    padding: 11px;
+    padding: 9px;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
@@ -252,10 +258,18 @@
   .customer-filter-row .ghost-button {
     width: auto;
     min-width: 72px;
-    min-height: 40px;
-    padding-inline: 11px;
+    min-height: 38px;
+    padding-inline: 10px;
     font-size: 9px;
   }
+
+  /* Preserve the compact physical footprint when the app Display size is increased. */
+  .app[data-font-size='comfortable'] .customer-workspace-bridge > .section-header .primary-button { min-height: 33px; }
+  .app[data-font-size='large'] .customer-workspace-bridge > .section-header .primary-button { min-height: 30px; }
+  .app[data-font-size='comfortable'] .customer-workspace-bridge .customer-stats-grid .mini-stat { min-height: 62px; }
+  .app[data-font-size='large'] .customer-workspace-bridge .customer-stats-grid .mini-stat { min-height: 58px; padding: 7px 4px; }
+  .app[data-font-size='comfortable'] .customer-filter-row .ghost-button { min-height: 35px; }
+  .app[data-font-size='large'] .customer-filter-row .ghost-button { min-height: 32px; padding-inline: 8px; }
 
   .customer-table-card {
     min-height: 0;
@@ -272,9 +286,12 @@
 
   .customer-mobile-card {
     min-width: 0;
-    padding: 11px 12px;
+    padding: 10px 11px;
     border-bottom: 1px solid var(--border);
   }
+
+  .app[data-font-size='comfortable'] .customer-mobile-card { padding: 9px 10px; }
+  .app[data-font-size='large'] .customer-mobile-card { padding: 8px 9px; }
 
   .customer-mobile-card:last-child {
     border-bottom: 0;
