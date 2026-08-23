@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-08-23",
+    "macrostructure": "Narrative Workflow",
+    "theme": "existing PhoneFlow",
+    "enrichment": "none",
+    "brief": "Decision-first refund review with expandable sale record"
+  },
+  {
     "date": "2026-08-22",
     "macrostructure": "Workbench",
     "theme": "existing PhoneFlow",

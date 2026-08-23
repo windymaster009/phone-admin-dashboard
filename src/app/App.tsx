@@ -1761,20 +1761,6 @@ function RefundsView({ user }: { user: SessionUser }) {
                 <RefundStatusBadge status={selectedTrade.status} />
               </header>
 
-              <dl className="refund-summary">
-                <div><dt>Refund amount</dt><dd>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionAmountPaid, selectedTrade.amountPaid)}</dd></div>
-                <div><dt>Payment recorded</dt><dd>{titleStatus(selectedTrade.paymentMethod)}</dd></div>
-                <div><dt>Sale total</dt><dd>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionTotal, selectedTrade.total)}</dd></div>
-                <div><dt>Recorded by</dt><dd>{selectedTrade.createdBy?.name || 'Staff member'}</dd></div>
-              </dl>
-
-              <section className="refund-items" aria-labelledby="refund-items-title">
-                <h4 id="refund-items-title">Items in this sale</h4>
-                {selectedTrade.items.map((item, index) => (
-                  <div key={`${item.name}-${index}`}><span><strong>{item.name}</strong><small>Quantity {item.quantity}</small></span><strong>{tradeTransactionMoney(selectedTrade, item.originalUnitPrice === undefined ? undefined : item.originalUnitPrice * item.quantity, item.unitPrice * item.quantity)}</strong></div>
-                ))}
-              </section>
-
               {selectedTrade.status === 'RETURNED' && selectedTrade.refund ? (
                 <section className="refund-complete" role="status">
                   <span><BadgeCheck size={20} /></span>
@@ -1786,14 +1772,40 @@ function RefundsView({ user }: { user: SessionUser }) {
                 </section>
               ) : (
                 <form className="refund-form" onSubmit={recordRefund}>
-                  {selectedWarningStage && <div className={`refund-record-only refund-stage-warning refund-stage-${selectedWarningStage.number}`}><AlertTriangle size={18} /><p><strong>Stage {selectedWarningStage.number} · {selectedWarningStage.label}</strong><span>{selectedWarningStage.message}</span><small>Sold {selectedWarningStage.saleAgeDays === 0 ? 'today' : `${selectedWarningStage.saleAgeDays} day${selectedWarningStage.saleAgeDays === 1 ? '' : 's'} ago`}. PhoneFlow records the refund and stock change only; return {tradeTransactionMoney(selectedTrade, selectedTrade.transactionAmountPaid, selectedTrade.amountPaid)} to the customer using your shop’s current process.</small></p></div>}
-                  <label><span>Refund reason</span><textarea required minLength={5} maxLength={500} rows={3} value={reason} aria-invalid={reason.length > 0 && reason.trim().length < 5} onChange={(event) => setReason(event.target.value)} placeholder="Describe why the customer returned this sale" /><small>Use a specific reason so the refund is clear in the audit history.</small></label>
-                  <label><span>Returned inventory</span><select required value={inventoryDisposition} onChange={(event) => setInventoryDisposition(event.target.value as '' | 'RESTOCK' | 'NO_RESTOCK')}><option value="" disabled>Choose after inspecting every item</option><option value="RESTOCK">Restore all items to available stock</option><option value="NO_RESTOCK">Do not return items to saleable stock</option></select><small>Restore stock only when every returned item is present, correct, and resaleable.</small></label>
-                  <label className="refund-confirm"><span>Type <strong>{selectedTrade.tradeNo}</strong> to confirm</span><input required autoComplete="off" value={confirmation} aria-invalid={confirmation.length > 0 && confirmation !== selectedTrade.tradeNo} onChange={(event) => setConfirmation(event.target.value)} /><small>This check prevents a refund from being recorded against the wrong receipt.</small></label>
-                  {actionError && <p className="refund-error" role="alert"><AlertTriangle size={16} /> {actionError}</p>}
-                  <footer><button type="button" className="ghost-button" onClick={() => { setReason(''); setInventoryDisposition(''); setConfirmation(''); setActionError('') }} disabled={actionBusy}>Clear</button><button type="submit" className="primary-button danger-button" disabled={!canSubmit}>{actionBusy ? 'Recording refund…' : 'Record full refund'}</button></footer>
+                  <section className="refund-decision" aria-labelledby="refund-decision-title">
+                    <header className="refund-decision-header">
+                      <div><span>Refund decision</span><h4 id="refund-decision-title">Refund {tradeTransactionMoney(selectedTrade, selectedTrade.transactionAmountPaid, selectedTrade.amountPaid)}</h4><p>Return this amount by {titleStatus(selectedTrade.paymentMethod)} after reviewing the sale.</p></div>
+                      {selectedWarningStage && <span className={`refund-review-tag refund-stage-${selectedWarningStage.number}`}><AlertTriangle size={15} aria-hidden="true" />Stage {selectedWarningStage.number} · {selectedWarningStage.label}</span>}
+                    </header>
+                    <div className="refund-form-fields">
+                      <label><span>Refund reason</span><textarea required minLength={5} maxLength={500} rows={2} value={reason} aria-invalid={reason.length > 0 && reason.trim().length < 5} onChange={(event) => setReason(event.target.value)} placeholder="Why is the customer returning this sale?" /><small>Use a specific reason for the audit history.</small></label>
+                      <label><span>Returned inventory</span><select required value={inventoryDisposition} onChange={(event) => setInventoryDisposition(event.target.value as '' | 'RESTOCK' | 'NO_RESTOCK')}><option value="" disabled>Choose after inspecting every item</option><option value="RESTOCK">Restore all items to available stock</option><option value="NO_RESTOCK">Do not return items to saleable stock</option></select><small>Restore stock only when every item is present and resaleable.</small></label>
+                    </div>
+                    <label className="refund-confirm"><span>Confirm receipt</span><input required autoComplete="off" value={confirmation} aria-invalid={confirmation.length > 0 && confirmation !== selectedTrade.tradeNo} onChange={(event) => setConfirmation(event.target.value)} placeholder={`Type ${selectedTrade.tradeNo}`} /><small>Type the receipt number to prevent recording against the wrong sale.</small></label>
+                    {actionError && <p className="refund-error" role="alert"><AlertTriangle size={16} /> {actionError}</p>}
+                    <footer><button type="button" className="ghost-button" onClick={() => { setReason(''); setInventoryDisposition(''); setConfirmation(''); setActionError('') }} disabled={actionBusy}>Clear</button><button type="submit" className="primary-button danger-button" disabled={!canSubmit}>{actionBusy ? 'Recording refund…' : 'Record full refund'}</button></footer>
+                  </section>
                 </form>
               )}
+
+              <details className="refund-sale-details">
+                <summary><span><strong>Review sale details</strong><small>{selectedTrade.items.length} item{selectedTrade.items.length === 1 ? '' : 's'} · {tradeTransactionMoney(selectedTrade, selectedTrade.transactionTotal, selectedTrade.total)}</small></span><span>Inspect items &amp; history</span></summary>
+                <div className="refund-sale-details-content">
+                  <dl className="refund-summary">
+                    <div><dt>Refund amount</dt><dd>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionAmountPaid, selectedTrade.amountPaid)}</dd></div>
+                    <div><dt>Payment recorded</dt><dd>{titleStatus(selectedTrade.paymentMethod)}</dd></div>
+                    <div><dt>Sale total</dt><dd>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionTotal, selectedTrade.total)}</dd></div>
+                    <div><dt>Recorded by</dt><dd>{selectedTrade.createdBy?.name || 'Staff member'}</dd></div>
+                  </dl>
+                  <section className="refund-items" aria-labelledby="refund-items-title">
+                    <h4 id="refund-items-title">Items in this sale</h4>
+                    {selectedTrade.items.map((item, index) => (
+                      <div key={`${item.name}-${index}`}><span><strong>{item.name}</strong><small>Quantity {item.quantity}</small></span><strong>{tradeTransactionMoney(selectedTrade, item.originalUnitPrice === undefined ? undefined : item.originalUnitPrice * item.quantity, item.unitPrice * item.quantity)}</strong></div>
+                    ))}
+                  </section>
+                  {selectedWarningStage && <aside className={`refund-record-only refund-stage-warning refund-stage-${selectedWarningStage.number}`}><AlertTriangle size={18} aria-hidden="true" /><p><strong>Stage {selectedWarningStage.number} · {selectedWarningStage.label}</strong><span>{selectedWarningStage.message}</span><small>Sold {selectedWarningStage.saleAgeDays === 0 ? 'today' : `${selectedWarningStage.saleAgeDays} day${selectedWarningStage.saleAgeDays === 1 ? '' : 's'} ago`}. PhoneFlow records the refund and stock change only; return {tradeTransactionMoney(selectedTrade, selectedTrade.transactionAmountPaid, selectedTrade.amountPaid)} to the customer using your shop’s current process.</small></p></aside>}
+                </div>
+              </details>
             </>
           )}
         </article>

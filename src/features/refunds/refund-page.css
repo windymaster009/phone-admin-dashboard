@@ -1,5 +1,5 @@
-/* Hallmark · macrostructure: Workbench · tone: technical and restrained · anchor hue: violet · enrichment: none · contrast: pass (40–41) · tokens: pass (48) · mobile: pass (34, 49–57) */
-/* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V4 */
+/* Hallmark · macrostructure: Narrative Workflow · tone: utilitarian and restrained · anchor hue: violet · enrichment: none · contrast: pass (40–41) · tokens: pass (48) · mobile: pass (34, 49–57) */
+/* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 */
 @import '../../../tokens.css';
 
 .refund-page {
@@ -376,7 +376,7 @@
 }
 
 .refund-review {
-  padding: var(--space-refund-lg);
+  padding: var(--space-refund-md);
 }
 
 .refund-review-header {
@@ -402,6 +402,89 @@
   color: var(--color-refund-muted);
   font-size: var(--text-refund-sm);
   line-height: 1.5;
+}
+
+.refund-sale-details {
+  margin-block-start: var(--space-refund-md);
+  border-block-start: var(--rule-refund);
+}
+
+.refund-sale-details summary {
+  min-height: 3.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-refund-sm);
+  padding-inline: var(--space-refund-2xs);
+  cursor: pointer;
+  list-style: none;
+  color: var(--color-refund-ink);
+}
+
+.refund-sale-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.refund-sale-details summary::after {
+  content: '+';
+  flex: 0 0 auto;
+  width: 1.5rem;
+  height: 1.5rem;
+  display: grid;
+  place-items: center;
+  border: var(--rule-refund);
+  border-radius: 50%;
+  color: var(--color-refund-muted);
+  font-size: var(--text-refund-lg);
+  font-weight: 500;
+  line-height: 1;
+}
+
+.refund-sale-details[open] summary::after {
+  content: '−';
+}
+
+.refund-sale-details summary:focus-visible {
+  outline: 2px solid var(--color-refund-accent);
+  outline-offset: 2px;
+}
+
+.refund-sale-details summary:active {
+  transform: translateY(1px);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .refund-sale-details summary:hover {
+    color: var(--color-refund-ink);
+    background: var(--color-refund-surface-hover);
+  }
+}
+
+.refund-sale-details summary > span:first-child {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-refund-2xs);
+}
+
+.refund-sale-details summary strong {
+  font-family: var(--font-refund-display);
+  font-size: var(--text-refund-sm);
+}
+
+.refund-sale-details summary small,
+.refund-sale-details summary > span:last-of-type {
+  color: var(--color-refund-muted);
+  font-size: var(--text-refund-xs);
+}
+
+.refund-sale-details summary > span:last-of-type {
+  margin-inline-start: auto;
+  white-space: nowrap;
+}
+
+.refund-sale-details-content {
+  padding-inline: var(--space-refund-2xs);
+  border-block-start: var(--rule-refund);
 }
 
 .refund-summary {
@@ -440,7 +523,7 @@
 }
 
 .refund-items {
-  padding-block: var(--space-refund-lg);
+  padding-block: var(--space-refund-md);
   border-block-end: var(--rule-refund);
 }
 
@@ -481,17 +564,73 @@
 }
 
 .refund-form {
+  padding-block-start: var(--space-refund-md);
+}
+
+.refund-decision {
+  display: grid;
+  gap: var(--space-refund-md);
+  padding: var(--space-refund-md);
+  border: var(--rule-refund-strong);
+  border-radius: var(--radius-refund-md);
+  background: var(--color-refund-input);
+}
+
+.refund-decision-header {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-refund-md);
+}
+
+.refund-decision-header > div {
+  min-width: 0;
+}
+
+.refund-decision-header > div > span {
+  color: var(--color-refund-muted);
+  font-size: var(--text-refund-xs);
+  font-weight: 800;
+}
+
+.refund-decision-header h4 {
+  margin-block: var(--space-refund-2xs);
+  overflow-wrap: anywhere;
+  font-size: var(--text-refund-lg);
+}
+
+.refund-decision-header p {
+  margin: 0;
+  color: var(--color-refund-muted);
+  font-size: var(--text-refund-xs);
+  line-height: 1.5;
+}
+
+.refund-review-tag {
+  min-height: 2rem;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-refund-2xs);
+  flex: 0 0 auto;
+  padding: var(--space-refund-2xs) var(--space-refund-xs);
+  border: 1px solid color-mix(in srgb, var(--refund-stage-color) 34%, var(--color-refund-rule));
+  border-radius: var(--radius-refund-sm);
+  color: var(--refund-stage-color);
+  background: color-mix(in srgb, var(--refund-stage-color) 8%, var(--color-refund-surface));
+  font-size: var(--text-refund-xs);
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.refund-review-tag svg {
+  flex: 0 0 auto;
+}
+
+.refund-form-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-refund-md);
-  padding-block-start: var(--space-refund-lg);
-}
-
-.refund-record-only,
-.refund-confirm,
-.refund-error,
-.refund-form > footer {
-  grid-column: 1 / -1;
 }
 
 .refund-record-only {
@@ -540,7 +679,8 @@
   line-height: 1.55;
 }
 
-.refund-form label {
+.refund-form-fields label,
+.refund-confirm {
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -550,7 +690,8 @@
   font-weight: 700;
 }
 
-.refund-form label > span strong {
+.refund-form-fields label > span strong,
+.refund-confirm > span strong {
   color: var(--color-refund-ink);
 }
 
@@ -575,7 +716,7 @@
 }
 
 .refund-form textarea {
-  min-height: 6.5rem;
+  min-height: 5rem;
   padding: var(--space-refund-sm);
   resize: vertical;
 }
@@ -612,7 +753,8 @@
   opacity: 0.5;
 }
 
-.refund-form label > small {
+.refund-form-fields label > small,
+.refund-confirm > small {
   color: var(--color-refund-muted);
   font-size: var(--text-refund-xs);
   font-weight: 500;
@@ -620,7 +762,7 @@
 }
 
 .refund-confirm {
-  padding-block-start: var(--space-refund-xs);
+  max-width: 34rem;
 }
 
 .refund-error {
@@ -637,11 +779,11 @@
   flex: 0 0 auto;
 }
 
-.refund-form > footer {
+.refund-decision > footer {
   display: flex;
   justify-content: flex-end;
   gap: var(--space-refund-sm);
-  padding-block-start: var(--space-refund-xs);
+  padding-block-start: var(--space-refund-2xs);
 }
 
 .refund-form button:focus-visible {
@@ -845,7 +987,7 @@
   }
 
   .refund-summary,
-  .refund-form,
+  .refund-form-fields,
   .refund-complete dl {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -854,22 +996,29 @@
     padding-inline-start: 0;
   }
 
-  .refund-record-only,
-  .refund-confirm,
-  .refund-error,
-  .refund-form > footer {
-    grid-column: 1;
+  .refund-decision-header {
+    align-items: stretch;
+    flex-direction: column;
   }
 
-  .refund-form > footer {
+  .refund-review-tag {
+    align-self: flex-start;
+  }
+
+  .refund-sale-details summary > span:last-of-type {
+    display: none;
+  }
+
+  .refund-decision > footer {
     display: grid;
     grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
   }
 
-  .refund-form > footer button {
+  .refund-decision > footer button {
     min-width: 0;
     padding-inline: var(--space-refund-xs);
     font-size: var(--text-refund-xs);
+    white-space: nowrap;
   }
 }
 
