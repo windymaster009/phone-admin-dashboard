@@ -1726,8 +1726,9 @@ a:focus-visible,
   .trade-transactions-card .transaction-row p strong { font-size: 10px; }
   .trade-transactions-card .transaction-row p small { margin-top: 2px; font-size: 8px; }
   .trade-transactions-card .transaction-row .icon-button { width: 32px; height: 32px; }
-  .stock-category-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
-  .stock-category { min-width: 0; min-height: 68px; padding: 8px 4px; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; gap: 0; text-align: center; }
+  .stock-category-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 7px; }
+  .stock-category { min-width: 0; min-height: 68px; grid-column: span 2; padding: 8px 4px; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; gap: 0; text-align: center; }
+  .stock-category:nth-child(n + 4) { grid-column: span 3; }
   .stock-category > svg { display: none; }
   .stock-category .stock-icon { width: 20px; height: 20px; flex: 0 0 auto; padding: 4px; border-radius: 7px; }
   .stock-category .stock-icon svg { width: 12px; }
