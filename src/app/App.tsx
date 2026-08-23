@@ -2877,22 +2877,35 @@ const reportSections = [
   { slug: 'pawns', title: 'Pawn', description: 'Outstanding principal, overdue, redeemed, and claimed collateral', icon: HandCoins, tone: 'violet' },
   { slug: 'loans', title: 'Loans', description: 'Outstanding loans, repayments, and overdue balances', icon: WalletCards, tone: 'blue' },
   { slug: 'payments', title: 'Payments', description: 'Cash, KHQR, bank, card, and daily closing', icon: Banknote, tone: 'rose' },
-  { slug: 'customers', title: 'Customer report', description: 'Customer profiles, contact records, and transaction history', icon: Users, tone: 'blue' },
+  { slug: 'customers', title: 'Customer report', description: 'Customer profiles, contact records, and transaction history', icon: Users, tone: 'blue', upcoming: true },
   { slug: 'activity', title: 'Activity', description: 'Staff actions and audit history', icon: FileText, tone: 'orange' },
 ] as const
 
 function ReportLanding({ navigate }: { navigate: (path: string) => void }) {
+  const financialReports = reportSections.filter((report) => ['sales', 'purchases', 'payments'].includes(report.slug))
+  const operationalReports = reportSections.filter((report) => !['sales', 'purchases', 'payments'].includes(report.slug))
+  const reportCard = ({ slug, title, description, icon: Icon, tone, upcoming }: typeof reportSections[number]) => (
+    <button type="button" className="surface-card report-hub-card" key={slug} onClick={() => navigate(`/reports/${slug}`)}>
+      <span className={`metric-icon tone-${tone}`}><Icon size={21} /></span>
+      <span className="report-hub-copy"><strong>{title}</strong><small>{description}</small></span>
+      {upcoming ? <span className="report-card-status">Coming soon</span> : <ArrowUpRight size={18} />}
+    </button>
+  )
+
   return (
     <div className="reports-hub-page">
       <SectionHeader eyebrow="Finance & control" title="Reports & Analytics" description="Choose a focused report to review business performance and operational history." />
-      <section className="report-hub-grid" aria-label="Available reports">
-        {reportSections.map(({ slug, title, description, icon: Icon, tone }) => (
-          <button type="button" className="surface-card report-hub-card" key={slug} onClick={() => navigate(`/reports/${slug}`)}>
-            <span className={`metric-icon tone-${tone}`}><Icon size={21} /></span>
-            <span className="report-hub-copy"><strong>{title}</strong><small>{description}</small></span>
-            <ArrowUpRight size={18} />
-          </button>
-        ))}
+      <section className="report-category" aria-labelledby="financial-reports-title">
+        <header className="report-category-header"><div><h3 id="financial-reports-title">Financial reports</h3><p>Review revenue, spending, and money received.</p></div></header>
+        <div className="report-hub-grid report-primary-grid">
+          {financialReports.map(reportCard)}
+        </div>
+      </section>
+      <section className="report-category report-category-operations" aria-labelledby="operational-reports-title">
+        <header className="report-category-header"><div><h3 id="operational-reports-title">Operations &amp; records</h3><p>Check stock, contracts, customer records, and staff activity.</p></div></header>
+        <div className="report-hub-grid report-operations-grid">
+          {operationalReports.map(reportCard)}
+        </div>
       </section>
       <p className="report-hub-note"><AlertTriangle size={15} />Exports will be added only after all report calculations and workflows are verified.</p>
     </div>

@@ -1289,12 +1289,21 @@ td strong { color: var(--text); }
 .reports-placeholder-page > .section-header,
 .sales-report-page > .section-header { margin-bottom: 0; }
 .report-hub-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; }
+.report-category { display: grid; gap: 9px; }
+.report-category-operations { padding-top: 14px; border-top: 1px solid var(--border); }
+.report-category-header { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.report-category-header h3 { margin: 0; color: var(--text); font: 800 13px Manrope, sans-serif; }
+.report-category-header p { margin: 4px 0 0; color: var(--muted); font-size: 10px; line-height: 1.4; }
+.report-operations-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .report-hub-card { min-width: 0; min-height: 76px; padding: 11px 14px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 11px; color: var(--text); text-align: left; transition: border-color .18s ease, background .18s ease, transform .18s ease; }
 .report-hub-card:hover { border-color: color-mix(in srgb, var(--primary) 42%, var(--border)); background: var(--surface-hover); transform: translateY(-2px); }
+.report-hub-card:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.report-hub-card:active { transform: translateY(1px); }
 .report-hub-card > svg { color: var(--muted-2); }
 .report-hub-copy { min-width: 0; display: flex; flex-direction: column; }
 .report-hub-copy strong { font: 800 15px Manrope, sans-serif; }
 .report-hub-copy small { margin-top: 4px; overflow: hidden; color: var(--muted); font-size: 10px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.report-card-status { padding: 5px 7px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted-2); background: var(--bg-soft); font-size: 8px; font-weight: 800; white-space: nowrap; }
 .report-hub-note { margin: 0; padding: 12px 14px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: 11px; color: var(--muted); background: var(--surface); font-size: 10px; line-height: 1.45; }
 .report-placeholder-card { min-height: 320px; padding: 32px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .report-placeholder-card h3 { margin: 16px 0 7px; font: 800 18px Manrope, sans-serif; }
@@ -1460,6 +1469,7 @@ a:focus-visible,
 @media (max-width: 1180px) {
   .metrics-grid, .mini-stats-grid { grid-template-columns: repeat(2, 1fr); }
   .report-hub-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .report-operations-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .sales-report-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .sales-report-lower-grid { grid-template-columns: minmax(0, 1fr); }
   .operational-breakdown-grid { grid-template-columns: minmax(0, 1fr); }
