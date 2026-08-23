@@ -2919,17 +2919,18 @@ function ReportLanding({ navigate }: { navigate: (path: string) => void }) {
         </div>
       </section>
       <p className="report-hub-note"><AlertTriangle size={15} />Exports will be added only after all report calculations and workflows are verified.</p>
-      {customerReportOpen && <CustomerReportModal onClose={() => setCustomerReportOpen(false)} />}
+      {customerReportOpen && <CustomerReportModal onClose={() => setCustomerReportOpen(false)} onOpenCustomers={() => { setCustomerReportOpen(false); navigate('/customers') }} />}
     </div>
   )
 }
 
-function CustomerReportModal({ onClose }: { onClose: () => void }) {
+function CustomerReportModal({ onClose, onOpenCustomers }: { onClose: () => void; onOpenCustomers: () => void }) {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [idFilter, setIdFilter] = useState<'all' | 'recorded' | 'missing'>('all')
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
 
   useEffect(() => {
     api<{ customers: Customer[] }>('/customers')
@@ -2937,6 +2938,14 @@ function CustomerReportModal({ onClose }: { onClose: () => void }) {
       .catch((reason: Error) => setError(reason.message))
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
 
   const filteredCustomers = useMemo(() => customers.filter((customer) => {
     const term = search.trim().toLowerCase()
@@ -2953,36 +2962,59 @@ function CustomerReportModal({ onClose }: { onClose: () => void }) {
         <header className="detail-modal-header">
           <div>
             <span className="eyebrow">Customer report</span>
-            <h3 id="customer-report-title">Customer directory</h3>
-            <p>Find a customer record before reviewing their transaction history.</p>
+            <h3 id="customer-report-title">Find a customer</h3>
+            <p>Search the directory, then select a customer to review their profile.</p>
           </div>
           <button className="icon-button" onClick={onClose} aria-label="Close customer report"><X size={18} /></button>
         </header>
-        <div className="customer-report-filters">
-          <div className="search-field"><Search size={17} /><input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, phone, National ID, or address" /></div>
-          <label>
-            <span>ID status</span>
-            <select value={idFilter} onChange={(event) => setIdFilter(event.target.value as typeof idFilter)}>
-              <option value="all">All customers</option>
-              <option value="recorded">ID recorded</option>
-              <option value="missing">Needs ID</option>
-            </select>
-          </label>
+        <div className="customer-report-workspace">
+          <aside className="customer-report-browser" aria-label="Customer list">
+            <label className="customer-report-search">
+              <span>Search customers</span>
+              <div className="search-field"><Search size={17} /><input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, phone, ID, or address" disabled={loading} /></div>
+            </label>
+            <label className="customer-report-filter">
+              <span>Show</span>
+              <select value={idFilter} onChange={(event) => setIdFilter(event.target.value as typeof idFilter)} disabled={loading}>
+                <option value="all">All customers</option>
+                <option value="recorded">ID recorded</option>
+                <option value="missing">Needs ID</option>
+              </select>
+            </label>
+            <p className="customer-report-count" aria-live="polite">{loading ? 'Loading customers…' : `${filteredCustomers.length} customer${filteredCustomers.length === 1 ? '' : 's'} found`}</p>
+            <div className="customer-report-list">
+              {loading && Array.from({ length: 6 }, (_, index) => <div className="customer-report-skeleton" key={index} aria-hidden="true" />)}
+              {error && <p className="customer-report-error">Unable to load customers. {error}</p>}
+              {!loading && !error && filteredCustomers.map((customer) => {
+                const isSelected = selectedCustomer?._id === customer._id
+                const hasId = Boolean(customer.nationalIdNumber)
+                return (
+                  <button type="button" className={`customer-report-picker ${isSelected ? 'is-selected' : ''}`} key={customer._id} onClick={() => setSelectedCustomer(customer)} aria-pressed={isSelected}>
+                    <span className="avatar">{customer.name.slice(0, 2).toUpperCase()}</span>
+                    <span><strong>{customer.name}</strong><small>{customer.phone || 'No phone recorded'}</small></span>
+                    {hasId ? <BadgeCheck size={16} aria-label="National ID recorded" /> : <AlertTriangle size={16} aria-label="National ID not recorded" />}
+                  </button>
+                )
+              })}
+              {!loading && !error && filteredCustomers.length === 0 && <p className="customer-report-empty">No records match this search. Try a different name, phone, or filter.</p>}
+            </div>
+          </aside>
+          <section className={`customer-report-profile ${selectedCustomer ? 'has-selection' : ''}`} aria-live="polite">
+            {selectedCustomer ? <>
+              <div className="customer-report-profile-heading">
+                <span className="avatar">{selectedCustomer.name.slice(0, 2).toUpperCase()}</span>
+                <div><span className="eyebrow">Customer profile</span><h4>{selectedCustomer.name}</h4><p>{selectedCustomer.phone || 'No phone recorded'}</p></div>
+              </div>
+              <div className="customer-report-details">
+                <div><span>National ID</span><strong>{selectedCustomer.nationalIdNumber || 'Not recorded'}</strong></div>
+                <div><span>Added</span><strong>{selectedCustomer.createdAt ? dateText(selectedCustomer.createdAt) : 'Not recorded'}</strong></div>
+                <div className="customer-report-address"><span>Address</span><strong>{selectedCustomer.address || 'Not recorded'}</strong></div>
+                <div className="customer-report-address"><span>Notes</span><strong>{selectedCustomer.notes || 'No notes recorded'}</strong></div>
+              </div>
+              <button className="primary-button customer-report-open" onClick={onOpenCustomers}>Open full record <ArrowUpRight size={16} /></button>
+            </> : <div className="customer-report-empty-profile"><Users size={24} /><h4>Select a customer</h4><p>Choose someone from the list to see their saved contact and identity details.</p></div>}
+          </section>
         </div>
-        <div className="customer-report-list" aria-live="polite">
-          <p className="customer-report-count">{loading ? 'Loading customers…' : `${filteredCustomers.length} customer${filteredCustomers.length === 1 ? '' : 's'} found`}</p>
-          {error && <p className="customer-report-error">{error}</p>}
-          {!loading && !error && filteredCustomers.map((customer) => (
-            <article className="customer-report-row" key={customer._id}>
-              <span className="avatar">{customer.name.slice(0, 2).toUpperCase()}</span>
-              <div className="customer-report-identity"><strong>{customer.name}</strong><span>{customer.phone || 'No phone recorded'}</span></div>
-              <div className="customer-report-meta"><span>National ID</span><strong>{customer.nationalIdNumber || 'Not recorded'}</strong></div>
-              <div className="customer-report-meta"><span>Added</span><strong>{customer.createdAt ? dateText(customer.createdAt) : 'Not recorded'}</strong></div>
-            </article>
-          ))}
-          {!loading && !error && filteredCustomers.length === 0 && <p className="customer-report-empty">No customer records match this search or filter.</p>}
-        </div>
-        <footer className="detail-modal-footer"><button className="ghost-button" onClick={onClose}>Close</button></footer>
       </section>
     </div>
   )
