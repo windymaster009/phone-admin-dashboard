@@ -1535,6 +1535,25 @@ body.operation-modal-open {
     border-radius: 20px 20px 0 0;
   }
 
+  .operation-modal-backdrop:has(.operation-modal-stock) {
+    align-items: center;
+    padding: 16px;
+  }
+
+  .operation-modal-stock {
+    width: 100%;
+    height: min(80dvh, 640px);
+    max-height: calc(100dvh - 32px);
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    border-radius: 20px;
+  }
+
+  /* Keep the dialog inside the physical viewport as Display size increases. */
+  .app[data-font-size='comfortable'] .operation-modal-stock { height: min(72.7273dvh, 582px); max-height: calc(90.9091dvh - 29px); }
+  .app[data-font-size='large'] .operation-modal-stock { height: min(66.6667dvh, 533px); max-height: calc(83.3333dvh - 27px); }
+  .operation-modal-stock .operation-form { min-height: 0; overflow-y: auto; }
+
   .operation-modal-header,
   .operation-form {
     padding-left: 17px;
