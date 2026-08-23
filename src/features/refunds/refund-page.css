@@ -964,8 +964,8 @@
   }
 
   .refund-queue-list {
-    max-height: none;
     min-height: 0;
+    max-height: none;
   }
 
   .refund-review-empty {
@@ -975,6 +975,21 @@
   .refund-workbench-choosing .refund-review,
   .refund-workbench-reviewing .refund-queue {
     display: none;
+  }
+
+  .refund-workbench-choosing .refund-queue {
+    max-height: calc(100dvh - 11rem);
+    display: flex;
+    flex-direction: column;
+  }
+
+  .refund-workbench-choosing .refund-queue-list {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
   }
 
   .refund-mobile-step {
