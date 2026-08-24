@@ -1353,7 +1353,7 @@ td strong { color: var(--text); }
 .customer-report-details span { color: var(--muted-2); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .55px; }
 .customer-report-details strong { overflow-wrap: anywhere; color: var(--text); font-size: 11px; line-height: 1.45; }
 .customer-report-details .customer-report-address { grid-column: 1 / -1; min-height: 58px; }
-.customer-report-open { width: fit-content; margin-top: auto; white-space: nowrap; }
+.customer-report-open { width: fit-content; align-self: flex-start; margin-top: 18px; white-space: nowrap; }
 .customer-report-activity-heading { flex: 0 0 auto; }
 .customer-report-activity-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
 .supplier-report-summary { grid-template-columns: minmax(0, 1fr); }
