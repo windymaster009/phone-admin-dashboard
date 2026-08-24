@@ -124,7 +124,9 @@
     box-sizing: border-box;
     padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
     transform: translateX(-105%);
-    transition: transform 0.24s ease;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    transition: transform 160ms var(--ease-out);
     box-shadow: 25px 0 60px rgba(0, 0, 0, 0.3);
   }
   .sidebar.mobile-open { transform: translateX(0); }
@@ -132,7 +134,7 @@
   .sidebar-footer { flex: 0 0 auto; }
   .app[data-font-size='comfortable'] .sidebar { height: 90.9091dvh; max-height: 90.9091dvh; }
   .app[data-font-size='large'] .sidebar { height: 83.3333dvh; max-height: 83.3333dvh; }
-  .mobile-overlay { display: block; position: fixed; inset: 0; z-index: 25; pointer-events: none; opacity: 0; background: rgba(3, 7, 18, 0.6); transition: 0.2s ease; }
+  .mobile-overlay { display: block; position: fixed; inset: 0; z-index: 25; pointer-events: none; opacity: 0; background: rgba(3, 7, 18, 0.6); transition: opacity 160ms var(--ease-out); }
   .mobile-overlay.show { opacity: 1; pointer-events: auto; }
   .mobile-close, .mobile-menu { display: grid; place-items: center; }
   .topbar { padding: 0 18px; gap: 12px; }
