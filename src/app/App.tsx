@@ -2961,7 +2961,7 @@ function CustomerReportModal({ onClose, onOpenCustomers }: { onClose: () => void
   }), [customers, idFilter, search])
 
   return (
-    <div className="modal-backdrop" role="presentation" onClick={onClose}>
+    <div className="modal-backdrop customer-report-backdrop" role="presentation" onClick={onClose}>
       <section className="detail-modal surface-card customer-report-modal" role="dialog" aria-modal="true" aria-labelledby="customer-report-title" onClick={(event) => event.stopPropagation()}>
         <header className="detail-modal-header">
           <div>
