@@ -2217,6 +2217,7 @@ body.operation-modal-open {
   .sale-complete-workflow .record-created-actions button { min-width: 0; margin: 0; }
   .operation-modal-compact { width: 100%; height: min(100dvh,720px); max-height: 100dvh; border-radius: 16px 16px 0 0; }
   .operation-modal-pawn.operation-modal-compact { height: auto; }
+  .operation-modal-stock.operation-modal-compact { height: auto; }
   .operation-modal-compact .operation-modal-header { padding: 10px 12px; }
   .operation-modal-compact .operation-modal-header .eyebrow { display: none; }
   .operation-modal-compact .operation-modal-header h2 { margin: 0; font-size: 16px; }

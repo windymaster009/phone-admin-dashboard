@@ -114,6 +114,11 @@ type CreatedPawn = {
   currency: PawnCurrency
 }
 
+type CompletedStockAdjustment = {
+  itemName: string
+  detail: string
+}
+
 type SaleDraft = {
   type: 'SELL'
   customer?: string
@@ -477,6 +482,7 @@ export default function OperationModalBridge() {
   const [stockAdjustmentReason, setStockAdjustmentReason] = useState('')
   const [stockAdjustmentNotes, setStockAdjustmentNotes] = useState('')
   const [stockInventoryLoading, setStockInventoryLoading] = useState(false)
+  const [stockAdjustmentComplete, setStockAdjustmentComplete] = useState<CompletedStockAdjustment | null>(null)
   const [customers, setCustomers] = useState<Customer[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
   const [inventory, setInventory] = useState<InventoryItem[]>([])
@@ -887,6 +893,7 @@ export default function OperationModalBridge() {
     setStockAdjustmentReason('')
     setStockAdjustmentNotes('')
     setStockInventoryLoading(false)
+    setStockAdjustmentComplete(null)
     setEstimatedValue(0)
     setPawnAutoCalculate(getPawnAutoCalculatePreference())
     setPawnPercentage(45)
@@ -958,6 +965,10 @@ export default function OperationModalBridge() {
 
   const close = () => {
     if (busy) return
+    if (kind === 'stock' && stockAdjustmentComplete) {
+      window.location.reload()
+      return
+    }
     if (kind === 'pawn' && pawnCreated) {
       window.location.reload()
       return
@@ -1071,8 +1082,10 @@ export default function OperationModalBridge() {
     }
     try {
       await api(`/inventory/${selectedStockItem._id}/adjust`, { method: 'POST', body: JSON.stringify(payload) })
-      close()
-      window.location.reload()
+      const detail = stockIsSerialized
+        ? `Status set to ${stockAdjustmentStatus.replaceAll('_', ' ').toLowerCase()}`
+        : `Stock count is now ${Math.max(0, resultingStockQuantity ?? selectedStockItem.quantity)}`
+      setStockAdjustmentComplete({ itemName: selectedStockItem.name, detail })
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to adjust stock')
     } finally {
@@ -1532,13 +1545,25 @@ export default function OperationModalBridge() {
       kind={kind}
       error={error}
       busy={busy}
-      compact={(kind === 'sale' && Boolean(saleKhqr || saleCompleted)) || (kind === 'pawn' && Boolean(pawnCreated))}
+      compact={(kind === 'sale' && Boolean(saleKhqr || saleCompleted)) || (kind === 'pawn' && Boolean(pawnCreated)) || (kind === 'stock' && Boolean(stockAdjustmentComplete))}
       dismissible={!(kind === 'sale' && saleKhqr && !saleCompleted)}
       dismissOnBackdrop={!['pawn', 'purchase', 'scan', 'stock'].includes(kind)}
       dismissOnEscape={kind !== 'pawn'}
       onClose={close}
     >
-      {kind === 'stock' && <form className="operation-form stock-adjustment-form" onSubmit={submitStock}>
+      {kind === 'stock' && stockAdjustmentComplete && <section className="record-created-workflow" role="status" aria-live="polite">
+        <div className="record-created-card">
+          <span className="record-created-check"><CheckCircle2 size={38} /></span>
+          <div><span className="eyebrow">Stock updated</span><h3>Inventory adjustment saved</h3></div>
+          <dl>
+            <div><dt>Inventory item</dt><dd>{stockAdjustmentComplete.itemName}</dd></div>
+            <div><dt>Result</dt><dd><span>{stockAdjustmentComplete.detail}</span></dd></div>
+          </dl>
+        </div>
+        <footer className="operation-modal-actions"><button type="button" className="primary-button record-created-done" onClick={() => window.location.reload()}><CheckCircle2 size={16} /> Done</button></footer>
+      </section>}
+
+      {kind === 'stock' && !stockAdjustmentComplete && <form className="operation-form stock-adjustment-form" onSubmit={submitStock}>
         {!selectedStockItem ? <>
           <section className="stock-adjustment-intro">
             <span><Search size={19} /></span>
