@@ -131,18 +131,20 @@ type CustomerActivity = {
   occurredAt: string
 }
 
+type ReportCurrencyTotals = Record<PawnCurrency, number> & { usdEquivalent: number }
+
 type CustomerActivityReport = {
   summary: {
-    sales: Record<PawnCurrency, number>
-    purchases: Record<PawnCurrency, number>
-    pawned: Record<PawnCurrency, number>
+    sales: ReportCurrencyTotals
+    purchases: ReportCurrencyTotals
+    pawned: ReportCurrencyTotals
   }
   activities: CustomerActivity[]
   limited: boolean
 }
 
 type SupplierActivityReport = {
-  summary: { purchases: Record<PawnCurrency, number> }
+  summary: { purchases: ReportCurrencyTotals }
   activities: Array<{
     id: string
     reference: string
@@ -3075,9 +3077,9 @@ function CustomerReportModal({ onClose }: { onClose: () => void }) {
                 <div><span className="eyebrow">Customer activity</span><h4>{selectedCustomer.name}</h4><p>Sales, purchases, and pawn contracts linked to this customer.</p></div>
               </div>
               <div className="customer-report-activity-summary" aria-label="Customer activity totals">
-                <div><span>Sales</span><div className="customer-report-currency-values"><p><span>USD</span><strong>{pawnMoney(activityReport.summary.sales.USD)}</strong></p><p><span>KHR</span><strong>{pawnMoney(activityReport.summary.sales.KHR, 'KHR')}</strong></p></div></div>
-                <div><span>Purchases</span><div className="customer-report-currency-values"><p><span>USD</span><strong>{pawnMoney(activityReport.summary.purchases.USD)}</strong></p><p><span>KHR</span><strong>{pawnMoney(activityReport.summary.purchases.KHR, 'KHR')}</strong></p></div></div>
-                <div><span>Pawned</span><div className="customer-report-currency-values"><p><span>USD</span><strong>{pawnMoney(activityReport.summary.pawned.USD)}</strong></p><p><span>KHR</span><strong>{pawnMoney(activityReport.summary.pawned.KHR, 'KHR')}</strong></p></div></div>
+                <div><span>Sales</span><div className="customer-report-currency-values"><p><span>USD (converted)</span><strong>{pawnMoney(activityReport.summary.sales.usdEquivalent)}</strong></p><p><span>KHR recorded</span><strong>{pawnMoney(activityReport.summary.sales.KHR, 'KHR')}</strong></p></div></div>
+                <div><span>Purchases</span><div className="customer-report-currency-values"><p><span>USD (converted)</span><strong>{pawnMoney(activityReport.summary.purchases.usdEquivalent)}</strong></p><p><span>KHR recorded</span><strong>{pawnMoney(activityReport.summary.purchases.KHR, 'KHR')}</strong></p></div></div>
+                <div><span>Pawned</span><div className="customer-report-currency-values"><p><span>USD (converted)</span><strong>{pawnMoney(activityReport.summary.pawned.usdEquivalent)}</strong></p><p><span>KHR recorded</span><strong>{pawnMoney(activityReport.summary.pawned.KHR, 'KHR')}</strong></p></div></div>
               </div>
               <div className="customer-report-activity-list">
                 <div className="customer-report-activity-list-heading"><strong>History</strong><small>{activityReport.activities.length} record{activityReport.activities.length === 1 ? '' : 's'}{activityReport.limited ? ' · latest 200' : ''}</small></div>
@@ -3184,7 +3186,7 @@ function SupplierReportModal({ onClose }: { onClose: () => void }) {
             {selectedSupplier && activityReport ? <>
               <button type="button" className="customer-report-dismiss" onClick={() => setActivityReport(null)}><ArrowLeft size={16} /> Back to profile</button>
               <div className="customer-report-profile-heading customer-report-activity-heading"><span className="avatar">{selectedSupplier.name.slice(0, 2).toUpperCase()}</span><div><span className="eyebrow">Supplier activity</span><h4>{selectedSupplier.name}</h4><p>Purchases linked to this supplier.</p></div></div>
-              <div className="customer-report-activity-summary supplier-report-summary" aria-label="Supplier purchase total"><div><span>Total purchases</span><div className="customer-report-currency-values"><p><span>USD</span><strong>{pawnMoney(activityReport.summary.purchases.USD)}</strong></p><p><span>KHR</span><strong>{pawnMoney(activityReport.summary.purchases.KHR, 'KHR')}</strong></p></div></div></div>
+              <div className="customer-report-activity-summary supplier-report-summary" aria-label="Supplier purchase total"><div><span>Total purchases</span><div className="customer-report-currency-values"><p><span>USD (converted)</span><strong>{pawnMoney(activityReport.summary.purchases.usdEquivalent)}</strong></p><p><span>KHR recorded</span><strong>{pawnMoney(activityReport.summary.purchases.KHR, 'KHR')}</strong></p></div></div></div>
               <div className="customer-report-activity-list"><div className="customer-report-activity-list-heading"><strong>Purchase history</strong><small>{activityReport.activities.length} record{activityReport.activities.length === 1 ? '' : 's'}{activityReport.limited ? ' · latest 100' : ''}</small></div>{activityReport.activities.map((activity) => <article className="customer-report-activity-row purchase" key={activity.id}><span className="transaction-icon"><ShoppingCart size={16} /></span><div><strong>Purchased from supplier</strong><small>{activity.reference} · {dateText(activity.occurredAt)} · {activity.currency}</small><p>{activity.title}</p></div><aside><strong>{pawnMoney(activity.amount, activity.currency)}</strong><small>{titleStatus(activity.status)}</small></aside></article>)}{activityReport.activities.length === 0 && <p className="customer-report-empty">No purchases are linked to this supplier yet.</p>}</div>
             </> : selectedSupplier ? <>
               <button type="button" className="customer-report-dismiss" onClick={() => setSelectedSupplier(null)}><ChevronDown size={16} /> Back to list</button>

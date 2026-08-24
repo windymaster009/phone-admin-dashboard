@@ -355,6 +355,16 @@ function saleAmountFromUsd(amount, currency, exchangeRate) {
   return roundSaleCurrency(currency === 'KHR' ? Number(amount || 0) * exchangeRate : amount, currency)
 }
 
+function reportExchangeRate(value) {
+  const rate = Number(value)
+  return rate >= 1000 && rate <= 10000 ? rate : fallbackExchangeRate()
+}
+
+function reportAmountToUsd(amount, currency, exchangeRate) {
+  const value = Number(amount) || 0
+  return roundMoney(currency === 'KHR' ? value / reportExchangeRate(exchangeRate) : value)
+}
+
 function salePricing(item, role, currency = 'USD', exchangeRate = 1) {
   const savedUsdUnitPrice = roundMoney(item?.sellPrice)
   const savedUsdMinimum = roundMoney(item?.minimumSellPrice)
@@ -1689,27 +1699,28 @@ router.get('/customers/:id/activity-report', requireAuth, allowRoles('OWNER', 'M
   await refreshPawnStatuses()
   const [trades, pawns] = await Promise.all([
     Trade.find({ customer: customer._id })
-      .select('tradeNo type currency transactionTotal total status purchaseDate createdAt items')
+      .select('tradeNo type currency exchangeRate transactionTotal total status purchaseDate createdAt items')
       .sort({ createdAt: -1 })
       .limit(100),
     Pawn.find({ customer: customer._id })
-      .select('pawnNo principal currency status itemSnapshot issueDate createdAt')
+      .select('pawnNo principal currency exchangeRate status itemSnapshot issueDate createdAt')
       .sort({ issueDate: -1, createdAt: -1 })
       .limit(100),
   ])
 
-  const emptyTotals = () => ({ USD: 0, KHR: 0 })
+  const emptyTotals = () => ({ USD: 0, KHR: 0, usdEquivalent: 0 })
   const summary = { sales: emptyTotals(), purchases: emptyTotals(), pawned: emptyTotals() }
-  const addTotal = (totals, amount, currency) => {
+  const addTotal = (totals, amount, currency, exchangeRate) => {
     const key = currency === 'KHR' ? 'KHR' : 'USD'
     totals[key] = roundMoney(totals[key] + (Number(amount) || 0))
+    totals.usdEquivalent = roundMoney(totals.usdEquivalent + reportAmountToUsd(amount, key, exchangeRate))
   }
 
   const activities = [
     ...trades.map((trade) => {
       const amount = Number(trade.transactionTotal ?? trade.total) || 0
       const kind = trade.type === 'SELL' ? 'SALE' : 'PURCHASE'
-      addTotal(kind === 'SALE' ? summary.sales : summary.purchases, amount, trade.currency)
+      addTotal(kind === 'SALE' ? summary.sales : summary.purchases, amount, trade.currency, trade.exchangeRate)
       return {
         id: `trade-${trade._id}`,
         kind,
@@ -1722,7 +1733,7 @@ router.get('/customers/:id/activity-report', requireAuth, allowRoles('OWNER', 'M
       }
     }),
     ...pawns.map((pawn) => {
-      addTotal(summary.pawned, pawn.principal, pawn.currency)
+      addTotal(summary.pawned, pawn.principal, pawn.currency, pawn.exchangeRate)
       return {
         id: `pawn-${pawn._id}`,
         kind: 'PAWN',
@@ -1806,15 +1817,16 @@ router.get('/suppliers/:id/activity-report', requireAuth, allowRoles('OWNER', 'M
   if (!supplier) throw requestError(404, 'Supplier was not found')
 
   const trades = await Trade.find({ supplier: supplier._id, type: 'BUY' })
-    .select('tradeNo currency transactionTotal total status purchaseDate createdAt items')
+    .select('tradeNo currency exchangeRate transactionTotal total status purchaseDate createdAt items')
     .sort({ purchaseDate: -1, createdAt: -1 })
     .limit(100)
 
-  const totals = { USD: 0, KHR: 0 }
+  const totals = { USD: 0, KHR: 0, usdEquivalent: 0 }
   const activities = trades.map((trade) => {
     const amount = Number(trade.transactionTotal ?? trade.total) || 0
     const currency = trade.currency === 'KHR' ? 'KHR' : 'USD'
     totals[currency] = roundMoney(totals[currency] + amount)
+    totals.usdEquivalent = roundMoney(totals.usdEquivalent + reportAmountToUsd(amount, currency, trade.exchangeRate))
     return {
       id: `trade-${trade._id}`,
       reference: trade.tradeNo,
