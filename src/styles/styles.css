@@ -1827,15 +1827,21 @@ a:focus-visible,
   .calculator-card .card-heading .eyebrow,
   .calculator-card .calculator-mark { display: none; }
   .calculator-card .card-heading h3 { margin: 0; font-size: 15px; }
-  .calculator-card .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px 9px; margin-top: 14px; }
-  .calculator-card .form-grid > label:nth-child(3),
-  .calculator-card .form-grid > label:nth-child(4),
-  .calculator-card .form-grid > label:nth-child(5) { grid-column: 1 / -1; }
-  .calculator-card .calculator-risk-grid { grid-template-columns: 1fr; }
-  .calculator-card .calculator-risk-grid > label { grid-column: 1 / -1; }
-  .calculator-section { margin-top: 14px; padding-top: 13px; }
-  .calculator-section-heading small { font-size: 8px; }
-  .pawn-policy-control { grid-template-columns: 1fr; gap: 12px; margin-top: 14px; padding: 12px; }
+  .calculator-card .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 8px; margin-top: 12px; }
+  .calculator-card .calculator-resale-grid > label:nth-child(5) { grid-column: 1 / -1; }
+  .calculator-card .calculator-risk-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .calculator-card .calculator-risk-grid .calculator-accessories { grid-column: 1 / -1; }
+  .calculator-section { margin-top: 13px; padding-top: 12px; }
+  .calculator-section-heading { gap: 2px; }
+  .calculator-section-heading small { display: none; }
+  .calculator-card .calculator-accessories legend { margin-bottom: 6px; font-size: 9px; }
+  .calculator-card .calculator-accessories > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .calculator-card .calculator-risk-grid .calculator-accessories label { min-width: 0; min-height: 36px; justify-content: center; gap: 5px; padding: 0 5px; font-size: 7px; white-space: nowrap; }
+  .calculator-card .calculator-accessories input { width: 13px; height: 13px; flex-basis: 13px; }
+  .calculator-card .calculator-accessories > small { margin-top: 5px; font-size: 7px; }
+  .pawn-policy-control { grid-template-columns: 1fr; gap: 9px; margin-top: 13px; padding: 11px; }
+  .pawn-policy-control > div { gap: 2px; }
+  .pawn-policy-control > div small { display: none; }
   .calculator-card .form-grid label { gap: 6px; font-size: 9px; }
   .calculator-card .form-grid input,
   .calculator-card .form-grid select { height: 40px; padding-inline: 10px; }
@@ -1863,6 +1869,14 @@ a:focus-visible,
   .valuation-side .valuation-checklist p { display: none; }
   .valuation-side .valuation-checklist h3 { margin: 0; font-size: 12px; }
   .valuation-checklist .verification-chips { grid-column: 1 / -1; justify-content: flex-start; }
+  .app[data-font-size='comfortable'] .calculator-card .form-grid { gap: 9px 7px; }
+  .app[data-font-size='comfortable'] .calculator-card .calculator-risk-grid .calculator-accessories label { min-height: 33px; padding-inline: 4px; }
+  .app[data-font-size='large'] .calculator-card .form-grid,
+  .app[data-font-size='large'] .calculator-card .calculator-risk-grid { grid-template-columns: minmax(0, 1fr); }
+  .app[data-font-size='large'] .calculator-card .calculator-resale-grid > label:nth-child(5),
+  .app[data-font-size='large'] .calculator-card .calculator-risk-grid .calculator-accessories { grid-column: auto; }
+  .app[data-font-size='large'] .calculator-card .calculator-accessories > div { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app[data-font-size='large'] .calculator-card .calculator-risk-grid .calculator-accessories label { min-height: 32px; padding-inline: 7px; font-size: 8px; }
   .mobile-record-empty { margin: 0; padding: 24px 14px; color: var(--muted); font-size: 10px; text-align: center; }
   .pawn-management-table { display: none; }
   .pawn-management-mobile-list { display: grid; }

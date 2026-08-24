@@ -2461,7 +2461,7 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
 
           <div className="calculator-section">
             <div className="calculator-section-heading"><strong>1. Resale value</strong><small>Use a recent second-hand selling price, not the original retail price.</small></div>
-            <div className="form-grid">
+            <div className="form-grid calculator-resale-grid">
               <label><span>Valuation currency</span><select value={valuationCurrency} onChange={(event) => changeValuationCurrency(event.target.value as PawnCurrency)}><option value="USD">USD — US Dollar</option><option value="KHR" disabled={!exchangeRate}>KHR — Cambodian Riel</option></select></label>
               <label><span>Resale value</span><div className="input-prefix"><span>{valuationCurrency}</span><MoneyInput currency={valuationCurrency} value={marketPrice} onValueChange={(value) => setMarketPrice(Number(value))} /></div></label>
               <label><span>Phone age</span><div className="input-suffix"><input type="number" min="0" max="120" value={ageMonths} onChange={(event) => setAgeMonths(Number(event.target.value))} /><span>months</span></div></label>
