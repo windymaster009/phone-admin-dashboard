@@ -12,5 +12,12 @@
     "theme": "existing PhoneFlow",
     "enrichment": "none",
     "brief": "Owner and manager refund queue with transaction review and stock disposition"
+  },
+  {
+    "date": "2026-08-25",
+    "macrostructure": "Split Studio",
+    "theme": "existing PhoneFlow",
+    "enrichment": "none",
+    "brief": "Security-first customer document vault with compact status, customer navigator, upload flow, and responsive file management"
   }
 ]

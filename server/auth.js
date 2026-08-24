@@ -100,9 +100,9 @@ export function allowRoles(...roles) {
   }
 }
 
-export async function writeActivity(req, { action, entity, entityId, details }) {
+export async function writeActivity(req, { action, entity, entityId, details }, { required = false, session } = {}) {
   try {
-    await ActivityLog.create({
+    const activity = new ActivityLog({
       user: req.user?._id,
       action,
       entity,
@@ -110,7 +110,11 @@ export async function writeActivity(req, { action, entity, entityId, details }) 
       details,
       ipAddress: req.ip,
     })
+    await activity.save({ session })
+    return activity
   } catch (error) {
     console.error('Activity log failed:', error.message)
+    if (required) throw error
+    return null
   }
 }

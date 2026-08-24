@@ -27,6 +27,11 @@ Add the result to the server `.env`:
 ```env
 DOCUMENT_ENCRYPTION_KEY=<generated-base64-key>
 DOCUMENT_MAX_BYTES=5242880
+DOCUMENT_CUSTOMER_MAX_BYTES=104857600
+DOCUMENT_TOTAL_MAX_BYTES=524288000
+DOCUMENT_CUSTOMER_MAX_COUNT=100
+DOCUMENT_TOTAL_MAX_COUNT=5000
+DOCUMENT_UPLOAD_RATE_LIMIT=12
 ```
 
 Restart the API server after changing `.env`.
@@ -48,6 +53,8 @@ The UI displays a short key fingerprint so operators can confirm which key is ac
 
 Every upload, view, download, and deletion is written to the existing activity log. The log stores document category and record IDs, not decrypted file bytes.
 
+Secure document actions fail closed when their required audit entry cannot be saved. A file is not returned, created, or deleted unless the matching activity record succeeds. Document API responses also use `Cache-Control: private, no-store`.
+
 ## File validation
 
 The API:
@@ -59,8 +66,12 @@ The API:
 5. Rejects a mismatch between the declared type and actual bytes.
 6. Rejects an exact duplicate in the same customer/category.
 7. Encrypts the bytes before MongoDB receives the document record.
+8. Enforces per-customer and shop-wide byte quotas inside a database transaction.
+9. Limits each signed-in staff account to the configured number of uploads per 15 minutes.
 
 SVG, HTML, JavaScript, executables, archives, and office macro files are not accepted.
+
+The transaction-backed quota counter uses a shared MongoDB record so concurrent uploads cannot bypass the storage limits. Production MongoDB must support transactions (Atlas and replica sets do). If documents were inserted outside PhoneFlow, reconcile the usage counter before accepting more uploads.
 
 ## Linking evidence
 
@@ -98,6 +109,7 @@ After a restore drill, open one secure image and one secure PDF to confirm that 
 ## Production notes
 
 - Use HTTPS in production; encryption at rest does not protect an unencrypted network connection.
+- The file bytes are encrypted. Category, filename, reference, and internal note remain authorized metadata, so keep notes short and do not paste unnecessary identity data into them.
 - Protect MongoDB credentials and the document key as separate secrets.
 - Limit server and Atlas access to authorized administrators.
 - Do not share downloaded National ID files through public chat or email unless the shop has an approved process.
