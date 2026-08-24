@@ -3771,11 +3771,6 @@ function App({
             <span><BadgeCheck size={19} /></span>
             <p><strong>Daily backup</strong><small>Checking status</small></p>
           </div>
-          <div className="user-card">
-            <span className="avatar large">WN</span>
-            <p><strong>{user.name}</strong><small>{titleStatus(user.role)}</small></p>
-            <button className="icon-button" onClick={onLogout} aria-label="Log out"><X size={16} /></button>
-          </div>
         </div>
       </aside>
 
