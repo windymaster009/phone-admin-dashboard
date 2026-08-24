@@ -111,6 +111,15 @@ type Customer = {
   createdAt?: string
 }
 
+type Supplier = {
+  _id: string
+  name: string
+  phone?: string
+  nationalIdNumber?: string
+  notes?: string
+  createdAt?: string
+}
+
 type CustomerActivity = {
   id: string
   kind: 'SALE' | 'PURCHASE' | 'PAWN'
@@ -129,6 +138,20 @@ type CustomerActivityReport = {
     pawned: Record<PawnCurrency, number>
   }
   activities: CustomerActivity[]
+  limited: boolean
+}
+
+type SupplierActivityReport = {
+  summary: { purchases: Record<PawnCurrency, number> }
+  activities: Array<{
+    id: string
+    reference: string
+    title: string
+    amount: number
+    currency: PawnCurrency
+    status: string
+    occurredAt: string
+  }>
   limited: boolean
 }
 
@@ -2903,11 +2926,13 @@ const reportSections = [
   { slug: 'loans', title: 'Loans', description: 'Outstanding loans, repayments, and overdue balances', icon: WalletCards, tone: 'blue' },
   { slug: 'payments', title: 'Payments', description: 'Cash, KHQR, bank, card, and daily closing', icon: Banknote, tone: 'rose' },
   { slug: 'customers', title: 'Customer report', description: 'Customer profiles, contact records, and transaction history', icon: Users, tone: 'blue' },
+  { slug: 'suppliers', title: 'Supplier report', description: 'Supplier profiles, contacts, and purchase history', icon: Building2, tone: 'orange' },
   { slug: 'activity', title: 'Activity', description: 'Staff actions and audit history', icon: FileText, tone: 'orange' },
 ] as const
 
 function ReportLanding({ navigate }: { navigate: (path: string) => void }) {
   const [customerReportOpen, setCustomerReportOpen] = useState(false)
+  const [supplierReportOpen, setSupplierReportOpen] = useState(false)
   const financialReports = reportSections.filter((report) => ['sales', 'purchases', 'payments'].includes(report.slug))
   const operationalReports = reportSections.filter((report) => !['sales', 'purchases', 'payments'].includes(report.slug))
   const reportCard = (report: typeof reportSections[number]) => {
@@ -2918,8 +2943,8 @@ function ReportLanding({ navigate }: { navigate: (path: string) => void }) {
         type="button"
         className="surface-card report-hub-card"
         key={slug}
-        onClick={() => slug === 'customers' ? setCustomerReportOpen(true) : navigate(`/reports/${slug}`)}
-        aria-haspopup={slug === 'customers' ? 'dialog' : undefined}
+        onClick={() => slug === 'customers' ? setCustomerReportOpen(true) : slug === 'suppliers' ? setSupplierReportOpen(true) : navigate(`/reports/${slug}`)}
+        aria-haspopup={slug === 'customers' || slug === 'suppliers' ? 'dialog' : undefined}
       >
         <span className={`metric-icon tone-${tone}`}><Icon size={21} /></span>
         <span className="report-hub-copy"><strong>{title}</strong><small>{description}</small></span>
@@ -2945,6 +2970,7 @@ function ReportLanding({ navigate }: { navigate: (path: string) => void }) {
       </section>
       <p className="report-hub-note"><AlertTriangle size={15} />Exports will be added only after all report calculations and workflows are verified.</p>
       {customerReportOpen && <CustomerReportModal onClose={() => setCustomerReportOpen(false)} />}
+      {supplierReportOpen && <SupplierReportModal onClose={() => setSupplierReportOpen(false)} />}
     </div>
   )
 }
@@ -3076,6 +3102,97 @@ function CustomerReportModal({ onClose }: { onClose: () => void }) {
               <button className="primary-button customer-report-open" onClick={() => void openActivityReport()} disabled={activityLoading}>{activityLoading ? 'Loading report…' : 'Open activity report'} <ArrowUpRight size={16} /></button>
               {activityError && <p className="customer-report-activity-error" role="alert">{activityError}</p>}
             </> : <div className="customer-report-empty-profile"><Users size={24} /><h4>Select a customer</h4><p>Choose someone from the list to see their saved contact and identity details.</p></div>}
+          </section>
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function SupplierReportModal({ onClose }: { onClose: () => void }) {
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [search, setSearch] = useState('')
+  const [idFilter, setIdFilter] = useState<'all' | 'recorded' | 'missing'>('all')
+  const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null)
+  const [activityReport, setActivityReport] = useState<SupplierActivityReport | null>(null)
+  const [activityLoading, setActivityLoading] = useState(false)
+  const [activityError, setActivityError] = useState('')
+
+  useEffect(() => {
+    api<{ suppliers: Supplier[] }>('/suppliers')
+      .then((result) => setSuppliers(result.suppliers))
+      .catch((reason: Error) => setError(reason.message))
+      .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
+  const filteredSuppliers = useMemo(() => suppliers.filter((supplier) => {
+    const term = search.trim().toLowerCase()
+    const matchesSearch = !term || [supplier.name, supplier.phone, supplier.nationalIdNumber, supplier.notes]
+      .some((value) => String(value || '').toLowerCase().includes(term))
+    const hasId = Boolean(supplier.nationalIdNumber)
+    return matchesSearch && (idFilter === 'all' || (idFilter === 'recorded' ? hasId : !hasId))
+  }), [suppliers, idFilter, search])
+
+  const openActivityReport = async () => {
+    if (!selectedSupplier) return
+    setActivityLoading(true)
+    setActivityError('')
+    try {
+      const report = await api<SupplierActivityReport>(`/suppliers/${selectedSupplier._id}/activity-report`)
+      setActivityReport(report)
+    } catch (reason) {
+      setActivityError(reason instanceof Error ? reason.message : 'Unable to load this supplier purchase report')
+    } finally {
+      setActivityLoading(false)
+    }
+  }
+
+  return (
+    <div className="modal-backdrop customer-report-backdrop" role="presentation" onClick={onClose}>
+      <section className="detail-modal surface-card customer-report-modal supplier-report-modal" role="dialog" aria-modal="true" aria-labelledby="supplier-report-title" onClick={(event) => event.stopPropagation()}>
+        <header className="detail-modal-header">
+          <div><span className="eyebrow">Supplier report</span><h3 id="supplier-report-title">Find a supplier</h3><p>Search the directory, then review the supplier’s linked purchases.</p></div>
+          <button className="icon-button" onClick={onClose} aria-label="Close supplier report"><X size={18} /></button>
+        </header>
+        <div className="customer-report-workspace">
+          <aside className="customer-report-browser" aria-label="Supplier list">
+            <label className="customer-report-search"><span>Search suppliers</span><div className="search-field"><Search size={17} /><input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, phone, or National ID" disabled={loading} /></div></label>
+            <label className="customer-report-filter"><span>Show</span><select value={idFilter} onChange={(event) => setIdFilter(event.target.value as typeof idFilter)} disabled={loading}><option value="all">All suppliers</option><option value="recorded">ID recorded</option><option value="missing">Needs ID</option></select></label>
+            <p className="customer-report-count" aria-live="polite">{loading ? 'Loading suppliers…' : `${filteredSuppliers.length} supplier${filteredSuppliers.length === 1 ? '' : 's'} found`}</p>
+            <div className="customer-report-list">
+              {loading && Array.from({ length: 6 }, (_, index) => <div className="customer-report-skeleton" key={index} aria-hidden="true" />)}
+              {error && <p className="customer-report-error">Unable to load suppliers. {error}</p>}
+              {!loading && !error && filteredSuppliers.map((supplier) => {
+                const isSelected = selectedSupplier?._id === supplier._id
+                const hasId = Boolean(supplier.nationalIdNumber)
+                return <button type="button" className={`customer-report-picker ${isSelected ? 'is-selected' : ''}`} key={supplier._id} onClick={() => { setSelectedSupplier(supplier); setActivityReport(null); setActivityError('') }} aria-pressed={isSelected}><span className="avatar">{supplier.name.slice(0, 2).toUpperCase()}</span><span><strong>{supplier.name}</strong><small>{supplier.phone || 'No phone recorded'}</small></span>{hasId ? <BadgeCheck size={16} aria-label="National ID recorded" /> : <AlertTriangle size={16} aria-label="National ID not recorded" />}</button>
+              })}
+              {!loading && !error && filteredSuppliers.length === 0 && <p className="customer-report-empty">No records match this search. Try a different name, phone, or filter.</p>}
+            </div>
+          </aside>
+          <section className={`customer-report-profile ${selectedSupplier ? 'has-selection' : ''}`} aria-live="polite">
+            {selectedSupplier && activityReport ? <>
+              <button type="button" className="customer-report-dismiss" onClick={() => setActivityReport(null)}><ArrowLeft size={16} /> Back to profile</button>
+              <div className="customer-report-profile-heading customer-report-activity-heading"><span className="avatar">{selectedSupplier.name.slice(0, 2).toUpperCase()}</span><div><span className="eyebrow">Supplier activity</span><h4>{selectedSupplier.name}</h4><p>Purchases linked to this supplier.</p></div></div>
+              <div className="customer-report-activity-summary supplier-report-summary" aria-label="Supplier purchase total"><div><span>Total purchases</span><strong>{pawnMoney(activityReport.summary.purchases.USD)}<small>{activityReport.summary.purchases.KHR ? pawnMoney(activityReport.summary.purchases.KHR, 'KHR') : ''}</small></strong></div></div>
+              <div className="customer-report-activity-list"><div className="customer-report-activity-list-heading"><strong>Purchase history</strong><small>{activityReport.activities.length} record{activityReport.activities.length === 1 ? '' : 's'}{activityReport.limited ? ' · latest 100' : ''}</small></div>{activityReport.activities.map((activity) => <article className="customer-report-activity-row purchase" key={activity.id}><span className="transaction-icon"><ShoppingCart size={16} /></span><div><strong>Purchased from supplier</strong><small>{activity.reference} · {dateText(activity.occurredAt)}</small><p>{activity.title}</p></div><aside><strong>{pawnMoney(activity.amount, activity.currency)}</strong><small>{titleStatus(activity.status)}</small></aside></article>)}{activityReport.activities.length === 0 && <p className="customer-report-empty">No purchases are linked to this supplier yet.</p>}</div>
+            </> : selectedSupplier ? <>
+              <button type="button" className="customer-report-dismiss" onClick={() => setSelectedSupplier(null)}><ChevronDown size={16} /> Back to list</button>
+              <div className="customer-report-profile-heading"><span className="avatar">{selectedSupplier.name.slice(0, 2).toUpperCase()}</span><div><span className="eyebrow">Supplier profile</span><h4>{selectedSupplier.name}</h4><p>{selectedSupplier.phone || 'No phone recorded'}</p></div></div>
+              <div className="customer-report-details"><div><span>National ID</span><strong>{selectedSupplier.nationalIdNumber || 'Not recorded'}</strong></div><div><span>Added</span><strong>{selectedSupplier.createdAt ? dateText(selectedSupplier.createdAt) : 'Not recorded'}</strong></div><div className="customer-report-address"><span>Notes</span><strong>{selectedSupplier.notes || 'No notes recorded'}</strong></div></div>
+              <button className="primary-button customer-report-open" onClick={() => void openActivityReport()} disabled={activityLoading}>{activityLoading ? 'Loading report…' : 'Open purchase report'} <ArrowUpRight size={16} /></button>
+              {activityError && <p className="customer-report-activity-error" role="alert">{activityError}</p>}
+            </> : <div className="customer-report-empty-profile"><Building2 size={24} /><h4>Select a supplier</h4><p>Choose a supplier from the list to view their saved contact details and purchase history.</p></div>}
           </section>
         </div>
       </section>

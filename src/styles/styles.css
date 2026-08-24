@@ -1356,6 +1356,7 @@ td strong { color: var(--text); }
 .customer-report-open { width: fit-content; margin-top: auto; white-space: nowrap; }
 .customer-report-activity-heading { flex: 0 0 auto; }
 .customer-report-activity-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
+.supplier-report-summary { grid-template-columns: minmax(0, 1fr); }
 .customer-report-activity-summary > div { min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-soft); }
 .customer-report-activity-summary span, .customer-report-activity-list-heading small, .customer-report-activity-row small { display: block; color: var(--muted-2); font-size: 8px; font-weight: 700; }
 .customer-report-activity-summary > div > strong { display: block; margin-top: 5px; overflow: hidden; color: var(--text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }

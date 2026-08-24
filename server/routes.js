@@ -1800,6 +1800,35 @@ router.get('/suppliers', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), a
   res.json({ suppliers })
 }))
 
+router.get('/suppliers/:id/activity-report', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) throw requestError(400, 'Supplier ID is invalid')
+  const supplier = await Supplier.findById(req.params.id)
+  if (!supplier) throw requestError(404, 'Supplier was not found')
+
+  const trades = await Trade.find({ supplier: supplier._id, type: 'BUY' })
+    .select('tradeNo currency transactionTotal total status purchaseDate createdAt items')
+    .sort({ purchaseDate: -1, createdAt: -1 })
+    .limit(100)
+
+  const totals = { USD: 0, KHR: 0 }
+  const activities = trades.map((trade) => {
+    const amount = Number(trade.transactionTotal ?? trade.total) || 0
+    const currency = trade.currency === 'KHR' ? 'KHR' : 'USD'
+    totals[currency] = roundMoney(totals[currency] + amount)
+    return {
+      id: `trade-${trade._id}`,
+      reference: trade.tradeNo,
+      title: (trade.items || []).map((item) => `${item.name} ×${item.quantity}`).join(', ') || 'Purchase recorded',
+      amount: roundMoney(amount),
+      currency,
+      status: trade.status,
+      occurredAt: trade.purchaseDate || trade.createdAt,
+    }
+  })
+
+  res.json({ supplier, summary: { purchases: totals }, activities, limited: activities.length >= 100 })
+}))
+
 router.post('/suppliers', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
   const name = clean(req.body.name)
   if (!name) return res.status(400).json({ message: 'Supplier name is required' })
