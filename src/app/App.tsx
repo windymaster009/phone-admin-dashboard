@@ -11,6 +11,7 @@ import {
   Building2,
   Boxes,
   Calculator,
+  CalendarRange,
   ChevronDown,
   CircleDollarSign,
   Clock3,
@@ -134,7 +135,17 @@ type CustomerActivity = {
 
 type ReportCurrencyTotals = Record<PawnCurrency, number> & { usdEquivalent: number }
 
+type DirectoryReportPeriodKey = 'all_time' | 'this_month' | 'last_month' | 'last_3_months' | 'last_6_months' | 'this_year' | 'custom'
+
+type DirectoryReportPeriod = {
+  key: DirectoryReportPeriodKey
+  label: string
+  from: string
+  to: string
+}
+
 type CustomerActivityReport = {
+  period: DirectoryReportPeriod
   summary: {
     sales: ReportCurrencyTotals
     purchases: ReportCurrencyTotals
@@ -145,6 +156,7 @@ type CustomerActivityReport = {
 }
 
 type SupplierActivityReport = {
+  period: DirectoryReportPeriod
   summary: { purchases: ReportCurrencyTotals }
   activities: Array<{
     id: string
@@ -3003,6 +3015,63 @@ function ReportLanding({ navigate }: { navigate: (path: string) => void }) {
   )
 }
 
+const directoryReportPeriodOptions: Array<{ value: DirectoryReportPeriodKey; label: string }> = [
+  { value: 'all_time', label: 'All history' },
+  { value: 'this_month', label: 'This month' },
+  { value: 'last_month', label: 'Last month' },
+  { value: 'last_3_months', label: 'Last 3 months' },
+  { value: 'last_6_months', label: 'Last 6 months' },
+  { value: 'this_year', label: 'This year' },
+  { value: 'custom', label: 'Custom months' },
+]
+
+function currentCambodiaMonth() {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: '2-digit',
+    timeZone: 'Asia/Phnom_Penh',
+  }).formatToParts(new Date())
+  const year = parts.find((part) => part.type === 'year')?.value
+  const month = parts.find((part) => part.type === 'month')?.value
+  return `${year}-${month}`
+}
+
+function ReportMonthRangeControls({
+  period,
+  fromMonth,
+  toMonth,
+  resultLabel,
+  loading,
+  onPeriodChange,
+  onFromMonthChange,
+  onToMonthChange,
+  onApply,
+}: {
+  period: DirectoryReportPeriodKey
+  fromMonth: string
+  toMonth: string
+  resultLabel: string
+  loading: boolean
+  onPeriodChange: (period: DirectoryReportPeriodKey) => void
+  onFromMonthChange: (month: string) => void
+  onToMonthChange: (month: string) => void
+  onApply: () => void
+}) {
+  const customRangeInvalid = !fromMonth || !toMonth || fromMonth > toMonth
+
+  return (
+    <form className="customer-report-period" onSubmit={(event) => { event.preventDefault(); if (!customRangeInvalid) onApply() }} aria-label="Report month range">
+      <div className="customer-report-period-heading"><CalendarRange size={17} /><span><strong>Month range</strong><small>Showing {resultLabel}</small></span></div>
+      <label><span>Period</span><select value={period} onChange={(event) => onPeriodChange(event.target.value as DirectoryReportPeriodKey)} disabled={loading}>{directoryReportPeriodOptions.map((option) => <option value={option.value} key={option.value}>{option.label}</option>)}</select></label>
+      {period === 'custom' && <div className="customer-report-custom-months">
+        <label><span>From</span><input type="month" value={fromMonth} max={toMonth || undefined} aria-invalid={customRangeInvalid} onChange={(event) => onFromMonthChange(event.target.value)} disabled={loading} /></label>
+        <label><span>To</span><input type="month" value={toMonth} min={fromMonth || undefined} aria-invalid={customRangeInvalid} onChange={(event) => onToMonthChange(event.target.value)} disabled={loading} /></label>
+        <button type="submit" className="secondary-button" disabled={loading || customRangeInvalid}>{loading ? 'Loading…' : 'Apply'}</button>
+      </div>}
+    </form>
+  )
+}
+
 function CustomerReportModal({ onClose }: { onClose: () => void }) {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
@@ -3013,6 +3082,9 @@ function CustomerReportModal({ onClose }: { onClose: () => void }) {
   const [activityReport, setActivityReport] = useState<CustomerActivityReport | null>(null)
   const [activityLoading, setActivityLoading] = useState(false)
   const [activityError, setActivityError] = useState('')
+  const [reportPeriod, setReportPeriod] = useState<DirectoryReportPeriodKey>('all_time')
+  const [reportFromMonth, setReportFromMonth] = useState(currentCambodiaMonth)
+  const [reportToMonth, setReportToMonth] = useState(currentCambodiaMonth)
 
   useEffect(() => {
     api<{ customers: Customer[] }>('/customers')
@@ -3038,12 +3110,14 @@ function CustomerReportModal({ onClose }: { onClose: () => void }) {
     return matchesSearch && matchesIdFilter
   }), [customers, idFilter, search])
 
-  const openActivityReport = async () => {
+  const openActivityReport = async (nextPeriod = reportPeriod, nextFromMonth = reportFromMonth, nextToMonth = reportToMonth) => {
     if (!selectedCustomer) return
     setActivityLoading(true)
     setActivityError('')
     try {
-      const report = await api<CustomerActivityReport>(`/customers/${selectedCustomer._id}/activity-report`)
+      const query = new URLSearchParams({ period: nextPeriod })
+      if (nextPeriod === 'custom') { query.set('from', nextFromMonth); query.set('to', nextToMonth) }
+      const report = await api<CustomerActivityReport>(`/customers/${selectedCustomer._id}/activity-report?${query}`)
       setActivityReport(report)
     } catch (reason) {
       setActivityError(reason instanceof Error ? reason.message : 'Unable to load this customer activity report')
@@ -3052,9 +3126,14 @@ function CustomerReportModal({ onClose }: { onClose: () => void }) {
     }
   }
 
+  const changeReportPeriod = (nextPeriod: DirectoryReportPeriodKey) => {
+    setReportPeriod(nextPeriod)
+    if (nextPeriod !== 'custom') void openActivityReport(nextPeriod)
+  }
+
   return (
-    <div className="modal-backdrop customer-report-backdrop" role="presentation" onClick={onClose}>
-      <section className="detail-modal surface-card customer-report-modal" role="dialog" aria-modal="true" aria-labelledby="customer-report-title" onClick={(event) => event.stopPropagation()}>
+    <div className={`modal-backdrop customer-report-backdrop ${activityReport ? 'is-full-report-open' : ''}`} role="presentation" onClick={onClose}>
+      <section className={`detail-modal surface-card customer-report-modal ${activityReport ? 'is-full-report' : ''}`} role="dialog" aria-modal="true" aria-labelledby="customer-report-title" onClick={(event) => event.stopPropagation()}>
         <header className="detail-modal-header">
           <div>
             <span className="eyebrow">Customer report</span>
@@ -3095,13 +3174,15 @@ function CustomerReportModal({ onClose }: { onClose: () => void }) {
               {!loading && !error && filteredCustomers.length === 0 && <p className="customer-report-empty">No records match this search. Try a different name, phone, or filter.</p>}
             </div>
           </aside>
-          <section className={`customer-report-profile ${selectedCustomer ? 'has-selection' : ''}`} aria-live="polite">
+          <section className={`customer-report-profile ${selectedCustomer ? 'has-selection' : ''} ${activityReport ? 'is-activity-report' : ''}`} aria-live="polite" aria-busy={activityLoading}>
             {selectedCustomer && activityReport ? <>
-              <button type="button" className="customer-report-dismiss" onClick={() => setActivityReport(null)}><ArrowLeft size={16} /> Back to profile</button>
+              <div className="customer-report-sheet-actions"><button type="button" className="customer-report-dismiss" onClick={() => setActivityReport(null)}><ArrowLeft size={16} /> Back to profile</button><button type="button" className="customer-report-sheet-close" onClick={onClose} aria-label="Close customer report"><X size={17} /></button></div>
               <div className="customer-report-profile-heading customer-report-activity-heading">
                 <span className="avatar">{selectedCustomer.name.slice(0, 2).toUpperCase()}</span>
                 <div><span className="eyebrow">Customer activity</span><h4>{selectedCustomer.name}</h4><p>Sales, purchases, and pawn contracts linked to this customer.</p></div>
               </div>
+              <ReportMonthRangeControls period={reportPeriod} fromMonth={reportFromMonth} toMonth={reportToMonth} resultLabel={activityReport.period.label} loading={activityLoading} onPeriodChange={changeReportPeriod} onFromMonthChange={setReportFromMonth} onToMonthChange={setReportToMonth} onApply={() => void openActivityReport('custom')} />
+              {activityError && <p className="customer-report-activity-error" role="alert">{activityError}</p>}
               <div className="customer-report-activity-summary" aria-label="Customer activity totals">
                 <div><span>Sales</span><div className="customer-report-currency-values"><p><span>USD (converted)</span><strong>{pawnMoney(activityReport.summary.sales.usdEquivalent)}</strong></p><p><span>KHR recorded</span><strong>{pawnMoney(activityReport.summary.sales.KHR, 'KHR')}</strong></p></div></div>
                 <div><span>Purchases</span><div className="customer-report-currency-values"><p><span>USD (converted)</span><strong>{pawnMoney(activityReport.summary.purchases.usdEquivalent)}</strong></p><p><span>KHR recorded</span><strong>{pawnMoney(activityReport.summary.purchases.KHR, 'KHR')}</strong></p></div></div>
@@ -3147,6 +3228,9 @@ function SupplierReportModal({ onClose }: { onClose: () => void }) {
   const [activityReport, setActivityReport] = useState<SupplierActivityReport | null>(null)
   const [activityLoading, setActivityLoading] = useState(false)
   const [activityError, setActivityError] = useState('')
+  const [reportPeriod, setReportPeriod] = useState<DirectoryReportPeriodKey>('all_time')
+  const [reportFromMonth, setReportFromMonth] = useState(currentCambodiaMonth)
+  const [reportToMonth, setReportToMonth] = useState(currentCambodiaMonth)
 
   useEffect(() => {
     api<{ suppliers: Supplier[] }>('/suppliers')
@@ -3171,12 +3255,14 @@ function SupplierReportModal({ onClose }: { onClose: () => void }) {
     return matchesSearch && (idFilter === 'all' || (idFilter === 'recorded' ? hasId : !hasId))
   }), [suppliers, idFilter, search])
 
-  const openActivityReport = async () => {
+  const openActivityReport = async (nextPeriod = reportPeriod, nextFromMonth = reportFromMonth, nextToMonth = reportToMonth) => {
     if (!selectedSupplier) return
     setActivityLoading(true)
     setActivityError('')
     try {
-      const report = await api<SupplierActivityReport>(`/suppliers/${selectedSupplier._id}/activity-report`)
+      const query = new URLSearchParams({ period: nextPeriod })
+      if (nextPeriod === 'custom') { query.set('from', nextFromMonth); query.set('to', nextToMonth) }
+      const report = await api<SupplierActivityReport>(`/suppliers/${selectedSupplier._id}/activity-report?${query}`)
       setActivityReport(report)
     } catch (reason) {
       setActivityError(reason instanceof Error ? reason.message : 'Unable to load this supplier purchase report')
@@ -3185,9 +3271,14 @@ function SupplierReportModal({ onClose }: { onClose: () => void }) {
     }
   }
 
+  const changeReportPeriod = (nextPeriod: DirectoryReportPeriodKey) => {
+    setReportPeriod(nextPeriod)
+    if (nextPeriod !== 'custom') void openActivityReport(nextPeriod)
+  }
+
   return (
-    <div className="modal-backdrop customer-report-backdrop" role="presentation" onClick={onClose}>
-      <section className="detail-modal surface-card customer-report-modal supplier-report-modal" role="dialog" aria-modal="true" aria-labelledby="supplier-report-title" onClick={(event) => event.stopPropagation()}>
+    <div className={`modal-backdrop customer-report-backdrop ${activityReport ? 'is-full-report-open' : ''}`} role="presentation" onClick={onClose}>
+      <section className={`detail-modal surface-card customer-report-modal supplier-report-modal ${activityReport ? 'is-full-report' : ''}`} role="dialog" aria-modal="true" aria-labelledby="supplier-report-title" onClick={(event) => event.stopPropagation()}>
         <header className="detail-modal-header">
           <div><span className="eyebrow">Supplier report</span><h3 id="supplier-report-title">Find a supplier</h3><p>Search the directory, then review the supplier’s linked purchases.</p></div>
           <button className="icon-button" onClick={onClose} aria-label="Close supplier report"><X size={18} /></button>
@@ -3208,10 +3299,12 @@ function SupplierReportModal({ onClose }: { onClose: () => void }) {
               {!loading && !error && filteredSuppliers.length === 0 && <p className="customer-report-empty">No records match this search. Try a different name, phone, or filter.</p>}
             </div>
           </aside>
-          <section className={`customer-report-profile ${selectedSupplier ? 'has-selection' : ''}`} aria-live="polite">
+          <section className={`customer-report-profile ${selectedSupplier ? 'has-selection' : ''} ${activityReport ? 'is-activity-report' : ''}`} aria-live="polite" aria-busy={activityLoading}>
             {selectedSupplier && activityReport ? <>
-              <button type="button" className="customer-report-dismiss" onClick={() => setActivityReport(null)}><ArrowLeft size={16} /> Back to profile</button>
+              <div className="customer-report-sheet-actions"><button type="button" className="customer-report-dismiss" onClick={() => setActivityReport(null)}><ArrowLeft size={16} /> Back to profile</button><button type="button" className="customer-report-sheet-close" onClick={onClose} aria-label="Close supplier report"><X size={17} /></button></div>
               <div className="customer-report-profile-heading customer-report-activity-heading"><span className="avatar">{selectedSupplier.name.slice(0, 2).toUpperCase()}</span><div><span className="eyebrow">Supplier activity</span><h4>{selectedSupplier.name}</h4><p>Purchases linked to this supplier.</p></div></div>
+              <ReportMonthRangeControls period={reportPeriod} fromMonth={reportFromMonth} toMonth={reportToMonth} resultLabel={activityReport.period.label} loading={activityLoading} onPeriodChange={changeReportPeriod} onFromMonthChange={setReportFromMonth} onToMonthChange={setReportToMonth} onApply={() => void openActivityReport('custom')} />
+              {activityError && <p className="customer-report-activity-error" role="alert">{activityError}</p>}
               <div className="customer-report-activity-summary supplier-report-summary" aria-label="Supplier purchase total"><div><span>Total purchases</span><div className="customer-report-currency-values"><p><span>USD (converted)</span><strong>{pawnMoney(activityReport.summary.purchases.usdEquivalent)}</strong></p><p><span>KHR recorded</span><strong>{pawnMoney(activityReport.summary.purchases.KHR, 'KHR')}</strong></p></div></div></div>
               <div className="customer-report-activity-list"><div className="customer-report-activity-list-heading"><strong>Purchase history</strong><small>{activityReport.activities.length} record{activityReport.activities.length === 1 ? '' : 's'}{activityReport.limited ? ' · latest 100' : ''}</small></div>{activityReport.activities.map((activity) => <article className="customer-report-activity-row purchase" key={activity.id}><span className="transaction-icon"><ShoppingCart size={16} /></span><div><strong>Purchased from supplier</strong><small>{activity.reference} · {dateText(activity.occurredAt)} · {activity.currency}</small><p>{activity.title}</p></div><aside><strong>{pawnMoney(activity.amount, activity.currency)}</strong><small>{titleStatus(activity.status)}</small></aside></article>)}{activityReport.activities.length === 0 && <p className="customer-report-empty">No purchases are linked to this supplier yet.</p>}</div>
             </> : selectedSupplier ? <>

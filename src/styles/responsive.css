@@ -183,6 +183,30 @@
   .customer-report-activity-row aside strong { font-size: 9px; }
   .app[data-font-size='comfortable'] .customer-report-modal { height: min(69.0909dvh, 545px); max-height: calc(90.9091dvh - 65px); }
   .app[data-font-size='large'] .customer-report-modal { height: min(63.3333dvh, 500px); max-height: calc(83.3333dvh - 60px); }
+  .modal-backdrop.customer-report-backdrop.is-full-report-open { align-items: stretch; padding: max(8px, env(safe-area-inset-top, 0px)) 0 0; }
+  .customer-report-modal.is-full-report { width: 100%; height: calc(100dvh - max(8px, env(safe-area-inset-top, 0px))); max-height: none; border-radius: 16px 16px 0 0; }
+  .customer-report-modal.is-full-report > .detail-modal-header { display: none; }
+  .customer-report-modal.is-full-report .customer-report-workspace { height: 100%; flex: 1; }
+  .customer-report-modal.is-full-report .customer-report-browser { visibility: hidden; pointer-events: none; }
+  .customer-report-profile.has-selection.is-activity-report { position: absolute; inset: 0; max-height: none; display: flex; overflow-x: clip; overflow-y: auto; padding: 0 12px max(104px, calc(env(safe-area-inset-bottom, 0px) + 80px)); border: 0; border-radius: 0; background: var(--surface-solid); box-shadow: none; overscroll-behavior: contain; scroll-padding-bottom: max(104px, calc(env(safe-area-inset-bottom, 0px) + 80px)); -webkit-overflow-scrolling: touch; }
+  .customer-report-sheet-actions { position: sticky; inset-block-start: 0; z-index: 3; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 -12px 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface-solid); }
+  .customer-report-sheet-actions .customer-report-dismiss { align-self: auto; margin: 0; }
+  .customer-report-sheet-close { width: 40px; height: 40px; flex: 0 0 auto; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 8px; outline: 2px solid transparent; outline-offset: 1px; color: var(--muted); background: var(--bg-soft); }
+  .customer-report-sheet-close:hover { color: var(--text); background: var(--surface-hover); }
+  .customer-report-sheet-close:focus-visible { border-color: var(--primary); outline-color: var(--primary); }
+  .customer-report-sheet-close:active { transform: translateY(1px); }
+  .customer-report-sheet-close:disabled { opacity: .55; cursor: not-allowed; }
+  .customer-report-period { grid-template-columns: minmax(0, 1fr); margin-top: 12px; padding: 12px; }
+  .customer-report-period select,
+  .customer-report-period input { min-height: 44px; font-size: 10px; }
+  .customer-report-custom-months { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .customer-report-custom-months button { grid-column: 1 / -1; width: 100%; min-height: 44px; justify-content: center; }
+  .customer-report-profile.is-activity-report .customer-report-activity-summary { grid-template-columns: minmax(0, 1fr); }
+  .customer-report-profile.is-activity-report .customer-report-activity-summary > div { padding: 12px; }
+  .customer-report-profile.is-activity-report .customer-report-activity-row { grid-template-columns: auto minmax(0, 1fr); }
+  .customer-report-profile.is-activity-report .customer-report-activity-row aside { grid-column: 2; flex-direction: row; align-items: center; justify-content: space-between; gap: 8px; padding-top: 3px; }
+  .app[data-font-size='comfortable'] .customer-report-modal.is-full-report { height: calc(90.9091dvh - 8px); max-height: none; }
+  .app[data-font-size='large'] .customer-report-modal.is-full-report { height: calc(83.3333dvh - 8px); max-height: none; }
   .sales-report-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 11px; }
   .sales-report-filters label { min-width: 0; }
   .sales-report-filters > svg { margin: 0; }
@@ -568,6 +592,11 @@
   .settings-card-footer { align-items: stretch; flex-direction: column; padding: 14px 17px 17px; }
   .settings-card-footer .ghost-button { width: 100%; }
   .environment-list { padding-inline: 17px; }
+}
+
+@media (max-width: 360px) {
+  .customer-report-custom-months { grid-template-columns: minmax(0, 1fr); }
+  .customer-report-custom-months button { grid-column: auto; }
 }
 
 @media (max-width: 440px) {

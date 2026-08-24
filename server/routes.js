@@ -365,6 +365,66 @@ function reportAmountToUsd(amount, currency, exchangeRate) {
   return roundMoney(currency === 'KHR' ? value / reportExchangeRate(exchangeRate) : value)
 }
 
+function parseReportMonth(value) {
+  const match = /^(\d{4})-(\d{2})$/.exec(String(value || ''))
+  if (!match) return null
+  const year = Number(match[1])
+  const month = Number(match[2]) - 1
+  if (year < 2000 || year > 2200 || month < 0 || month > 11) return null
+  return { year, month }
+}
+
+function reportMonthLabel(value) {
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    year: 'numeric',
+    timeZone: overviewTimeZone,
+  }).format(value)
+}
+
+function resolveDirectoryActivityPeriod(query) {
+  const requestedKey = String(query.period || 'all_time').toLowerCase()
+  const now = new Date()
+  const tomorrow = addUtcDays(cambodiaStartOfDay(now), 1)
+  const { year, month } = cambodiaParts(now)
+  let key = requestedKey
+  let label
+  let from
+  let to = tomorrow
+
+  if (key === 'this_month') {
+    from = cambodiaDate(year, month, 1)
+    label = 'This Month'
+  } else if (key === 'last_month') {
+    from = cambodiaDate(year, month - 1, 1)
+    to = cambodiaDate(year, month, 1)
+    label = 'Last Month'
+  } else if (key === 'last_3_months') {
+    from = cambodiaDate(year, month - 2, 1)
+    label = 'Last 3 Months'
+  } else if (key === 'last_6_months') {
+    from = cambodiaDate(year, month - 5, 1)
+    label = 'Last 6 Months'
+  } else if (key === 'this_year') {
+    from = cambodiaDate(year, 0, 1)
+    label = 'This Year'
+  } else if (key === 'custom') {
+    const start = parseReportMonth(query.from)
+    const end = parseReportMonth(query.to)
+    if (!start || !end) throw requestError(400, 'Choose a valid From and To month')
+    from = cambodiaDate(start.year, start.month, 1)
+    to = cambodiaDate(end.year, end.month + 1, 1)
+    if (from >= to) throw requestError(400, 'From month must be before or equal to To month')
+    label = `${reportMonthLabel(from)} – ${reportMonthLabel(cambodiaDate(end.year, end.month, 1))}`
+  } else {
+    key = 'all_time'
+    from = new Date(0)
+    label = 'All History'
+  }
+
+  return { key, label, from, to }
+}
+
 function salePricing(item, role, currency = 'USD', exchangeRate = 1) {
   const savedUsdUnitPrice = roundMoney(item?.sellPrice)
   const savedUsdMinimum = roundMoney(item?.minimumSellPrice)
@@ -1695,14 +1755,28 @@ router.get('/customers/:id/activity-report', requireAuth, allowRoles('OWNER', 'M
   if (!mongoose.isValidObjectId(req.params.id)) throw requestError(400, 'Customer ID is invalid')
   const customer = await Customer.findById(req.params.id)
   if (!customer) throw requestError(404, 'Customer was not found')
+  const period = resolveDirectoryActivityPeriod(req.query)
+  const occurredInPeriod = { $gte: period.from, $lt: period.to }
 
   await refreshPawnStatuses()
   const [trades, pawns] = await Promise.all([
-    Trade.find({ customer: customer._id })
+    Trade.find({
+      customer: customer._id,
+      $or: [
+        { purchaseDate: occurredInPeriod },
+        { purchaseDate: null, createdAt: occurredInPeriod },
+      ],
+    })
       .select('tradeNo type currency exchangeRate transactionTotal total status purchaseDate createdAt items')
       .sort({ createdAt: -1 })
       .limit(100),
-    Pawn.find({ customer: customer._id })
+    Pawn.find({
+      customer: customer._id,
+      $or: [
+        { issueDate: occurredInPeriod },
+        { issueDate: null, createdAt: occurredInPeriod },
+      ],
+    })
       .select('pawnNo principal currency exchangeRate status itemSnapshot issueDate createdAt')
       .sort({ issueDate: -1, createdAt: -1 })
       .limit(100),
@@ -1747,7 +1821,7 @@ router.get('/customers/:id/activity-report', requireAuth, allowRoles('OWNER', 'M
     }),
   ].sort((left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime())
 
-  res.json({ customer, summary, activities, limited: activities.length >= 200 })
+  res.json({ customer, period, summary, activities, limited: activities.length >= 200 })
 }))
 
 router.post('/customers', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
@@ -1815,8 +1889,17 @@ router.get('/suppliers/:id/activity-report', requireAuth, allowRoles('OWNER', 'M
   if (!mongoose.isValidObjectId(req.params.id)) throw requestError(400, 'Supplier ID is invalid')
   const supplier = await Supplier.findById(req.params.id)
   if (!supplier) throw requestError(404, 'Supplier was not found')
+  const period = resolveDirectoryActivityPeriod(req.query)
+  const occurredInPeriod = { $gte: period.from, $lt: period.to }
 
-  const trades = await Trade.find({ supplier: supplier._id, type: 'BUY' })
+  const trades = await Trade.find({
+    supplier: supplier._id,
+    type: 'BUY',
+    $or: [
+      { purchaseDate: occurredInPeriod },
+      { purchaseDate: null, createdAt: occurredInPeriod },
+    ],
+  })
     .select('tradeNo currency exchangeRate transactionTotal total status purchaseDate createdAt items')
     .sort({ purchaseDate: -1, createdAt: -1 })
     .limit(100)
@@ -1838,7 +1921,7 @@ router.get('/suppliers/:id/activity-report', requireAuth, allowRoles('OWNER', 'M
     }
   })
 
-  res.json({ supplier, summary: { purchases: totals }, activities, limited: activities.length >= 100 })
+  res.json({ supplier, period, summary: { purchases: totals }, activities, limited: activities.length >= 100 })
 }))
 
 router.post('/suppliers', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
