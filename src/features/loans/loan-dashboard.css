@@ -1,3 +1,5 @@
+/* Hallmark · component: dashboard summary · genre: operational product UI · theme: existing violet
+   Mobile treatment: priority-first lending snapshot · display-size aware metric grid */
 .loan-dashboard-portal-host {
   width: 100%;
   margin-bottom: 20px;
@@ -316,9 +318,12 @@
 }
 
 @media (max-width: 760px) {
+  .loan-dashboard-section { gap: 10px; }
+
   .loan-dashboard-heading {
     align-items: flex-start;
     flex-direction: column;
+    gap: 8px;
   }
 
   .loan-dashboard-heading-actions {
@@ -328,10 +333,105 @@
   .loan-dashboard-heading-actions .ghost-button {
     flex: 1;
     justify-content: center;
+    min-height: 38px;
+    padding-inline: 10px;
+    font-size: 0.72rem;
+    white-space: nowrap;
   }
 
   .loan-dashboard-metrics {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .loan-dashboard-metric {
+    min-height: 66px;
+    display: grid;
+    grid-template-columns: 28px minmax(0, 1fr);
+    align-items: center;
+    gap: 7px;
+    padding: 8px;
+  }
+
+  .loan-dashboard-metric:first-child {
+    grid-column: 1 / -1;
+    min-height: 78px;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .loan-dashboard-metric-icon {
+    width: 28px;
+    height: 28px;
+    flex-basis: 28px;
+    border-radius: 9px;
+  }
+
+  .loan-dashboard-metric:first-child .loan-dashboard-metric-icon {
+    width: 34px;
+    height: 34px;
+    flex-basis: 34px;
+    border-radius: 11px;
+  }
+
+  .loan-dashboard-metric p { gap: 1px; }
+
+  .loan-dashboard-metric p > span {
+    overflow: hidden;
+    font-size: 0.5rem;
+    letter-spacing: 0.02em;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .loan-dashboard-metric p > strong {
+    margin-top: 0;
+    overflow: hidden;
+    font-size: 0.86rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .loan-dashboard-metric:first-child p > strong {
+    margin-top: 1px;
+    font-size: 1.08rem;
+  }
+
+  .loan-dashboard-metric:not(:first-child) p > small {
+    display: none;
+  }
+
+  .loan-dashboard-metric p > em {
+    margin-top: 1px;
+    overflow: hidden;
+    font-size: 0.54rem;
+    line-height: 1.2;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .loan-dashboard-urgent-card {
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .loan-dashboard-urgent-heading {
+    margin-bottom: 7px;
+  }
+
+  /* Comfortable and Large reserve more room for the user-selected text scale. */
+  .app[data-font-size='comfortable'] .loan-dashboard-metrics,
+  .app[data-font-size='large'] .loan-dashboard-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .app[data-font-size='comfortable'] .loan-dashboard-metric:first-child,
+  .app[data-font-size='large'] .loan-dashboard-metric:first-child,
+  .app[data-font-size='comfortable'] .loan-dashboard-metric:last-child,
+  .app[data-font-size='large'] .loan-dashboard-metric:last-child {
+    grid-column: 1 / -1;
   }
 
   .loan-dashboard-urgent-list > button {
