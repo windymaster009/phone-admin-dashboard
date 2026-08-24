@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import {
   AlertTriangle,
   BadgeCheck,
+  CheckCircle2,
   MapPin,
   Pencil,
   Phone,
@@ -161,6 +162,7 @@ function CustomerPage() {
   const [error, setError] = useState('')
   const [modalError, setModalError] = useState('')
   const [deleteError, setDeleteError] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<Customer | null>(null)
   const [deleting, setDeleting] = useState<Customer | null>(null)
@@ -181,6 +183,12 @@ function CustomerPage() {
   useEffect(() => {
     void loadCustomers()
   }, [loadCustomers])
+
+  useEffect(() => {
+    if (!successMessage) return undefined
+    const timeout = window.setTimeout(() => setSuccessMessage(''), 4000)
+    return () => window.clearTimeout(timeout)
+  }, [successMessage])
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -209,6 +217,7 @@ function CustomerPage() {
       address: String(form.get('address') || '').trim(),
       notes: String(form.get('notes') || '').trim(),
     }
+    const isEditing = Boolean(editing)
 
     try {
       await api(editing ? `/customers/${editing._id}` : '/customers', { method: editing ? 'PATCH' : 'POST', body: JSON.stringify(payload) })
@@ -217,6 +226,7 @@ function CustomerPage() {
       setEditing(null)
       await loadCustomers()
       window.dispatchEvent(new CustomEvent('phoneflow:customers-updated'))
+      setSuccessMessage(isEditing ? `${payload.name} updated` : `${payload.name} added`)
     } catch (reason) {
       setModalError(reason instanceof Error ? reason.message : 'Unable to save customer')
     } finally {
@@ -315,6 +325,14 @@ function CustomerPage() {
 
       {showModal && <CustomerModal customer={editing} busy={busy} error={modalError} onClose={() => { if (!busy) { setShowModal(false); setEditing(null) } }} onSubmit={saveCustomer} />}
       {deleting && <DeleteCustomerModal customer={deleting} busy={busy} error={deleteError} onClose={() => { if (!busy) setDeleting(null) }} onConfirm={() => void deleteCustomer()} />}
+      {successMessage && createPortal(
+        <div className="customer-success-toast" role="status" aria-live="polite">
+          <span className="customer-success-icon"><CheckCircle2 size={18} /></span>
+          <p><strong>{successMessage}</strong><span>The customer record is ready to use.</span></p>
+          <button type="button" onClick={() => setSuccessMessage('')} aria-label="Dismiss confirmation"><X size={16} /></button>
+        </div>,
+        document.body,
+      )}
     </div>
   )
 }
