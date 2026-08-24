@@ -1551,8 +1551,22 @@ a:focus-visible,
   .reports-hub-page > .section-header,
   .reports-placeholder-page > .section-header,
   .sales-report-page > .section-header { align-items: stretch; flex-direction: column; }
-  .sidebar { transform: translateX(-105%); transition: transform 0.24s ease; box-shadow: 25px 0 60px rgba(0, 0, 0, 0.3); }
+  .sidebar {
+    top: auto;
+    bottom: 0;
+    height: 100dvh;
+    max-height: 100dvh;
+    box-sizing: border-box;
+    padding-bottom: max(10px, env(safe-area-inset-bottom, 0px));
+    transform: translateX(-105%);
+    transition: transform 0.24s ease;
+    box-shadow: 25px 0 60px rgba(0, 0, 0, 0.3);
+  }
   .sidebar.mobile-open { transform: translateX(0); }
+  .sidebar-nav { min-height: 0; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+  .sidebar-footer { flex: 0 0 auto; }
+  .app[data-font-size='comfortable'] .sidebar { height: 90.9091dvh; max-height: 90.9091dvh; }
+  .app[data-font-size='large'] .sidebar { height: 83.3333dvh; max-height: 83.3333dvh; }
   .mobile-overlay { display: block; position: fixed; inset: 0; z-index: 25; pointer-events: none; opacity: 0; background: rgba(3, 7, 18, 0.6); transition: 0.2s ease; }
   .mobile-overlay.show { opacity: 1; pointer-events: auto; }
   .mobile-close, .mobile-menu { display: grid; place-items: center; }
