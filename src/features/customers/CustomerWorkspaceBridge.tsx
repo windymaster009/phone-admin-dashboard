@@ -116,7 +116,12 @@ function CustomerModal({
   )
 }
 
-function CustomerSaveSuccessModal({ message, onClose }: { message: string; onClose: () => void }) {
+type CustomerSuccess = {
+  action: 'saved' | 'deleted'
+  message: string
+}
+
+function CustomerSuccessModal({ success, onClose }: { success: CustomerSuccess; onClose: () => void }) {
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') onClose()
@@ -133,9 +138,9 @@ function CustomerSaveSuccessModal({ message, onClose }: { message: string; onClo
     <div className="operation-modal-backdrop customer-save-success-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
       <section className="operation-modal customer-save-success-modal" role="dialog" aria-modal="true" aria-labelledby="customer-save-success-title">
         <span className="customer-save-success-icon"><CheckCircle2 size={30} /></span>
-        <span className="eyebrow">Customer record saved</span>
-        <h2 id="customer-save-success-title">{message}</h2>
-        <p>The customer profile is ready to use in your shop.</p>
+        <span className="eyebrow">Customer record {success.action === 'deleted' ? 'deleted' : 'saved'}</span>
+        <h2 id="customer-save-success-title">{success.message}</h2>
+        <p>{success.action === 'deleted' ? 'The customer profile has been removed from your shop.' : 'The customer profile is ready to use in your shop.'}</p>
         <button type="button" className="primary-button" onClick={onClose} autoFocus><CheckCircle2 size={16} /> Done</button>
       </section>
     </div>,
@@ -189,7 +194,7 @@ function CustomerPage() {
   const [error, setError] = useState('')
   const [modalError, setModalError] = useState('')
   const [deleteError, setDeleteError] = useState('')
-  const [successMessage, setSuccessMessage] = useState('')
+  const [success, setSuccess] = useState<CustomerSuccess | null>(null)
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<Customer | null>(null)
   const [deleting, setDeleting] = useState<Customer | null>(null)
@@ -245,7 +250,7 @@ function CustomerPage() {
       formElement.reset()
       setShowModal(false)
       setEditing(null)
-      setSuccessMessage(isEditing ? `${payload.name} updated` : `${payload.name} added`)
+      setSuccess({ action: 'saved', message: isEditing ? `${payload.name} updated` : `${payload.name} added` })
       await loadCustomers()
       window.dispatchEvent(new CustomEvent('phoneflow:customers-updated'))
     } catch (reason) {
@@ -265,6 +270,7 @@ function CustomerPage() {
       setDeleting(null)
       await loadCustomers()
       window.dispatchEvent(new CustomEvent('phoneflow:customers-updated'))
+      setSuccess({ action: 'deleted', message: `${customer.name} deleted` })
     } catch (reason) {
       setDeleteError(reason instanceof Error ? reason.message : 'Unable to delete customer')
     } finally {
@@ -346,7 +352,7 @@ function CustomerPage() {
 
       {showModal && <CustomerModal customer={editing} busy={busy} error={modalError} onClose={() => { if (!busy) { setShowModal(false); setEditing(null) } }} onSubmit={saveCustomer} />}
       {deleting && <DeleteCustomerModal customer={deleting} busy={busy} error={deleteError} onClose={() => { if (!busy) setDeleting(null) }} onConfirm={() => void deleteCustomer()} />}
-      {successMessage && <CustomerSaveSuccessModal message={successMessage} onClose={() => setSuccessMessage('')} />}
+      {success && <CustomerSuccessModal success={success} onClose={() => setSuccess(null)} />}
     </div>
   )
 }
