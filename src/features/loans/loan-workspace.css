@@ -232,6 +232,10 @@
   width: min(580px, calc(100vw - 28px));
 }
 
+.loan-modal.loan-modal-confirmation {
+  width: min(480px, calc(100vw - 32px));
+}
+
 .loan-create-form,
 .loan-detail-scroll {
   overflow-y: auto;
@@ -652,6 +656,17 @@
     max-height: calc(100dvh - 32px);
     border-radius: 20px;
   }
+
+  /* Completion feedback should feel like a focused confirmation, not a full-height sheet. */
+  .loan-modal.loan-modal-confirmation {
+    width: min(360px, calc(100vw - 32px));
+    height: auto;
+    max-height: calc(100dvh - 32px);
+    border-radius: 20px;
+  }
+
+  :root[data-font-size='comfortable'] .loan-modal.loan-modal-confirmation { zoom: .9091; }
+  :root[data-font-size='large'] .loan-modal.loan-modal-confirmation { zoom: .8333; }
 
   /* Counter the app's zoom-based Default / Comfortable / Large display sizes. */
   .app[data-font-size='comfortable'] .loan-modal { height: min(72.7273dvh, 582px); max-height: calc(90.9091dvh - 29px); }

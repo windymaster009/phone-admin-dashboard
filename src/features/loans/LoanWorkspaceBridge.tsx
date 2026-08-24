@@ -69,6 +69,14 @@ type LoanSummary = {
 
 type LoanDetail = { loan: Loan; payments: LoanPayment[] }
 
+type LoanPaymentConfirmation = {
+  amount: number
+  paymentMethod: string
+  currency: Currency
+  remainingBalance: number
+  status: LoanStatus
+}
+
 const emptyCurrencySummary = (): CurrencySummary => ({ lent: 0, expected: 0, paid: 0, outstanding: 0, dueSoon: 0, overdue: 0 })
 const emptySummary = (): LoanSummary => ({
   byCurrency: { USD: emptyCurrencySummary(), KHR: emptyCurrencySummary() },
@@ -127,12 +135,13 @@ function DualAmount({ usd, khr }: { usd: number; khr: number }) {
   return <><strong>{money(usd, 'USD')}</strong><small>{money(khr, 'KHR')}</small></>
 }
 
-function Modal({ title, eyebrow, description, onClose, compact = false, children }: {
+function Modal({ title, eyebrow, description, onClose, compact = false, confirmation = false, children }: {
   title: string
   eyebrow: string
   description: string
   onClose: () => void
   compact?: boolean
+  confirmation?: boolean
   children: ReactNode
 }) {
   useEffect(() => {
@@ -147,7 +156,7 @@ function Modal({ title, eyebrow, description, onClose, compact = false, children
 
   return createPortal(
     <div className="operation-modal-backdrop loan-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-      <section className={`operation-modal loan-modal${compact ? ' operation-modal-compact' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
+      <section className={`operation-modal loan-modal${compact ? ' operation-modal-compact' : ''}${confirmation ? ' loan-modal-confirmation' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
         <header className="operation-modal-header">
           <span className="operation-modal-icon"><Banknote size={21} /></span>
           <div><span className="eyebrow">{eyebrow}</span><h2>{title}</h2><p>{description}</p></div>
@@ -175,7 +184,7 @@ function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
   due.setDate(due.getDate() + 30)
   const interestAmount = interestType === 'FIXED' ? interestValue : interestType === 'PERCENT' ? principal * interestValue / 100 : 0
 
-  return <Modal title="Create loan" eyebrow="Money lending" description="Record who borrowed money and when it must be repaid." compact={Boolean(createdLoan)} onClose={onClose}>
+  return <Modal title={createdLoan ? 'Loan saved' : 'Create loan'} eyebrow="Money lending" description={createdLoan ? 'The borrower and repayment schedule are ready to review.' : 'Record who borrowed money and when it must be repaid.'} compact={Boolean(createdLoan)} confirmation={Boolean(createdLoan)} onClose={onClose}>
     {createdLoan && <section className="record-created-workflow" role="status" aria-live="polite">
       <div className="record-created-card">
         <span className="record-created-check"><CheckCircle2 size={38} /></span>
@@ -224,11 +233,12 @@ function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
   </Modal>
 }
 
-function LoanDetailModal({ detail, user, busy, error, onClose, onPayment, onDueDate, onCancel }: {
+function LoanDetailModal({ detail, user, busy, error, paymentConfirmation, onClose, onPayment, onDueDate, onCancel }: {
   detail: LoanDetail
   user: SessionUser | null
   busy: boolean
   error: string
+  paymentConfirmation: LoanPaymentConfirmation | null
   onClose: () => void
   onPayment: (event: FormEvent<HTMLFormElement>) => void
   onDueDate: (event: FormEvent<HTMLFormElement>) => void
@@ -238,6 +248,23 @@ function LoanDetailModal({ detail, user, busy, error, onClose, onPayment, onDueD
   const canManage = user?.role === 'OWNER' || user?.role === 'MANAGER'
   const canPay = canManage || user?.role === 'CASHIER'
   const open = !['PAID', 'CANCELLED'].includes(loan.status)
+
+  if (paymentConfirmation) {
+    return <Modal title="Payment recorded" eyebrow="Repayment" description="The loan balance and payment history have been updated." compact confirmation onClose={onClose}>
+      <section className="record-created-workflow" role="status" aria-live="polite">
+        <div className="record-created-card">
+          <span className="record-created-check"><CheckCircle2 size={38} /></span>
+          <div><span className="eyebrow">Repayment saved</span><h3>{paymentConfirmation.status === 'PAID' ? 'Loan paid in full' : 'Loan payment recorded'}</h3></div>
+          <dl>
+            <div><dt>Payment received</dt><dd>{money(paymentConfirmation.amount, paymentConfirmation.currency)}</dd></div>
+            <div><dt>Remaining balance</dt><dd><span>{money(paymentConfirmation.remainingBalance, paymentConfirmation.currency)}</span></dd></div>
+            <div><dt>Payment method</dt><dd>{paymentConfirmation.paymentMethod}</dd></div>
+          </dl>
+        </div>
+        <footer className="operation-modal-actions"><button type="button" className="primary-button record-created-done" onClick={onClose}><CheckCircle2 size={16} /> Done</button></footer>
+      </section>
+    </Modal>
+  }
 
   return <Modal title={`${loan.loanNo} · ${loan.borrower.name}`} eyebrow="Loan record" description={`${dueDescription(loan)} · ${money(loan.remainingBalance, loan.currency)} remaining`} onClose={onClose}>
     {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
@@ -298,6 +325,7 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
   const [showCreate, setShowCreate] = useState(false)
   const [createdLoan, setCreatedLoan] = useState<Loan | null>(null)
   const [detail, setDetail] = useState<LoanDetail | null>(null)
+  const [paymentConfirmation, setPaymentConfirmation] = useState<LoanPaymentConfirmation | null>(null)
 
   const loadLoans = useCallback(async () => {
     setLoading(true)
@@ -353,6 +381,7 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
 
   async function openDetail(loan: Loan) {
     setModalError('')
+    setPaymentConfirmation(null)
     try { setDetail(await api<LoanDetail>(`/loans/${loan._id}`)) }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to open loan') }
   }
@@ -361,16 +390,26 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
     event.preventDefault()
     if (!detail) return
     const form = new FormData(event.currentTarget)
+    const amount = Number(form.get('amount') || 0)
+    const paymentMethod = String(form.get('paymentMethod') || 'CASH')
     setBusy(true)
     setModalError('')
     try {
-      setDetail(await api<LoanDetail>(`/loans/${detail.loan._id}/payments`, { method: 'POST', body: JSON.stringify({
-        amount: Number(form.get('amount') || 0),
-        paymentMethod: form.get('paymentMethod'),
+      const nextDetail = await api<LoanDetail>(`/loans/${detail.loan._id}/payments`, { method: 'POST', body: JSON.stringify({
+        amount,
+        paymentMethod,
         paidAt: form.get('paidAt'),
         reference: String(form.get('reference') || '').trim(),
         note: String(form.get('note') || '').trim(),
-      }) }))
+      }) })
+      setDetail(nextDetail)
+      setPaymentConfirmation({
+        amount,
+        paymentMethod,
+        currency: nextDetail.loan.currency,
+        remainingBalance: nextDetail.loan.remainingBalance,
+        status: nextDetail.loan.status,
+      })
       await loadLoans()
     } catch (reason) {
       setModalError(reason instanceof Error ? reason.message : 'Unable to record payment')
@@ -457,7 +496,7 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
     </article>
 
     {showCreate && <CreateLoanModal busy={busy} error={modalError} createdLoan={createdLoan} onClose={() => { if (!busy) { setShowCreate(false); setCreatedLoan(null) } }} onSubmit={createLoan} />}
-    {detail && <LoanDetailModal detail={detail} user={user} busy={busy} error={modalError} onClose={() => { if (!busy) setDetail(null) }} onPayment={recordPayment} onDueDate={changeDueDate} onCancel={cancelLoan} />}
+    {detail && <LoanDetailModal detail={detail} user={user} busy={busy} error={modalError} paymentConfirmation={paymentConfirmation} onClose={() => { if (!busy) { setDetail(null); setPaymentConfirmation(null) } }} onPayment={recordPayment} onDueDate={changeDueDate} onCancel={cancelLoan} />}
   </div>
 }
 
