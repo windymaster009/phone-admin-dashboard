@@ -1078,7 +1078,7 @@ function SectionHeader({
   )
 }
 
-function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: SessionUser }) {
+function DashboardView({ goTo, user, onReady }: { goTo: (key: NavKey) => void; user: SessionUser; onReady: () => void }) {
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedPawn, setSelectedPawn] = useState<Pawn | null>(null)
@@ -1097,6 +1097,7 @@ function DashboardView({ goTo, user }: { goTo: (key: NavKey) => void; user: Sess
       setError(reason instanceof Error ? reason.message : 'Could not load dashboard data')
     } finally {
       setLoading(false)
+      onReady()
       if (showRefresh) setRefreshing(false)
     }
   }
@@ -2802,7 +2803,7 @@ function BusinessPerformanceChart({
   )
 }
 
-function BusinessOverviewView() {
+function BusinessOverviewView({ onReady }: { onReady: () => void }) {
   const now = new Date()
   const todayInput = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   const monthStartInput = `${todayInput.slice(0, 8)}01`
@@ -2825,7 +2826,7 @@ function BusinessOverviewView() {
     api<BusinessOverviewData>(`/business-overview?${query.toString()}`)
       .then(setData)
       .catch((reason: Error) => setError(reason.message))
-      .finally(() => setLoading(false))
+      .finally(() => { setLoading(false); onReady() })
   }, [period, customFrom, customTo])
 
   const periodLabel = data?.period.label || 'This Month'
@@ -3759,6 +3760,7 @@ function App({
   onToggleTheme,
   fontSize,
   onFontSizeChange,
+  onWorkspaceReady,
 }: {
   user: SessionUser
   onLogout: () => void
@@ -3766,11 +3768,17 @@ function App({
   onToggleTheme: () => void
   fontSize: AppFontSize
   onFontSizeChange: (fontSize: AppFontSize) => void
+  onWorkspaceReady: () => void
 }) {
   const [active, setActive] = useState<NavKey>(() => viewFromPath(window.location.pathname))
   const [mobileOpen, setMobileOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [sidebarCounts, setSidebarCounts] = useState({ pawns: 0, lowStock: 0 })
+  const [sidebarReady, setSidebarReady] = useState(false)
+  const [initialViewReady, setInitialViewReady] = useState(() => {
+    const initialView = viewFromPath(window.location.pathname)
+    return initialView !== 'dashboard' && initialView !== 'businessOverview'
+  })
   const profileMenuRef = useRef<HTMLDivElement>(null)
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null)
   const sidebarRef = useRef<HTMLElement>(null)
@@ -3791,7 +3799,12 @@ function App({
     api<DashboardData>('/dashboard')
       .then((result) => setSidebarCounts({ pawns: result.metrics.pawnCount, lowStock: result.metrics.lowStock }))
       .catch(() => undefined)
+      .finally(() => setSidebarReady(true))
   }, [])
+
+  useEffect(() => {
+    if (sidebarReady && initialViewReady) onWorkspaceReady()
+  }, [initialViewReady, onWorkspaceReady, sidebarReady])
 
   useEffect(() => {
     const currentView = viewFromPath(window.location.pathname)
@@ -3891,7 +3904,7 @@ function App({
 
   const renderView = () => {
     switch (active) {
-      case 'dashboard': return <DashboardView goTo={changePage} user={user} />
+      case 'dashboard': return <DashboardView goTo={changePage} user={user} onReady={() => setInitialViewReady(true)} />
       case 'pawn': return <PawnView />
       case 'trade': return <TradeView />
       case 'inventory': return <InventoryView />
@@ -3899,10 +3912,10 @@ function App({
       case 'suppliers': return <SupplierWorkspace />
       case 'depreciation': return <DepreciationView goTo={changePage} />
       case 'refunds': return <RefundsView user={user} />
-      case 'businessOverview': return <BusinessOverviewView />
+      case 'businessOverview': return <BusinessOverviewView onReady={() => setInitialViewReady(true)} />
       case 'reports': return <ReportsView />
       case 'settings': return <SettingsView user={user} onLogout={onLogout} fontSize={fontSize} onFontSizeChange={onFontSizeChange} />
-      default: return <DashboardView goTo={changePage} user={user} />
+      default: return <DashboardView goTo={changePage} user={user} onReady={() => setInitialViewReady(true)} />
     }
   }
 

@@ -44,7 +44,7 @@ const stageCopy: Record<StartupStage, StageCopy> = {
   },
 }
 
-export default function StartupScreen({ stage = 'checking-session' }: { stage?: StartupStage }) {
+export default function StartupScreen({ stage = 'checking-session', overlay = false }: { stage?: StartupStage; overlay?: boolean }) {
   const [online, setOnline] = useState(() => navigator.onLine)
   const [slow, setSlow] = useState(false)
   const copy = stageCopy[stage]
@@ -73,7 +73,7 @@ export default function StartupScreen({ stage = 'checking-session' }: { stage?: 
 
   return (
     <div
-      className={`startup-screen startup-screen-${stage}${online ? '' : ' startup-screen-offline'}`}
+      className={`startup-screen startup-screen-${stage}${overlay ? ' startup-screen-overlay' : ''}${online ? '' : ' startup-screen-offline'}`}
       role="status"
       aria-live="polite"
       aria-busy="true"

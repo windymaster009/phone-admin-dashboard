@@ -52,6 +52,7 @@ export default function AppWithBackend() {
   const [fontSize, setFontSize] = useState<AppFontSize>(getInitialFontSize)
   const [user, setUser] = useState<SessionUser | null>(null)
   const [checking, setChecking] = useState(true)
+  const [workspaceReady, setWorkspaceReady] = useState(false)
 
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -87,6 +88,7 @@ export default function AppWithBackend() {
         if (!active) return
         setToken(null)
         setSessionUser(result.user)
+        setWorkspaceReady(false)
         setUser(result.user)
         void loadApp()
       })
@@ -107,6 +109,7 @@ export default function AppWithBackend() {
 
   const handleAuthenticated = (authenticatedUser: SessionUser) => {
     setSessionUser(authenticatedUser)
+    setWorkspaceReady(false)
     setUser(authenticatedUser)
     setChecking(false)
   }
@@ -122,22 +125,26 @@ export default function AppWithBackend() {
   }
 
   return (
-    <Suspense fallback={<StartupScreen stage="opening-workspace" />}>
-      <App
-        theme={theme}
-        onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
-        fontSize={fontSize}
-        onFontSizeChange={setFontSize}
-        user={user}
-        onLogout={() => {
-          void api('/auth/logout', { method: 'POST' }).catch(() => undefined).finally(() => {
-            setToken(null)
-            setSessionUser(null)
-            setUser(null)
-          })
-        }}
-      />
-      <DeferredBridges />
-    </Suspense>
+    <>
+      <Suspense fallback={<StartupScreen stage="opening-workspace" />}>
+        <App
+          theme={theme}
+          onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
+          fontSize={fontSize}
+          onFontSizeChange={setFontSize}
+          user={user}
+          onWorkspaceReady={() => setWorkspaceReady(true)}
+          onLogout={() => {
+            void api('/auth/logout', { method: 'POST' }).catch(() => undefined).finally(() => {
+              setToken(null)
+              setSessionUser(null)
+              setUser(null)
+            })
+          }}
+        />
+        <DeferredBridges />
+      </Suspense>
+      {!workspaceReady && <StartupScreen stage="opening-workspace" overlay />}
+    </>
   )
 }
