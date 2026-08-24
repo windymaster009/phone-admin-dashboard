@@ -1971,6 +1971,154 @@ body.operation-modal-open {
     white-space: nowrap;
   }
 
+  /* Pawn is a two-step verification flow, so the current step and its action stay visible. */
+  .operation-modal-backdrop:has(.operation-modal-pawn) {
+    align-items: center;
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+
+  .operation-modal-pawn {
+    width: 100%;
+    height: min(80dvh, 640px);
+    max-height: calc(100dvh - 32px);
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    border-radius: 20px;
+  }
+
+  .app[data-font-size='comfortable'] .operation-modal-pawn { height: min(72.7273dvh, 582px); max-height: calc(90.9091dvh - 29px); }
+  .app[data-font-size='large'] .operation-modal-pawn { height: min(66.6667dvh, 533px); max-height: calc(83.3333dvh - 27px); }
+
+  .operation-modal-pawn .operation-modal-header {
+    gap: 11px;
+    padding: 14px 17px;
+  }
+
+  .operation-modal-pawn .operation-modal-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+  }
+
+  .operation-modal-pawn .operation-modal-header h2 {
+    margin: 2px 0 3px;
+    font-size: 19px;
+  }
+
+  .operation-modal-pawn .operation-modal-header p {
+    max-width: 33ch;
+    font-size: 10px;
+    line-height: 1.45;
+  }
+
+  .operation-modal-pawn .operation-modal-close {
+    width: 40px;
+    height: 40px;
+  }
+
+  .operation-modal-pawn .pawn-workflow-form {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .operation-modal-pawn .purchase-stepper {
+    grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr);
+    padding: 10px 17px;
+  }
+
+  .operation-modal-pawn .purchase-stepper .purchase-step {
+    min-height: 44px;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px;
+    border-radius: 10px;
+  }
+
+  .operation-modal-pawn .purchase-stepper .purchase-step > span {
+    width: 28px;
+    height: 28px;
+    font-size: 10px;
+  }
+
+  .operation-modal-pawn .purchase-stepper .purchase-step strong {
+    overflow: hidden;
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .operation-modal-pawn .purchase-step-content {
+    gap: 12px;
+    padding: 0 17px 12px;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+
+  .operation-modal-pawn .purchase-section-card {
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .operation-modal-pawn .purchase-section-heading {
+    gap: 9px;
+    margin-bottom: 10px;
+  }
+
+  .operation-modal-pawn .purchase-section-heading > span {
+    width: 30px;
+    height: 30px;
+    border-radius: 10px;
+  }
+
+  .operation-modal-pawn .purchase-section-heading h3 {
+    font-size: 14px;
+  }
+
+  .operation-modal-pawn .purchase-section-heading p {
+    font-size: 8px;
+    line-height: 1.4;
+  }
+
+  .operation-modal-pawn .purchase-seller-tabs.pawn-customer-tabs {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    margin-bottom: 11px;
+    padding: 4px;
+  }
+
+  .operation-modal-pawn .purchase-seller-tabs.pawn-customer-tabs button {
+    min-width: 0;
+    min-height: 40px;
+    padding: 6px;
+    overflow: hidden;
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .operation-modal-pawn .purchase-fields-grid {
+    gap: 10px;
+  }
+
+  .operation-modal-pawn .pawn-workflow-form > .operation-modal-actions {
+    display: grid;
+    grid-template-columns: minmax(0, .78fr) minmax(0, 1.22fr);
+    gap: 8px;
+    margin: 0;
+    padding: 12px 17px max(12px, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    background: var(--surface-solid, #151e34);
+    box-shadow: 0 -10px 24px color-mix(in srgb, var(--text, #f4f6fb) 12%, transparent);
+  }
+
+  .operation-modal-pawn .pawn-workflow-form > .operation-modal-actions button {
+    min-width: 0;
+    min-height: 44px;
+    padding-inline: 10px;
+    white-space: nowrap;
+  }
+
   .operation-modal-stock .operation-modal-header {
     padding-top: 14px;
     padding-bottom: 14px;
