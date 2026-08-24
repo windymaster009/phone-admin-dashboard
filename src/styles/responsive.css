@@ -196,7 +196,11 @@
   .customer-report-sheet-close:focus-visible { border-color: var(--primary); outline-color: var(--primary); }
   .customer-report-sheet-close:active { transform: translateY(1px); }
   .customer-report-sheet-close:disabled { opacity: .55; cursor: not-allowed; }
-  .customer-report-period { grid-template-columns: minmax(0, 1fr); margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-soft); }
+  .customer-report-activity-heading { min-height: 0; grid-template-columns: auto minmax(0, 1fr); }
+  .customer-report-period,
+  .customer-report-period.is-custom { width: 100%; grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr); margin-top: 12px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-soft); }
+  .customer-report-period-heading small { display: block; }
+  .customer-report-period > label > span { position: static; width: auto; height: auto; overflow: visible; margin: 0; clip: auto; white-space: normal; }
   .customer-report-period select,
   .customer-report-period input { min-height: 44px; font-size: 10px; }
   .customer-report-custom-months { grid-template-columns: repeat(2, minmax(0, 1fr)); }

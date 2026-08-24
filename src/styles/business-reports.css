@@ -322,19 +322,18 @@
 .customer-report-filter select:disabled { opacity: .55; cursor: not-allowed; }
 .customer-report-sheet-actions { display: none; }
 .customer-report-sheet-close { display: none; }
-.customer-report-period { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(168px, 184px); align-items: center; gap: 16px; margin-top: 12px; padding: 8px 0 12px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; }
+.customer-report-period { min-width: 0; display: grid; grid-template-columns: auto minmax(168px, 184px); align-items: center; gap: 8px; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; }
 .customer-report-period-heading { min-width: 0; display: flex; align-items: center; gap: 8px; }
 .customer-report-period-heading > svg { width: 32px; height: 32px; flex: 0 0 32px; padding: 8px; border-radius: 8px; color: var(--primary); background: var(--primary-soft); }
 .customer-report-period-heading > span { min-width: 0; display: grid; gap: 2px; }
 .customer-report-period-heading strong { color: var(--text); font-size: 10px; }
-.customer-report-period-heading small { overflow: hidden; color: var(--muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.customer-report-period-heading small { display: none; overflow: hidden; color: var(--muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .customer-report-period label { min-width: 0; display: grid; gap: 5px; color: var(--muted-2); font-size: 8px; font-weight: 800; letter-spacing: .45px; text-transform: uppercase; }
+.customer-report-period > label > span { position: absolute; width: 1px; height: 1px; overflow: hidden; margin: -1px; padding: 0; border: 0; clip: rect(0 0 0 0); white-space: nowrap; }
 .customer-report-period select,
-.customer-report-period input { min-width: 0; width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 8px; outline: 2px solid transparent; outline-offset: 1px; color: var(--text); background: var(--bg-soft); font: 700 9px var(--font-body); color-scheme: dark; }
+.customer-report-period input { min-width: 0; width: 100%; height: 36px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 8px; outline: 2px solid transparent; outline-offset: 1px; color: var(--text); background: var(--bg-soft); font: 700 9px var(--font-body); color-scheme: dark; }
 .app[data-theme='light'] .customer-report-period select,
 .app[data-theme='light'] .customer-report-period input { color-scheme: light; }
-.customer-report-period select:hover,
-.customer-report-period input:hover { background: var(--surface-hover); }
 .customer-report-period select:focus-visible,
 .customer-report-period input:focus-visible { border-color: var(--primary); outline-color: var(--primary); }
 .customer-report-period input[aria-invalid='true'] { border-color: var(--rose); }
@@ -343,6 +342,8 @@
 .customer-report-period select:disabled,
 .customer-report-period input:disabled,
 .customer-report-period button:disabled { opacity: .55; cursor: not-allowed; }
+.customer-report-period.is-custom { width: 100%; grid-column: 1 / -1; grid-template-columns: minmax(0, 1fr) minmax(168px, 184px); gap: 8px 16px; margin-top: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+.customer-report-period.is-custom .customer-report-period-heading small { display: block; }
 .customer-report-custom-months { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; align-items: end; gap: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
 .customer-report-custom-months button { min-height: 36px; white-space: nowrap; }
 .customer-report-count { margin: 16px 0 8px; color: var(--muted); font-size: 10px; font-weight: 700; }
@@ -376,7 +377,7 @@
 .customer-report-details strong { overflow-wrap: anywhere; color: var(--text); font-size: 11px; line-height: 1.45; }
 .customer-report-details .customer-report-address { grid-column: 1 / -1; min-height: 58px; }
 .customer-report-open { width: fit-content; align-self: flex-start; margin-top: 18px; white-space: nowrap; }
-.customer-report-activity-heading { flex: 0 0 auto; }
+.customer-report-activity-heading { min-height: 64px; flex: 0 0 auto; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; }
 .customer-report-activity-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
 .supplier-report-summary { grid-template-columns: minmax(0, 1fr); }
 .customer-report-activity-summary > div { min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-soft); }
@@ -404,7 +405,7 @@
 .customer-report-activity-error { margin: 10px 0 0; color: var(--rose); font-size: 9px; line-height: 1.4; }
 .customer-report-empty-profile { min-height: 100%; display: grid; place-content: center; justify-items: center; padding: 24px; color: var(--muted); text-align: center; }
 .customer-report-empty-profile > svg { margin-bottom: 8px; color: var(--primary); }
-@media (hover: hover) and (pointer: fine) { .customer-report-search .search-field:hover, .customer-report-filter select:hover { background: var(--surface-hover); } }
+@media (hover: hover) and (pointer: fine) { .customer-report-search .search-field:hover, .customer-report-filter select:hover, .customer-report-period select:hover, .customer-report-period input:hover { background: var(--surface-hover); } }
 @media (prefers-reduced-motion: reduce) { .customer-report-picker { transition: none; } .customer-report-skeleton { animation: none; } }
 .report-placeholder-card { min-height: 320px; padding: 32px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .report-placeholder-card h3 { margin: 16px 0 7px; font: 800 18px Manrope, sans-serif; }
