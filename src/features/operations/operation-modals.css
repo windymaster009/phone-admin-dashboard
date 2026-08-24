@@ -1852,6 +1852,125 @@ body.operation-modal-open {
     white-space: nowrap;
   }
 
+  /* Keep scanning a short, clear choice on phones instead of a screen-filling sheet. */
+  .operation-modal-backdrop:has(.operation-modal-scan) {
+    align-items: center;
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+
+  .operation-modal-scan {
+    width: 100%;
+    height: min(80dvh, 640px);
+    max-height: calc(100dvh - 32px);
+    border-radius: 20px;
+  }
+
+  .app[data-font-size='comfortable'] .operation-modal-scan { height: min(72.7273dvh, 582px); max-height: calc(90.9091dvh - 29px); }
+  .app[data-font-size='large'] .operation-modal-scan { height: min(66.6667dvh, 533px); max-height: calc(83.3333dvh - 27px); }
+
+  .operation-modal-scan .operation-modal-header {
+    gap: 11px;
+    padding: 14px 17px;
+  }
+
+  .operation-modal-scan .operation-modal-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+  }
+
+  .operation-modal-scan .operation-modal-header h2 {
+    margin: 2px 0 3px;
+    font-size: 19px;
+  }
+
+  .operation-modal-scan .operation-modal-header p {
+    max-width: 33ch;
+    font-size: 10px;
+    line-height: 1.45;
+  }
+
+  .operation-modal-scan .operation-modal-close {
+    width: 40px;
+    height: 40px;
+  }
+
+  .operation-modal-scan .scanner-workflow {
+    min-height: 0;
+    flex: 1;
+    padding: 14px 17px 17px;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+
+  .operation-modal-scan .scanner-intro {
+    margin-bottom: 11px;
+  }
+
+  .operation-modal-scan .scanner-intro h3 {
+    margin-bottom: 4px;
+    font-size: 15px;
+  }
+
+  .operation-modal-scan .scanner-intro p {
+    font-size: 9px;
+    line-height: 1.4;
+  }
+
+  .operation-modal-scan .scanner-code-form {
+    padding: 12px;
+    border-radius: 13px;
+  }
+
+  .operation-modal-scan .scanner-method-heading {
+    gap: 9px;
+    margin-bottom: 9px;
+  }
+
+  .operation-modal-scan .scanner-method-heading > span {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+  }
+
+  .operation-modal-scan .scanner-method-heading strong {
+    font-size: 11px;
+  }
+
+  .operation-modal-scan .scanner-method-heading small,
+  .operation-modal-scan .scanner-code-form > small,
+  .operation-modal-scan .camera-scanner > small {
+    font-size: 8px;
+    line-height: 1.35;
+  }
+
+  .operation-modal-scan .scanner-input-row {
+    gap: 7px;
+  }
+
+  .operation-modal-scan .scanner-code-form input,
+  .operation-modal-scan .scanner-input-row .primary-button,
+  .operation-modal-scan .camera-scanner .secondary-button {
+    min-height: 44px;
+  }
+
+  .operation-modal-scan .scanner-divider {
+    margin: 12px 0;
+    font-size: 8px;
+  }
+
+  .operation-modal-scan .camera-scanner {
+    gap: 8px;
+    padding: 11px;
+    border-radius: 13px;
+  }
+
+  .operation-modal-scan .camera-scanner .secondary-button {
+    padding-inline: 10px;
+    white-space: nowrap;
+  }
+
   .operation-modal-stock .operation-modal-header {
     padding-top: 14px;
     padding-bottom: 14px;
