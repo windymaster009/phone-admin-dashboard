@@ -111,6 +111,27 @@ type Customer = {
   createdAt?: string
 }
 
+type CustomerActivity = {
+  id: string
+  kind: 'SALE' | 'PURCHASE' | 'PAWN'
+  reference: string
+  title: string
+  amount: number
+  currency: PawnCurrency
+  status: string
+  occurredAt: string
+}
+
+type CustomerActivityReport = {
+  summary: {
+    sales: Record<PawnCurrency, number>
+    purchases: Record<PawnCurrency, number>
+    pawned: Record<PawnCurrency, number>
+  }
+  activities: CustomerActivity[]
+  limited: boolean
+}
+
 type InventoryItem = {
   _id: string
   sku: string
@@ -2923,18 +2944,21 @@ function ReportLanding({ navigate }: { navigate: (path: string) => void }) {
         </div>
       </section>
       <p className="report-hub-note"><AlertTriangle size={15} />Exports will be added only after all report calculations and workflows are verified.</p>
-      {customerReportOpen && <CustomerReportModal onClose={() => setCustomerReportOpen(false)} onOpenCustomers={() => { setCustomerReportOpen(false); navigate('/customers') }} />}
+      {customerReportOpen && <CustomerReportModal onClose={() => setCustomerReportOpen(false)} />}
     </div>
   )
 }
 
-function CustomerReportModal({ onClose, onOpenCustomers }: { onClose: () => void; onOpenCustomers: () => void }) {
+function CustomerReportModal({ onClose }: { onClose: () => void }) {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [idFilter, setIdFilter] = useState<'all' | 'recorded' | 'missing'>('all')
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
+  const [activityReport, setActivityReport] = useState<CustomerActivityReport | null>(null)
+  const [activityLoading, setActivityLoading] = useState(false)
+  const [activityError, setActivityError] = useState('')
 
   useEffect(() => {
     api<{ customers: Customer[] }>('/customers')
@@ -2959,6 +2983,20 @@ function CustomerReportModal({ onClose, onOpenCustomers }: { onClose: () => void
     const matchesIdFilter = idFilter === 'all' || (idFilter === 'recorded' ? hasId : !hasId)
     return matchesSearch && matchesIdFilter
   }), [customers, idFilter, search])
+
+  const openActivityReport = async () => {
+    if (!selectedCustomer) return
+    setActivityLoading(true)
+    setActivityError('')
+    try {
+      const report = await api<CustomerActivityReport>(`/customers/${selectedCustomer._id}/activity-report`)
+      setActivityReport(report)
+    } catch (reason) {
+      setActivityError(reason instanceof Error ? reason.message : 'Unable to load this customer activity report')
+    } finally {
+      setActivityLoading(false)
+    }
+  }
 
   return (
     <div className="modal-backdrop customer-report-backdrop" role="presentation" onClick={onClose}>
@@ -2993,7 +3031,7 @@ function CustomerReportModal({ onClose, onOpenCustomers }: { onClose: () => void
                 const isSelected = selectedCustomer?._id === customer._id
                 const hasId = Boolean(customer.nationalIdNumber)
                 return (
-                  <button type="button" className={`customer-report-picker ${isSelected ? 'is-selected' : ''}`} key={customer._id} onClick={() => setSelectedCustomer(customer)} aria-pressed={isSelected}>
+                  <button type="button" className={`customer-report-picker ${isSelected ? 'is-selected' : ''}`} key={customer._id} onClick={() => { setSelectedCustomer(customer); setActivityReport(null); setActivityError('') }} aria-pressed={isSelected}>
                     <span className="avatar">{customer.name.slice(0, 2).toUpperCase()}</span>
                     <span><strong>{customer.name}</strong><small>{customer.phone || 'No phone recorded'}</small></span>
                     {hasId ? <BadgeCheck size={16} aria-label="National ID recorded" /> : <AlertTriangle size={16} aria-label="National ID not recorded" />}
@@ -3004,7 +3042,26 @@ function CustomerReportModal({ onClose, onOpenCustomers }: { onClose: () => void
             </div>
           </aside>
           <section className={`customer-report-profile ${selectedCustomer ? 'has-selection' : ''}`} aria-live="polite">
-            {selectedCustomer ? <>
+            {selectedCustomer && activityReport ? <>
+              <button type="button" className="customer-report-dismiss" onClick={() => setActivityReport(null)}><ArrowLeft size={16} /> Back to profile</button>
+              <div className="customer-report-profile-heading customer-report-activity-heading">
+                <span className="avatar">{selectedCustomer.name.slice(0, 2).toUpperCase()}</span>
+                <div><span className="eyebrow">Customer activity</span><h4>{selectedCustomer.name}</h4><p>Sales, purchases, and pawn contracts linked to this customer.</p></div>
+              </div>
+              <div className="customer-report-activity-summary" aria-label="Customer activity totals">
+                <div><span>Sales</span><strong>{pawnMoney(activityReport.summary.sales.USD)}<small>{activityReport.summary.sales.KHR ? pawnMoney(activityReport.summary.sales.KHR, 'KHR') : ''}</small></strong></div>
+                <div><span>Purchases</span><strong>{pawnMoney(activityReport.summary.purchases.USD)}<small>{activityReport.summary.purchases.KHR ? pawnMoney(activityReport.summary.purchases.KHR, 'KHR') : ''}</small></strong></div>
+                <div><span>Pawned</span><strong>{pawnMoney(activityReport.summary.pawned.USD)}<small>{activityReport.summary.pawned.KHR ? pawnMoney(activityReport.summary.pawned.KHR, 'KHR') : ''}</small></strong></div>
+              </div>
+              <div className="customer-report-activity-list">
+                <div className="customer-report-activity-list-heading"><strong>History</strong><small>{activityReport.activities.length} record{activityReport.activities.length === 1 ? '' : 's'}{activityReport.limited ? ' · latest 200' : ''}</small></div>
+                {activityReport.activities.map((activity) => {
+                  const Icon = activity.kind === 'SALE' ? CircleDollarSign : activity.kind === 'PURCHASE' ? ShoppingCart : HandCoins
+                  return <article className={`customer-report-activity-row ${activity.kind.toLowerCase()}`} key={activity.id}><span className="transaction-icon"><Icon size={16} /></span><div><strong>{activity.kind === 'SALE' ? 'Sold to customer' : activity.kind === 'PURCHASE' ? 'Bought from customer' : 'Pawn contract'}</strong><small>{activity.reference} · {dateText(activity.occurredAt)}</small><p>{activity.title}</p></div><aside><strong>{pawnMoney(activity.amount, activity.currency)}</strong><small>{titleStatus(activity.status)}</small></aside></article>
+                })}
+                {activityReport.activities.length === 0 && <p className="customer-report-empty">No sales, purchases, or pawn contracts are linked to this customer yet.</p>}
+              </div>
+            </> : selectedCustomer ? <>
               <button type="button" className="customer-report-dismiss" onClick={() => setSelectedCustomer(null)}><ChevronDown size={16} /> Back to list</button>
               <div className="customer-report-profile-heading">
                 <span className="avatar">{selectedCustomer.name.slice(0, 2).toUpperCase()}</span>
@@ -3016,7 +3073,8 @@ function CustomerReportModal({ onClose, onOpenCustomers }: { onClose: () => void
                 <div className="customer-report-address"><span>Address</span><strong>{selectedCustomer.address || 'Not recorded'}</strong></div>
                 <div className="customer-report-address"><span>Notes</span><strong>{selectedCustomer.notes || 'No notes recorded'}</strong></div>
               </div>
-              <button className="primary-button customer-report-open" onClick={onOpenCustomers}>Open full record <ArrowUpRight size={16} /></button>
+              <button className="primary-button customer-report-open" onClick={() => void openActivityReport()} disabled={activityLoading}>{activityLoading ? 'Loading report…' : 'Open activity report'} <ArrowUpRight size={16} /></button>
+              {activityError && <p className="customer-report-activity-error" role="alert">{activityError}</p>}
             </> : <div className="customer-report-empty-profile"><Users size={24} /><h4>Select a customer</h4><p>Choose someone from the list to see their saved contact and identity details.</p></div>}
           </section>
         </div>

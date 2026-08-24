@@ -1681,6 +1681,64 @@ router.get('/customers', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'),
   res.json({ customers })
 }))
 
+router.get('/customers/:id/activity-report', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) throw requestError(400, 'Customer ID is invalid')
+  const customer = await Customer.findById(req.params.id)
+  if (!customer) throw requestError(404, 'Customer was not found')
+
+  await refreshPawnStatuses()
+  const [trades, pawns] = await Promise.all([
+    Trade.find({ customer: customer._id })
+      .select('tradeNo type currency transactionTotal total status purchaseDate createdAt items')
+      .sort({ createdAt: -1 })
+      .limit(100),
+    Pawn.find({ customer: customer._id })
+      .select('pawnNo principal currency status itemSnapshot issueDate createdAt')
+      .sort({ issueDate: -1, createdAt: -1 })
+      .limit(100),
+  ])
+
+  const emptyTotals = () => ({ USD: 0, KHR: 0 })
+  const summary = { sales: emptyTotals(), purchases: emptyTotals(), pawned: emptyTotals() }
+  const addTotal = (totals, amount, currency) => {
+    const key = currency === 'KHR' ? 'KHR' : 'USD'
+    totals[key] = roundMoney(totals[key] + (Number(amount) || 0))
+  }
+
+  const activities = [
+    ...trades.map((trade) => {
+      const amount = Number(trade.transactionTotal ?? trade.total) || 0
+      const kind = trade.type === 'SELL' ? 'SALE' : 'PURCHASE'
+      addTotal(kind === 'SALE' ? summary.sales : summary.purchases, amount, trade.currency)
+      return {
+        id: `trade-${trade._id}`,
+        kind,
+        reference: trade.tradeNo,
+        title: trade.items.map((item) => `${item.name} ×${item.quantity}`).join(', ') || 'Transaction recorded',
+        amount: roundMoney(amount),
+        currency: trade.currency || 'USD',
+        status: trade.status,
+        occurredAt: trade.purchaseDate || trade.createdAt,
+      }
+    }),
+    ...pawns.map((pawn) => {
+      addTotal(summary.pawned, pawn.principal, pawn.currency)
+      return {
+        id: `pawn-${pawn._id}`,
+        kind: 'PAWN',
+        reference: pawn.pawnNo,
+        title: pawn.itemSnapshot?.name || 'Pawn collateral recorded',
+        amount: roundMoney(pawn.principal),
+        currency: pawn.currency || 'USD',
+        status: pawn.status,
+        occurredAt: pawn.issueDate || pawn.createdAt,
+      }
+    }),
+  ].sort((left, right) => new Date(right.occurredAt).getTime() - new Date(left.occurredAt).getTime())
+
+  res.json({ customer, summary, activities, limited: activities.length >= 200 })
+}))
+
 router.post('/customers', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
   const { name, phone, nationalIdNumber, nationalIdFrontUrl, nationalIdBackUrl, address, notes } = req.body
   if (!name || !phone) return res.status(400).json({ message: 'Customer name and phone are required' })

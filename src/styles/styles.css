@@ -1354,6 +1354,27 @@ td strong { color: var(--text); }
 .customer-report-details strong { overflow-wrap: anywhere; color: var(--text); font-size: 11px; line-height: 1.45; }
 .customer-report-details .customer-report-address { grid-column: 1 / -1; min-height: 58px; }
 .customer-report-open { width: fit-content; margin-top: auto; white-space: nowrap; }
+.customer-report-activity-heading { flex: 0 0 auto; }
+.customer-report-activity-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
+.customer-report-activity-summary > div { min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg-soft); }
+.customer-report-activity-summary span, .customer-report-activity-list-heading small, .customer-report-activity-row small { display: block; color: var(--muted-2); font-size: 8px; font-weight: 700; }
+.customer-report-activity-summary > div > strong { display: block; margin-top: 5px; overflow: hidden; color: var(--text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.customer-report-activity-summary > div > strong small { margin-top: 3px; color: var(--primary); font-size: 7px; }
+.customer-report-activity-list { min-height: 0; flex: 1; margin-top: 16px; overflow-y: auto; }
+.customer-report-activity-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+.customer-report-activity-list-heading strong { color: var(--text); font-size: 11px; }
+.customer-report-activity-row { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 9px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.customer-report-activity-row .transaction-icon { width: 30px; height: 30px; border-radius: 9px; color: var(--chart-green); background: color-mix(in srgb, var(--chart-green) 12%, transparent); }
+.customer-report-activity-row.purchase .transaction-icon { color: var(--chart-orange); background: color-mix(in srgb, var(--chart-orange) 12%, transparent); }
+.customer-report-activity-row.pawn .transaction-icon { color: var(--primary); background: var(--primary-soft); }
+.customer-report-activity-row > div { min-width: 0; }
+.customer-report-activity-row > div > strong { display: block; overflow: hidden; color: var(--text); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.customer-report-activity-row > div > small { margin-top: 3px; }
+.customer-report-activity-row p { margin: 4px 0 0; overflow: hidden; color: var(--muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.customer-report-activity-row aside { min-width: 0; display: flex; flex-direction: column; align-items: flex-end; }
+.customer-report-activity-row aside strong { overflow: hidden; color: var(--text); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.customer-report-activity-row aside small { margin-top: 3px; text-transform: capitalize; }
+.customer-report-activity-error { margin: 10px 0 0; color: var(--rose); font-size: 9px; line-height: 1.4; }
 .customer-report-empty-profile { min-height: 100%; display: grid; place-content: center; justify-items: center; padding: 24px; color: var(--muted); text-align: center; }
 .customer-report-empty-profile > svg { margin-bottom: 8px; color: var(--primary); }
 @media (hover: hover) and (pointer: fine) { .customer-report-search .search-field:hover, .customer-report-filter select:hover { background: var(--surface-hover); } }
@@ -1589,7 +1610,7 @@ a:focus-visible,
   .sales-report-page { gap: 12px; }
   .report-hub-grid { grid-template-columns: minmax(0, 1fr); gap: 9px; }
   .report-hub-card { min-height: 0; padding: 11px 14px; }
-  .customer-report-backdrop { align-items: center; padding: max(16px, env(safe-area-inset-top, 0px)) 12px max(72px, env(safe-area-inset-bottom, 0px)); }
+  .modal-backdrop.customer-report-backdrop { align-items: center; padding: max(16px, env(safe-area-inset-top, 0px)) 12px max(72px, env(safe-area-inset-bottom, 0px)); }
   .customer-report-modal { width: 100%; height: min(76dvh, 600px); max-height: calc(100dvh - 72px); position: relative; }
   .customer-report-modal .detail-modal-header { flex: 0 0 auto; padding: 16px 14px; }
   .customer-report-modal .detail-modal-header h3 { margin: 4px 0; font-size: 19px; }
@@ -1607,6 +1628,13 @@ a:focus-visible,
   .customer-report-details > div { min-height: 64px; padding: 10px; }
   .customer-report-details > div:last-child { display: none; }
   .customer-report-open { width: 100%; justify-content: center; margin-top: 16px; }
+  .customer-report-activity-summary { gap: 6px; margin-top: 12px; }
+  .customer-report-activity-summary > div { padding: 8px; }
+  .customer-report-activity-summary > div > strong { font-size: 10px; }
+  .customer-report-activity-list { overflow: visible; margin-top: 12px; }
+  .customer-report-activity-row { gap: 7px; padding: 8px 0; }
+  .customer-report-activity-row .transaction-icon { width: 27px; height: 27px; border-radius: 8px; }
+  .customer-report-activity-row aside strong { font-size: 9px; }
   .app[data-font-size='comfortable'] .customer-report-modal { height: min(69.0909dvh, 545px); max-height: calc(90.9091dvh - 65px); }
   .app[data-font-size='large'] .customer-report-modal { height: min(63.3333dvh, 500px); max-height: calc(83.3333dvh - 60px); }
   .sales-report-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 11px; }
