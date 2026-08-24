@@ -1752,7 +1752,7 @@ router.get('/customers/:id/activity-report', requireAuth, allowRoles('OWNER', 'M
 
 router.post('/customers', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
   const { name, phone, nationalIdNumber, nationalIdFrontUrl, nationalIdBackUrl, address, notes } = req.body
-  if (!name || !phone) return res.status(400).json({ message: 'Customer name and phone are required' })
+  if (!clean(name)) return res.status(400).json({ message: 'Customer name is required' })
   const canManageIdentity = ['OWNER', 'MANAGER'].includes(req.user.role)
 
   const customer = await Customer.create({

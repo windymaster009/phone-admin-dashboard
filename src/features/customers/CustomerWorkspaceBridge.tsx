@@ -100,7 +100,7 @@ function CustomerModal({
           {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
           <div className="operation-form-grid">
             <label>Full name<input name="name" required autoFocus defaultValue={customer?.name || ''} placeholder="Customer full name" /></label>
-            <label>Phone number<input name="phone" required defaultValue={customer?.phone || ''} placeholder="012 345 678" /></label>
+            <label>Phone number <small className="optional-marker">Optional</small><input name="phone" defaultValue={customer?.phone || ''} placeholder="012 345 678" /></label>
             <label>National ID number <small className="optional-marker">Optional</small><input name="nationalIdNumber" defaultValue={customer?.nationalIdNumber || ''} placeholder="ID number" /></label>
             <label>Address <small className="optional-marker">Optional</small><input name="address" defaultValue={customer?.address || ''} placeholder="Village, district, province" /></label>
             <label className="operation-wide">Notes <small className="optional-marker">Optional</small><textarea name="notes" rows={4} defaultValue={customer?.notes || ''} placeholder="Ownership details, contact notes, or other information" /></label>
