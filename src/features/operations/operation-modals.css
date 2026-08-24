@@ -1702,6 +1702,156 @@ body.operation-modal-open {
     white-space: nowrap;
   }
 
+  /* The sale starts as a focussed checkout panel, with its decision controls always in reach. */
+  .operation-modal-backdrop:has(.operation-modal-sale) {
+    align-items: center;
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  }
+
+  .operation-modal-sale {
+    width: 100%;
+    height: min(80dvh, 640px);
+    max-height: calc(100dvh - 32px);
+    border-radius: 20px;
+  }
+
+  /* Keep the physical panel stable as the user moves between Default, Comfortable, and Large. */
+  .app[data-font-size='comfortable'] .operation-modal-sale { height: min(72.7273dvh, 582px); max-height: calc(90.9091dvh - 29px); }
+  .app[data-font-size='large'] .operation-modal-sale { height: min(66.6667dvh, 533px); max-height: calc(83.3333dvh - 27px); }
+
+  .operation-modal-sale .operation-modal-header {
+    gap: 11px;
+    padding: 14px 17px;
+  }
+
+  .operation-modal-sale .operation-modal-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+  }
+
+  .operation-modal-sale .operation-modal-header h2 {
+    margin: 2px 0 3px;
+    font-size: 19px;
+  }
+
+  .operation-modal-sale .operation-modal-header p {
+    max-width: 33ch;
+    font-size: 10px;
+    line-height: 1.45;
+  }
+
+  .operation-modal-sale .operation-modal-close {
+    width: 40px;
+    height: 40px;
+  }
+
+  .operation-modal-sale .sale-form {
+    min-height: 0;
+    flex: 1;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    overflow: hidden;
+    padding: 0;
+  }
+
+  .operation-modal-sale .sale-form > .operation-form-grid {
+    min-height: 0;
+    align-content: start;
+    gap: 11px;
+    overflow-y: auto;
+    padding: 13px 17px 12px;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+
+  .operation-modal-sale .sale-form label,
+  .operation-modal-sale .sale-price-display {
+    gap: 5px;
+    font-size: 10px;
+  }
+
+  .operation-modal-sale .sale-form input,
+  .operation-modal-sale .sale-form select,
+  .operation-modal-sale .sale-price-display strong {
+    min-height: 44px;
+    font-size: 12px;
+  }
+
+  .operation-modal-sale .sale-price-display small,
+  .operation-modal-sale .sale-form label > small {
+    font-size: 8px;
+    line-height: 1.35;
+  }
+
+  .operation-modal-sale .sale-payment-method {
+    gap: 8px;
+  }
+
+  .operation-modal-sale .sale-payment-method button {
+    min-height: 56px;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .operation-modal-sale .sale-payment-method button > span {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+  }
+
+  .operation-modal-sale .sale-payment-method button strong {
+    font-size: 10px;
+  }
+
+  .operation-modal-sale .sale-payment-method button small {
+    font-size: 8px;
+  }
+
+  .operation-modal-sale .sale-amount-received {
+    padding: 10px;
+    border-radius: 12px;
+  }
+
+  .operation-modal-sale .sale-summary > header {
+    padding: 10px 11px;
+  }
+
+  .operation-modal-sale .sale-summary-calculation > span {
+    gap: 5px;
+    padding: 9px 10px;
+  }
+
+  .operation-modal-sale .sale-form .operation-modal-actions {
+    position: static;
+    display: grid;
+    grid-template-columns: minmax(0, .78fr) minmax(0, 1.22fr);
+    gap: 8px;
+    margin: 0;
+    padding: 10px 17px max(12px, env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    background: var(--surface-solid, #151e34);
+    box-shadow: 0 -10px 24px color-mix(in srgb, var(--text, #f4f6fb) 12%, transparent);
+  }
+
+  .operation-modal-sale .sale-form .sale-total {
+    grid-column: 1 / -1;
+    min-width: 0;
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 0 2px 6px;
+  }
+
+  .operation-modal-sale .sale-form .operation-modal-actions button {
+    min-width: 0;
+    min-height: 44px;
+    padding-inline: 10px;
+    white-space: nowrap;
+  }
+
   .operation-modal-stock .operation-modal-header {
     padding-top: 14px;
     padding-bottom: 14px;
