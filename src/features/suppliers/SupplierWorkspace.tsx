@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ButtonHTMLAttributes, type FormEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle, BadgeCheck, Building2, Pencil, Phone, Plus, Power, Search, Trash2, X } from 'lucide-react'
+import { AlertTriangle, BadgeCheck, Building2, CheckCircle2, Pencil, Phone, Plus, Power, Search, Trash2, X } from 'lucide-react'
 import { api } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
 import './supplier-workspace.css'
@@ -82,6 +82,36 @@ function SupplierModal({ supplier, busy, error, onClose, onSubmit }: {
   </div>
 }
 
+type SupplierSuccess = {
+  action: 'saved' | 'deleted'
+  message: string
+}
+
+function SupplierSuccessModal({ success, onClose }: { success: SupplierSuccess; onClose: () => void }) {
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
+    document.addEventListener('keydown', closeOnEscape)
+    document.body.classList.add('operation-modal-open')
+    return () => {
+      document.removeEventListener('keydown', closeOnEscape)
+      document.body.classList.remove('operation-modal-open')
+    }
+  }, [onClose])
+
+  return createPortal(
+    <div className="operation-modal-backdrop supplier-save-success-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+      <section className="operation-modal supplier-save-success-modal" role="dialog" aria-modal="true" aria-labelledby="supplier-save-success-title">
+        <span className="supplier-save-success-icon"><CheckCircle2 size={30} /></span>
+        <span className="eyebrow">Supplier record {success.action === 'deleted' ? 'deleted' : 'saved'}</span>
+        <h2 id="supplier-save-success-title">{success.message}</h2>
+        <p>{success.action === 'deleted' ? 'The supplier profile has been removed from your shop.' : 'The supplier profile is ready to use in new purchases.'}</p>
+        <button type="button" className="primary-button" onClick={onClose} autoFocus><CheckCircle2 size={16} /> Done</button>
+      </section>
+    </div>,
+    document.body,
+  )
+}
+
 function DeleteSupplierModal({ supplier, busy, error, onClose, onConfirm }: {
   supplier: Supplier
   busy: boolean
@@ -100,7 +130,7 @@ function DeleteSupplierModal({ supplier, busy, error, onClose, onConfirm }: {
   }, [busy, onClose])
 
   return createPortal(
-    <div className="operation-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose() }}>
+    <div className="operation-modal-backdrop supplier-delete-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose() }}>
       <section className="operation-modal supplier-delete-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-supplier-title">
         <button type="button" className="supplier-delete-close" onClick={onClose} disabled={busy} aria-label="Close"><X size={18} /></button>
         {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
@@ -128,6 +158,7 @@ export default function SupplierWorkspace() {
   const [error, setError] = useState('')
   const [modalError, setModalError] = useState('')
   const [deleteError, setDeleteError] = useState('')
+  const [success, setSuccess] = useState<SupplierSuccess | null>(null)
   const [editing, setEditing] = useState<Supplier | null>(null)
   const [deleting, setDeleting] = useState<Supplier | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
@@ -165,10 +196,12 @@ export default function SupplierWorkspace() {
       nationalIdNumber: String(form.get('nationalIdNumber') || '').trim(),
       notes: String(form.get('notes') || '').trim(),
     }
+    const isEditing = Boolean(editing)
     try {
       await api(editing ? `/suppliers/${editing._id}` : '/suppliers', { method: editing ? 'PATCH' : 'POST', body: JSON.stringify(payload) })
       setModalOpen(false)
       setEditing(null)
+      setSuccess({ action: 'saved', message: isEditing ? `${payload.name} updated` : `${payload.name} added` })
       await loadSuppliers()
       window.dispatchEvent(new CustomEvent('phoneflow:suppliers-updated'))
     } catch (reason) {
@@ -203,6 +236,7 @@ export default function SupplierWorkspace() {
       setDeleting(null)
       await loadSuppliers()
       window.dispatchEvent(new CustomEvent('phoneflow:suppliers-updated'))
+      setSuccess({ action: 'deleted', message: `${supplier.name} deleted` })
     } catch (reason) {
       setDeleteError(reason instanceof Error ? reason.message : 'Unable to delete supplier')
     } finally {
@@ -237,5 +271,6 @@ export default function SupplierWorkspace() {
     </article>
     {modalOpen && <SupplierModal supplier={editing} busy={busy} error={modalError} onClose={() => { if (!busy) { setModalOpen(false); setEditing(null) } }} onSubmit={saveSupplier} />}
     {deleting && <DeleteSupplierModal supplier={deleting} busy={busy} error={deleteError} onClose={() => { if (!busy) setDeleting(null) }} onConfirm={() => void deleteSupplier()} />}
+    {success && <SupplierSuccessModal success={success} onClose={() => setSuccess(null)} />}
   </div>
 }
