@@ -1361,6 +1361,10 @@ td strong { color: var(--text); }
 .customer-report-activity-summary span, .customer-report-activity-list-heading small, .customer-report-activity-row small { display: block; color: var(--muted-2); font-size: 8px; font-weight: 700; }
 .customer-report-activity-summary > div > strong { display: block; margin-top: 5px; overflow: hidden; color: var(--text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
 .customer-report-activity-summary > div > strong small { margin-top: 3px; color: var(--primary); font-size: 7px; }
+.customer-report-currency-values { display: grid; gap: 4px; margin-top: 5px; }
+.customer-report-currency-values p { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 0; }
+.customer-report-currency-values p span { display: block; color: var(--muted-2); font-size: 7px; font-weight: 800; }
+.customer-report-currency-values p strong { overflow: hidden; color: var(--text); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .customer-report-activity-list { min-height: 0; flex: 1; margin-top: 16px; overflow-y: auto; }
 .customer-report-activity-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
 .customer-report-activity-list-heading strong { color: var(--text); font-size: 11px; }
