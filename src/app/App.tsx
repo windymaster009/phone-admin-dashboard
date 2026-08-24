@@ -3773,8 +3773,6 @@ function App({
   const [active, setActive] = useState<NavKey>(() => viewFromPath(window.location.pathname))
   const [mobileOpen, setMobileOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
-  const [sidebarCounts, setSidebarCounts] = useState({ pawns: 0, lowStock: 0 })
-  const [sidebarReady, setSidebarReady] = useState(false)
   const [initialViewReady, setInitialViewReady] = useState(() => {
     const initialView = viewFromPath(window.location.pathname)
     return initialView !== 'dashboard' && initialView !== 'businessOverview'
@@ -3796,15 +3794,8 @@ function App({
   }
 
   useEffect(() => {
-    api<DashboardData>('/dashboard')
-      .then((result) => setSidebarCounts({ pawns: result.metrics.pawnCount, lowStock: result.metrics.lowStock }))
-      .catch(() => undefined)
-      .finally(() => setSidebarReady(true))
-  }, [])
-
-  useEffect(() => {
-    if (sidebarReady && initialViewReady) onWorkspaceReady()
-  }, [initialViewReady, onWorkspaceReady, sidebarReady])
+    if (initialViewReady) onWorkspaceReady()
+  }, [initialViewReady, onWorkspaceReady])
 
   useEffect(() => {
     const currentView = viewFromPath(window.location.pathname)
@@ -3939,16 +3930,11 @@ function App({
               <span className="nav-group-label">{group.label}</span>
               {group.items.filter((item) => !item.roles || item.roles.includes(user.role)).map((item) => {
                 const Icon = item.icon
-                const badge = item.key === 'pawn'
-                  ? String(sidebarCounts.pawns)
-                  : item.key === 'inventory'
-                    ? `Low ${sidebarCounts.lowStock}`
-                    : item.badge
                 return (
                   <button className={active === item.key ? 'active' : ''} key={item.key} onClick={() => changePage(item.key)}>
                     <Icon size={19} />
                     <span>{item.label}</span>
-                    {badge && <small>{badge}</small>}
+                    {item.badge && <small>{item.badge}</small>}
                   </button>
                 )
               })}
