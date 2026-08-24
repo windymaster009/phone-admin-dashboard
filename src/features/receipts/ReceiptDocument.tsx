@@ -90,13 +90,14 @@ function ContractDetails({ snapshot }: { snapshot: ReceiptSnapshot }) {
 }
 
 function Totals({ snapshot }: { snapshot: ReceiptSnapshot }) {
+  const refund = snapshot.documentType === 'REFUND_RECEIPT'
   return (
     <section className="receipt-totals">
       {snapshot.subtotal !== undefined && <Row label="Subtotal" value={money(snapshot.subtotal, snapshot.currency)} />}
       {Number(snapshot.discount || 0) > 0 && <Row label="Discount" value={`-${money(snapshot.discount, snapshot.currency)}`} />}
-      <div className="receipt-grand-total"><span>Total</span><strong>{money(snapshot.total, snapshot.currency)}</strong></div>
-      {snapshot.amountPaid !== undefined && <Row label="Amount paid" value={money(snapshot.amountPaid, snapshot.currency)} />}
-      {snapshot.balance !== undefined && <Row label="Balance" value={money(snapshot.balance, snapshot.currency)} />}
+      <div className="receipt-grand-total"><span>{refund ? 'Refund total' : 'Total'}</span><strong>{money(snapshot.total, snapshot.currency)}</strong></div>
+      {snapshot.amountPaid !== undefined && <Row label={refund ? 'Refunded' : 'Amount paid'} value={money(snapshot.amountPaid, snapshot.currency)} />}
+      {snapshot.balance !== undefined && <Row label={refund ? 'Remaining due' : 'Balance'} value={money(snapshot.balance, snapshot.currency)} />}
     </section>
   )
 }
@@ -201,7 +202,7 @@ export default function ReceiptDocument({ receipt, layout }: { receipt: ReceiptR
       </section>
 
       <section className="receipt-section">
-        <h3>{snapshot.documentType === 'PAWN_CONTRACT' ? 'Collateral' : 'Items / purpose'}</h3>
+        <h3>{snapshot.documentType === 'PAWN_CONTRACT' ? 'Collateral' : snapshot.documentType === 'REFUND_RECEIPT' ? 'Returned items' : 'Items / purpose'}</h3>
         <div className="receipt-item-head"><span>Description</span><span>Qty</span><span>Unit</span><span>Total</span></div>
         {snapshot.items.map((item, index) => (
           <div className="receipt-item" key={`${item.name}-${index}`}>

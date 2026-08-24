@@ -10,6 +10,7 @@ const receiptSchema = new Schema(
       enum: [
         'SALE_RECEIPT',
         'PURCHASE_RECEIPT',
+        'REFUND_RECEIPT',
         'PAWN_CONTRACT',
         'PAWN_PAYMENT',
         'PAWN_REDEMPTION',

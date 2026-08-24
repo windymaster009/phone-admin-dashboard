@@ -35,6 +35,7 @@ function receiptPrefix(documentType) {
   return {
     SALE_RECEIPT: 'SR',
     PURCHASE_RECEIPT: 'PR',
+    REFUND_RECEIPT: 'RR',
     PAWN_CONTRACT: 'PC',
     PAWN_PAYMENT: 'PP',
     PAWN_REDEMPTION: 'RD',
@@ -62,6 +63,7 @@ async function findTrade(reference) {
     .populate('customer', 'name phone nationalIdNumber address')
     .populate('supplier', 'name phone nationalIdNumber')
     .populate('createdBy', 'name role')
+    .populate('refund.refundedBy', 'name role')
     .populate('items.inventoryItem', 'sku barcode imei1 imei2 serialNumber brand model storage color')
   if (!trade) throw requestError(404, 'Transaction not found')
   return trade
@@ -200,6 +202,37 @@ const RECEIPT_DAY_MS = 24 * 60 * 60 * 1000
 
 function pawnReceiptAmount(value, currency) {
   return currency === 'KHR' ? Math.round(Number(value || 0) / 100) * 100 : roundMoney(value)
+}
+
+function buildRefundSnapshot(trade) {
+  if (trade.type !== 'SELL' || trade.status !== 'RETURNED' || !trade.refund) {
+    throw requestError(409, 'A refund receipt is available only after a completed sale has been refunded')
+  }
+
+  const saleSnapshot = buildTradeSnapshot(trade, 'SALE_RECEIPT')
+  const refundAmount = tradeDisplayAmount(trade, trade.refund.amount, trade.refund.amount)
+  const inventoryNote = trade.refund.inventoryDisposition === 'RESTOCK'
+    ? 'Returned items were restored to available stock.'
+    : 'Returned items were not restored to saleable stock.'
+
+  return {
+    ...saleSnapshot,
+    documentType: 'REFUND_RECEIPT',
+    title: 'Refund Receipt',
+    issuedAt: trade.refund.refundedAt || trade.updatedAt || new Date(),
+    subtotal: undefined,
+    discount: undefined,
+    total: refundAmount,
+    amountPaid: refundAmount,
+    balance: 0,
+    paymentStatus: 'REFUNDED',
+    transactionStatus: 'RETURNED',
+    notes: [`Refund reason: ${trade.refund.reason}`, inventoryNote].filter(Boolean).join('\n'),
+    staff: trade.refund.refundedBy
+      ? { name: trade.refund.refundedBy.name, role: trade.refund.refundedBy.role }
+      : saleSnapshot.staff,
+    signatureLabels: ['Customer acknowledgement', 'Shop representative'],
+  }
 }
 
 function daysBetween(fromValue, toValue, fallback = 0) {
@@ -498,17 +531,28 @@ router.get('/options', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), a
   if (sourceType === 'TRADE') {
     const trade = await findTrade(reference)
     const documentType = trade.type === 'SELL' ? 'SALE_RECEIPT' : 'PURCHASE_RECEIPT'
+    const options = [option(
+      documentType,
+      'trade',
+      documentType === 'SALE_RECEIPT' ? 'Sales receipt / invoice' : 'Purchase receipt',
+      trade.purchaseDate || trade.createdAt,
+      tradeDisplayAmount(trade, trade.transactionTotal, trade.total),
+      trade.currency === 'KHR' ? 'KHR' : 'USD',
+    )]
+    if (trade.type === 'SELL' && trade.status === 'RETURNED' && trade.refund) {
+      options.push(option(
+        'REFUND_RECEIPT',
+        'refund',
+        'Refund receipt',
+        trade.refund.refundedAt || trade.updatedAt || trade.createdAt,
+        tradeDisplayAmount(trade, trade.refund.amount, trade.refund.amount),
+        trade.currency === 'KHR' ? 'KHR' : 'USD',
+      ))
+    }
     return res.json({
       sourceType,
       referenceNo: trade.tradeNo,
-      options: [option(
-        documentType,
-        'trade',
-        documentType === 'SALE_RECEIPT' ? 'Sales receipt / invoice' : 'Purchase receipt',
-        trade.purchaseDate || trade.createdAt,
-        tradeDisplayAmount(trade, trade.transactionTotal, trade.total),
-        trade.currency === 'KHR' ? 'KHR' : 'USD',
-      )],
+      options,
     })
   }
 
@@ -580,10 +624,16 @@ router.post('/generate', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'),
 
   if (sourceType === 'TRADE') {
     source = await findTrade(reference)
-    documentType = source.type === 'SELL' ? 'SALE_RECEIPT' : 'PURCHASE_RECEIPT'
-    if (requestedType && requestedType !== documentType) throw requestError(409, 'Receipt type does not match this transaction')
-    sourceSubId = 'trade'
-    snapshot = buildTradeSnapshot(source, documentType)
+    const tradeDocumentType = source.type === 'SELL' ? 'SALE_RECEIPT' : 'PURCHASE_RECEIPT'
+    documentType = requestedType || tradeDocumentType
+    if (documentType === 'REFUND_RECEIPT') {
+      sourceSubId = 'refund'
+      snapshot = buildRefundSnapshot(source)
+    } else {
+      if (documentType !== tradeDocumentType) throw requestError(409, 'Receipt type does not match this transaction')
+      sourceSubId = 'trade'
+      snapshot = buildTradeSnapshot(source, documentType)
+    }
   } else if (sourceType === 'PAWN') {
     source = await findPawn(reference)
     documentType = requestedType || 'PAWN_CONTRACT'

@@ -26,6 +26,7 @@ import {
   MoreHorizontal,
   Package,
   Plus,
+  Printer,
   RefreshCcw,
   ScanLine,
   Search,
@@ -1875,7 +1876,14 @@ function RefundsView({ user }: { user: SessionUser }) {
             <div><dt>Amount</dt><dd>{tradeTransactionMoney(refundSuccess, refundSuccess.refund.amount, refundSuccess.refund.amount)}</dd></div>
             <div><dt>Inventory</dt><dd>{refundSuccess.refund.inventoryDisposition === 'RESTOCK' ? 'Restocked' : 'Not restocked'}</dd></div>
           </dl>
-          <button type="button" className="primary-button refund-success-done" onClick={() => setRefundSuccess(null)}><BadgeCheck size={16} /> Done</button>
+          <div className="refund-success-actions">
+            <button type="button" className="secondary-button" onClick={() => {
+              const { tradeNo, currency } = refundSuccess
+              setRefundSuccess(null)
+              window.setTimeout(() => window.dispatchEvent(new CustomEvent('phoneflow:open-refund-receipt', { detail: { reference: tradeNo, currency } })), 0)
+            }}><Printer size={16} /> Print receipt</button>
+            <button type="button" className="primary-button" onClick={() => setRefundSuccess(null)}><BadgeCheck size={16} /> Done</button>
+          </div>
         </section>
       </div>}
     </section>

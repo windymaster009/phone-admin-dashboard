@@ -931,7 +931,8 @@
 .refund-success-modal dl > div { min-width: 0; display: grid; gap: var(--space-refund-2xs); padding: var(--space-refund-sm); border: var(--rule-refund); border-radius: var(--radius-refund-sm); background: var(--color-refund-input); }
 .refund-success-modal dt { color: var(--color-refund-muted); font-size: var(--text-refund-xs); }
 .refund-success-modal dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--color-refund-ink); font-size: var(--text-refund-sm); font-weight: 800; }
-.refund-success-done { width: 100%; margin-block-start: var(--space-refund-xs); }
+.refund-success-actions { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-refund-xs); margin-block-start: var(--space-refund-xs); }
+.refund-success-actions > button { min-width: 0; justify-content: center; }
 
 .refund-empty {
   min-height: 16rem;
@@ -1008,6 +1009,8 @@
     padding: 1.5rem 1.25rem;
     border-radius: var(--radius-refund-md);
   }
+
+  .refund-success-actions { grid-template-columns: minmax(0, 1fr); }
 
   /* The app uses zoom for Display size; preserve this modal's physical fit on phones. */
   .app[data-font-size='comfortable'] .refund-success-modal { zoom: .9091; }

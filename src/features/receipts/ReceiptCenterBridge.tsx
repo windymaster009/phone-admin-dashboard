@@ -26,6 +26,7 @@ function documentLabel(type: ReceiptDocumentType) {
   return {
     SALE_RECEIPT: 'Sales receipt / invoice',
     PURCHASE_RECEIPT: 'Purchase receipt',
+    REFUND_RECEIPT: 'Refund receipt',
     PAWN_CONTRACT: 'Pawn contract',
     PAWN_PAYMENT: 'Pawn payment receipt',
     PAWN_REDEMPTION: 'Pawn redemption receipt',
@@ -37,6 +38,7 @@ function documentLabel(type: ReceiptDocumentType) {
 function DocumentIcon({ type, size = 17 }: { type: ReceiptDocumentType; size?: number }) {
   if (type === 'SALE_RECEIPT') return <ShoppingCart size={size} />
   if (type === 'PURCHASE_RECEIPT') return <Banknote size={size} />
+  if (type === 'REFUND_RECEIPT') return <RefreshCcw size={size} />
   if (type.startsWith('LOAN_')) return <Landmark size={size} />
   return <HandCoins size={size} />
 }
@@ -208,7 +210,7 @@ function Workspace({ refreshVersion, onOpen }: { refreshVersion: number; onOpen:
       <article className="surface-card"><Printer /><p>Total prints<strong>{stats.prints}</strong><small>including reprints</small></p></article>
     </section>
     <article className="surface-card table-card page-table receipt-table-card">
-      <div className="filter-row receipt-filter-row"><div className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search receipt, reference, name or phone" /></div><select className="ghost-button filter-select" value={type} onChange={(event) => setType(event.target.value)}><option value="ALL">All documents</option><option value="SALE_RECEIPT">Sales receipts</option><option value="PURCHASE_RECEIPT">Purchase receipts</option><option value="PAWN_CONTRACT">Pawn contracts</option><option value="PAWN_PAYMENT">Pawn payments</option><option value="PAWN_REDEMPTION">Pawn redemptions</option><option value="LOAN_AGREEMENT">Loan agreements</option><option value="LOAN_PAYMENT">Loan repayments</option></select></div>
+      <div className="filter-row receipt-filter-row"><div className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search receipt, reference, name or phone" /></div><select className="ghost-button filter-select" value={type} onChange={(event) => setType(event.target.value)}><option value="ALL">All documents</option><option value="SALE_RECEIPT">Sales receipts</option><option value="PURCHASE_RECEIPT">Purchase receipts</option><option value="REFUND_RECEIPT">Refund receipts</option><option value="PAWN_CONTRACT">Pawn contracts</option><option value="PAWN_PAYMENT">Pawn payments</option><option value="PAWN_REDEMPTION">Pawn redemptions</option><option value="LOAN_AGREEMENT">Loan agreements</option><option value="LOAN_PAYMENT">Loan repayments</option></select></div>
       <div className="table-scroll receipt-desktop-table"><table><thead><tr><th>Receipt</th><th>Document</th><th>Customer / borrower</th><th>Reference</th><th>Amount</th><th>Issued</th><th>Prints</th><th /></tr></thead><tbody>
         {receipts.map((receipt) => <tr key={receipt._id}><td><strong className="mono">{receipt.receiptNo}</strong></td><td><span className="receipt-type"><DocumentIcon type={receipt.documentType} /> {documentLabel(receipt.documentType)}</span></td><td><strong>{receipt.partyName || 'Walk-in customer'}</strong><small className="table-subtext">{receipt.partyPhone || 'No phone'}</small></td><td className="mono">{receipt.referenceNo}</td><td><strong>{money(receipt.total, receipt.currency)}</strong></td><td>{dateText(receipt.issuedAt)}</td><td>{receipt.printCount}</td><td><button className="icon-button" onClick={() => void open(receipt)}><ChevronRight size={17} /></button></td></tr>)}
         {!loading && receipts.length === 0 && <tr><td colSpan={8}>No receipt documents match these filters.</td></tr>}{loading && receipts.length === 0 && <tr><td colSpan={8}><LoadingState compact label="Loading receipts" detail="Reading printable records…" /></td></tr>}
@@ -380,11 +382,24 @@ export default function ReceiptCenterBridge() {
         'THERMAL',
       )
     }
+    const openRefundReceipt = (event: Event) => {
+      const detail = (event as CustomEvent<{ reference?: string; currency?: 'USD' | 'KHR'; refreshOnClose?: boolean }>).detail
+      const reference = detail?.reference?.trim()
+      if (!reference) return
+      setReloadAfterViewerClose(Boolean(detail?.refreshOnClose))
+      void generate(
+        { sourceType: 'TRADE', reference },
+        { documentType: 'REFUND_RECEIPT', sourceSubId: 'refund', label: 'Refund receipt', issuedAt: new Date().toISOString(), amount: 0, currency: detail?.currency === 'KHR' ? 'KHR' : 'USD' },
+        'THERMAL',
+      )
+    }
     window.addEventListener('phoneflow:open-pawn-ticket', openPawnTicket)
     window.addEventListener('phoneflow:open-trade-receipt', openTradeReceipt)
+    window.addEventListener('phoneflow:open-refund-receipt', openRefundReceipt)
     return () => {
       window.removeEventListener('phoneflow:open-pawn-ticket', openPawnTicket)
       window.removeEventListener('phoneflow:open-trade-receipt', openTradeReceipt)
+      window.removeEventListener('phoneflow:open-refund-receipt', openRefundReceipt)
     }
   }, [generate])
 

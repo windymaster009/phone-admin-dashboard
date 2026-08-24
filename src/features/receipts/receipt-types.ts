@@ -1,6 +1,7 @@
 export type ReceiptDocumentType =
   | 'SALE_RECEIPT'
   | 'PURCHASE_RECEIPT'
+  | 'REFUND_RECEIPT'
   | 'PAWN_CONTRACT'
   | 'PAWN_PAYMENT'
   | 'PAWN_REDEMPTION'
