@@ -1545,7 +1545,7 @@ export default function OperationModalBridge() {
       kind={kind}
       error={error}
       busy={busy}
-      compact={(kind === 'sale' && Boolean(saleKhqr || saleCompleted)) || (kind === 'pawn' && Boolean(pawnCreated)) || (kind === 'stock' && Boolean(stockAdjustmentComplete))}
+      compact={kind === 'label' || (kind === 'sale' && Boolean(saleKhqr || saleCompleted)) || (kind === 'pawn' && Boolean(pawnCreated)) || (kind === 'stock' && Boolean(stockAdjustmentComplete))}
       dismissible={!(kind === 'sale' && saleKhqr && !saleCompleted)}
       dismissOnBackdrop={!['pawn', 'purchase', 'scan', 'stock'].includes(kind)}
       dismissOnEscape={kind !== 'pawn'}
