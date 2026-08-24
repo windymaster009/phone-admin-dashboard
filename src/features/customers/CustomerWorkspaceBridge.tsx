@@ -116,6 +116,33 @@ function CustomerModal({
   )
 }
 
+function CustomerSaveSuccessModal({ message, onClose }: { message: string; onClose: () => void }) {
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', closeOnEscape)
+    document.body.classList.add('operation-modal-open')
+    return () => {
+      document.removeEventListener('keydown', closeOnEscape)
+      document.body.classList.remove('operation-modal-open')
+    }
+  }, [onClose])
+
+  return createPortal(
+    <div className="operation-modal-backdrop customer-save-success-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+      <section className="operation-modal customer-save-success-modal" role="dialog" aria-modal="true" aria-labelledby="customer-save-success-title">
+        <span className="customer-save-success-icon"><CheckCircle2 size={30} /></span>
+        <span className="eyebrow">Customer record saved</span>
+        <h2 id="customer-save-success-title">{message}</h2>
+        <p>The customer profile is ready to use in your shop.</p>
+        <button type="button" className="primary-button" onClick={onClose} autoFocus><CheckCircle2 size={16} /> Done</button>
+      </section>
+    </div>,
+    document.body,
+  )
+}
+
 function DeleteCustomerModal({ customer, busy, error, onClose, onConfirm }: {
   customer: Customer
   busy: boolean
@@ -184,12 +211,6 @@ function CustomerPage() {
     void loadCustomers()
   }, [loadCustomers])
 
-  useEffect(() => {
-    if (!successMessage) return undefined
-    const timeout = window.setTimeout(() => setSuccessMessage(''), 4000)
-    return () => window.clearTimeout(timeout)
-  }, [successMessage])
-
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase()
     if (!term) return customers
@@ -224,9 +245,9 @@ function CustomerPage() {
       formElement.reset()
       setShowModal(false)
       setEditing(null)
+      setSuccessMessage(isEditing ? `${payload.name} updated` : `${payload.name} added`)
       await loadCustomers()
       window.dispatchEvent(new CustomEvent('phoneflow:customers-updated'))
-      setSuccessMessage(isEditing ? `${payload.name} updated` : `${payload.name} added`)
     } catch (reason) {
       setModalError(reason instanceof Error ? reason.message : 'Unable to save customer')
     } finally {
@@ -325,14 +346,7 @@ function CustomerPage() {
 
       {showModal && <CustomerModal customer={editing} busy={busy} error={modalError} onClose={() => { if (!busy) { setShowModal(false); setEditing(null) } }} onSubmit={saveCustomer} />}
       {deleting && <DeleteCustomerModal customer={deleting} busy={busy} error={deleteError} onClose={() => { if (!busy) setDeleting(null) }} onConfirm={() => void deleteCustomer()} />}
-      {successMessage && createPortal(
-        <div className="customer-success-toast" role="status" aria-live="polite">
-          <span className="customer-success-icon"><CheckCircle2 size={18} /></span>
-          <p><strong>{successMessage}</strong><span>The customer record is ready to use.</span></p>
-          <button type="button" onClick={() => setSuccessMessage('')} aria-label="Dismiss confirmation"><X size={16} /></button>
-        </div>,
-        document.body,
-      )}
+      {successMessage && <CustomerSaveSuccessModal message={successMessage} onClose={() => setSuccessMessage('')} />}
     </div>
   )
 }
