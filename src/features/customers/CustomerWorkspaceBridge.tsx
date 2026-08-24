@@ -166,7 +166,7 @@ function DeleteCustomerModal({ customer, busy, error, onClose, onConfirm }: {
   }, [busy, onClose])
 
   return createPortal(
-    <div className="operation-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose() }}>
+    <div className="operation-modal-backdrop customer-delete-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose() }}>
       <section className="operation-modal customer-delete-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-customer-title">
         <button type="button" className="customer-delete-close" onClick={onClose} disabled={busy} aria-label="Close"><X size={18} /></button>
         {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
