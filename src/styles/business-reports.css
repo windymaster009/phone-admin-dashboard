@@ -322,15 +322,15 @@
 .customer-report-filter select:disabled { opacity: .55; cursor: not-allowed; }
 .customer-report-sheet-actions { display: none; }
 .customer-report-sheet-close { display: none; }
-.customer-report-period { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(148px, .62fr); align-items: end; gap: 8px; margin-top: 16px; padding: 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-soft); }
+.customer-report-period { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(168px, 184px); align-items: center; gap: 16px; margin-top: 12px; padding: 8px 0 12px; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; background: transparent; }
 .customer-report-period-heading { min-width: 0; display: flex; align-items: center; gap: 8px; }
-.customer-report-period-heading > svg { flex: 0 0 auto; color: var(--primary); }
+.customer-report-period-heading > svg { width: 32px; height: 32px; flex: 0 0 32px; padding: 8px; border-radius: 8px; color: var(--primary); background: var(--primary-soft); }
 .customer-report-period-heading > span { min-width: 0; display: grid; gap: 2px; }
 .customer-report-period-heading strong { color: var(--text); font-size: 10px; }
 .customer-report-period-heading small { overflow: hidden; color: var(--muted); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .customer-report-period label { min-width: 0; display: grid; gap: 5px; color: var(--muted-2); font-size: 8px; font-weight: 800; letter-spacing: .45px; text-transform: uppercase; }
 .customer-report-period select,
-.customer-report-period input { min-width: 0; width: 100%; height: 40px; padding: 0 12px; border: 1px solid var(--border-strong); border-radius: 8px; outline: 2px solid transparent; outline-offset: 1px; color: var(--text); background: var(--surface); font: 700 9px var(--font-body); color-scheme: dark; }
+.customer-report-period input { min-width: 0; width: 100%; height: 36px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: 8px; outline: 2px solid transparent; outline-offset: 1px; color: var(--text); background: var(--bg-soft); font: 700 9px var(--font-body); color-scheme: dark; }
 .app[data-theme='light'] .customer-report-period select,
 .app[data-theme='light'] .customer-report-period input { color-scheme: light; }
 .customer-report-period select:hover,
@@ -344,7 +344,7 @@
 .customer-report-period input:disabled,
 .customer-report-period button:disabled { opacity: .55; cursor: not-allowed; }
 .customer-report-custom-months { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; align-items: end; gap: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
-.customer-report-custom-months button { min-height: 40px; white-space: nowrap; }
+.customer-report-custom-months button { min-height: 36px; white-space: nowrap; }
 .customer-report-count { margin: 16px 0 8px; color: var(--muted); font-size: 10px; font-weight: 700; }
 .customer-report-list { min-height: 0; flex: 1; overflow-y: auto; margin: 0 -8px; padding: 0 8px; }
 .customer-report-picker { width: 100%; min-height: 52px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px; padding: 8px; border: 1px solid transparent; border-radius: 11px; outline: 2px solid transparent; outline-offset: 1px; color: var(--text); background: transparent; text-align: left; transition: background var(--dur-micro) var(--ease-out), border-color var(--dur-micro) var(--ease-out), transform var(--dur-micro) var(--ease-out); }
