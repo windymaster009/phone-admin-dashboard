@@ -2248,6 +2248,23 @@ body.operation-modal-open {
   .operation-modal-stock.operation-modal-compact { height: auto; }
   .operation-modal-label.operation-modal-compact,
   .operation-modal-sale.operation-modal-compact:has(.sale-complete-workflow) { height: auto; }
+
+  /* A completed pawn contract is confirmation feedback, so keep it contained and centred. */
+  .operation-modal.operation-modal-pawn.operation-modal-compact:has(.record-created-workflow) {
+    width: min(540px, calc(100vw - 32px));
+    max-height: calc(100dvh - 32px);
+    border-radius: 20px;
+  }
+
+  .app[data-font-size='comfortable'] .operation-modal.operation-modal-pawn.operation-modal-compact:has(.record-created-workflow) {
+    width: min(490px, calc(90.9091vw - 29px));
+    max-height: calc(90.9091dvh - 29px);
+  }
+
+  .app[data-font-size='large'] .operation-modal.operation-modal-pawn.operation-modal-compact:has(.record-created-workflow) {
+    width: min(450px, calc(83.3333vw - 27px));
+    max-height: calc(83.3333dvh - 27px);
+  }
   .operation-modal-compact .operation-modal-header { padding: 10px 12px; }
   .operation-modal-compact .operation-modal-header .eyebrow { display: none; }
   .operation-modal-compact .operation-modal-header h2 { margin: 0; font-size: 16px; }
