@@ -1660,6 +1660,7 @@ function RefundsView({ user }: { user: SessionUser }) {
   const [actionError, setActionError] = useState('')
   const [actionBusy, setActionBusy] = useState(false)
   const [completedTradeNo, setCompletedTradeNo] = useState('')
+  const [refundSuccess, setRefundSuccess] = useState<Trade | null>(null)
   const [mobileRefundStep, setMobileRefundStep] = useState<'queue' | 'review'>('queue')
   const selectedRefundRowRef = useRef<HTMLButtonElement>(null)
   const hasAccess = user.role === 'OWNER' || user.role === 'MANAGER'
@@ -1729,6 +1730,7 @@ function RefundsView({ user }: { user: SessionUser }) {
       })
       setTrades((current) => current.map((trade) => trade._id === result.trade._id ? result.trade : trade))
       setCompletedTradeNo(result.trade.tradeNo)
+      setRefundSuccess(result.trade)
       setFilter('RETURNED')
       setReason('')
       setInventoryDisposition('')
@@ -1861,6 +1863,21 @@ function RefundsView({ user }: { user: SessionUser }) {
           )}
         </article>
       </div>
+
+      {refundSuccess?.refund && <div className="refund-success-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setRefundSuccess(null) }}>
+        <section className="refund-success-modal" role="dialog" aria-modal="true" aria-labelledby="refund-success-title" aria-describedby="refund-success-description">
+          <button type="button" className="refund-success-close" onClick={() => setRefundSuccess(null)} aria-label="Close refund confirmation"><X size={18} /></button>
+          <span className="refund-success-icon"><BadgeCheck size={31} /></span>
+          <span className="eyebrow">Refund recorded</span>
+          <h3 id="refund-success-title">{refundSuccess.tradeNo} refunded</h3>
+          <p id="refund-success-description">The refund is saved and the sale has been moved to the refunded records.</p>
+          <dl>
+            <div><dt>Amount</dt><dd>{tradeTransactionMoney(refundSuccess, refundSuccess.refund.amount, refundSuccess.refund.amount)}</dd></div>
+            <div><dt>Inventory</dt><dd>{refundSuccess.refund.inventoryDisposition === 'RESTOCK' ? 'Restocked' : 'Not restocked'}</dd></div>
+          </dl>
+          <button type="button" className="primary-button refund-success-done" onClick={() => setRefundSuccess(null)}><BadgeCheck size={16} /> Done</button>
+        </section>
+      </div>}
     </section>
   )
 }
