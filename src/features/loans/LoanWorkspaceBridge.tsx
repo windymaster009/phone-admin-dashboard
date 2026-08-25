@@ -221,7 +221,7 @@ function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
           if (nextInterestType === 'NONE') setInterestValue(0)
         }}><option value="NONE">No interest</option><option value="PERCENT">Rate (%)</option><option value="FIXED">Fixed money amount</option></select></label>
         {interestType === 'NONE' ? (
-          <div className="loan-interest-note" role="status"><strong>No interest</strong><span>The borrower repays only the loan amount.</span></div>
+          <div className="loan-interest-field"><span className="loan-interest-label">Interest details</span><div className="loan-interest-note" role="status"><strong>No interest</strong><span>The borrower repays only the loan amount.</span></div></div>
         ) : interestType === 'PERCENT' ? (
           <label>Interest rate (%)<span className="device-unit-input"><input name="interestValue" type="number" min="0" step="0.01" inputMode="decimal" value={interestValue || ''} onChange={(event) => setInterestValue(Number(event.target.value) || 0)} /><span>%</span></span><small>Applied once to the loan amount.</small></label>
         ) : (
