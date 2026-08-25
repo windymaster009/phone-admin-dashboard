@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { api, type SessionUser } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
+import MoneyInput from '../../components/MoneyInput'
 
 type Currency = 'USD' | 'KHR'
 type LoanStatus = 'ACTIVE' | 'DUE_SOON' | 'OVERDUE' | 'PARTIALLY_PAID' | 'PAID' | 'CANCELLED'
@@ -205,17 +206,27 @@ function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
         <label>Phone number <small className="optional-marker">Optional</small><input name="borrowerPhone" placeholder="012 345 678" /></label>
         <label>National ID <small className="optional-marker">Optional</small><input name="nationalIdNumber" placeholder="ID number" /></label>
         <label>Address <small className="optional-marker">Optional</small><input name="address" placeholder="Village, district, province" /></label>
-        <label>Loan amount<input name="principal" type="number" min={currency === 'KHR' ? '1' : '0.01'} step={currency === 'KHR' ? '1' : '0.01'} inputMode={currency === 'KHR' ? 'numeric' : 'decimal'} value={principal || ''} required onChange={(event) => setPrincipal(Number(event.target.value) || 0)} /></label>
+        <label>Loan amount<MoneyInput name="principal" currency={currency} value={principal || ''} minimum={currency === 'KHR' ? 100 : 0.01} required onValueChange={(value) => setPrincipal(Number(value) || 0)} /></label>
         <label>Currency<select name="currency" value={currency} onChange={(event) => {
           const nextCurrency = event.target.value as Currency
           setCurrency(nextCurrency)
           if (nextCurrency === 'KHR') {
-            setPrincipal((value) => Math.round(value))
-            if (interestType === 'FIXED') setInterestValue((value) => Math.round(value))
+            setPrincipal((value) => Math.max(100, Math.round(value / 100) * 100))
+            if (interestType === 'FIXED') setInterestValue((value) => Math.round(value / 100) * 100)
           }
         }}><option value="USD">USD</option><option value="KHR">KHR</option></select></label>
-        <label>Interest type<select name="interestType" value={interestType} onChange={(event) => setInterestType(event.target.value as 'NONE' | 'FIXED' | 'PERCENT')}><option value="NONE">No interest</option><option value="FIXED">Fixed amount</option><option value="PERCENT">Percentage</option></select></label>
-        <label>{interestType === 'PERCENT' ? 'Interest percent' : 'Interest amount'}<input name="interestValue" type="number" min="0" step={interestType === 'PERCENT' ? '0.01' : currency === 'KHR' ? '1' : '0.01'} inputMode={interestType === 'PERCENT' || currency === 'USD' ? 'decimal' : 'numeric'} value={interestValue} disabled={interestType === 'NONE'} onChange={(event) => setInterestValue(Number(event.target.value) || 0)} /></label>
+        <label>Interest type<select name="interestType" value={interestType} onChange={(event) => {
+          const nextInterestType = event.target.value as 'NONE' | 'FIXED' | 'PERCENT'
+          setInterestType(nextInterestType)
+          if (nextInterestType === 'NONE') setInterestValue(0)
+        }}><option value="NONE">No interest</option><option value="PERCENT">Rate (%)</option><option value="FIXED">Fixed money amount</option></select></label>
+        {interestType === 'NONE' ? (
+          <div className="loan-interest-note" role="status"><strong>No interest</strong><span>The borrower repays only the loan amount.</span></div>
+        ) : interestType === 'PERCENT' ? (
+          <label>Interest rate (%)<span className="device-unit-input"><input name="interestValue" type="number" min="0" step="0.01" inputMode="decimal" value={interestValue || ''} onChange={(event) => setInterestValue(Number(event.target.value) || 0)} /><span>%</span></span><small>Applied once to the loan amount.</small></label>
+        ) : (
+          <label>Interest amount ({currency})<MoneyInput name="interestValue" currency={currency} value={interestValue || ''} minimum={0} onValueChange={(value) => setInterestValue(Number(value) || 0)} /><small>Added as a fixed money amount.</small></label>
+        )}
         <label>Loan date<input name="loanDate" type="date" required defaultValue={dateInput(new Date())} /></label>
         <label>Due date<input name="dueDate" type="date" required defaultValue={dateInput(due)} /></label>
         <label>Remind before due<select name="reminderDays" defaultValue="3"><option value="0">On due date</option><option value="1">1 day before</option><option value="3">3 days before</option><option value="7">7 days before</option><option value="14">14 days before</option></select></label>
