@@ -244,16 +244,19 @@ function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
   </Modal>
 }
 
-function LoanDetailModal({ detail, user, busy, error, paymentConfirmation, onClose, onPayment, onDueDate, onCancel }: {
+function LoanDetailModal({ detail, user, busy, error, paymentConfirmation, cancelConfirmation, onClose, onPayment, onDueDate, onCancel, onConfirmCancel, onCancelConfirmationClose }: {
   detail: LoanDetail
   user: SessionUser | null
   busy: boolean
   error: string
   paymentConfirmation: LoanPaymentConfirmation | null
+  cancelConfirmation: boolean
   onClose: () => void
   onPayment: (event: FormEvent<HTMLFormElement>) => void
   onDueDate: (event: FormEvent<HTMLFormElement>) => void
   onCancel: () => void
+  onConfirmCancel: () => void
+  onCancelConfirmationClose: () => void
 }) {
   const { loan, payments } = detail
   const canManage = user?.role === 'OWNER' || user?.role === 'MANAGER'
@@ -274,6 +277,24 @@ function LoanDetailModal({ detail, user, busy, error, paymentConfirmation, onClo
         </div>
         <footer className="operation-modal-actions"><button type="button" className="primary-button record-created-done" onClick={onClose}><CheckCircle2 size={16} /> Done</button></footer>
       </section>
+    </Modal>
+  }
+
+  if (cancelConfirmation) {
+    return <Modal title="Cancel this loan?" eyebrow="Loan cancellation" description="Confirm that this agreement should be closed without a repayment." compact confirmation onClose={onCancelConfirmationClose}>
+      <section className="loan-cancel-confirmation" aria-describedby="loan-cancel-description">
+        <span className="loan-cancel-confirmation-icon"><AlertTriangle size={22} /></span>
+        <div>
+          <strong>{loan.loanNo}</strong>
+          <span>{loan.borrower.name} · {money(loan.remainingBalance, loan.currency)} remaining</span>
+          <p id="loan-cancel-description">No payments have been recorded, so this loan can be cancelled. It will remain in the audit history with a cancelled status.</p>
+        </div>
+      </section>
+      {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
+      <footer className="operation-modal-actions loan-cancel-actions">
+        <button type="button" className="ghost-button" disabled={busy} onClick={onCancelConfirmationClose}>Keep loan</button>
+        <button type="button" className="danger-button loan-cancel-confirm-button" disabled={busy} onClick={onConfirmCancel}>{busy ? 'Cancelling...' : 'Cancel loan'}</button>
+      </footer>
     </Modal>
   }
 
@@ -337,6 +358,7 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
   const [createdLoan, setCreatedLoan] = useState<Loan | null>(null)
   const [detail, setDetail] = useState<LoanDetail | null>(null)
   const [paymentConfirmation, setPaymentConfirmation] = useState<LoanPaymentConfirmation | null>(null)
+  const [cancelConfirmation, setCancelConfirmation] = useState(false)
 
   const loadLoans = useCallback(async () => {
     setLoading(true)
@@ -393,6 +415,7 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
   async function openDetail(loan: Loan) {
     setModalError('')
     setPaymentConfirmation(null)
+    setCancelConfirmation(false)
     try { setDetail(await api<LoanDetail>(`/loans/${loan._id}`)) }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to open loan') }
   }
@@ -447,12 +470,13 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
   }
 
   async function cancelLoan() {
-    if (!detail || !window.confirm(`Cancel ${detail.loan.loanNo}?`)) return
+    if (!detail) return
     setBusy(true)
     setModalError('')
     try {
       await api(`/loans/${detail.loan._id}/cancel`, { method: 'POST', body: JSON.stringify({ note: 'Cancelled from loan manager' }) })
       setDetail(await api<LoanDetail>(`/loans/${detail.loan._id}`))
+      setCancelConfirmation(false)
       await loadLoans()
     } catch (reason) {
       setModalError(reason instanceof Error ? reason.message : 'Unable to cancel loan')
@@ -507,7 +531,7 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
     </article>
 
     {showCreate && <CreateLoanModal busy={busy} error={modalError} createdLoan={createdLoan} onClose={() => { if (!busy) { setShowCreate(false); setCreatedLoan(null) } }} onSubmit={createLoan} />}
-    {detail && <LoanDetailModal detail={detail} user={user} busy={busy} error={modalError} paymentConfirmation={paymentConfirmation} onClose={() => { if (!busy) { setDetail(null); setPaymentConfirmation(null) } }} onPayment={recordPayment} onDueDate={changeDueDate} onCancel={cancelLoan} />}
+    {detail && <LoanDetailModal detail={detail} user={user} busy={busy} error={modalError} paymentConfirmation={paymentConfirmation} cancelConfirmation={cancelConfirmation} onClose={() => { if (!busy) { setDetail(null); setPaymentConfirmation(null); setCancelConfirmation(false) } }} onPayment={recordPayment} onDueDate={changeDueDate} onCancel={() => { setModalError(''); setCancelConfirmation(true) }} onConfirmCancel={cancelLoan} onCancelConfirmationClose={() => { if (!busy) { setCancelConfirmation(false); setModalError('') } }} />}
   </div>
 }
 

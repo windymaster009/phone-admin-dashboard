@@ -563,6 +563,54 @@
   font-size: 0.7rem;
 }
 
+.loan-cancel-confirmation {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 13px;
+  margin: 18px 24px 0;
+  padding: 15px;
+  border: 1px solid rgba(239, 68, 68, 0.22);
+  border-radius: 14px;
+  background: color-mix(in srgb, rgba(239, 68, 68, 0.12) 45%, var(--surface-solid, #151e34));
+}
+
+.loan-cancel-confirmation-icon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: #fda4af;
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.loan-cancel-confirmation > div {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 3px;
+}
+
+.loan-cancel-confirmation strong { color: var(--text, #f4f6fb); font-size: 0.88rem; }
+.loan-cancel-confirmation span:not(.loan-cancel-confirmation-icon) { color: var(--muted-text, #94a3b8); font-size: 0.72rem; }
+.loan-cancel-confirmation p { margin: 6px 0 0; color: var(--muted-text, #94a3b8); font-size: 0.73rem; line-height: 1.55; }
+
+.loan-cancel-actions { margin-top: 16px; }
+
+.loan-cancel-confirm-button {
+  min-width: 128px;
+  border-color: rgba(251, 113, 133, 0.52);
+  color: #fff;
+  background: linear-gradient(135deg, #e11d48, #be123c);
+  box-shadow: 0 8px 18px rgba(190, 24, 93, 0.24);
+}
+
+.loan-cancel-confirm-button:not(:disabled):hover {
+  color: #fff;
+  border-color: rgba(253, 164, 175, 0.8);
+  background: linear-gradient(135deg, #f43f5e, #e11d48);
+}
+
 :root[data-theme='light'] .loan-error {
   border-color: color-mix(in srgb, var(--rose) 38%, transparent);
   color: #9f2942;
@@ -748,6 +796,25 @@
     height: auto;
     max-height: calc(100dvh - 32px);
     border-radius: 20px;
+  }
+
+  .loan-modal-confirmation .loan-cancel-confirmation {
+    margin: 14px 17px 0;
+    padding: 13px;
+  }
+
+  .loan-modal-confirmation .loan-cancel-actions {
+    display: grid;
+    grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr);
+    gap: 8px;
+    margin: 14px 0 0;
+    padding: 12px 17px;
+  }
+
+  .loan-modal-confirmation .loan-cancel-actions button {
+    min-width: 0;
+    min-height: 42px;
+    padding-inline: 10px;
   }
 
   :root[data-font-size='comfortable'] .loan-modal.loan-modal-confirmation { zoom: .9091; }
