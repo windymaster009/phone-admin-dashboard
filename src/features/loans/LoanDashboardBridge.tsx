@@ -39,7 +39,7 @@ type LoanDashboardData = {
     loanNo: string
     borrower: {
       name: string
-      phone: string
+      phone?: string
     }
     remainingBalance: number
     totalDue: number
@@ -163,7 +163,7 @@ function LoanDashboardPanel({ data, loading, error, onRefresh }: {
                   </span>
                   <p>
                     <strong>{loan.borrower.name}</strong>
-                    <small>{loan.loanNo} · {loan.borrower.phone}</small>
+                    <small>{loan.loanNo}{loan.borrower.phone ? ` · ${loan.borrower.phone}` : ''}</small>
                   </p>
                   <div>
                     <strong>{money(loan.remainingBalance, loan.currency)}</strong>

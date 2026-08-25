@@ -140,7 +140,6 @@ function borrowerFromBody(body) {
   const name = clean(borrower.name || borrower.borrowerName)
   const phone = clean(borrower.phone || borrower.borrowerPhone)
   if (!name) throw requestError(400, 'Borrower name is required')
-  if (!phone) throw requestError(400, 'Borrower phone number is required')
   return {
     name,
     phone,

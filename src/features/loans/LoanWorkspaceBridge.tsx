@@ -24,7 +24,7 @@ type LoanStatus = 'ACTIVE' | 'DUE_SOON' | 'OVERDUE' | 'PARTIALLY_PAID' | 'PAID' 
 type Loan = {
   _id: string
   loanNo: string
-  borrower: { name: string; phone: string; nationalIdNumber?: string; address?: string }
+  borrower: { name: string; phone?: string; nationalIdNumber?: string; address?: string }
   principal: number
   interestType: 'NONE' | 'FIXED' | 'PERCENT'
   interestValue: number
@@ -202,7 +202,7 @@ function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
     <form className="operation-form loan-create-form" onSubmit={onSubmit}>
       <div className="operation-form-grid">
         <label>Borrower name<input name="borrowerName" autoFocus required placeholder="Full name" /></label>
-        <label>Phone number<input name="borrowerPhone" required placeholder="012 345 678" /></label>
+        <label>Phone number <small className="optional-marker">Optional</small><input name="borrowerPhone" placeholder="012 345 678" /></label>
         <label>National ID <small className="optional-marker">Optional</small><input name="nationalIdNumber" placeholder="ID number" /></label>
         <label>Address <small className="optional-marker">Optional</small><input name="address" placeholder="Village, district, province" /></label>
         <label>Loan amount<input name="principal" type="number" min={currency === 'KHR' ? '1' : '0.01'} step={currency === 'KHR' ? '1' : '0.01'} inputMode={currency === 'KHR' ? 'numeric' : 'decimal'} value={principal || ''} required onChange={(event) => setPrincipal(Number(event.target.value) || 0)} /></label>
@@ -270,7 +270,7 @@ function LoanDetailModal({ detail, user, busy, error, paymentConfirmation, onClo
     {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
     <div className="loan-detail-scroll">
       <section className="loan-detail-summary">
-        <div><span>Borrower</span><strong>{loan.borrower.name}</strong><small><Phone size={13} /> {loan.borrower.phone}</small></div>
+        <div><span>Borrower</span><strong>{loan.borrower.name}</strong><small><Phone size={13} /> {loan.borrower.phone || 'No phone recorded'}</small></div>
         <div><span>Principal</span><strong>{money(loan.principal, loan.currency)}</strong><small>{loan.interestType === 'NONE' ? 'No interest' : `${money(loan.interestAmount, loan.currency)} interest`}</small></div>
         <div><span>Total expected</span><strong>{money(loan.totalDue, loan.currency)}</strong><small>{money(loan.amountPaid, loan.currency)} received</small></div>
         <div><span>Remaining</span><strong>{money(loan.remainingBalance, loan.currency)}</strong><small>{dateText(loan.dueDate)}</small></div>
@@ -474,7 +474,7 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
       <div className="table-scroll"><table><thead><tr><th>Loan</th><th>Borrower</th><th>Lent</th><th>Remaining</th><th>Due date</th><th>Status</th><th /></tr></thead><tbody>
         {loans.map((loan) => <tr key={loan._id} className={loan.status === 'OVERDUE' ? 'loan-overdue-row' : ''}>
           <td><strong>{loan.loanNo}</strong><small className="cell-note">{dateText(loan.loanDate)}</small></td>
-          <td><div className="loan-borrower-cell"><span className="avatar">{loan.borrower.name.slice(0, 2).toUpperCase()}</span><p><strong>{loan.borrower.name}</strong><small>{loan.borrower.phone}</small></p></div></td>
+          <td><div className="loan-borrower-cell"><span className="avatar">{loan.borrower.name.slice(0, 2).toUpperCase()}</span><p><strong>{loan.borrower.name}</strong><small>{loan.borrower.phone || 'No phone recorded'}</small></p></div></td>
           <td>{money(loan.principal, loan.currency)}<small className="cell-note">Expected {money(loan.totalDue, loan.currency)}</small></td>
           <td><strong>{money(loan.remainingBalance, loan.currency)}</strong><small className="cell-note">Paid {money(loan.amountPaid, loan.currency)}</small></td>
           <td>{dateText(loan.dueDate)}<small className={`cell-note loan-due-note ${loan.status === 'OVERDUE' ? 'danger' : ''}`}>{dueDescription(loan)}</small></td>

@@ -6,7 +6,7 @@ const baseOptions = { timestamps: true, versionKey: false }
 const borrowerSchema = new Schema(
   {
     name: { type: String, required: true, trim: true, index: true },
-    phone: { type: String, required: true, trim: true, index: true },
+    phone: { type: String, trim: true, index: true },
     nationalIdNumber: { type: String, trim: true, index: true },
     address: { type: String, trim: true },
   },
