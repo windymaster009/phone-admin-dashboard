@@ -692,7 +692,15 @@
 }
 
 @media (max-width: 760px) {
-  .loan-stats-grid { grid-template-columns: 1fr; }
+  .loan-stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-bottom: 10px; }
+  .loan-stat { min-height: 72px; padding: 8px 6px; gap: 6px; align-items: center; border-radius: 11px; }
+  .loan-stat-icon { width: 27px; height: 27px; flex-basis: 27px; border-radius: 8px; }
+  .loan-stat-icon svg { width: 15px; height: 15px; }
+  .loan-stat p { gap: 1px; font-size: 8px; line-height: 1.15; }
+  .loan-stat p > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .loan-stat p > strong { overflow: hidden; font-size: 15px; line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
+  .loan-stat p > small { overflow: hidden; font-size: 7px; line-height: 1.1; text-overflow: ellipsis; white-space: nowrap; }
+  .loan-stat p > em { display: none; }
   .loan-table-card { border-radius: 14px; }
   .loan-filter-row { grid-template-columns: minmax(0, 1fr) 42px; gap: 7px; padding: 10px; }
   .loan-filter-row .search-field { grid-column: 1 / -1; height: 38px; }

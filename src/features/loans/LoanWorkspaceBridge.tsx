@@ -470,10 +470,10 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
     {error && <div className="loan-error"><AlertTriangle size={17} /> {error}</div>}
 
     <section className="loan-stats-grid">
-      <article className="surface-card loan-stat"><span className="loan-stat-icon violet"><Banknote /></span><p>Total lent<DualAmount usd={summary.byCurrency.USD.lent} khr={summary.byCurrency.KHR.lent} /><em>{summary.counts.total} loan{summary.counts.total === 1 ? '' : 's'}</em></p></article>
-      <article className="surface-card loan-stat"><span className="loan-stat-icon blue"><CircleDollarSign /></span><p>Outstanding<DualAmount usd={summary.byCurrency.USD.outstanding} khr={summary.byCurrency.KHR.outstanding} /><em>{summary.counts.open} still open</em></p></article>
-      <article className="surface-card loan-stat"><span className="loan-stat-icon orange"><Clock /></span><p>Due soon<DualAmount usd={summary.byCurrency.USD.dueSoon} khr={summary.byCurrency.KHR.dueSoon} /><em>{summary.counts.dueSoon} reminder{summary.counts.dueSoon === 1 ? '' : 's'}</em></p></article>
-      <article className="surface-card loan-stat"><span className="loan-stat-icon rose"><AlertTriangle /></span><p>Overdue<DualAmount usd={summary.byCurrency.USD.overdue} khr={summary.byCurrency.KHR.overdue} /><em>{summary.counts.overdue} need attention</em></p></article>
+      <article className="surface-card loan-stat"><span className="loan-stat-icon violet"><Banknote /></span><p><span>Total lent</span><DualAmount usd={summary.byCurrency.USD.lent} khr={summary.byCurrency.KHR.lent} /><em>{summary.counts.total} loan{summary.counts.total === 1 ? '' : 's'}</em></p></article>
+      <article className="surface-card loan-stat"><span className="loan-stat-icon blue"><CircleDollarSign /></span><p><span>Outstanding</span><DualAmount usd={summary.byCurrency.USD.outstanding} khr={summary.byCurrency.KHR.outstanding} /><em>{summary.counts.open} still open</em></p></article>
+      <article className="surface-card loan-stat"><span className="loan-stat-icon orange"><Clock /></span><p><span>Due soon</span><DualAmount usd={summary.byCurrency.USD.dueSoon} khr={summary.byCurrency.KHR.dueSoon} /><em>{summary.counts.dueSoon} reminder{summary.counts.dueSoon === 1 ? '' : 's'}</em></p></article>
+      <article className="surface-card loan-stat"><span className="loan-stat-icon rose"><AlertTriangle /></span><p><span>Overdue</span><DualAmount usd={summary.byCurrency.USD.overdue} khr={summary.byCurrency.KHR.overdue} /><em>{summary.counts.overdue} need attention</em></p></article>
     </section>
 
     <article className="surface-card table-card page-table loan-table-card">
