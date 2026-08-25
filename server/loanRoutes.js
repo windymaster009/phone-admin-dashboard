@@ -2,6 +2,7 @@ import { Router } from 'express'
 import mongoose from 'mongoose'
 import { allowRoles, requireAuth, writeActivity } from './auth.js'
 import { Loan, LoanPayment } from './loanModels.js'
+import { Receipt } from './receiptModels.js'
 
 const router = Router()
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
@@ -472,6 +473,45 @@ router.post('/:id/cancel', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRou
   })
 
   res.json({ loan })
+}))
+
+router.delete('/:id', requireAuth, allowRoles('OWNER'), asyncRoute(async (req, res) => {
+  const loan = await Loan.findById(req.params.id)
+  if (!loan) throw requestError(404, 'Loan not found')
+  if (!['PAID', 'CANCELLED'].includes(loan.status)) {
+    throw requestError(409, 'Only paid or cancelled loans can be deleted')
+  }
+
+  const loanId = loan._id
+  const auditDetails = { loanNo: loan.loanNo, borrower: loan.borrower.name, status: loan.status }
+  const removeRecords = async (session) => {
+    const options = session ? { session } : undefined
+    await Receipt.deleteMany({ sourceType: 'LOAN', sourceId: loanId }, options)
+    await LoanPayment.deleteMany({ loan: loanId }, options)
+    await Loan.deleteOne({ _id: loanId }, options)
+  }
+
+  const session = await mongoose.startSession()
+  try {
+    try {
+      await session.withTransaction(() => removeRecords(session))
+    } catch (error) {
+      const unsupported = /transaction numbers are only allowed|does not support transactions|transaction is not supported|replica set/i.test(error?.message || '')
+      if (!unsupported) throw error
+      await removeRecords()
+    }
+  } finally {
+    await session.endSession()
+  }
+
+  await writeActivity(req, {
+    action: 'DELETE',
+    entity: 'LOAN',
+    entityId: loanId,
+    details: auditDetails,
+  })
+
+  res.json({ deleted: true, loanNo: loan.loanNo })
 }))
 
 export default router

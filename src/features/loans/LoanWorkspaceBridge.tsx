@@ -13,6 +13,7 @@ import {
   Plus,
   RefreshCcw,
   Search,
+  Trash2,
   X,
 } from 'lucide-react'
 import { api, type SessionUser } from '../../lib/api'
@@ -244,24 +245,29 @@ function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
   </Modal>
 }
 
-function LoanDetailModal({ detail, user, busy, error, paymentConfirmation, cancelConfirmation, onClose, onPayment, onDueDate, onCancel, onConfirmCancel, onCancelConfirmationClose }: {
+function LoanDetailModal({ detail, user, busy, error, paymentConfirmation, cancelConfirmation, deleteConfirmation, onClose, onPayment, onDueDate, onCancel, onConfirmCancel, onDelete, onConfirmDelete, onCancelConfirmationClose, onDeleteConfirmationClose }: {
   detail: LoanDetail
   user: SessionUser | null
   busy: boolean
   error: string
   paymentConfirmation: LoanPaymentConfirmation | null
   cancelConfirmation: boolean
+  deleteConfirmation: boolean
   onClose: () => void
   onPayment: (event: FormEvent<HTMLFormElement>) => void
   onDueDate: (event: FormEvent<HTMLFormElement>) => void
   onCancel: () => void
   onConfirmCancel: () => void
+  onDelete: () => void
+  onConfirmDelete: () => void
   onCancelConfirmationClose: () => void
+  onDeleteConfirmationClose: () => void
 }) {
   const { loan, payments } = detail
   const canManage = user?.role === 'OWNER' || user?.role === 'MANAGER'
   const canPay = canManage || user?.role === 'CASHIER'
   const open = !['PAID', 'CANCELLED'].includes(loan.status)
+  const canDelete = user?.role === 'OWNER' && !open
 
   if (paymentConfirmation) {
     return <Modal title="Payment recorded" eyebrow="Repayment" description="The loan balance and payment history have been updated." compact confirmation onClose={onClose}>
@@ -275,7 +281,10 @@ function LoanDetailModal({ detail, user, busy, error, paymentConfirmation, cance
             <div><dt>Payment method</dt><dd>{paymentConfirmation.paymentMethod}</dd></div>
           </dl>
         </div>
-        <footer className="operation-modal-actions"><button type="button" className="primary-button record-created-done" onClick={onClose}><CheckCircle2 size={16} /> Done</button></footer>
+        <footer className="operation-modal-actions">
+          {paymentConfirmation.status === 'PAID' && user?.role === 'OWNER' && <button type="button" className="ghost-button danger-button" onClick={onDelete}><Trash2 size={15} /> Delete loan</button>}
+          <button type="button" className="primary-button record-created-done" onClick={onClose}><CheckCircle2 size={16} /> Done</button>
+        </footer>
       </section>
     </Modal>
   }
@@ -294,6 +303,24 @@ function LoanDetailModal({ detail, user, busy, error, paymentConfirmation, cance
       <footer className="operation-modal-actions loan-cancel-actions">
         <button type="button" className="ghost-button" disabled={busy} onClick={onCancelConfirmationClose}>Keep loan</button>
         <button type="button" className="danger-button loan-cancel-confirm-button" disabled={busy} onClick={onConfirmCancel}>{busy ? 'Cancelling...' : 'Cancel loan'}</button>
+      </footer>
+    </Modal>
+  }
+
+  if (deleteConfirmation) {
+    return <Modal title="Delete this loan?" eyebrow="Permanent deletion" description="This removes the completed loan and its payment records." compact confirmation onClose={onDeleteConfirmationClose}>
+      <section className="loan-cancel-confirmation loan-delete-confirmation" aria-describedby="loan-delete-description">
+        <span className="loan-cancel-confirmation-icon"><Trash2 size={21} /></span>
+        <div>
+          <strong>{loan.loanNo}</strong>
+          <span>{loan.borrower.name} · {statusLabel(loan.status)}</span>
+          <p id="loan-delete-description">This permanently removes the loan, its repayments, and related receipts. This cannot be undone.</p>
+        </div>
+      </section>
+      {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
+      <footer className="operation-modal-actions loan-cancel-actions">
+        <button type="button" className="ghost-button" disabled={busy} onClick={onDeleteConfirmationClose}>Keep record</button>
+        <button type="button" className="danger-button loan-cancel-confirm-button" disabled={busy} onClick={onConfirmDelete}>{busy ? 'Deleting...' : 'Delete permanently'}</button>
       </footer>
     </Modal>
   }
@@ -341,6 +368,7 @@ function LoanDetailModal({ detail, user, busy, error, paymentConfirmation, cance
       </section>
 
       {canManage && open && loan.amountPaid === 0 && <div className="loan-danger-zone"><div><strong>Cancel this loan</strong><span>Only loans without repayment history can be cancelled.</span></div><button type="button" className="ghost-button danger-button" disabled={busy} onClick={onCancel}>Cancel loan</button></div>}
+      {canDelete && <div className="loan-danger-zone loan-delete-zone"><div><strong>Delete completed loan</strong><span>Permanently remove this {loan.status === 'PAID' ? 'paid' : 'cancelled'} loan and its linked payment records.</span></div><button type="button" className="ghost-button danger-button" disabled={busy} onClick={onDelete}><Trash2 size={15} /> Delete loan</button></div>}
     </div>
   </Modal>
 }
@@ -359,6 +387,7 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
   const [detail, setDetail] = useState<LoanDetail | null>(null)
   const [paymentConfirmation, setPaymentConfirmation] = useState<LoanPaymentConfirmation | null>(null)
   const [cancelConfirmation, setCancelConfirmation] = useState(false)
+  const [deleteConfirmation, setDeleteConfirmation] = useState(false)
 
   const loadLoans = useCallback(async () => {
     setLoading(true)
@@ -416,6 +445,7 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
     setModalError('')
     setPaymentConfirmation(null)
     setCancelConfirmation(false)
+    setDeleteConfirmation(false)
     try { setDetail(await api<LoanDetail>(`/loans/${loan._id}`)) }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to open loan') }
   }
@@ -485,6 +515,22 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
     }
   }
 
+  async function deleteLoan() {
+    if (!detail) return
+    setBusy(true)
+    setModalError('')
+    try {
+      await api(`/loans/${detail.loan._id}`, { method: 'DELETE' })
+      setDetail(null)
+      setDeleteConfirmation(false)
+      await loadLoans()
+    } catch (reason) {
+      setModalError(reason instanceof Error ? reason.message : 'Unable to delete loan')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const canCreate = user?.role === 'OWNER' || user?.role === 'MANAGER'
   return <div className="loan-workspace-bridge">
     <div className="section-header">
@@ -531,7 +577,7 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
     </article>
 
     {showCreate && <CreateLoanModal busy={busy} error={modalError} createdLoan={createdLoan} onClose={() => { if (!busy) { setShowCreate(false); setCreatedLoan(null) } }} onSubmit={createLoan} />}
-    {detail && <LoanDetailModal detail={detail} user={user} busy={busy} error={modalError} paymentConfirmation={paymentConfirmation} cancelConfirmation={cancelConfirmation} onClose={() => { if (!busy) { setDetail(null); setPaymentConfirmation(null); setCancelConfirmation(false) } }} onPayment={recordPayment} onDueDate={changeDueDate} onCancel={() => { setModalError(''); setCancelConfirmation(true) }} onConfirmCancel={cancelLoan} onCancelConfirmationClose={() => { if (!busy) { setCancelConfirmation(false); setModalError('') } }} />}
+    {detail && <LoanDetailModal detail={detail} user={user} busy={busy} error={modalError} paymentConfirmation={paymentConfirmation} cancelConfirmation={cancelConfirmation} deleteConfirmation={deleteConfirmation} onClose={() => { if (!busy) { setDetail(null); setPaymentConfirmation(null); setCancelConfirmation(false); setDeleteConfirmation(false) } }} onPayment={recordPayment} onDueDate={changeDueDate} onCancel={() => { setModalError(''); setCancelConfirmation(true) }} onConfirmCancel={cancelLoan} onDelete={() => { setModalError(''); setPaymentConfirmation(null); setCancelConfirmation(false); setDeleteConfirmation(true) }} onConfirmDelete={deleteLoan} onCancelConfirmationClose={() => { if (!busy) { setCancelConfirmation(false); setModalError('') } }} onDeleteConfirmationClose={() => { if (!busy) { setDeleteConfirmation(false); setModalError('') } }} />}
   </div>
 }
 
