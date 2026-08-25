@@ -1,5 +1,9 @@
 /* Hallmark · component: supplier mobile sheet · tone: calm operational flow · anchor hue: existing violet · pre-emit: P5 H5 E5 S5 R5 V4 */
 .supplier-stats-grid { margin-bottom: 18px; }
+.supplier-stats-grid .mini-stat:nth-child(1) > svg { color: var(--primary); background: var(--primary-soft); }
+.supplier-stats-grid .mini-stat:nth-child(2) > svg { color: var(--green); background: color-mix(in srgb, var(--green) 14%, transparent); }
+.supplier-stats-grid .mini-stat:nth-child(3) > svg { color: var(--blue); background: color-mix(in srgb, var(--blue) 14%, transparent); }
+.supplier-stats-grid .mini-stat:nth-child(4) > svg { color: var(--rose); background: color-mix(in srgb, var(--rose) 14%, transparent); }
 .supplier-table-card { min-height: 400px; }
 .supplier-filter-row { justify-content: space-between; }
 .supplier-filter-row .search-field { width: min(600px, 100%); }
@@ -103,8 +107,8 @@
   .supplier-workspace > .section-header .primary-button svg { width: 15px; height: 15px; }
 
   .supplier-workspace .supplier-stats-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-bottom: 10px; }
-  .supplier-workspace .supplier-stats-grid .mini-stat { min-height: 68px; padding: 8px 4px; display: grid; place-items: center; text-align: center; }
-  .supplier-workspace .supplier-stats-grid .mini-stat > svg { width: 20px; height: 20px; display: grid; padding: 4px; border-radius: 7px; }
+  .supplier-workspace .supplier-stats-grid .mini-stat { min-height: 72px; padding: 8px 4px; display: grid; place-items: center; text-align: center; }
+  .supplier-workspace .supplier-stats-grid .mini-stat > svg { width: 24px; height: 24px; display: grid; padding: 5px; border-radius: 9px; }
   .supplier-workspace .supplier-stats-grid .mini-stat small { display: none; }
   .supplier-workspace .supplier-stats-grid .mini-stat p { width: 100%; align-items: center; overflow: hidden; font-size: 8px; white-space: nowrap; text-overflow: ellipsis; }
   .supplier-workspace .supplier-stats-grid .mini-stat strong { margin: 3px 0 0; font-size: 16px; }
@@ -115,10 +119,10 @@
   /* Preserve the compact physical footprint when the app Display size is increased. */
   .app[data-font-size='comfortable'] .supplier-workspace > .section-header .primary-button { min-height: 33px; }
   .app[data-font-size='large'] .supplier-workspace > .section-header .primary-button { min-height: 30px; }
-  .app[data-font-size='comfortable'] .supplier-workspace .supplier-stats-grid .mini-stat { min-height: 64px; }
-  .app[data-font-size='large'] .supplier-workspace .supplier-stats-grid .mini-stat { min-height: 64px; padding: 7px 4px; }
+  .app[data-font-size='comfortable'] .supplier-workspace .supplier-stats-grid .mini-stat { min-height: 68px; }
+  .app[data-font-size='large'] .supplier-workspace .supplier-stats-grid .mini-stat { min-height: 68px; padding: 7px 4px; }
   .app[data-font-size='comfortable'] .supplier-workspace .supplier-stats-grid .mini-stat > svg,
-  .app[data-font-size='large'] .supplier-workspace .supplier-stats-grid .mini-stat > svg { width: 18px; height: 18px; padding: 4px; }
+  .app[data-font-size='large'] .supplier-workspace .supplier-stats-grid .mini-stat > svg { width: 22px; height: 22px; padding: 4px; }
   .app[data-font-size='comfortable'] .supplier-filter-row .ghost-button { min-height: 35px; }
   .app[data-font-size='large'] .supplier-filter-row .ghost-button { min-height: 32px; padding-inline: 8px; }
   .supplier-table-card { min-height: 0; }
