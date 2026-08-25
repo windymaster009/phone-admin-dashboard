@@ -595,7 +595,13 @@
 .loan-cancel-confirmation span:not(.loan-cancel-confirmation-icon) { color: var(--muted-text, #94a3b8); font-size: 0.72rem; }
 .loan-cancel-confirmation p { margin: 6px 0 0; color: var(--muted-text, #94a3b8); font-size: 0.73rem; line-height: 1.55; }
 
-.loan-cancel-actions { margin-top: 16px; }
+.loan-modal-confirmation .loan-cancel-actions {
+  position: static;
+  margin: 16px;
+  padding: 12px 8px 0;
+  background: transparent;
+  backdrop-filter: none;
+}
 
 .loan-cancel-confirm-button {
   min-width: 128px;
@@ -809,6 +815,8 @@
     gap: 8px;
     margin: 14px 0 0;
     padding: 12px 17px;
+    background: color-mix(in srgb, var(--surface-solid, #151e34) 94%, transparent);
+    backdrop-filter: blur(14px);
   }
 
   .loan-modal-confirmation .loan-cancel-actions button {
