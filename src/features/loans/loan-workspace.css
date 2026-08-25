@@ -693,8 +693,22 @@
 
 @media (max-width: 760px) {
   .loan-stats-grid { grid-template-columns: 1fr; }
-  .loan-filter-row { grid-template-columns: 1fr; }
-  .loan-mobile-list { grid-template-columns: 1fr; }
+  .loan-table-card { border-radius: 14px; }
+  .loan-filter-row { grid-template-columns: minmax(0, 1fr) 42px; gap: 7px; padding: 10px; }
+  .loan-filter-row .search-field { grid-column: 1 / -1; height: 38px; }
+  .loan-filter-row > select { min-height: 38px; font-size: 11px; }
+  .loan-filter-row > .ghost-button { grid-column: 2; width: 42px; min-height: 38px; padding: 0; }
+  .loan-filter-row > .ghost-button span { display: none; }
+  .loan-mobile-list { grid-template-columns: 1fr; gap: 7px; padding: 8px 10px 10px; }
+  .loan-mobile-card { gap: 7px; padding: 10px; border-radius: 11px; }
+  .loan-mobile-card > div { gap: 8px; }
+  .loan-mobile-card > div .avatar { width: 30px; height: 30px; border-radius: 9px; font-size: 9px; }
+  .loan-mobile-card > div strong { font-size: 11px; }
+  .loan-mobile-card > div small { font-size: 9px; }
+  .loan-mobile-card section { gap: 6px; }
+  .loan-mobile-card section span { gap: 2px; font-size: 0.62rem; }
+  .loan-mobile-card section strong { font-size: 0.72rem; }
+  .loan-mobile-card footer { font-size: 0.63rem; }
   .loan-detail-summary { grid-template-columns: 1fr; }
   .loan-payment-form { grid-template-columns: 1fr; }
   .loan-payment-note,

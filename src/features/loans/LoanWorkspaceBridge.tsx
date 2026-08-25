@@ -480,7 +480,7 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
       <div className="filter-row loan-filter-row">
         <div className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search loan number, borrower, phone, ID, or reason" /></div>
         <select value={status} onChange={(event) => setStatus(event.target.value)}><option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="DUE_SOON">Due soon</option><option value="OVERDUE">Overdue</option><option value="PARTIALLY_PAID">Partially paid</option><option value="PAID">Paid</option><option value="CANCELLED">Cancelled</option></select>
-        <button className="ghost-button" onClick={() => void loadLoans()}><RefreshCcw size={15} /> Refresh</button>
+        <button className="ghost-button" onClick={() => void loadLoans()} aria-label="Refresh loans"><RefreshCcw size={15} /><span>Refresh</span></button>
       </div>
       <div className="table-scroll"><table><thead><tr><th>Loan</th><th>Borrower</th><th>Lent</th><th>Remaining</th><th>Due date</th><th>Status</th><th /></tr></thead><tbody>
         {loans.map((loan) => <tr key={loan._id} className={loan.status === 'OVERDUE' ? 'loan-overdue-row' : ''}>
