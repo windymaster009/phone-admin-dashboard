@@ -175,7 +175,7 @@ function VaultWorkspace() {
       <div><LockKeyhole aria-hidden="true" /><span>Encrypted storage<strong>{bytes(summary.encryptedBytes)} used</strong></span></div>
     </section>
     <button className="secure-mobile-customer-trigger" type="button" aria-expanded={customerDirectoryOpen} onClick={() => setCustomerDirectoryOpen((current) => !current)}>
-      <span className="avatar">{initials(selectedCustomer?.name)}</span><span><small>Customer</small><strong>{selectedCustomer?.name || 'Choose a customer'}</strong></span><span className="secure-trigger-action">Change <ChevronDown size={16} aria-hidden="true" /></span>
+      <span className="secure-avatar">{initials(selectedCustomer?.name)}</span><span><small>Customer</small><strong>{selectedCustomer?.name || 'Choose a customer'}</strong></span><span className="secure-trigger-action">Change <ChevronDown size={16} aria-hidden="true" /></span>
     </button>
 
     <section className="secure-workbench">
@@ -184,7 +184,7 @@ function VaultWorkspace() {
         <label className="secure-search-field"><span className="sr-only">Search customers</span><Search size={17} aria-hidden="true" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name or phone" /></label>
         <div className="secure-customer-list" role="listbox" aria-label="Customers">
           {filteredCustomers.map((customer) => <button key={customer._id} type="button" role="option" aria-selected={selectedCustomerId === customer._id} className={selectedCustomerId === customer._id ? 'active' : ''} onClick={() => chooseCustomer(customer._id)}>
-            <span className="avatar">{initials(customer.name)}</span><span className="secure-customer-name"><strong>{customer.name}</strong><small>{customer.phone || 'No phone recorded'}</small></span><span className={`secure-profile-state${customer.active === false ? ' is-inactive' : ''}`} aria-label={customer.active === false ? 'Inactive customer' : 'Active customer'}><ShieldCheck size={15} aria-hidden="true" /></span>
+            <span className="secure-avatar">{initials(customer.name)}</span><span className="secure-customer-name"><strong>{customer.name}</strong><small>{customer.phone || 'No phone recorded'}</small></span><span className={`secure-profile-state${customer.active === false ? ' is-inactive' : ''}`} aria-label={customer.active === false ? 'Inactive customer' : 'Active customer'}><ShieldCheck size={15} aria-hidden="true" /></span>
           </button>)}
           {!loading && filteredCustomers.length === 0 && <div className="secure-empty secure-empty-compact"><Search size={22} aria-hidden="true" /><strong>No customers found</strong><span>Try a different name or phone number.</span></div>}
           {loading && <LoadingState compact label="Loading customers" />}
@@ -192,7 +192,7 @@ function VaultWorkspace() {
       </aside>
 
       <main className="secure-document-content">
-        <header className="secure-customer-context"><span className="avatar secure-customer-avatar">{initials(selectedCustomer?.name)}</span><div><small>Secure record</small><h3>{selectedCustomer?.name || 'Select a customer'}</h3><p>{selectedCustomer?.phone || 'No phone recorded'} · {documents.length} {documents.length === 1 ? 'document' : 'documents'}</p></div><span className="secure-encryption-chip"><ShieldCheck size={15} aria-hidden="true" /> AES-256 encrypted</span></header>
+        <header className="secure-customer-context"><span className="secure-avatar secure-customer-avatar">{initials(selectedCustomer?.name)}</span><div><small>Secure record</small><h3>{selectedCustomer?.name || 'Select a customer'}</h3><p>{selectedCustomer?.phone || 'No phone recorded'} · {documents.length} {documents.length === 1 ? 'document' : 'documents'}</p></div><span className="secure-encryption-chip"><ShieldCheck size={15} aria-hidden="true" /> AES-256 encrypted</span></header>
         <section className="secure-upload-section" aria-labelledby="secure-upload-title">
           <div className="secure-section-heading"><div><h4 id="secure-upload-title">Upload a document</h4><p>The file is encrypted before it is stored.</p></div></div>
           <form onSubmit={uploadDocument}>

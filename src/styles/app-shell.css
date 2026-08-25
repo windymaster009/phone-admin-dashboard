@@ -64,10 +64,13 @@ kbd { border: 1px solid var(--border-strong); border-radius: 6px; padding: 3px 7
   z-index: 50;
   width: 270px;
   overflow: hidden;
+  border: 1px solid var(--border-strong, rgba(148, 163, 184, 0.24));
+  border-radius: 14px;
+  background: var(--surface-solid, #151e34);
   box-shadow: 0 22px 60px rgba(0, 0, 0, 0.28);
   animation: profile-menu-in 0.16s ease-out;
 }
-.profile-dropdown-header { display: flex; align-items: center; gap: 11px; padding: 16px; }
+.profile-dropdown-header { display: flex; align-items: center; gap: 11px; padding: 16px; background: linear-gradient(135deg, color-mix(in srgb, var(--primary, #8b5cf6) 14%, var(--surface-solid, #151e34)), var(--surface-solid, #151e34) 72%); }
 .profile-dropdown-header p { min-width: 0; display: flex; flex: 1; flex-direction: column; margin: 0; }
 .profile-dropdown-header strong { color: var(--text); font-size: 12px; }
 .profile-dropdown-header small { margin-top: 4px; overflow: hidden; color: var(--muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
