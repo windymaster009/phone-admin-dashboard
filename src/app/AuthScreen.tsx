@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { motion } from 'framer-motion'
 import { AlertTriangle, BadgeCheck, ChevronDown, ExternalLink, Github, KeyRound, ShieldCheck, Smartphone } from 'lucide-react'
-import { ApiError, api, setToken, type SessionUser } from '../lib/api'
+import { ApiError, api, setToken, type SessionUser, type ShopProfile } from '../lib/api'
 
 function ErrorNotice({ message }: { message: string }) {
   return <div className="error-notice"><AlertTriangle size={16} /> {message}</div>
@@ -119,9 +119,11 @@ type TwoFactorChallenge = {
 export default function AuthScreen({
   onAuthenticated,
   theme,
+  shop,
 }: {
   onAuthenticated: (user: SessionUser) => void
   theme: 'dark' | 'light'
+  shop: ShopProfile
 }) {
   const [setupRequired, setSetupRequired] = useState<boolean | null>(null)
   const [pairMode, setPairMode] = useState(false)
@@ -220,8 +222,8 @@ export default function AuthScreen({
     : twoFactor
       ? `Enter the code from your authenticator app${twoFactor.accountName ? ` for ${twoFactor.accountName}` : ''}, or use one saved recovery code.`
       : pairMode
-        ? 'Enter the one-time code shown in PhoneFlow Security on an already signed-in device.'
-        : 'Sign in to your PhoneFlow account.'
+        ? `Enter the one-time code shown in ${shop.name} Security on an already signed-in device.`
+        : `Sign in to your ${shop.name} account.`
 
   return (
     <main className="auth-page">
@@ -233,8 +235,8 @@ export default function AuthScreen({
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55 }}
         >
-          <span className="auth-logo"><Smartphone size={22} /></span>
-          <span><strong>PhoneFlow</strong><small>Shop management</small></span>
+          <span className="auth-logo">{shop.logoUrl ? <img src={shop.logoUrl} alt="" /> : <Smartphone size={22} />}</span>
+          <span><strong>{shop.name}</strong><small>{shop.subtitle}</small></span>
         </motion.div>
 
         <div className="auth-layout">
@@ -293,7 +295,7 @@ export default function AuthScreen({
                 ) : null}
               </>
             )}
-            <div className="auth-features" aria-label="PhoneFlow information">
+            <div className="auth-features" aria-label={`${shop.name} information`}>
               <span><BadgeCheck size={15} /> Revocable staff sessions</span>
               <div className="auth-footer-actions">
                 <details className="auth-authors">
@@ -313,7 +315,7 @@ export default function AuthScreen({
                     </a>
                   </div>
                 </details>
-                <span className="auth-version">PhoneFlow v1.8.2</span>
+                <span className="auth-version">{shop.name} v1.8.2</span>
               </div>
             </div>
           </motion.section>

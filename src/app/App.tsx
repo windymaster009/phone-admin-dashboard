@@ -47,7 +47,7 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react'
-import { api, type SessionUser } from '../lib/api'
+import { api, type SessionUser, type ShopProfile } from '../lib/api'
 import { getPawnAutoCalculatePreference, PAWN_AUTO_CALCULATE_EVENT, savePawnAutoCalculatePreference } from '../lib/pawnPreferences'
 import LoadingState from '../components/LoadingState'
 import MoneyInput from '../components/MoneyInput'
@@ -3957,6 +3957,7 @@ function SettingsView({
 
 function App({
   user,
+  shop,
   onLogout,
   theme,
   onToggleTheme,
@@ -3965,6 +3966,7 @@ function App({
   onWorkspaceReady,
 }: {
   user: SessionUser
+  shop: ShopProfile
   onLogout: () => void
   theme: 'dark' | 'light'
   onToggleTheme: () => void
@@ -4020,8 +4022,8 @@ function App({
   }, [])
 
   useEffect(() => {
-    document.title = `${navGroups.flatMap((group) => group.items).find((item) => item.key === active)?.label || 'Dashboard'} · PhoneFlow`
-  }, [active])
+    document.title = `${navGroups.flatMap((group) => group.items).find((item) => item.key === active)?.label || 'Dashboard'} · ${shop.name}`
+  }, [active, shop.name])
 
   useEffect(() => {
     if (!profileOpen) return
@@ -4121,8 +4123,8 @@ function App({
       <div className={`mobile-overlay ${mobileOpen ? 'show' : ''}`} onClick={() => setMobileOpen(false)} aria-hidden="true" />
       <aside ref={sidebarRef} id="primary-sidebar" className={`sidebar ${mobileOpen ? 'mobile-open' : ''}`} aria-label="Primary navigation">
         <div className="brand">
-          <span className="brand-mark"><Smartphone size={22} /></span>
-          <div><strong>PhoneFlow</strong><small>Shop Management</small></div>
+          <span className="brand-mark">{shop.logoUrl ? <img src={shop.logoUrl} alt="" /> : <Smartphone size={22} />}</span>
+          <div><strong>{shop.name}</strong><small>{shop.subtitle}</small></div>
           <button type="button" className="mobile-close" onClick={() => setMobileOpen(false)} aria-label="Close navigation menu" aria-controls="primary-sidebar"><X size={20} aria-hidden="true" /></button>
         </div>
 

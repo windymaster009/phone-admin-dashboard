@@ -4,6 +4,7 @@ import { allowRoles, requireAuth, writeActivity } from './auth.js'
 import { Loan, LoanPayment } from './loanModels.js'
 import { Pawn, Trade } from './models.js'
 import { Receipt } from './receiptModels.js'
+import { shopProfile } from './shopProfile.js'
 import { calculateDailyPawnSummary, calculatePawnFee, isDailyPawn } from './pawnFeeService.js'
 
 const router = Router()
@@ -19,16 +20,8 @@ function requestError(status, message) {
 }
 
 function shopSnapshot() {
-  return {
-    name: clean(process.env.SHOP_NAME) || 'PhoneFlow',
-    subtitle: clean(process.env.SHOP_SUBTITLE) || 'Phone Shop Management',
-    phone: clean(process.env.SHOP_PHONE) || '',
-    email: clean(process.env.SHOP_EMAIL) || '',
-    address: clean(process.env.SHOP_ADDRESS) || '',
-    taxId: clean(process.env.SHOP_TAX_ID) || '',
-    logoUrl: clean(process.env.SHOP_LOGO_URL) || '',
-    footer: clean(process.env.SHOP_RECEIPT_FOOTER) || 'Thank you for your business.',
-  }
+  const shop = shopProfile()
+  return { ...shop, footer: shop.receiptFooter }
 }
 
 function receiptPrefix(documentType) {

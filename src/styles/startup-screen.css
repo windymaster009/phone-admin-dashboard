@@ -28,6 +28,7 @@
 .startup-shell { width: min(760px, 100%); display: grid; gap: 18px; }
 .startup-brand { display: inline-flex; align-items: center; justify-self: start; gap: 11px; }
 .startup-brand-mark { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--primary) 38%, transparent); border-radius: 13px; color: var(--primary); background: var(--primary-soft); box-shadow: 0 15px 36px color-mix(in srgb, var(--primary) 22%, transparent), inset 0 1px rgba(255,255,255,.16); }
+.startup-brand-mark img { width: 100%; height: 100%; object-fit: contain; border-radius: inherit; }
 .startup-brand-copy { display: grid; gap: 1px; }
 .startup-screen .startup-brand-copy strong { color: var(--text); font: 800 16px/1.15 Manrope, Inter, sans-serif; letter-spacing: -.25px; }
 .startup-screen .startup-brand-copy small { color: var(--muted); font-size: 10px; letter-spacing: .04em; }

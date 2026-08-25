@@ -67,6 +67,28 @@ export function setToken(token: string | null) {
   }
 }
 
+export type ShopProfile = {
+  name: string
+  subtitle: string
+  phone: string
+  email: string
+  address: string
+  taxId: string
+  logoUrl: string
+  receiptFooter: string
+}
+
+export const defaultShopProfile: ShopProfile = {
+  name: 'PhoneFlow',
+  subtitle: 'Phone Shop Management',
+  phone: '',
+  email: '',
+  address: '',
+  taxId: '',
+  logoUrl: '',
+  receiptFooter: 'Thank you for your business.',
+}
+
 export function setAuthTransitionInProgress(inProgress: boolean) {
   authTransitionInProgress = inProgress
 }

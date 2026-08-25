@@ -3,10 +3,12 @@ import DeferredBridges from './DeferredBridges'
 import StartupScreen from './StartupScreen'
 import {
   api,
+  defaultShopProfile,
   getToken,
   setSessionUser,
   setToken,
   subscribeToTokenChanges,
+  type ShopProfile,
   type SessionUser,
 } from '../lib/api'
 
@@ -51,6 +53,7 @@ export default function AppWithBackend() {
   const [theme, setTheme] = useState<AppTheme>(getInitialTheme)
   const [fontSize, setFontSize] = useState<AppFontSize>(getInitialFontSize)
   const [user, setUser] = useState<SessionUser | null>(null)
+  const [shop, setShop] = useState<ShopProfile>(defaultShopProfile)
   const [checking, setChecking] = useState(true)
   const [workspaceReady, setWorkspaceReady] = useState(false)
 
@@ -79,6 +82,14 @@ export default function AppWithBackend() {
       setChecking(false)
     }
   }), [])
+
+  useEffect(() => {
+    let active = true
+    api<{ shop: ShopProfile }>('/shop')
+      .then((result) => { if (active) setShop(result.shop) })
+      .catch(() => undefined)
+    return () => { active = false }
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -114,25 +125,26 @@ export default function AppWithBackend() {
     setChecking(false)
   }
 
-  if (checking) return <StartupScreen stage="checking-session" />
+  if (checking) return <StartupScreen stage="checking-session" shop={shop} />
 
   if (!user) {
     return (
-      <Suspense fallback={<StartupScreen stage="loading-sign-in" />}>
-        <AuthScreen theme={theme} onAuthenticated={handleAuthenticated} />
+      <Suspense fallback={<StartupScreen stage="loading-sign-in" shop={shop} />}>
+        <AuthScreen theme={theme} shop={shop} onAuthenticated={handleAuthenticated} />
       </Suspense>
     )
   }
 
   return (
     <>
-      <Suspense fallback={<StartupScreen stage="opening-workspace" />}>
+      <Suspense fallback={<StartupScreen stage="opening-workspace" shop={shop} />}>
         <App
           theme={theme}
           onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
           fontSize={fontSize}
           onFontSizeChange={setFontSize}
           user={user}
+          shop={shop}
           onWorkspaceReady={() => setWorkspaceReady(true)}
           onLogout={() => {
             void api('/auth/logout', { method: 'POST' }).catch(() => undefined).finally(() => {
@@ -144,7 +156,7 @@ export default function AppWithBackend() {
         />
         <DeferredBridges />
       </Suspense>
-      {!workspaceReady && <StartupScreen stage="opening-workspace" overlay />}
+      {!workspaceReady && <StartupScreen stage="opening-workspace" shop={shop} overlay />}
     </>
   )
 }

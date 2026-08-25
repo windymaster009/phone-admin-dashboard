@@ -9,6 +9,7 @@ import {
   Smartphone,
   WifiOff,
 } from 'lucide-react'
+import type { ShopProfile } from '../lib/api'
 
 export type StartupStage = 'checking-session' | 'loading-sign-in' | 'opening-workspace'
 
@@ -44,10 +45,15 @@ const stageCopy: Record<StartupStage, StageCopy> = {
   },
 }
 
-export default function StartupScreen({ stage = 'checking-session', overlay = false }: { stage?: StartupStage; overlay?: boolean }) {
+export default function StartupScreen({ stage = 'checking-session', overlay = false, shop }: { stage?: StartupStage; overlay?: boolean; shop: ShopProfile }) {
   const [online, setOnline] = useState(() => navigator.onLine)
   const [slow, setSlow] = useState(false)
   const copy = stageCopy[stage]
+  const brandedCopy = {
+    ...copy,
+    title: copy.title.replace('PhoneFlow', shop.name),
+    message: copy.message.replace('PhoneFlow', shop.name),
+  }
 
   useEffect(() => {
     setSlow(false)
@@ -68,8 +74,8 @@ export default function StartupScreen({ stage = 'checking-session', overlay = fa
   const statusMessage = useMemo(() => {
     if (!online) return 'Your device is offline. Reconnect to continue.'
     if (slow) return 'This is taking longer than usual. The API or database may still be starting.'
-    return copy.message
-  }, [copy.message, online, slow])
+    return brandedCopy.message
+  }, [brandedCopy.message, online, slow])
 
   return (
     <div
@@ -84,8 +90,8 @@ export default function StartupScreen({ stage = 'checking-session', overlay = fa
 
       <main className="startup-shell">
         <header className="startup-brand">
-          <span className="startup-brand-mark" aria-hidden="true"><Smartphone size={22} /></span>
-          <span className="startup-brand-copy"><strong>PhoneFlow</strong><small>Shop Management</small></span>
+          <span className="startup-brand-mark" aria-hidden="true">{shop.logoUrl ? <img src={shop.logoUrl} alt="" /> : <Smartphone size={22} />}</span>
+          <span className="startup-brand-copy"><strong>{shop.name}</strong><small>{shop.subtitle}</small></span>
         </header>
 
         <section className="startup-card">
@@ -105,10 +111,10 @@ export default function StartupScreen({ stage = 'checking-session', overlay = fa
 
           <div className="startup-content">
             <span className="startup-eyebrow">{online ? copy.eyebrow : 'Connection required'}</span>
-            <h1>{online ? copy.title : 'You are offline'}</h1>
+            <h1>{online ? brandedCopy.title : 'You are offline'}</h1>
             <p>{statusMessage}</p>
 
-            <div className="startup-progress" aria-label="Loading PhoneFlow"><span /></div>
+            <div className="startup-progress" aria-label={`Loading ${shop.name}`}><span /></div>
 
             <div className="startup-steps" aria-label="Startup progress">
               {copy.steps.map((label, index) => {
@@ -139,7 +145,7 @@ export default function StartupScreen({ stage = 'checking-session', overlay = fa
 
         <footer className="startup-footer">
           <span><ShieldCheck size={13} /> Secure internal workspace</span>
-          <span>PhoneFlow</span>
+          <span>{shop.name}</span>
         </footer>
       </main>
     </div>
