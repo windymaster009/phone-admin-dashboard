@@ -295,11 +295,14 @@
   .pawn-page-heading .section-header h2 { margin: 0; font-size: 22px; }
   .pawn-page-heading .section-header .primary-button { width: auto; flex: 0 0 auto; padding-inline: 13px; }
   .pawn-stats-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-bottom: 10px; }
-  .pawn-stats-grid .mini-stat { min-height: 74px; padding: 10px 6px; display: grid; place-items: center; text-align: center; }
-  .pawn-stats-grid .mini-stat > svg,
+  .pawn-stats-grid .mini-stat { min-height: 78px; padding: 7px 4px; display: grid; grid-template-columns: 1fr; place-items: center; gap: 2px; text-align: center; }
+  .pawn-stats-grid .mini-stat > svg { display: block; width: 23px; height: 23px; padding: 5px; border-radius: 8px; }
+  .pawn-stats-grid .mini-stat:nth-child(2) > svg { color: #f5b942; background: rgba(245, 185, 66, .14); }
+  .pawn-stats-grid .mini-stat:nth-child(3) > svg { color: #fb6476; background: rgba(251, 100, 118, .14); }
+  .pawn-stats-grid .mini-stat:nth-child(4) > svg { color: #60a5fa; background: rgba(96, 165, 250, .14); }
   .pawn-stats-grid .mini-stat small { display: none; }
-  .pawn-stats-grid .mini-stat p { width: 100%; align-items: center; overflow: hidden; font-size: 8px; white-space: nowrap; text-overflow: ellipsis; }
-  .pawn-stats-grid .mini-stat strong { margin: 5px 0 0; font-size: 18px; }
+  .pawn-stats-grid .mini-stat p { width: 100%; align-items: center; overflow: hidden; font-size: 7px; line-height: 1.1; white-space: nowrap; text-overflow: ellipsis; }
+  .pawn-stats-grid .mini-stat strong { margin: 2px 0 0; font-size: 16px; }
   .pawn-workspace-card .filter-row { padding: 11px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .pawn-workspace-card .filter-row .search-field { grid-column: 1 / -1; width: 100%; }
   .pawn-workspace-card .filter-row .filter-select { width: 100%; min-width: 0; padding-inline: 10px; font-size: 9px; }
