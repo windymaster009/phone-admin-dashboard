@@ -8,6 +8,7 @@ import {
   Banknote,
   BarChart3,
   Bell,
+  BookOpen,
   Building2,
   Boxes,
   Calculator,
@@ -1362,6 +1363,7 @@ function PawnView() {
   const [pawns, setPawns] = useState<Pawn[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedPawn, setSelectedPawn] = useState<Pawn | null>(null)
+  const [guideOpen, setGuideOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [pawnSort, setPawnSort] = useState<'newest' | 'oldest' | 'due-soonest' | 'due-latest'>('newest')
@@ -1417,7 +1419,10 @@ function PawnView() {
           eyebrow="Operations"
           title="Pawn management"
           description={error || 'Track collateral, optional customer identification, due payments, extensions, and overdue contracts.'}
-          action={<button className="primary-button" onClick={() => comingNext('New pawn')}><Plus size={17} /> New pawn</button>}
+          action={<div className="section-header-actions pawn-header-actions">
+            <button className="ghost-button pawn-guide-trigger" type="button" onClick={() => setGuideOpen(true)} aria-label="Open pawn guide" title="Pawn guide"><BookOpen size={18} aria-hidden="true" /></button>
+            <button className="primary-button" onClick={() => comingNext('New pawn')}><Plus size={17} /> New pawn</button>
+          </div>}
         />
       </div>
       <section className="mini-stats-grid pawn-stats-grid">
@@ -1478,7 +1483,60 @@ function PawnView() {
         </div>
       </article>
       {selectedPawn && <PawnDetailModal pawn={selectedPawn} onClose={() => setSelectedPawn(null)} onAction={updatePawn} />}
+      {guideOpen && <PawnGuideDialog onClose={() => setGuideOpen(false)} onStartPawn={() => {
+        setGuideOpen(false)
+        comingNext('New pawn')
+      }} />}
     </>
+  )
+}
+
+function PawnGuideDialog({ onClose, onStartPawn }: { onClose: () => void; onStartPawn: () => void }) {
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    document.body.style.overflow = 'hidden'
+    document.addEventListener('keydown', onKeyDown)
+    window.requestAnimationFrame(() => closeButtonRef.current?.focus())
+    return () => {
+      document.body.style.overflow = previousOverflow
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [onClose])
+
+  return (
+    <div className="operation-modal-backdrop pawn-guide-backdrop" role="presentation" onMouseDown={(event) => {
+      if (event.target === event.currentTarget) onClose()
+    }}>
+      <section className="operation-modal pawn-guide-dialog" role="dialog" aria-modal="true" aria-labelledby="pawn-guide-title" aria-describedby="pawn-guide-description">
+        <header className="operation-modal-header">
+          <span className="operation-modal-icon"><BookOpen size={21} aria-hidden="true" /></span>
+          <div>
+            <span className="eyebrow">Pawn workflow guide</span>
+            <h2 id="pawn-guide-title">Create a pawn contract with confidence</h2>
+            <p id="pawn-guide-description">Use this quick checklist before handing over any money.</p>
+          </div>
+          <button ref={closeButtonRef} type="button" className="operation-modal-close" onClick={onClose} aria-label="Close pawn guide"><X size={19} /></button>
+        </header>
+        <div className="pawn-guide-content">
+          <ol className="pawn-guide-steps">
+            <li><span>1</span><div><strong>Confirm the customer</strong><p>Choose an existing customer or add one. Check their identity and that they own the item.</p></div></li>
+            <li><span>2</span><div><strong>Inspect the collateral</strong><p>Record the item, IMEI or serial number, condition, accessories, and any repair costs.</p></div></li>
+            <li><span>3</span><div><strong>Set a safe offer</strong><p>Use the valuation to set the principal, currency, fee, term, and due date your shop can support.</p></div></li>
+            <li><span>4</span><div><strong>Review, save, and give a receipt</strong><p>Read back the total due and due date, save the contract, then provide the customer receipt.</p></div></li>
+          </ol>
+          <aside className="pawn-guide-reminder"><AlertTriangle size={17} aria-hidden="true" /><p><strong>Before releasing money:</strong> complete the physical inspection and customer ownership check.</p></aside>
+        </div>
+        <footer className="pawn-guide-actions">
+          <button type="button" className="ghost-button" onClick={onClose}>Close</button>
+          <button type="button" className="primary-button" onClick={onStartPawn}><Plus size={17} /> Start a new pawn</button>
+        </footer>
+      </section>
+    </div>
   )
 }
 
