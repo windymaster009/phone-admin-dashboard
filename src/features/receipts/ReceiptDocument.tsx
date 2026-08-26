@@ -30,7 +30,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return <div className="receipt-row"><span>{label}</span><strong>{value}</strong></div>
 }
 
-function PawnBarcode({ reference, thermal = false }: { reference: string; thermal?: boolean }) {
+function ReferenceBarcode({ reference, label, thermal = false }: { reference: string; label: string; thermal?: boolean }) {
   const barcodeRef = useRef<SVGSVGElement>(null)
 
   useEffect(() => {
@@ -50,8 +50,9 @@ function PawnBarcode({ reference, thermal = false }: { reference: string; therma
     }
   }, [reference, thermal])
 
-  return <section className={`pawn-ticket-barcode${thermal ? ' pawn-ticket-barcode-thermal' : ''}`} aria-label={`Barcode for pawn contract ${reference}`}>
+  return <section className={`pawn-ticket-barcode receipt-reference-barcode${thermal ? ' pawn-ticket-barcode-thermal' : ''}`} aria-label={`Barcode for ${label.toLowerCase()} ${reference}`}>
     <svg ref={barcodeRef} aria-hidden="true" />
+    <span>Scan to find this {label.toLowerCase()}</span>
     <strong>{reference}</strong>
   </section>
 }
@@ -148,7 +149,7 @@ function PawnTicketThermal({ receipt, snapshot }: { receipt: ReceiptRecord; snap
         <small>Receipt {receipt.receiptNo}</small>
       </div>
 
-      <PawnBarcode reference={snapshot.referenceNo} thermal />
+        <ReferenceBarcode reference={snapshot.referenceNo} label="pawn contract" thermal />
 
       <section className="pawn-ticket-fields">
         <Row label="Customer" value={snapshot.party.name || 'Walk-in customer'} />
@@ -193,6 +194,7 @@ export default function ReceiptDocument({ receipt, layout }: { receipt: ReceiptR
   }
 
   const pawnReceipt = ['PAWN_CONTRACT', 'PAWN_PAYMENT', 'PAWN_REDEMPTION'].includes(snapshot.documentType)
+  const loanReceipt = ['LOAN_AGREEMENT', 'LOAN_PAYMENT'].includes(snapshot.documentType)
 
   return (
     <article className={`receipt-paper receipt-paper-${layout.toLowerCase()}`}>
@@ -223,7 +225,7 @@ export default function ReceiptDocument({ receipt, layout }: { receipt: ReceiptR
         {snapshot.staff?.name && <Row label="Processed by" value={snapshot.staff.name} />}
       </section>
 
-      {pawnReceipt && <PawnBarcode reference={snapshot.referenceNo} />}
+      {(pawnReceipt || loanReceipt) && <ReferenceBarcode reference={snapshot.referenceNo} label={loanReceipt ? 'loan' : 'pawn contract'} />}
 
       <section className="receipt-section">
         <h3>{snapshot.party.role || 'Customer'}</h3>

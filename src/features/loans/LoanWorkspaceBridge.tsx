@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   BadgeCheck,
   Banknote,
+  Camera,
   CheckCircle2,
   CircleDollarSign,
   Clock,
@@ -13,6 +14,7 @@ import {
   Plus,
   RefreshCcw,
   Search,
+  ScanLine,
   Trash2,
   X,
 } from 'lucide-react'
@@ -137,13 +139,14 @@ function DualAmount({ usd, khr }: { usd: number; khr: number }) {
   return <><strong>{money(usd, 'USD')}</strong><small>{money(khr, 'KHR')}</small></>
 }
 
-function Modal({ title, eyebrow, description, onClose, compact = false, confirmation = false, children }: {
+function Modal({ title, eyebrow, description, onClose, compact = false, confirmation = false, scanner = false, children }: {
   title: string
   eyebrow: string
   description: string
   onClose: () => void
   compact?: boolean
   confirmation?: boolean
+  scanner?: boolean
   children: ReactNode
 }) {
   useEffect(() => {
@@ -158,7 +161,7 @@ function Modal({ title, eyebrow, description, onClose, compact = false, confirma
 
   return createPortal(
     <div className="operation-modal-backdrop loan-modal-backdrop" role="presentation">
-      <section className={`operation-modal loan-modal${compact ? ' operation-modal-compact' : ''}${confirmation ? ' loan-modal-confirmation' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
+      <section className={`operation-modal loan-modal${compact ? ' operation-modal-compact' : ''}${confirmation ? ' loan-modal-confirmation' : ''}${scanner ? ' loan-modal-scanner' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
         <header className="operation-modal-header">
           <span className="operation-modal-icon"><Banknote size={21} /></span>
           <div><span className="eyebrow">{eyebrow}</span><h2>{title}</h2><p>{description}</p></div>
@@ -169,6 +172,70 @@ function Modal({ title, eyebrow, description, onClose, compact = false, confirma
     </div>,
     document.body,
   )
+}
+
+function LoanBarcodeScanner({ onFound, onError }: { onFound: (value: string) => void; onError: (message: string) => void }) {
+  const [cameraActive, setCameraActive] = useState(false)
+
+  useEffect(() => {
+    if (!cameraActive) return
+    let scanner: import('html5-qrcode').Html5Qrcode | null = null
+    let disposed = false
+
+    async function startCamera() {
+      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode')
+      if (disposed) return
+      scanner = new Html5Qrcode('phoneflow-loan-barcode-reader', {
+        formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.QR_CODE],
+        verbose: false,
+      })
+      await scanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 280, height: 130 } },
+        (decodedText) => {
+          if (disposed) return
+          setCameraActive(false)
+          onFound(decodedText)
+        },
+        () => undefined,
+      )
+    }
+
+    void startCamera().catch((reason: Error) => {
+      setCameraActive(false)
+      onError(reason.message || 'Unable to start the camera. Check camera permission and try again.')
+    })
+
+    return () => {
+      disposed = true
+      if (scanner?.isScanning) void scanner.stop().finally(() => scanner?.clear())
+      else scanner?.clear()
+    }
+  }, [cameraActive, onError, onFound])
+
+  return <div className="loan-barcode-camera">
+    <div id="phoneflow-loan-barcode-reader" className={cameraActive ? 'active' : ''} />
+    <button type="button" className="secondary-button" onClick={() => setCameraActive((active) => !active)}><Camera size={16} /> {cameraActive ? 'Stop camera' : 'Scan with camera'}</button>
+    <small>Allow camera access on localhost or HTTPS. A handheld scanner can type into the field above.</small>
+  </div>
+}
+
+function ScanLoanModal({ busy, error, onClose, onScan }: { busy: boolean; error: string; onClose: () => void; onScan: (value: string) => void }) {
+  const [code, setCode] = useState('')
+  const [cameraError, setCameraError] = useState('')
+  const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); onScan(code) }
+  const useScannedCode = (value: string) => { setCode(value); onScan(value) }
+
+  return <Modal title="Scan loan" eyebrow="Loan lookup" description="Scan the loan barcode or enter the loan number to open its record." compact scanner onClose={onClose}>
+    <form className="loan-scan-form" onSubmit={submit}>
+      {error && <div className="loan-error"><AlertTriangle size={16} /> {error}</div>}
+      {cameraError && <div className="loan-error"><AlertTriangle size={16} /> {cameraError}</div>}
+      <div className="loan-scan-intro"><span><ScanLine size={20} /></span><div><strong>Find a loan quickly</strong><p>Every loan receipt includes a barcode linked to its loan number.</p></div></div>
+      <label>Loan barcode or number<input autoFocus value={code} onChange={(event) => setCode(event.target.value)} placeholder="Scan or enter LN-..." autoComplete="off" /></label>
+      <button className="primary-button" disabled={busy || !code.trim()}><ScanLine size={17} /> {busy ? 'Finding loan...' : 'Find loan'}</button>
+      <LoanBarcodeScanner onFound={useScannedCode} onError={setCameraError} />
+    </form>
+  </Modal>
 }
 
 function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
@@ -383,6 +450,8 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
   const [error, setError] = useState('')
   const [modalError, setModalError] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const [showScanner, setShowScanner] = useState(false)
+  const [scannerError, setScannerError] = useState('')
   const [createdLoan, setCreatedLoan] = useState<Loan | null>(null)
   const [detail, setDetail] = useState<LoanDetail | null>(null)
   const [paymentConfirmation, setPaymentConfirmation] = useState<LoanPaymentConfirmation | null>(null)
@@ -515,6 +584,25 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
     }
   }
 
+  async function findLoanByBarcode(rawCode: string) {
+    const code = rawCode.trim()
+    if (!code) return
+    setBusy(true)
+    setScannerError('')
+    try {
+      const result = await api<{ loans: Loan[] }>(`/loans?${new URLSearchParams({ search: code }).toString()}`)
+      const normalised = code.toUpperCase()
+      const loan = result.loans.find((item) => item.loanNo.toUpperCase() === normalised) || result.loans[0]
+      if (!loan) throw new Error('No loan matches that barcode. Check that you scanned the loan receipt.')
+      setShowScanner(false)
+      await openDetail(loan)
+    } catch (reason) {
+      setScannerError(reason instanceof Error ? reason.message : 'Unable to find this loan')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function deleteLoan() {
     if (!detail) return
     setBusy(true)
@@ -535,7 +623,10 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
   return <div className="loan-workspace-bridge">
     <div className="section-header">
       <div><span className="eyebrow">Finance & control</span><h2>Loans</h2><p>Track money lent to people, upcoming due dates, overdue balances, and every repayment.</p></div>
-      {canCreate && <button className="primary-button" onClick={() => { setModalError(''); setCreatedLoan(null); setShowCreate(true) }}><Plus size={17} /> New loan</button>}
+      <div className="loan-section-actions">
+        <button className="secondary-button" onClick={() => { setScannerError(''); setShowScanner(true) }}><ScanLine size={17} /> Scan loan</button>
+        {canCreate && <button className="primary-button" onClick={() => { setModalError(''); setCreatedLoan(null); setShowCreate(true) }}><Plus size={17} /> New loan</button>}
+      </div>
     </div>
     {error && <div className="loan-error"><AlertTriangle size={17} /> {error}</div>}
 
@@ -576,6 +667,7 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
     </article>
 
     {showCreate && <CreateLoanModal busy={busy} error={modalError} createdLoan={createdLoan} onClose={() => { if (!busy) { setShowCreate(false); setCreatedLoan(null) } }} onSubmit={createLoan} />}
+    {showScanner && <ScanLoanModal busy={busy} error={scannerError} onClose={() => { if (!busy) { setShowScanner(false); setScannerError('') } }} onScan={(value) => void findLoanByBarcode(value)} />}
     {detail && <LoanDetailModal detail={detail} user={user} busy={busy} error={modalError} paymentConfirmation={paymentConfirmation} cancelConfirmation={cancelConfirmation} deleteConfirmation={deleteConfirmation} onClose={() => { if (!busy) { setDetail(null); setPaymentConfirmation(null); setCancelConfirmation(false); setDeleteConfirmation(false) } }} onPayment={recordPayment} onDueDate={changeDueDate} onCancel={() => { setModalError(''); setCancelConfirmation(true) }} onConfirmCancel={cancelLoan} onDelete={() => { setModalError(''); setPaymentConfirmation(null); setCancelConfirmation(false); setDeleteConfirmation(true) }} onConfirmDelete={deleteLoan} onCancelConfirmationClose={() => { if (!busy) { setCancelConfirmation(false); setModalError('') } }} onDeleteConfirmationClose={() => { if (!busy) { setDeleteConfirmation(false); setModalError('') } }} />}
   </div>
 }
