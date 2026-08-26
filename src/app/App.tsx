@@ -851,7 +851,7 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
   const duePayment = pawnCurrency === 'KHR'
     ? Math.round(duePaymentRaw / 100) * 100
     : Math.round((duePaymentRaw + Number.EPSILON) * 100) / 100
-  const dailyFeeRate = Number(pawn.dailyFeeRate || 2.5).toLocaleString(undefined, { maximumFractionDigits: 4 })
+  const dailyFeeRate = Number(pawn.dailyFeeRate || 2.5).toLocaleString(undefined, { maximumFractionDigits: 2 })
   const dailyFeeAmount = pawn.feeSummary?.dailyFeeAmount ?? remainingPrincipal * Number(pawn.dailyFeeRate || 2.5) / 100
   const dayInMilliseconds = 86_400_000
   const dueDateMilliseconds = new Date(pawn.dueDate).getTime()
