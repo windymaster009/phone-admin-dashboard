@@ -20,58 +20,26 @@
   gap: 9px;
 }
 
-.loan-scan-form {
-  display: grid;
-  gap: 14px;
-  padding: 18px 20px 20px;
+.loan-scan-workflow {
+  padding: 20px;
 }
 
-.loan-scan-form > label {
-  display: grid;
-  gap: 6px;
-  color: var(--muted-text, #94a3b8);
-  font-size: .75rem;
-  font-weight: 700;
+.loan-scan-workflow .loan-error {
+  margin: 0 0 14px;
 }
 
-.loan-scan-form input {
-  min-height: 46px;
+#phoneflow-loan-barcode-reader {
+  width: 100%;
+  display: none;
+  overflow: hidden;
+  border: 1px solid var(--border-strong, rgba(255,255,255,.12));
+  border-radius: 14px;
+  background: #05070c;
 }
 
-.loan-scan-intro {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 13px;
-  border: 1px solid color-mix(in srgb, var(--primary) 32%, var(--border-color, rgba(148, 163, 184, .18)));
-  border-radius: 13px;
-  background: var(--primary-soft, rgba(139, 92, 246, .1));
-}
-
-.loan-scan-intro > span {
-  width: 38px;
-  height: 38px;
-  flex: 0 0 38px;
-  display: grid;
-  place-items: center;
-  border-radius: 11px;
-  color: var(--primary);
-  background: rgba(139, 92, 246, .18);
-}
-
-.loan-scan-intro div { display: grid; gap: 3px; }
-.loan-scan-intro strong { color: var(--text-color, #f8fafc); }
-.loan-scan-intro p { margin: 0; color: var(--muted-text, #94a3b8); font-size: .74rem; line-height: 1.45; }
-
-.loan-barcode-camera {
-  display: grid;
-  gap: 8px;
-  justify-items: start;
-}
-
-.loan-barcode-camera > div:empty { display: none; }
-.loan-barcode-camera > div.active { width: 100%; overflow: hidden; border-radius: 12px; background: #020617; }
-.loan-barcode-camera > small { color: var(--muted-text, #94a3b8); font-size: .68rem; line-height: 1.4; }
+#phoneflow-loan-barcode-reader.active { display: block; grid-column: 1 / -1; }
+#phoneflow-loan-barcode-reader video { width: 100% !important; max-height: 330px; object-fit: cover; }
+#phoneflow-loan-barcode-reader img { display: none; }
 
 .loan-error {
   display: flex;
@@ -866,8 +834,21 @@
     max-height: calc(100dvh - 32px);
   }
 
-  .loan-modal .loan-scan-form { gap: 11px; padding: 13px 17px 17px; }
-  .loan-modal .loan-scan-intro { padding: 11px; }
+  .loan-modal .loan-scan-workflow { padding: 14px 17px 17px; }
+  .loan-modal-scanner .scanner-intro { margin-bottom: 11px; }
+  .loan-modal-scanner .scanner-intro h3 { margin-bottom: 4px; font-size: 15px; }
+  .loan-modal-scanner .scanner-intro p { font-size: 9px; line-height: 1.4; }
+  .loan-modal-scanner .scanner-code-form { padding: 12px; border-radius: 13px; }
+  .loan-modal-scanner .scanner-method-heading { gap: 9px; margin-bottom: 9px; }
+  .loan-modal-scanner .scanner-method-heading > span { width: 34px; height: 34px; border-radius: 10px; }
+  .loan-modal-scanner .scanner-method-heading strong { font-size: 11px; }
+  .loan-modal-scanner .scanner-method-heading small,
+  .loan-modal-scanner .scanner-code-form > small,
+  .loan-modal-scanner .camera-scanner > small { font-size: 8px; line-height: 1.35; }
+  .loan-modal-scanner .scanner-input-row { gap: 7px; }
+  .loan-modal-scanner .scanner-input-row .primary-button,
+  .loan-modal-scanner .camera-scanner .secondary-button { min-height: 44px; }
+  .loan-modal-scanner .scanner-divider { margin: 12px 0; font-size: 8px; }
   .loan-modal .loan-barcode-camera > div.active { max-height: 210px; }
 
   .loan-modal-confirmation .loan-cancel-confirmation {

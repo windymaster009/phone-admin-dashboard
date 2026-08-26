@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from
 import { createPortal } from 'react-dom'
 import {
   AlertTriangle,
+  Barcode,
   BadgeCheck,
   Banknote,
   Camera,
@@ -213,7 +214,7 @@ function LoanBarcodeScanner({ onFound, onError }: { onFound: (value: string) => 
     }
   }, [cameraActive, onError, onFound])
 
-  return <div className="loan-barcode-camera">
+  return <div className="camera-scanner loan-barcode-camera">
     <div id="phoneflow-loan-barcode-reader" className={cameraActive ? 'active' : ''} />
     <button type="button" className="secondary-button" onClick={() => setCameraActive((active) => !active)}><Camera size={16} /> {cameraActive ? 'Stop camera' : 'Scan with camera'}</button>
     <small>Allow camera access on localhost or HTTPS. A handheld scanner can type into the field above.</small>
@@ -227,14 +228,18 @@ function ScanLoanModal({ busy, error, onClose, onScan }: { busy: boolean; error:
   const useScannedCode = (value: string) => { setCode(value); onScan(value) }
 
   return <Modal title="Scan loan" eyebrow="Loan lookup" description="Scan the loan barcode or enter the loan number to open its record." compact scanner onClose={onClose}>
-    <form className="loan-scan-form" onSubmit={submit}>
+    <div className="loan-scan-workflow">
       {error && <div className="loan-error"><AlertTriangle size={16} /> {error}</div>}
       {cameraError && <div className="loan-error"><AlertTriangle size={16} /> {cameraError}</div>}
-      <div className="loan-scan-intro"><span><ScanLine size={20} /></span><div><strong>Find a loan quickly</strong><p>Every loan receipt includes a barcode linked to its loan number.</p></div></div>
-      <label>Loan barcode or number<input autoFocus value={code} onChange={(event) => setCode(event.target.value)} placeholder="Scan or enter LN-..." autoComplete="off" /></label>
-      <button className="primary-button" disabled={busy || !code.trim()}><ScanLine size={17} /> {busy ? 'Finding loan...' : 'Find loan'}</button>
+      <div className="scanner-intro"><h3>How would you like to scan?</h3><p>Use the receipt barcode for the fastest loan lookup, or open this device camera.</p></div>
+      <form className="scanner-code-form" onSubmit={submit}>
+        <div className="scanner-method-heading"><span><Barcode size={18} /></span><div><strong>Loan barcode</strong><small>Keep this field selected, then scan the receipt.</small></div></div>
+        <div className="scanner-input-row"><input aria-label="Loan barcode or number" autoFocus value={code} onChange={(event) => setCode(event.target.value)} placeholder="Scan or enter loan number" autoComplete="off" /><button className="primary-button" disabled={busy || !code.trim()}>{busy ? 'Finding...' : 'Find loan'}</button></div>
+        <small>Works with the loan receipt barcode. Most handheld scanners press Enter automatically.</small>
+      </form>
+      <div className="scanner-divider"><span>or use this device</span></div>
       <LoanBarcodeScanner onFound={useScannedCode} onError={setCameraError} />
-    </form>
+    </div>
   </Modal>
 }
 
