@@ -484,7 +484,7 @@ function SecurityWorkspace() {
 
       <div className="security-grid">
         <div className="security-main-stack">
-          <section className="card security-panel">
+          <section className="card security-panel security-sessions-panel">
             <div className="security-panel-title"><div><h2>Signed-in devices</h2><p>Revoking a session signs that device out on its next request.</p></div><button type="button" className="danger-button" disabled={busy || otherSessions.length === 0} onClick={() => void revokeOthers()}><LogOut size={15} /> Sign out others</button></div>
             <div className="security-session-list">
               {sessions.map((session) => <article key={session.id} className={session.revokedAt ? 'revoked' : ''}>

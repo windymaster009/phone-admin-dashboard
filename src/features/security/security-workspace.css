@@ -759,6 +759,17 @@
     align-self: flex-start;
   }
 
+  .security-sessions-panel .security-panel-title {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
+  .security-sessions-panel .security-panel-title .danger-button {
+    align-self: center;
+    min-height: 36px;
+  }
+
   .security-events-toggle {
     align-self: flex-start;
   }
@@ -778,12 +789,16 @@
   }
 
   .security-session-list > article {
-    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 10px;
   }
 
   .security-session-list > article > .icon-button {
-    grid-column: 2;
-    justify-self: end;
+    grid-column: auto;
+    align-self: center;
+    justify-self: auto;
+    min-width: 36px;
+    min-height: 36px;
   }
 
   .security-event-list > article {
