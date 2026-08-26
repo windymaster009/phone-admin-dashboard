@@ -204,12 +204,6 @@
   text-align: left;
 }
 
-.loan-mobile-card:hover {
-  border-color: rgba(139, 92, 246, 0.5);
-  background: rgba(30, 41, 59, 0.48);
-  outline: none;
-}
-
 .loan-mobile-card.overdue { border-color: rgba(244, 63, 94, 0.38); }
 .loan-mobile-heading { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px; }
 .loan-mobile-heading .avatar { width: 34px; height: 34px; border-radius: 10px; font-size: 9px; }
@@ -731,12 +725,6 @@
   color: var(--text);
   border-color: var(--border-strong);
   background: var(--surface-solid);
-}
-
-:root[data-theme='light'] .loan-mobile-card:hover,
-:root[data-theme='light'] .loan-mobile-card:focus-visible {
-  border-color: color-mix(in srgb, var(--primary) 42%, var(--border));
-  background: var(--surface-hover);
 }
 
 :root[data-theme='light'] .loan-mobile-card.overdue {
