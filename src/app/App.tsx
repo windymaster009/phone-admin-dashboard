@@ -8,7 +8,6 @@ import {
   Banknote,
   BarChart3,
   Bell,
-  BookOpen,
   Building2,
   Boxes,
   Calculator,
@@ -1363,7 +1362,6 @@ function PawnView() {
   const [pawns, setPawns] = useState<Pawn[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedPawn, setSelectedPawn] = useState<Pawn | null>(null)
-  const [guideOpen, setGuideOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [pawnSort, setPawnSort] = useState<'newest' | 'oldest' | 'due-soonest' | 'due-latest'>('newest')
@@ -1420,7 +1418,7 @@ function PawnView() {
           title="Pawn management"
           description={error || 'Track collateral, optional customer identification, due payments, extensions, and overdue contracts.'}
           action={<div className="section-header-actions pawn-header-actions">
-            <button className="ghost-button pawn-guide-trigger" type="button" onClick={() => setGuideOpen(true)} aria-label="Open pawn guide" title="Pawn guide"><BookOpen size={18} aria-hidden="true" /></button>
+            <button className="ghost-button pawn-guide-trigger" type="button" onClick={() => window.dispatchEvent(new Event('phoneflow:open-scanner'))} aria-label="Scan barcode" title="Scan barcode"><ScanLine size={18} aria-hidden="true" /></button>
             <button className="primary-button" onClick={() => comingNext('New pawn')}><Plus size={17} /> New pawn</button>
           </div>}
         />
@@ -1483,87 +1481,7 @@ function PawnView() {
         </div>
       </article>
       {selectedPawn && <PawnDetailModal pawn={selectedPawn} onClose={() => setSelectedPawn(null)} onAction={updatePawn} />}
-      {guideOpen && <PawnGuideDialog onClose={() => setGuideOpen(false)} onStartPawn={() => {
-        setGuideOpen(false)
-        comingNext('New pawn')
-      }} />}
     </>
-  )
-}
-
-function PawnGuideDialog({ onClose, onStartPawn }: { onClose: () => void; onStartPawn: () => void }) {
-  const dialogRef = useRef<HTMLElement>(null)
-
-  useEffect(() => {
-    const previousOverflow = document.body.style.overflow
-    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null
-    const focusableSelector = 'button:not([disabled]), [tabindex]:not([tabindex="-1"])'
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    const trapFocus = (event: KeyboardEvent) => {
-      if (event.key !== 'Tab') return
-      const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(focusableSelector) || [])
-      if (!focusable.length) return
-      const first = focusable[0]
-      const last = focusable.at(-1)!
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault()
-        last.focus()
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault()
-        first.focus()
-      }
-    }
-    document.body.style.overflow = 'hidden'
-    document.addEventListener('keydown', onKeyDown)
-    const frame = window.requestAnimationFrame(() => {
-      dialogRef.current?.querySelector<HTMLElement>('[data-modal-initial-focus]')?.focus()
-    })
-    dialogRef.current?.addEventListener('keydown', trapFocus)
-    return () => {
-      window.cancelAnimationFrame(frame)
-      document.body.style.overflow = previousOverflow
-      document.removeEventListener('keydown', onKeyDown)
-      dialogRef.current?.removeEventListener('keydown', trapFocus)
-      if (previouslyFocused?.isConnected) previouslyFocused.focus()
-    }
-  }, [onClose])
-
-  return (
-    <div className="operation-modal-backdrop pawn-guide-backdrop" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose()
-    }}>
-      <section ref={dialogRef} className="operation-modal pawn-guide-dialog" role="dialog" aria-modal="true" aria-labelledby="pawn-guide-title" aria-describedby="pawn-guide-description">
-        <header className="operation-modal-header">
-          <span className="operation-modal-icon"><BookOpen size={21} aria-hidden="true" /></span>
-          <div>
-            <span className="eyebrow">Pawn workflow guide</span>
-            <h2 id="pawn-guide-title">Pawn a phone or item in five steps</h2>
-            <p id="pawn-guide-description">Follow this order every time. Do not give cash until you finish step 4.</p>
-          </div>
-          <button type="button" className="operation-modal-close" onClick={onClose} aria-label="Close pawn guide"><X size={19} /></button>
-        </header>
-        <div className="pawn-guide-content">
-          <section className="pawn-guide-prep" aria-labelledby="pawn-guide-prep-title">
-            <div><strong id="pawn-guide-prep-title">Before you begin</strong><span>Keep the customer and the item in front of you.</span></div>
-            <ul><li>Customer details</li><li>Item and accessories</li></ul>
-          </section>
-          <ol className="pawn-guide-steps">
-            <li><span>1</span><div><strong>Choose or add the customer</strong><p>Select their record, or add one if they are new.</p><small>Check: the person says they own this item.</small></div></li>
-            <li><span>2</span><div><strong>Inspect and record the item</strong><p>Enter the product, IMEI or serial number, condition, and included accessories.</p><small>Check: no activation lock and no hidden damage.</small></div></li>
-            <li><span>3</span><div><strong>Set the money and repayment terms</strong><p>Use the valuation to set the principal, currency, fee, term, and due date.</p><small>Say clearly: how much cash they receive and how much they repay.</small></div></li>
-            <li><span>4</span><div><strong>Read back the contract before paying</strong><p>Confirm the customer, item, cash amount, repayment total, and due date together.</p><small>Only then release the money and save the contract.</small></div></li>
-            <li><span>5</span><div><strong>Give the receipt and manage the contract</strong><p>Provide the receipt. Later, use the contract to record a payment, extension, or redemption.</p></div></li>
-          </ol>
-          <aside className="pawn-guide-reminder"><AlertTriangle size={17} aria-hidden="true" /><p><strong>Pause the transaction</strong> if you cannot confirm ownership, the device is activation-locked, or the item cannot be inspected.</p></aside>
-        </div>
-        <footer className="pawn-guide-actions">
-          <button type="button" className="ghost-button" onClick={onClose}>Close</button>
-          <button type="button" className="primary-button" data-modal-initial-focus onClick={onStartPawn}><Plus size={17} /> Start pawn</button>
-        </footer>
-      </section>
-    </div>
   )
 }
 
