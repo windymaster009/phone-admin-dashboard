@@ -141,6 +141,7 @@ export default function ServiceWorkspace() {
     const terms = `${service.name} ${service.description || ''} ${service.code}`.toLowerCase()
     return matchesCategory && terms.includes(search.trim().toLowerCase())
   }), [services, search, category])
+  const pricedServices = useMemo(() => services.filter((service) => service.price > 0), [services])
 
   const subtotal = Number(selected?.price || 0) * quantity
   const normalizedDiscount = Math.min(subtotal, Math.max(0, Number(discount.replaceAll(',', '')) || 0))
@@ -342,10 +343,21 @@ export default function ServiceWorkspace() {
           <div className="service-security-note"><ShieldCheck size={16} /><span><strong>Protect customer access</strong>Never save passwords, one-time codes, or recovery codes.</span></div>
           <dl className="service-total"><div><dt>Subtotal</dt><dd>{money(subtotal, selected.currency)}</dd></div>{normalizedDiscount > 0 && <div><dt>Discount</dt><dd>− {money(normalizedDiscount, selected.currency)}</dd></div>}<div><dt>Total</dt><dd>{money(total, selected.currency)}</dd></div></dl>
           <button className="primary-button service-complete" disabled={busy} type="submit"><CreditCard size={16} />{busy ? 'Saving…' : 'Record charge'}</button>
-        </form> : <div className="service-panel-empty"><MessageCircle size={28} /><strong>Choose the service to charge</strong><p>Select a priced service below. Services without a price must be priced first.</p><select autoFocus value="" onChange={(event) => {
-          const service = services.find((item) => item._id === event.target.value)
-          if (service) choose(service)
-        }} aria-label="Service to charge"><option value="">Select service</option>{services.filter((service) => service.price > 0).map((service) => <option value={service._id} key={service._id}>{service.name} · {money(service.price, service.currency)}</option>)}</select></div>}
+        </form> : <div className="service-panel-empty service-service-picker">
+          <div className="service-picker-heading"><span className="service-picker-icon"><MessageCircle size={19} /></span><div><span className="eyebrow">Start a charge</span><strong>What service did you complete?</strong><p>Choose a priced service to add the customer and payment.</p></div></div>
+          {pricedServices.length ? <>
+            <div className="service-picker-list" aria-label="Suggested priced services">
+              {pricedServices.slice(0, 3).map((service) => {
+                const Icon = categoryDetails[service.category].icon
+                return <button type="button" key={service._id} onClick={() => choose(service)}><span className={`service-picker-service-icon service-tone-${service.category.toLowerCase()}`}><Icon size={16} /></span><span><strong>{service.name}</strong><small>{categoryDetails[service.category].label}</small></span><strong>{money(service.price, service.currency)}</strong><ArrowRight size={15} /></button>
+              })}
+            </div>
+            <label className="service-picker-select"><span>{pricedServices.length > 3 ? 'Or choose another priced service' : 'Choose from available services'}</span><select autoFocus value="" onChange={(event) => {
+              const service = pricedServices.find((item) => item._id === event.target.value)
+              if (service) choose(service)
+            }} aria-label="Service to charge"><option value="">Select service</option>{pricedServices.map((service) => <option value={service._id} key={service._id}>{service.name} · {money(service.price, service.currency)}</option>)}</select></label>
+          </> : <div className="service-picker-unpriced"><AlertTriangle size={17} /><span><strong>No priced services yet</strong><small>Set a catalogue price before recording a service charge.</small></span></div>}
+        </div>}
       </section>
       </div>}
     </div>
