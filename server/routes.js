@@ -972,7 +972,11 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
   ])
 
   const [recentPawns, recentTrades, inventoryMix, monthPerformance, monthlyPerformance, dailyPerformance, weekPerformance] = await Promise.all([
-    Pawn.find().populate('customer', 'name phone').sort({ createdAt: -1 }).limit(6),
+    Pawn.find()
+      .populate('customer', 'name phone')
+      .populate('inventoryItem', 'sku barcode name brand model storage color imei1 sellPrice status')
+      .sort({ createdAt: -1 })
+      .limit(6),
     Trade.find().populate('customer', 'name phone').populate('supplier', 'name phone').sort({ createdAt: -1 }).limit(6),
     InventoryItem.aggregate([
       { $match: { status: { $ne: 'ARCHIVED' } } },
@@ -1998,7 +2002,11 @@ router.get('/inventory/scan/:code', requireAuth, asyncRoute(async (req, res) => 
     ],
   })
   if (!item) return res.status(404).json({ message: `No product found for ${code}` })
-  res.json({ item })
+  const relatedPawn = await Pawn.findOne({ inventoryItem: item._id })
+    .select('pawnNo status customer')
+    .populate('customer', 'name')
+    .lean()
+  res.json({ item, relatedPawn })
 }))
 
 router.post('/inventory', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
@@ -2245,7 +2253,7 @@ router.get('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asy
   const customerFields = req.user.role === 'CASHIER' ? 'name phone' : 'name phone nationalIdNumber'
   const pawns = await Pawn.find(filter)
     .populate('customer', customerFields)
-    .populate('inventoryItem', 'sku name imei1 status')
+    .populate('inventoryItem', 'sku barcode name brand model storage color imei1 sellPrice status')
     .populate('renewals.renewedBy', 'name role')
     .sort({ createdAt: -1 })
     .limit(300)

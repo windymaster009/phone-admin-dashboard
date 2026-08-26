@@ -217,6 +217,7 @@ type Pawn = {
   _id: string
   pawnNo: string
   customer?: Customer
+  inventoryItem?: Pick<InventoryItem, '_id' | 'sku' | 'barcode' | 'name' | 'brand' | 'model' | 'storage' | 'color' | 'imei1' | 'sellPrice' | 'status'> | string
   itemSnapshot: { name: string; brand?: string; model?: string; imei?: string; condition?: string; color?: string; storage?: string }
   estimatedValue: number
   pawnPercentage: number
@@ -889,13 +890,18 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
   }
 
   function printPawnProductLabel() {
+    const linkedItem = typeof pawn.inventoryItem === 'object' ? pawn.inventoryItem : null
+    if (!linkedItem?.sku) {
+      window.alert('This pawn is not linked to an inventory label yet. Refresh Pawn Management and try again.')
+      return
+    }
     printInventoryLabel({
-      sku: pawn.pawnNo,
-      barcode: pawn.pawnNo,
-      name: pawn.itemSnapshot.name,
-      brand: pawn.itemSnapshot.brand,
-      model: [pawn.itemSnapshot.model, pawn.itemSnapshot.storage, pawn.itemSnapshot.color].filter(Boolean).join(' '),
-      imei1: pawn.itemSnapshot.imei,
+      sku: linkedItem.sku,
+      barcode: linkedItem.barcode || linkedItem.sku,
+      name: linkedItem.name || pawn.itemSnapshot.name,
+      brand: linkedItem.brand || pawn.itemSnapshot.brand,
+      model: [linkedItem.model || pawn.itemSnapshot.model, linkedItem.storage || pawn.itemSnapshot.storage, linkedItem.color || pawn.itemSnapshot.color].filter(Boolean).join(' '),
+      imei1: linkedItem.imei1 || pawn.itemSnapshot.imei,
       sellPrice: 0,
     })
   }
@@ -1045,7 +1051,7 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
         {!action && <footer className="detail-modal-footer">
           {onAction && isOpen && pawn.status === 'OVERDUE' && <div className={`pawn-claim-action ${canClaimCollateral ? 'eligible' : ''}`} role="note"><span><strong>{canClaimCollateral ? 'Claim is available' : `Claim available ${claimAvailableText}`}</strong><small>Recommended claim window: 5-7 days overdue{claimRecommendedByMilliseconds > claimAvailableAtMilliseconds ? `, by ${claimRecommendedByText}` : ''}.</small></span><button className="ghost-button danger-link" onClick={() => openAction('forfeit')} disabled={!canClaimCollateral} title={canClaimCollateral ? 'Claim this collateral for shop inventory' : `Wait until ${claimAvailableText} to claim this collateral`}>Claim collateral</button></div>}
           <div className="pawn-footer-actions">
-            <button type="button" className="secondary-button pawn-label-print" onClick={printPawnProductLabel} title={`Print a tracking label for ${pawn.pawnNo}`}><Printer size={15} /> Print label</button>
+            <button type="button" className="secondary-button pawn-label-print" onClick={printPawnProductLabel} title="Print the linked collateral inventory label"><Printer size={15} /> Print label</button>
             {onAction && isOpen && <><button className="secondary-button" onClick={() => openAction('payment')} disabled={duePayment <= 0} title={duePayment <= 0 ? 'No fee is due today' : `Pay ${pawnMoney(duePayment, pawnCurrency)} due today`}>Due payment</button><button className="secondary-button" onClick={() => openAction('renew')} disabled={pawn.feeModel === 'DAILY_SIMPLE' && duePayment > 0} title={pawn.feeModel === 'DAILY_SIMPLE' && duePayment > 0 ? `Pay ${pawnMoney(duePayment, pawnCurrency)} due first` : 'Add more days to this pawn'}>Extend pawn</button><button className="primary-button" onClick={() => openAction('redeem')}>Redeem item</button></>}
             {onOpenAll && <button className="secondary-button" onClick={onOpenAll}>Open pawn management <ArrowUpRight size={15} /></button>}
             <button className="ghost-button" onClick={onClose}>Close</button>
@@ -1413,13 +1419,19 @@ function PawnView() {
       method: 'POST',
       body: JSON.stringify(payload),
     })
-    setPawns((current) => current.map((pawn) => pawn._id === result.pawn._id ? result.pawn : pawn))
-    setSelectedPawn(result.pawn)
+    const updatedPawn: Pawn = {
+      ...result.pawn,
+      inventoryItem: typeof result.pawn.inventoryItem === 'object'
+        ? result.pawn.inventoryItem
+        : selectedPawn.inventoryItem,
+    }
+    setPawns((current) => current.map((pawn) => pawn._id === updatedPawn._id ? updatedPawn : pawn))
+    setSelectedPawn(updatedPawn)
     if (action === 'renew') {
-      const latestRenewal = result.pawn.renewals?.at(-1)
+      const latestRenewal = updatedPawn.renewals?.at(-1)
       const sourceSubId = latestRenewal?._id ? `renewal:${latestRenewal._id}` : 'latest-contract'
       window.dispatchEvent(new CustomEvent('phoneflow:open-pawn-ticket', {
-        detail: { reference: result.pawn.pawnNo, sourceSubId },
+        detail: { reference: updatedPawn.pawnNo, sourceSubId },
       }))
     }
   }

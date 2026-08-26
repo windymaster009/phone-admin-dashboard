@@ -63,6 +63,13 @@ type InventoryItem = {
   imei1?: string
 }
 
+type RelatedPawn = {
+  _id: string
+  pawnNo: string
+  status: string
+  customer?: { _id: string; name: string }
+}
+
 type Supplier = {
   _id: string
   name: string
@@ -519,6 +526,7 @@ export default function OperationModalBridge() {
   const [pawnScannerOpen, setPawnScannerOpen] = useState(false)
   const [scanCode, setScanCode] = useState('')
   const [scannedItem, setScannedItem] = useState<InventoryItem | null>(null)
+  const [scannedPawn, setScannedPawn] = useState<RelatedPawn | null>(null)
   const [labelItems, setLabelItems] = useState<InventoryItem[]>([])
   const [saleItemId, setSaleItemId] = useState('')
   const [saleCustomerId, setSaleCustomerId] = useState('')
@@ -764,6 +772,7 @@ export default function OperationModalBridge() {
       setError('')
       setScanCode('')
       setScannedItem(null)
+      setScannedPawn(null)
       setKind('scan')
     }
     window.addEventListener('phoneflow:open-scanner', openScanner)
@@ -923,6 +932,7 @@ export default function OperationModalBridge() {
     setPawnScannerOpen(false)
     setScanCode('')
     setScannedItem(null)
+    setScannedPawn(null)
     setLabelItems([])
     setSaleItemId('')
     setSaleCustomerId('')
@@ -1054,10 +1064,12 @@ export default function OperationModalBridge() {
     setBusy(true)
     setError('')
     setScannedItem(null)
+    setScannedPawn(null)
     try {
-      const result = await api<{ item: InventoryItem }>(`/inventory/scan/${encodeURIComponent(code)}`)
+      const result = await api<{ item: InventoryItem; relatedPawn?: RelatedPawn | null }>(`/inventory/scan/${encodeURIComponent(code)}`)
       setScanCode(code)
       setScannedItem(result.item)
+      setScannedPawn(result.relatedPawn || null)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to find this product')
     } finally {
@@ -1774,7 +1786,8 @@ export default function OperationModalBridge() {
               <div><span>Product</span><p><small>{scannedItem.category === 'PHONE' ? 'IMEI' : 'Category'}</small><strong>{scannedItem.category === 'PHONE' ? scannedItem.imei1 || 'Not recorded' : scannedItem.category.replaceAll('_', ' ')}</strong></p><p><small>Condition</small><strong>{scannedItem.condition?.replaceAll('_', ' ') || 'Not recorded'}</strong></p></div>
               <div className="price-group"><span>Shop price</span><strong>{scannedItem.sellPrice > 0 ? `$${scannedItem.sellPrice.toFixed(2)}` : 'Not set'}</strong><small>{scannedItem.sellPrice > 0 ? 'Current selling price' : 'Set a price in Stock Information first'}</small></div>
             </div>
-            <footer className="scanner-result-actions"><button type="button" className="secondary-button" onClick={() => { setScannedItem(null); setScanCode(''); setError('') }}><ScanLine size={17} /> Scan another</button><div><button type="button" className="ghost-button" onClick={close}>Close</button><button type="button" className="primary-button" onClick={sellScannedProduct} disabled={scannedItem.status !== 'IN_STOCK' || scannedItem.quantity < 1 || scannedItem.sellPrice <= 0}><ShoppingCart size={17} /> Sell product</button></div></footer>
+            {scannedPawn && <div className="scanned-pawn-link" role="note"><span><HandCoins size={18} /></span><div><small>Linked pawn contract</small><strong>{scannedPawn.pawnNo}</strong><p>This product is collateral for {scannedPawn.customer?.name || 'a pawn customer'}.</p></div><b>{scannedPawn.status.replaceAll('_', ' ')}</b></div>}
+            <footer className="scanner-result-actions"><button type="button" className="secondary-button" onClick={() => { setScannedItem(null); setScannedPawn(null); setScanCode(''); setError('') }}><ScanLine size={17} /> Scan another</button><div><button type="button" className="ghost-button" onClick={close}>Close</button><button type="button" className="primary-button" onClick={sellScannedProduct} disabled={scannedItem.status !== 'IN_STOCK' || scannedItem.quantity < 1 || scannedItem.sellPrice <= 0}><ShoppingCart size={17} /> Sell product</button></div></footer>
           </article>
         </>}
       </div>}

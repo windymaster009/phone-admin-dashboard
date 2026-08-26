@@ -1523,6 +1523,13 @@ body.operation-modal-open {
 .scanned-product-details .price-group { display: flex; flex-direction: column; justify-content: center; background: linear-gradient(135deg, rgba(139,92,246,.14), var(--bg-soft, #10172a)); }
 .scanned-product-details .price-group > strong { color: #a78bfa; font: 800 24px Manrope, sans-serif; }
 .scanned-product-details .price-group > small { margin-top: 5px; color: var(--muted, #8f9bb4); font-size: 9px; }
+.scanned-pawn-link { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; margin: 0 18px 18px; padding: 12px 14px; border: 1px solid rgba(139,92,246,.28); border-radius: 12px; background: rgba(139,92,246,.08); }
+.scanned-pawn-link > span { width: 36px; height: 36px; display: grid; place-items: center; color: #a78bfa; border-radius: 10px; background: rgba(139,92,246,.15); }
+.scanned-pawn-link > div { min-width: 0; display: grid; gap: 3px; }
+.scanned-pawn-link small { color: #a78bfa; font-size: 8px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.scanned-pawn-link strong { color: var(--text, #f4f6fb); font-size: 12px; }
+.scanned-pawn-link p { margin: 0; overflow: hidden; color: var(--muted, #8f9bb4); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.scanned-pawn-link > b { padding: 5px 8px; color: #c4b5fd; border-radius: 999px; background: rgba(139,92,246,.14); font-size: 8px; text-transform: capitalize; }
 .scanner-result-actions { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 18px 18px; border-top: 1px solid var(--border, rgba(255,255,255,.08)); }
 .scanner-result-actions > div { display: flex; gap: 10px; }
 .scanner-result-actions button { min-width: 116px; }
@@ -2427,6 +2434,8 @@ body.operation-modal-open {
   .scanned-product-heading .status-badge { grid-column: 2; justify-self: start; }
   .scanned-product-details { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .scanned-product-details .price-group { grid-column: 1 / -1; min-height: 90px; }
+  .scanned-pawn-link { grid-template-columns: auto minmax(0, 1fr); margin: 0 14px 14px; }
+  .scanned-pawn-link > b { grid-column: 2; justify-self: start; }
   .scanner-result-actions { align-items: stretch; flex-direction: column; gap: 10px; padding: 14px; }
   .scanner-result-actions > div { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .scanner-result-actions button { min-width: 0; }
