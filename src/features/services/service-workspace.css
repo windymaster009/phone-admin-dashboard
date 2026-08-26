@@ -82,6 +82,12 @@
 .service-price-modal label { min-width: 0; display: grid; gap: 6px; color: var(--muted); font-size: .68rem; font-weight: 700; }
 .service-charge-panel label > span small { color: var(--primary); font-size: .56rem; }
 .service-field-help { min-height: 13px; color: var(--muted-2); font-size: .58rem; font-weight: 600; line-height: 1.35; }
+.service-discount-mode { min-width: 0; display: grid; align-content: start; gap: 6px; color: var(--muted); font-size: .68rem; font-weight: 700; }
+.service-discount-mode > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; min-height: 44px; padding: 4px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--bg-soft); }
+.service-discount-mode button { min-width: 0; border: 0; border-radius: 7px; outline: 2px solid transparent; outline-offset: 1px; color: var(--muted); background: transparent; font: 800 .65rem var(--font-body); }
+.service-discount-mode button.selected { color: var(--text); background: var(--primary-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 45%, transparent); }
+.service-discount-mode button:focus-visible { outline-color: var(--primary); }
+.service-discount-mode button:active { background: var(--surface-hover); }
 .service-charge-panel textarea { min-height: 70px; padding-block: 10px; resize: vertical; }
 .service-form-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 .service-security-note { display: flex; align-items: flex-start; gap: 8px; padding: 12px; border: 1px solid color-mix(in srgb, var(--green) 28%, var(--border)); border-radius: 10px; color: var(--green); background: color-mix(in srgb, var(--green) 7%, var(--bg-soft)); }
