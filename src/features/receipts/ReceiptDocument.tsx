@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react'
+import JsBarcode from 'jsbarcode'
 import type { ReceiptLayout, ReceiptRecord, ReceiptSnapshot } from './receipt-types'
 
 const number = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 })
@@ -26,6 +28,33 @@ function title(value?: string) {
 
 function Row({ label, value }: { label: string; value: string }) {
   return <div className="receipt-row"><span>{label}</span><strong>{value}</strong></div>
+}
+
+function PawnBarcode({ reference, thermal = false }: { reference: string; thermal?: boolean }) {
+  const barcodeRef = useRef<SVGSVGElement>(null)
+
+  useEffect(() => {
+    if (!barcodeRef.current) return
+    try {
+      JsBarcode(barcodeRef.current, reference, {
+        format: 'CODE128',
+        width: thermal ? 1.05 : 1.35,
+        height: thermal ? 32 : 42,
+        displayValue: false,
+        margin: 0,
+        lineColor: '#111827',
+        background: '#ffffff',
+      })
+    } catch {
+      barcodeRef.current.replaceChildren()
+    }
+  }, [reference, thermal])
+
+  return <section className={`pawn-ticket-barcode${thermal ? ' pawn-ticket-barcode-thermal' : ''}`} aria-label={`Barcode for pawn contract ${reference}`}>
+    <svg ref={barcodeRef} aria-hidden="true" />
+    <span>Scan to find this pawn</span>
+    <strong>{reference}</strong>
+  </section>
 }
 
 function ContractDetails({ snapshot }: { snapshot: ReceiptSnapshot }) {
@@ -120,6 +149,8 @@ function PawnTicketThermal({ receipt, snapshot }: { receipt: ReceiptRecord; snap
         <small>Receipt {receipt.receiptNo}</small>
       </div>
 
+      <PawnBarcode reference={snapshot.referenceNo} thermal />
+
       <section className="pawn-ticket-fields">
         <Row label="Customer" value={snapshot.party.name || 'Walk-in customer'} />
         <Row label="Number of items" value={String(itemCount)} />
@@ -162,6 +193,8 @@ export default function ReceiptDocument({ receipt, layout }: { receipt: ReceiptR
     return <PawnTicketThermal receipt={receipt} snapshot={snapshot} />
   }
 
+  const pawnReceipt = ['PAWN_CONTRACT', 'PAWN_PAYMENT', 'PAWN_REDEMPTION'].includes(snapshot.documentType)
+
   return (
     <article className={`receipt-paper receipt-paper-${layout.toLowerCase()}`}>
       <header className="receipt-document-header">
@@ -190,6 +223,8 @@ export default function ReceiptDocument({ receipt, layout }: { receipt: ReceiptR
         {snapshot.paymentExternalReference && <Row label="External reference" value={snapshot.paymentExternalReference} />}
         {snapshot.staff?.name && <Row label="Processed by" value={snapshot.staff.name} />}
       </section>
+
+      {pawnReceipt && <PawnBarcode reference={snapshot.referenceNo} />}
 
       <section className="receipt-section">
         <h3>{snapshot.party.role || 'Customer'}</h3>
@@ -279,6 +314,7 @@ const thermalReceiptPrintStyles = `
 .receipt-paper-thermal .receipt-totals{margin-top:11px}
 .receipt-paper-thermal .receipt-grand-total{font-size:14px}
 .receipt-paper-thermal footer{margin-top:18px;overflow-wrap:anywhere}
+.pawn-ticket-barcode{display:grid;justify-items:center;gap:4px;margin:13px auto 0;padding:10px 12px;border:1px dashed #9ca3af;background:#fff;color:#111827;text-align:center}.pawn-ticket-barcode svg{display:block;width:min(100%,250px);height:auto;max-height:48px}.pawn-ticket-barcode span{color:#4b5563;font-size:9px}.pawn-ticket-barcode strong{font:700 10px ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.06em}.receipt-paper-thermal .pawn-ticket-barcode{margin-top:9px;padding:8px 7px}.receipt-paper-thermal .pawn-ticket-barcode svg{width:min(100%,230px);max-height:38px}.receipt-paper-thermal .pawn-ticket-barcode span{font-size:8px}.receipt-paper-thermal .pawn-ticket-barcode strong{font-size:9px}
 .pawn-ticket-thermal{padding:5mm 4mm;color:#111827;font-size:11px;line-height:1.4}
 .pawn-ticket-shop{display:grid;justify-items:center;gap:3px;padding-bottom:9px;border-bottom:2px solid #111827;text-align:center}
 .pawn-ticket-shop h1{margin:0;font-size:18px}.pawn-ticket-shop strong{font-size:11px}.pawn-ticket-shop span{font-size:9px}
