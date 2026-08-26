@@ -3166,7 +3166,7 @@ function CustomerReportModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className={`modal-backdrop customer-report-backdrop ${activityReport ? 'is-full-report-open' : ''}`} role="presentation" onClick={onClose}>
+    <div className={`modal-backdrop customer-report-backdrop ${activityReport ? 'is-full-report-open' : ''}`} role="presentation">
       <section className={`detail-modal surface-card customer-report-modal ${activityReport ? 'is-full-report' : ''}`} role="dialog" aria-modal="true" aria-labelledby="customer-report-title" onClick={(event) => event.stopPropagation()}>
         <header className="detail-modal-header">
           <div>
@@ -3311,7 +3311,7 @@ function SupplierReportModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className={`modal-backdrop customer-report-backdrop ${activityReport ? 'is-full-report-open' : ''}`} role="presentation" onClick={onClose}>
+    <div className={`modal-backdrop customer-report-backdrop ${activityReport ? 'is-full-report-open' : ''}`} role="presentation">
       <section className={`detail-modal surface-card customer-report-modal supplier-report-modal ${activityReport ? 'is-full-report' : ''}`} role="dialog" aria-modal="true" aria-labelledby="supplier-report-title" onClick={(event) => event.stopPropagation()}>
         <header className="detail-modal-header">
           <div><span className="eyebrow">Supplier report</span><h3 id="supplier-report-title">Find a supplier</h3><p>Search the directory, then review the supplier’s linked purchases.</p></div>
