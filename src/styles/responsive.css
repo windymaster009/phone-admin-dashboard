@@ -552,11 +552,30 @@
   .inventory-detail-modal .detail-sections { grid-template-columns: 1fr; gap: 8px; padding: 12px; }
   .inventory-detail-modal .detail-modal-footer { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 11px 12px; }
   .inventory-detail-modal .detail-modal-footer > * { width: 100%; justify-content: center; }
-  .pawn-detail-modal { width: 100%; }
-  .pawn-detail-modal .detail-modal-header { padding: 16px; }
+  /* Hallmark · component: pawn contract detail · genre: modern-minimal
+   * Mobile action-first sheet: the money action stays ahead of supporting contract data.
+   */
+  .modal-backdrop:has(.pawn-detail-modal) {
+    align-items: center;
+    padding: max(12px, env(safe-area-inset-top, 0px)) 12px max(76px, calc(env(safe-area-inset-bottom, 0px) + 64px));
+  }
+  .pawn-detail-modal {
+    width: min(100%, 500px);
+    height: min(78dvh, 680px);
+    max-height: calc(100dvh - 88px);
+    border-radius: 16px;
+  }
+  .pawn-detail-modal .detail-modal-header { padding: 14px 14px 13px; }
   .pawn-detail-modal .detail-modal-header h3 { margin: 5px 0; font-size: 19px; overflow-wrap: anywhere; }
-  .pawn-balance-summary { margin: 12px; padding: 14px; }
-  .pawn-balance-total { font-size: 25px; }
+  .pawn-detail-modal .detail-modal-header p { font-size: 10px; line-height: 1.45; }
+  .pawn-detail-body { display: flex; flex-direction: column; -webkit-overflow-scrolling: touch; scroll-padding-block: 12px; }
+  .pawn-detail-body > .pawn-balance-summary { order: 1; }
+  .pawn-detail-body > .pawn-action-form { order: 2; scroll-margin-block: 12px; }
+  .pawn-detail-body > :not(.pawn-balance-summary, .pawn-action-form) { order: 3; }
+  .pawn-balance-summary { margin: 10px 12px; padding: 12px; }
+  .pawn-balance-heading h4 { font-size: 13px; }
+  .pawn-balance-total { margin-top: 9px; font-size: 22px; }
+  .pawn-balance-summary > p { font-size: 9px; }
   .pawn-balance-breakdown { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pawn-detail-groups { grid-template-columns: 1fr; gap: 8px; padding: 0 12px 10px; }
   .pawn-verification-summary { grid-template-columns: 1fr; margin: 0 12px 12px; }
@@ -568,9 +587,12 @@
   .pawn-detail-modal .detail-sections article { min-width: 0; padding: 11px; }
   .pawn-detail-modal .detail-sections p { margin-top: 5px; font-size: 10px; overflow-wrap: anywhere; }
   .pawn-detail-modal .detail-note { margin: 0 12px 12px; padding: 11px; }
-  .pawn-detail-modal .pawn-action-form { grid-template-columns: 1fr; margin: 0 12px 12px; padding: 14px; }
+  .pawn-detail-modal .pawn-action-form { grid-template-columns: 1fr; gap: 11px; margin: 0 12px 12px; padding: 12px; }
   .pawn-detail-modal .pawn-action-form > * { grid-column: 1; }
-  .pawn-detail-modal .pawn-action-header p { font-size: 10px; }
+  .pawn-detail-modal .pawn-action-header { gap: 10px; padding-bottom: 10px; }
+  .pawn-detail-modal .pawn-action-header p { margin-top: 4px; font-size: 9px; line-height: 1.45; }
+  .pawn-detail-modal .pawn-action-header .icon-button { width: 40px; height: 40px; flex: 0 0 40px; }
+  .pawn-detail-modal .pawn-action-buttons { gap: 8px; margin-top: 0; padding-top: 11px; }
   .pawn-detail-modal .pawn-renewal-summary { grid-template-columns: 1fr; }
   .pawn-detail-modal .pawn-action-buttons { display: grid; grid-template-columns: 1fr 1.35fr; }
   .pawn-detail-modal .pawn-action-buttons button { width: 100%; }
@@ -581,6 +603,9 @@
   .pawn-detail-modal .detail-modal-footer .pawn-claim-action > button { width: auto; }
   .pawn-detail-modal .pawn-footer-actions { grid-column: 1; width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .pawn-detail-modal .pawn-footer-actions > * { width: 100%; justify-content: center; }
+  /* Keep the sheet physically usable when the app's Display size is 110% or 120%. */
+  .app[data-font-size='comfortable'] .pawn-detail-modal { height: min(70.9091dvh, 618px); max-height: calc(90.9091dvh - 80px); zoom: .9091; }
+  .app[data-font-size='large'] .pawn-detail-modal { height: min(65dvh, 566px); max-height: calc(83.3333dvh - 72px); zoom: .8333; }
   .trade-detail-modal .detail-sections { grid-template-columns: 1fr; padding: 12px; }
   .trade-detail-modal .detail-lines, .trade-detail-modal .detail-note, .trade-refund-record { margin: 0 12px 12px; }
   .trade-detail-modal .detail-grid { padding: 12px; }
