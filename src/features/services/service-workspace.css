@@ -181,6 +181,7 @@
   .service-set-price,
   .service-record-button { min-height: 34px; }
   .service-charge-panel { width: 100%; max-height: min(720px, calc(100dvh - max(28px, env(safe-area-inset-top)) - max(28px, env(safe-area-inset-bottom)))); }
+  .service-charge-backdrop { align-items: start; padding-top: max(16px, env(safe-area-inset-top)); }
   .service-charge-panel > header { padding: 13px; }
   .service-charge-panel form { gap: 11px; padding: 13px; }
   .service-panel-empty { min-height: 230px; padding: 22px 16px; }
