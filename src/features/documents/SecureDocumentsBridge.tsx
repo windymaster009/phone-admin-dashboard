@@ -222,7 +222,7 @@ function VaultWorkspace() {
       </main>
     </section>
 
-    <dialog ref={deleteDialogRef} className="secure-delete-dialog" onClose={() => setPendingDelete(null)} onClick={(event) => { if (event.target === event.currentTarget) setPendingDelete(null) }}><div className="secure-delete-dialog-content"><span className="secure-delete-mark"><Trash2 size={21} aria-hidden="true" /></span><div><h3>Delete this secure document?</h3><p><strong>{pendingDelete?.originalName}</strong> will be permanently removed. This action cannot be undone.</p></div><div className="secure-delete-actions"><button type="button" className="ghost-button" onClick={() => setPendingDelete(null)} disabled={busy}>Cancel</button><button type="button" className="danger-button" onClick={() => void confirmDelete()} disabled={busy}>{busy ? 'Deleting…' : 'Delete document'}</button></div></div></dialog>
+    <dialog ref={deleteDialogRef} className="secure-delete-dialog" onClose={() => setPendingDelete(null)}><div className="secure-delete-dialog-content"><span className="secure-delete-mark"><Trash2 size={21} aria-hidden="true" /></span><div><h3>Delete this secure document?</h3><p><strong>{pendingDelete?.originalName}</strong> will be permanently removed. This action cannot be undone.</p></div><div className="secure-delete-actions"><button type="button" className="ghost-button" onClick={() => setPendingDelete(null)} disabled={busy}>Cancel</button><button type="button" className="danger-button" onClick={() => void confirmDelete()} disabled={busy}>{busy ? 'Deleting…' : 'Delete document'}</button></div></div></dialog>
   </div>
 }
 

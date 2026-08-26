@@ -129,7 +129,7 @@ function CustomerSuccessModal({ success, onClose }: { success: CustomerSuccess; 
   }, [onClose])
 
   return createPortal(
-    <div className="operation-modal-backdrop customer-save-success-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+    <div className="operation-modal-backdrop customer-save-success-backdrop" role="presentation">
       <section className="operation-modal customer-save-success-modal" role="dialog" aria-modal="true" aria-labelledby="customer-save-success-title">
         <span className="customer-save-success-icon"><CheckCircle2 size={30} /></span>
         <span className="eyebrow">Customer record {success.action === 'deleted' ? 'deleted' : 'saved'}</span>
@@ -160,7 +160,7 @@ function DeleteCustomerModal({ customer, busy, error, onClose, onConfirm }: {
   }, [busy, onClose])
 
   return createPortal(
-    <div className="operation-modal-backdrop customer-delete-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose() }}>
+    <div className="operation-modal-backdrop customer-delete-backdrop" role="presentation">
       <section className="operation-modal customer-delete-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-customer-title">
         <button type="button" className="customer-delete-close" onClick={onClose} disabled={busy} aria-label="Close"><X size={18} /></button>
         {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}

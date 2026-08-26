@@ -99,7 +99,7 @@ function SupplierSuccessModal({ success, onClose }: { success: SupplierSuccess; 
   }, [onClose])
 
   return createPortal(
-    <div className="operation-modal-backdrop supplier-save-success-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+    <div className="operation-modal-backdrop supplier-save-success-backdrop" role="presentation">
       <section className="operation-modal supplier-save-success-modal" role="dialog" aria-modal="true" aria-labelledby="supplier-save-success-title">
         <span className="supplier-save-success-icon"><CheckCircle2 size={30} /></span>
         <span className="eyebrow">Supplier record {success.action === 'deleted' ? 'deleted' : 'saved'}</span>
@@ -130,7 +130,7 @@ function DeleteSupplierModal({ supplier, busy, error, onClose, onConfirm }: {
   }, [busy, onClose])
 
   return createPortal(
-    <div className="operation-modal-backdrop supplier-delete-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose() }}>
+    <div className="operation-modal-backdrop supplier-delete-backdrop" role="presentation">
       <section className="operation-modal supplier-delete-modal" role="alertdialog" aria-modal="true" aria-labelledby="delete-supplier-title">
         <button type="button" className="supplier-delete-close" onClick={onClose} disabled={busy} aria-label="Close"><X size={18} /></button>
         {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}

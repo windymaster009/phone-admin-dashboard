@@ -446,9 +446,7 @@ export default function BackupStatusBridge() {
       )}
 
       {managerOpen && createPortal(
-        <div className="backup-manager-backdrop" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget) setManagerOpen(false)
-        }}>
+        <div className="backup-manager-backdrop" role="presentation">
           <section className="backup-manager surface-card" role="dialog" aria-modal="true" aria-labelledby="backup-manager-title">
             <header className="backup-manager-header">
               <div>
@@ -554,9 +552,7 @@ export default function BackupStatusBridge() {
       )}
 
       {deleteConfirmation && createPortal(
-        <div className="backup-delete-backdrop" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget && !deleteConfirmationBusy) setDeleteConfirmation(null)
-        }}>
+        <div className="backup-delete-backdrop" role="presentation">
           <section
             className="backup-delete-dialog surface-card"
             role="alertdialog"
@@ -611,9 +607,7 @@ export default function BackupStatusBridge() {
       )}
 
       {!restoreSuccess && restoreCandidate && restoreAge && createPortal(
-        <div className="backup-restore-backdrop" role="presentation" onMouseDown={(event) => {
-          if (event.target === event.currentTarget && !restoreBusy) setRestoreCandidate(null)
-        }}>
+        <div className="backup-restore-backdrop" role="presentation">
           <section
             className="backup-restore-dialog surface-card"
             role="alertdialog"

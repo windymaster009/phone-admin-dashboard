@@ -1601,7 +1601,7 @@ function TradeView() {
         </div>}
       </article>
       {selectedTrade && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setSelectedTrade(null)}>
+        <div className="modal-backdrop" role="presentation">
           <section className="detail-modal trade-detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="trade-detail-title" onClick={(event) => event.stopPropagation()}>
             <header className="detail-modal-header">
               <div>
@@ -1910,7 +1910,7 @@ function RefundsView({ user }: { user: SessionUser }) {
         </article>
       </div>
 
-      {refundSuccess?.refund && <div className="refund-success-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setRefundSuccess(null) }}>
+      {refundSuccess?.refund && <div className="refund-success-backdrop" role="presentation">
         <section className="refund-success-modal" role="dialog" aria-modal="true" aria-labelledby="refund-success-title" aria-describedby="refund-success-description">
           <button type="button" className="refund-success-close" onClick={() => setRefundSuccess(null)} aria-label="Close refund confirmation"><X size={18} /></button>
           <span className="refund-success-icon"><BadgeCheck size={31} /></span>
@@ -2718,7 +2718,7 @@ function CustomersView() {
       </article>
 
       {selectedCustomer && (
-        <div className="modal-backdrop" role="presentation" onClick={() => setSelectedCustomer(null)}>
+        <div className="modal-backdrop" role="presentation">
           <section className="detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="customer-detail-title" onClick={(event) => event.stopPropagation()}>
             <header className="detail-modal-header">
               <div>

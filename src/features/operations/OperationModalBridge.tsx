@@ -341,7 +341,6 @@ function ModalShell({
   onClose,
   compact = false,
   dismissible = true,
-  dismissOnBackdrop = true,
   dismissOnEscape = true,
   children,
 }: {
@@ -351,7 +350,6 @@ function ModalShell({
   onClose: () => void
   compact?: boolean
   dismissible?: boolean
-  dismissOnBackdrop?: boolean
   dismissOnEscape?: boolean
   children: ReactNode
 }) {
@@ -402,9 +400,7 @@ function ModalShell({
   }, [kind, compact])
 
   return (
-    <div className="operation-modal-backdrop" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget && !busy && dismissible && dismissOnBackdrop) onClose()
-    }}>
+    <div className="operation-modal-backdrop" role="presentation">
       <section ref={dialogRef} className={`operation-modal operation-modal-${kind}${compact ? ' operation-modal-compact' : ''}`} role="dialog" aria-modal="true" aria-label={meta.title}>
         <header className="operation-modal-header">
           <span className="operation-modal-icon">{meta.icon}</span>
@@ -1572,7 +1568,6 @@ export default function OperationModalBridge() {
       busy={busy}
       compact={kind === 'label' || (kind === 'sale' && Boolean(saleKhqr || saleCompleted)) || (kind === 'pawn' && Boolean(pawnCreated)) || (kind === 'stock' && Boolean(stockAdjustmentComplete))}
       dismissible={!(kind === 'sale' && saleKhqr && !saleCompleted)}
-      dismissOnBackdrop={!['pawn', 'purchase', 'sale', 'scan', 'stock'].includes(kind)}
       dismissOnEscape={kind !== 'pawn'}
       onClose={close}
     >
@@ -1759,7 +1754,7 @@ export default function OperationModalBridge() {
         </>}
       </form>}
 
-      {kind === 'purchase' && imeiScanDeviceId && <div className="imei-scanner-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setImeiScanDeviceId(null) }}>
+      {kind === 'purchase' && imeiScanDeviceId && <div className="imei-scanner-backdrop" role="presentation">
         <section className="imei-scanner-dialog" role="dialog" aria-modal="true" aria-labelledby="imei-scanner-title">
           <header><span><Camera size={20} /></span><div><small>CAMERA ACTIVE</small><h3 id="imei-scanner-title">Point camera at the IMEI</h3><p>The IMEI will be filled automatically when the 15-digit barcode is detected.</p></div><button type="button" onClick={() => setImeiScanDeviceId(null)} aria-label="Close IMEI scanner"><X size={18} /></button></header>
           {imeiScanError && <div className="imei-scan-error"><AlertTriangle size={16} />{imeiScanError}</div>}
@@ -2038,7 +2033,7 @@ export default function OperationModalBridge() {
         {salePaymentPhase !== 'COMPLETED' && <div className={`khqr-inline-status status-${salePaymentPhase.toLowerCase()}`}>{salePaymentPhase === 'SCANNED' || salePaymentPhase === 'APPROVED' ? <CheckCircle2 size={15} /> : salePaymentPhase === 'CANCELLED' ? <X size={15} /> : <RefreshCw size={15} className={busy || salePaymentPhase === 'ERROR' ? '' : 'spinning'} />}<p><strong>{salePaymentStatus}</strong><small>{salePaymentPhase === 'CANCELLED' ? 'The cashier cancelled this payment request' : salePaymentPhase === 'SCANNED' ? 'Waiting for PayWay to approve the payment' : salePaymentPhase === 'ERROR' ? 'Use Check now to retry verification' : 'Checking securely with ABA PayWay every 3 seconds'}</small></p></div>}
         {salePaymentPhase !== 'COMPLETED' && <p className="khqr-security-note">{salePaymentPhase === 'CANCELLED' ? 'No sale was created and inventory was not deducted.' : 'Inventory will not be deducted until PayWay confirms payment.'}</p>}
         <footer className="operation-modal-actions">{salePaymentPhase === 'COMPLETED' ? <button type="button" className="primary-button khqr-done-button" onClick={() => window.location.reload()}><CheckCircle2 size={16} /> Done</button> : salePaymentPhase === 'CANCELLED' ? <><button type="button" className="ghost-button" onClick={resetAndClose}>Close</button><button type="button" className="primary-button" onClick={restartKhqrPayment}>Start another payment</button></> : <><button type="button" className="ghost-button" onClick={cancelKhqrPayment} disabled={busy}>Cancel payment</button>{saleKhqr.deeplink && <a className="primary-button khqr-mobile-link" href={saleKhqr.deeplink}>Open ABA Mobile</a>}<button type="button" className="secondary-button" onClick={() => void checkKhqrPayment()} disabled={busy}><RefreshCw size={16} /> Check now</button></>}</footer>
-        {saleQrZoomed && <div className="khqr-zoom-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSaleQrZoomed(false) }}>
+        {saleQrZoomed && <div className="khqr-zoom-backdrop" role="presentation">
           <section className="khqr-zoom-dialog" role="dialog" aria-modal="true" aria-label={`Enlarged KHQR payment for $${saleKhqr.amount.toFixed(2)}`}>
             <button type="button" className="khqr-zoom-close" onClick={() => setSaleQrZoomed(false)} aria-label="Close enlarged KHQR"><X size={20} /></button>
             <div className="khqr-zoom-outline">
@@ -2055,7 +2050,7 @@ export default function OperationModalBridge() {
         </div>}
       </section>}
 
-      {kind === 'pawn' && pawnScannerOpen && <div className="imei-scanner-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPawnScannerOpen(false) }}>
+      {kind === 'pawn' && pawnScannerOpen && <div className="imei-scanner-backdrop" role="presentation">
         <section className="imei-scanner-dialog" role="dialog" aria-modal="true" aria-labelledby="pawn-imei-scanner-title">
           <header><span><Camera size={20} /></span><div><small>CAMERA ACTIVE</small><h3 id="pawn-imei-scanner-title">Point camera at the IMEI</h3><p>The IMEI will be filled automatically when the 15-digit barcode is detected.</p></div><button type="button" onClick={() => setPawnScannerOpen(false)} aria-label="Close IMEI scanner"><X size={18} /></button></header>
           <CameraBarcodeReader autoStart readerId="phoneflow-pawn-imei-reader" onScan={(code) => { const imei = code.replace(/\D/g, '').slice(0, 15); if (imei.length !== 15) { setError('The scanned value is not a valid 15-digit IMEI'); return }; setPawnImei(imei); setPawnScannerOpen(false); setError('') }} onError={setError} />
