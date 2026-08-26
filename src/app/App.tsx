@@ -4157,7 +4157,6 @@ function App({
       <div className="app-shell">
         <header className="topbar">
           <button ref={mobileMenuButtonRef} type="button" className="mobile-menu" onClick={() => setMobileOpen(true)} aria-label="Open navigation menu" aria-controls="primary-sidebar" aria-expanded={mobileOpen}><Menu size={21} aria-hidden="true" /></button>
-          <div className="global-search"><Search size={18} /><input placeholder="Search pawn, customer, IMEI, product..." /><kbd>⌘ K</kbd></div>
           <div className="topbar-actions">
             <button
               className="icon-button theme-toggle"

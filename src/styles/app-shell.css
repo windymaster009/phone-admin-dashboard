@@ -40,10 +40,9 @@
 .user-card { min-width: 0; padding: 6px 7px; color: var(--muted); }
 
 .topbar { height: 64px; position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between; padding: 0 22px; background: color-mix(in srgb, var(--bg) 78%, transparent); border-bottom: 1px solid var(--border); backdrop-filter: blur(18px); }
-.global-search, .search-field { display: flex; align-items: center; gap: 9px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); }
-.global-search { width: min(440px, 46vw); height: 38px; padding: 0 12px; border-radius: 11px; }
-.global-search input, .search-field input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); }
-.global-search input::placeholder, .search-field input::placeholder { color: var(--muted-2); }
+.search-field { display: flex; align-items: center; gap: 9px; color: var(--muted); background: var(--surface); border: 1px solid var(--border); }
+.search-field input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); }
+.search-field input::placeholder { color: var(--muted-2); }
 kbd { border: 1px solid var(--border-strong); border-radius: 6px; padding: 3px 7px; font-size: 10px; color: var(--muted); background: var(--bg-soft); }
 .topbar-actions { display: flex; align-items: center; gap: 9px; }
 .icon-button { width: 34px; height: 34px; padding: 0; display: grid; place-items: center; border: 1px solid var(--border); border-radius: 9px; color: var(--muted); background: transparent; transition: 0.18s ease; }
