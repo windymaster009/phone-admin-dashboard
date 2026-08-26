@@ -52,7 +52,6 @@ function PawnBarcode({ reference, thermal = false }: { reference: string; therma
 
   return <section className={`pawn-ticket-barcode${thermal ? ' pawn-ticket-barcode-thermal' : ''}`} aria-label={`Barcode for pawn contract ${reference}`}>
     <svg ref={barcodeRef} aria-hidden="true" />
-    <span>Scan to find this pawn</span>
     <strong>{reference}</strong>
   </section>
 }
