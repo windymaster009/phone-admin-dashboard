@@ -4,6 +4,7 @@ import { allowRoles, requireAuth, writeActivity } from './auth.js'
 import { Loan, LoanPayment } from './loanModels.js'
 import { Pawn, Trade } from './models.js'
 import { Receipt } from './receiptModels.js'
+import { ServiceCharge } from './serviceModels.js'
 import { shopProfile } from './shopProfile.js'
 import { calculateDailyPawnSummary, calculatePawnFee, isDailyPawn } from './pawnFeeService.js'
 
@@ -34,6 +35,7 @@ function receiptPrefix(documentType) {
     PAWN_REDEMPTION: 'RD',
     LOAN_AGREEMENT: 'LA',
     LOAN_PAYMENT: 'LP',
+    SERVICE_RECEIPT: 'SC',
   }[documentType] || 'RC'
 }
 
@@ -83,6 +85,15 @@ async function findLoan(reference) {
     .sort({ paidAt: 1, createdAt: 1 })
     .populate('receivedBy', 'name role')
   return { loan, payments }
+}
+
+async function findServiceCharge(reference) {
+  const value = clean(reference)
+  const charge = await ServiceCharge.findOne(referenceQuery(value, 'serviceNo'))
+    .populate('customer', 'name phone nationalIdNumber address')
+    .populate('createdBy', 'name role')
+  if (!charge) throw requestError(404, 'Service charge not found')
+  return charge
 }
 
 function tradeParty(trade) {
@@ -169,6 +180,40 @@ function customerParty(customer, fallback = 'Unknown customer') {
     nationalIdNumber: customer?.nationalIdNumber || '',
     address: customer?.address || '',
     role: 'Customer',
+  }
+}
+
+function buildServiceSnapshot(charge) {
+  const party = customerParty(charge.customer, charge.customerSnapshot?.name || 'Walk-in customer')
+  if (!party.phone) party.phone = charge.customerSnapshot?.phone || ''
+  return {
+    schemaVersion: 1,
+    documentType: 'SERVICE_RECEIPT',
+    title: 'Service Receipt',
+    shop: shopSnapshot(),
+    referenceNo: charge.serviceNo,
+    issuedAt: charge.completedAt || charge.createdAt,
+    party,
+    currency: charge.currency === 'KHR' ? 'KHR' : 'USD',
+    exchangeRate: Number(charge.exchangeRate || 1),
+    items: [{
+      name: charge.serviceSnapshot?.name || 'Shop service',
+      quantity: Number(charge.quantity || 1),
+      unitPrice: roundMoney(charge.unitPrice),
+      total: roundMoney(charge.subtotal),
+      description: charge.serviceSnapshot?.description || '',
+    }],
+    subtotal: roundMoney(charge.subtotal),
+    discount: roundMoney(charge.discount),
+    total: roundMoney(charge.total),
+    amountPaid: charge.status === 'COMPLETED' ? roundMoney(charge.total) : 0,
+    balance: 0,
+    paymentMethod: charge.paymentMethod || 'OTHER',
+    paymentStatus: charge.status === 'COMPLETED' ? 'PAID' : 'CANCELLED',
+    transactionStatus: charge.status,
+    notes: charge.notes || '',
+    staff: charge.createdBy ? { name: charge.createdBy.name, role: charge.createdBy.role } : null,
+    signatureLabels: ['Customer acknowledgement', 'Shop representative'],
   }
 }
 
@@ -601,7 +646,23 @@ router.get('/options', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), a
     })
   }
 
-  throw requestError(400, 'Source type must be TRADE, PAWN, or LOAN')
+  if (sourceType === 'SERVICE') {
+    const charge = await findServiceCharge(reference)
+    return res.json({
+      sourceType,
+      referenceNo: charge.serviceNo,
+      options: [option(
+        'SERVICE_RECEIPT',
+        'service',
+        'Service receipt',
+        charge.completedAt || charge.createdAt,
+        charge.total,
+        charge.currency === 'KHR' ? 'KHR' : 'USD',
+      )],
+    })
+  }
+
+  throw requestError(400, 'Source type must be TRADE, PAWN, LOAN, or SERVICE')
 }))
 
 router.post('/generate', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
@@ -645,8 +706,14 @@ router.post('/generate', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'),
     const payment = documentType === 'LOAN_AGREEMENT' ? null : findLoanPayment(result.payments, requestedSubId)
     sourceSubId = payment ? payment._id.toString() : 'agreement'
     snapshot = payment ? buildLoanPaymentSnapshot(source, result.payments, payment) : buildLoanAgreementSnapshot(source)
+  } else if (sourceType === 'SERVICE') {
+    source = await findServiceCharge(reference)
+    documentType = requestedType || 'SERVICE_RECEIPT'
+    if (documentType !== 'SERVICE_RECEIPT') throw requestError(400, 'Invalid service receipt type')
+    sourceSubId = 'service'
+    snapshot = buildServiceSnapshot(source)
   } else {
-    throw requestError(400, 'Source type must be TRADE, PAWN, or LOAN')
+    throw requestError(400, 'Source type must be TRADE, PAWN, LOAN, or SERVICE')
   }
 
   const party = snapshot.party

@@ -4,6 +4,7 @@ import { allowRoles, requireAuth } from './auth.js'
 import { ActivityLog, InventoryItem, Pawn, Trade, User } from './models.js'
 import { Loan, LoanPayment } from './loanModels.js'
 import { refreshLoanStatuses } from './loanDashboardRoutes.js'
+import { ServiceCharge } from './serviceModels.js'
 
 const router = Router()
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
@@ -422,6 +423,66 @@ router.get('/payments', requireAuth, allowRoles(...reportRoles), asyncRoute(asyn
     ],
     rows: filtered.slice(0, 500),
     notes: ['Pawn payments do not currently store a payment method, so they are reported as Other.'],
+  })
+}))
+
+router.get('/services', requireAuth, allowRoles(...reportRoles), asyncRoute(async (req, res) => {
+  const period = resolvePeriod(req.query, 'this_month')
+  const currency = validChoice(req.query.currency || 'USD', ['USD', 'KHR'], 'currency')
+  const status = validChoice(req.query.status || 'COMPLETED', ['ALL', 'COMPLETED', 'CANCELLED'], 'service status')
+  const category = validChoice(req.query.category, ['ALL', 'ACCOUNT_SETUP', 'DEVICE_SETUP', 'DATA_TRANSFER', 'SOFTWARE', 'OTHER'], 'service category')
+  const method = validChoice(req.query.method, ['ALL', 'CASH', 'KHQR', 'BANK', 'CARD', 'OTHER'], 'payment method')
+  const staff = staffFilter(req.query.staff)
+  const match = {
+    currency,
+    completedAt: { $gte: period.from, $lt: period.to },
+    ...(status !== 'ALL' ? { status } : {}),
+    ...(category !== 'ALL' ? { 'serviceSnapshot.category': category } : {}),
+    ...(method !== 'ALL' ? { paymentMethod: method } : {}),
+    ...(staff ? { createdBy: staff } : {}),
+  }
+  const charges = await ServiceCharge.find(match)
+    .populate('customer', 'name phone')
+    .populate('createdBy', 'name email role')
+    .sort({ completedAt: -1, createdAt: -1 })
+    .lean()
+  const completed = charges.filter((charge) => charge.status === 'COMPLETED')
+  const revenue = roundMoney(completed.reduce((sum, charge) => sum + Number(charge.total || 0), 0))
+  const discounts = roundMoney(completed.reduce((sum, charge) => sum + Number(charge.discount || 0), 0))
+  const jobs = completed.reduce((sum, charge) => sum + Number(charge.quantity || 1), 0)
+
+  res.json({
+    title: 'Service Charges Report',
+    description: 'Paid account setup, device assistance, data transfer, and other service work.',
+    meta: { currency, period, totalRecords: charges.length, limited: charges.length > 500 },
+    filters: { currency, status, category, method, staff: staff ? String(staff) : 'ALL' },
+    staff: await reportStaff(),
+    summary: [
+      { label: 'Service Revenue', value: revenue, format: 'currency', detail: `Recorded in ${currency}`, tone: 'violet' },
+      { label: 'Completed Jobs', value: jobs, format: 'number', detail: period.label, tone: 'blue' },
+      { label: 'Transactions', value: completed.length, format: 'number', detail: 'Completed charges', tone: 'blue' },
+      { label: 'Discounts', value: discounts, format: 'currency', detail: 'Given to customers', tone: 'orange' },
+      { label: 'Average Charge', value: completed.length ? roundMoney(revenue / completed.length) : 0, format: 'currency', detail: 'Per completed transaction', tone: 'violet' },
+      { label: 'Cancelled', value: charges.filter((charge) => charge.status === 'CANCELLED').length, format: 'number', detail: 'Excluded from revenue', tone: 'rose' },
+    ],
+    breakdowns: [
+      { title: 'Revenue by Service', description: 'Completed service revenue by service type.', format: 'currency', rows: breakdown(completed, (charge) => charge.serviceSnapshot?.name, (charge) => charge.total) },
+      { title: 'Revenue by Payment', description: 'Completed service revenue by payment method.', format: 'currency', rows: breakdown(completed, (charge) => charge.paymentMethod, (charge) => charge.total) },
+    ],
+    columns: [
+      { key: 'date', label: 'Date', format: 'dateTime' }, { key: 'reference', label: 'Service #' },
+      { key: 'service', label: 'Service' }, { key: 'category', label: 'Category', format: 'status' },
+      { key: 'party', label: 'Customer' }, { key: 'quantity', label: 'Qty', format: 'number' },
+      { key: 'total', label: 'Total', format: 'currency' }, { key: 'paymentMethod', label: 'Payment', format: 'status' },
+      { key: 'staff', label: 'Staff' }, { key: 'status', label: 'Status', format: 'status' },
+    ],
+    rows: charges.slice(0, 500).map((charge) => ({
+      id: charge._id, date: charge.completedAt || charge.createdAt, reference: charge.serviceNo,
+      service: charge.serviceSnapshot?.name || 'Service', category: charge.serviceSnapshot?.category || 'OTHER',
+      party: charge.customer?.name || charge.customerSnapshot?.name || 'Walk-in customer', quantity: charge.quantity,
+      total: charge.total, paymentMethod: charge.paymentMethod, staff: publicStaff(charge.createdBy), status: charge.status,
+    })),
+    notes: ['Service notes must never contain customer passwords, one-time codes, or recovery codes.'],
   })
 }))
 

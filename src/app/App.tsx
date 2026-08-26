@@ -53,6 +53,7 @@ import MoneyInput from '../components/MoneyInput'
 import { printInventoryLabel } from '../features/inventory/barcode'
 import BackupStatusBridge from '../features/backup/BackupStatusBridge'
 import SupplierWorkspace from '../features/suppliers/SupplierWorkspace'
+import ServiceWorkspace from '../features/services/ServiceWorkspace'
 import '../features/backup/backup-status.css'
 import '../features/refunds/refund-page.css'
 
@@ -60,6 +61,7 @@ type NavKey =
   | 'dashboard'
   | 'pawn'
   | 'trade'
+  | 'services'
   | 'inventory'
   | 'customers'
   | 'suppliers'
@@ -83,6 +85,7 @@ const viewPaths: Record<NavKey, string> = {
   dashboard: '/dashboard',
   pawn: '/pawn-management',
   trade: '/buy-sell',
+  services: '/services',
   inventory: '/stock',
   customers: '/customers',
   suppliers: '/suppliers',
@@ -508,7 +511,7 @@ type PurchaseReportData = {
   limited: boolean
 }
 
-type OperationalReportKind = 'inventory' | 'pawns' | 'loans' | 'payments' | 'activity'
+type OperationalReportKind = 'inventory' | 'pawns' | 'loans' | 'payments' | 'services' | 'activity'
 
 type OperationalReportData = {
   title: string
@@ -554,6 +557,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
     items: [
       { key: 'pawn', label: 'Pawn Management', icon: HandCoins },
       { key: 'trade', label: 'Buy & Sell', icon: ShoppingCart },
+      { key: 'services', label: 'Services', icon: Wrench },
       { key: 'inventory', label: 'Stock Information', icon: Boxes },
       { key: 'customers', label: 'Customers', icon: Users },
       { key: 'suppliers', label: 'Suppliers', icon: Building2 },
@@ -2968,6 +2972,7 @@ const reportSections = [
   { slug: 'pawns', title: 'Pawn', description: 'Outstanding principal, overdue, redeemed, and claimed collateral', icon: HandCoins, tone: 'violet' },
   { slug: 'loans', title: 'Loans', description: 'Outstanding loans, repayments, and overdue balances', icon: WalletCards, tone: 'blue' },
   { slug: 'payments', title: 'Payments', description: 'Cash, KHQR, bank, card, and daily closing', icon: Banknote, tone: 'rose' },
+  { slug: 'services', title: 'Service charges', description: 'Paid setup, assistance, transfer, and software work', icon: Wrench, tone: 'violet' },
   { slug: 'customers', title: 'Customer report', description: 'Customer profiles, contact records, and transaction history', icon: Users, tone: 'blue' },
   { slug: 'suppliers', title: 'Supplier report', description: 'Supplier profiles, contacts, and purchase history', icon: Building2, tone: 'orange' },
   { slug: 'activity', title: 'Activity', description: 'Staff actions and audit history', icon: FileText, tone: 'orange' },
@@ -3585,6 +3590,13 @@ function OperationalReportView({ kind, navigate }: { kind: OperationalReportKind
         query.set('status', status)
         query.set('staff', staff)
       }
+      if (kind === 'services') {
+        query.set('currency', currencyCode)
+        query.set('status', status)
+        query.set('staff', staff)
+        query.set('category', category)
+        query.set('method', method)
+      }
       if (kind === 'payments') {
         query.set('currency', currencyCode)
         query.set('method', method)
@@ -3610,10 +3622,11 @@ function OperationalReportView({ kind, navigate }: { kind: OperationalReportKind
     { value: 'this_month', label: 'This Month' }, { value: 'last_month', label: 'Last Month' },
     { value: 'this_year', label: 'This Year' }, { value: 'custom', label: 'Custom' },
   ]
-  const statusOptions: Record<'inventory' | 'pawns' | 'loans', string[]> = {
+  const statusOptions: Record<'inventory' | 'pawns' | 'loans' | 'services', string[]> = {
     inventory: ['ALL', 'IN_STOCK', 'RESERVED', 'SOLD', 'PAWNED', 'REPAIR', 'ARCHIVED'],
     pawns: ['ALL', 'ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED', 'REDEEMED', 'FORFEITED', 'CANCELLED'],
     loans: ['ALL', 'ACTIVE', 'DUE_SOON', 'OVERDUE', 'PARTIALLY_PAID', 'PAID', 'CANCELLED'],
+    services: ['ALL', 'COMPLETED', 'CANCELLED'],
   }
   const valueText = (value: number, format: 'currency' | 'number') => format === 'currency'
     ? pawnMoney(value, data?.meta.currency || 'USD')
@@ -3645,7 +3658,7 @@ function OperationalReportView({ kind, navigate }: { kind: OperationalReportKind
           <label><span>Source</span><select value={source} onChange={(event) => setSource(event.target.value)}>{['ALL', 'SUPPLIER', 'CUSTOMER', 'PAWN_FORFEIT', 'OTHER'].map((value) => <option key={value} value={value}>{value === 'ALL' ? 'All sources' : titleStatus(value)}</option>)}</select></label>
           <label><span>Stock level</span><select value={stock} onChange={(event) => setStock(event.target.value)}><option value="ALL">All stock levels</option><option value="AVAILABLE">Available</option><option value="LOW">Low stock</option><option value="OUT">Out of stock</option></select></label>
         </>}
-        {['pawns', 'loans', 'payments'].includes(kind) && <label><span>Currency</span><select value={currencyCode} onChange={(event) => setCurrencyCode(event.target.value as 'USD' | 'KHR')}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Cambodian Riel</option></select></label>}
+        {['pawns', 'loans', 'payments', 'services'].includes(kind) && <label><span>Currency</span><select value={currencyCode} onChange={(event) => setCurrencyCode(event.target.value as 'USD' | 'KHR')}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Cambodian Riel</option></select></label>}
         {['pawns', 'loans'].includes(kind) && <>
           <label><span>Status</span><select value={status} onChange={(event) => setStatus(event.target.value)}>{statusOptions[kind as 'pawns' | 'loans'].map((value) => <option key={value} value={value}>{value === 'ALL' ? 'All statuses' : titleStatus(value)}</option>)}</select></label>
           <label><span>Staff</span><select value={staff} onChange={(event) => setStaff(event.target.value)}><option value="ALL">All staff</option>{(data?.staff || []).map((person) => <option key={person._id} value={person._id}>{person.name}</option>)}</select></label>
@@ -3653,6 +3666,12 @@ function OperationalReportView({ kind, navigate }: { kind: OperationalReportKind
         {kind === 'payments' && <>
           <label><span>Payment method</span><select value={method} onChange={(event) => setMethod(event.target.value)}>{['ALL', 'CASH', 'KHQR', 'BANK', 'CARD', 'OTHER'].map((value) => <option key={value} value={value}>{value === 'ALL' ? 'All methods' : titleStatus(value)}</option>)}</select></label>
           <label><span>Direction</span><select value={direction} onChange={(event) => setDirection(event.target.value)}><option value="ALL">Money in & out</option><option value="IN">Money in</option><option value="OUT">Money out</option></select></label>
+        </>}
+        {kind === 'services' && <>
+          <label><span>Status</span><select value={status} onChange={(event) => setStatus(event.target.value)}>{statusOptions.services.map((value) => <option key={value} value={value}>{value === 'ALL' ? 'All statuses' : titleStatus(value)}</option>)}</select></label>
+          <label><span>Category</span><select value={category} onChange={(event) => setCategory(event.target.value)}>{['ALL', 'ACCOUNT_SETUP', 'DEVICE_SETUP', 'DATA_TRANSFER', 'SOFTWARE', 'OTHER'].map((value) => <option key={value} value={value}>{value === 'ALL' ? 'All categories' : titleStatus(value)}</option>)}</select></label>
+          <label><span>Payment method</span><select value={method} onChange={(event) => setMethod(event.target.value)}>{['ALL', 'CASH', 'KHQR', 'BANK', 'CARD', 'OTHER'].map((value) => <option key={value} value={value}>{value === 'ALL' ? 'All methods' : titleStatus(value)}</option>)}</select></label>
+          <label><span>Staff</span><select value={staff} onChange={(event) => setStaff(event.target.value)}><option value="ALL">All staff</option>{(data?.staff || []).map((person) => <option key={person._id} value={person._id}>{person.name}</option>)}</select></label>
         </>}
         {kind === 'activity' && <>
           <label><span>Action</span><select value={action} onChange={(event) => setAction(event.target.value)}><option value="ALL">All actions</option>{(data?.filterOptions?.actions || []).map((value) => <option key={value} value={value}>{titleStatus(value)}</option>)}</select></label>
@@ -3713,6 +3732,7 @@ function ReportsView() {
   if (path === '/reports/pawns') return <OperationalReportView key={path} kind="pawns" navigate={navigate} />
   if (path === '/reports/loans') return <OperationalReportView key={path} kind="loans" navigate={navigate} />
   if (path === '/reports/payments') return <OperationalReportView key={path} kind="payments" navigate={navigate} />
+  if (path === '/reports/services') return <OperationalReportView key={path} kind="services" navigate={navigate} />
   if (path === '/reports/activity') return <OperationalReportView key={path} kind="activity" navigate={navigate} />
   const slug = path.startsWith('/reports/') ? path.slice('/reports/'.length) : ''
   if (slug && reportSections.some((item) => item.slug === slug)) return <UpcomingReportView slug={slug} navigate={navigate} />
@@ -4020,6 +4040,7 @@ function App({
       case 'dashboard': return <DashboardView goTo={changePage} user={user} onReady={() => setInitialViewReady(true)} />
       case 'pawn': return <PawnView />
       case 'trade': return <TradeView />
+      case 'services': return <ServiceWorkspace />
       case 'inventory': return <InventoryView />
       case 'customers': return <CustomersView />
       case 'suppliers': return <SupplierWorkspace />

@@ -973,6 +973,30 @@ body.operation-modal-open {
 .sale-price-display { min-width: 0; display: flex; flex-direction: column; gap: 7px; color: var(--muted, #8f9bb4); font-size: 12px; font-weight: 700; }
 .sale-price-display strong { min-height: 46px; display: flex; align-items: center; padding: 0 13px; border: 1px solid var(--border-strong, rgba(255,255,255,.12)); border-radius: 11px; color: var(--text, #f4f6fb); background: color-mix(in srgb, var(--bg-soft, #10172a) 78%, transparent); font-size: 15px; }
 .sale-price-display small { color: var(--primary, #a78bfa); font-size: 10px; font-weight: 700; }
+.sale-price-display.needs-price strong { border-color: color-mix(in srgb, var(--primary, #a78bfa) 48%, transparent); }
+.sale-price-configure {
+  width: fit-content;
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--primary, #a78bfa) 44%, transparent);
+  border-radius: 8px;
+  color: var(--primary, #a78bfa);
+  background: color-mix(in srgb, var(--primary, #a78bfa) 10%, transparent);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: transform 120ms ease-out, background-color 120ms ease-out, border-color 120ms ease-out;
+}
+.sale-price-configure:hover { border-color: var(--primary, #a78bfa); background: color-mix(in srgb, var(--primary, #a78bfa) 16%, transparent); }
+.sale-price-configure:focus-visible { outline: 2px solid var(--primary, #a78bfa); outline-offset: 2px; }
+.sale-price-configure:active { transform: translateY(1px); }
+.sale-price-configure:disabled { opacity: .5; cursor: not-allowed; }
 .sale-payment-method {
   min-width: 0;
   display: grid;

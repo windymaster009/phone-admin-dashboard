@@ -1021,6 +1021,13 @@
     flex-direction: column;
   }
 
+  /* The queue controls explain the next step on a phone; repeating the long
+     introduction and totals above them pushes the useful content below the fold. */
+  .refund-page-heading > div > p,
+  .refund-page-heading .refund-counts {
+    display: none;
+  }
+
   .refund-toolbar {
     align-items: stretch;
     flex-direction: column;

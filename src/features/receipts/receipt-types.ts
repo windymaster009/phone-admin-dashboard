@@ -7,9 +7,10 @@ export type ReceiptDocumentType =
   | 'PAWN_REDEMPTION'
   | 'LOAN_AGREEMENT'
   | 'LOAN_PAYMENT'
+  | 'SERVICE_RECEIPT'
 
 export type ReceiptLayout = 'A4' | 'THERMAL'
-export type ReceiptSourceType = 'TRADE' | 'PAWN' | 'LOAN'
+export type ReceiptSourceType = 'TRADE' | 'PAWN' | 'LOAN' | 'SERVICE'
 export type ReceiptCurrency = 'USD' | 'KHR'
 
 export type ReceiptOption = {

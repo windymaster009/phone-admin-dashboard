@@ -728,10 +728,8 @@ export default function OperationModalBridge() {
       ? 'Loading stock...'
       : !saleItemId
         ? 'Select a product first'
-        : salePriceInvalid
-          ? 'Set stock selling price'
-          : saleStockPricingInvalid
-            ? 'Fix stock pricing'
+        : salePriceInvalid || saleStockPricingInvalid
+          ? 'Complete sale'
             : saleDiscountInvalid
               ? 'Reduce discount'
               : salePaidInvalid
@@ -1004,6 +1002,21 @@ export default function OperationModalBridge() {
       return
     }
     resetAndClose()
+  }
+
+  const openSelectedSaleItemPricing = () => {
+    if (!selectedSaleItem) return
+
+    const item = selectedSaleItem
+    resetAndClose()
+    const navigationState = { view: 'inventory' }
+    if (window.location.pathname !== '/stock') {
+      window.history.pushState(navigationState, '', '/stock')
+    }
+    window.dispatchEvent(new PopStateEvent('popstate', { state: navigationState }))
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-stock-item', { detail: { item } }))
+    }, 0)
   }
 
   const printCreatedPawnTicket = () => {
@@ -1943,7 +1956,15 @@ export default function OperationModalBridge() {
             setSaleAmountPaid('')
           }}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Cambodian Riel</option></select><small>1 USD = {riel.format(usdKhrRate)} KHR</small></label>
           <label>Quantity<input type="number" min="1" max={selectedSaleItem?.quantity} value={effectiveSaleQuantity} disabled={!saleItemId || selectedSaleItem?.category === 'PHONE'} onChange={(event) => { setSaleQuantity(event.target.value); setSaleDiscount('0'); setSaleAmountPaid('') }} /></label>
-          <div className="sale-price-display" role="group" aria-label={`Selling price in ${saleCurrency}`}><span>Selling price ({saleCurrency})</span><strong>{selectedSaleItem ? saleAmountText(saleUnitPrice, saleCurrency) : 'Select a product'}</strong><small>{selectedSaleItem ? 'Set in Stock Information' : 'Choose inventory first'}</small></div>
+          <div className={`sale-price-display${salePriceInvalid || saleStockPricingInvalid ? ' needs-price' : ''}`} role="group" aria-label={`Selling price in ${saleCurrency}`}>
+            <span>Selling price ({saleCurrency})</span>
+            <strong>{selectedSaleItem ? saleAmountText(saleUnitPrice, saleCurrency) : 'Select a product'}</strong>
+            {selectedSaleItem
+              ? salePriceInvalid || saleStockPricingInvalid
+                ? <button type="button" className="sale-price-configure" onClick={openSelectedSaleItemPricing}><Banknote size={13} aria-hidden="true" />{saleStockPricingInvalid ? 'Fix price' : 'Set price'}</button>
+                : <small>Configured in Stock Information</small>
+              : <small>Choose inventory first</small>}
+          </div>
           <label className={saleDiscountInvalid ? 'field-invalid' : ''}>Discount ({saleCurrency})<MoneyInput currency={saleCurrency} minimum={0} maximum={saleMaximumDiscount} value={saleDiscount} disabled={!saleItemId} onValueChange={setSaleDiscount} placeholder={saleCurrency === 'KHR' ? '0' : '0.00'} />{selectedSaleItem && <small>{saleCurrency === 'KHR' && saleDiscountAmount % 100 !== 0 ? 'Use a whole KHR amount in increments of 100' : `${saleDiscountInvalid ? 'Maximum discount is' : 'Maximum allowed:'} ${saleAmountText(saleMaximumDiscount, saleCurrency)}`}</small>}</label>
           {paywayAvailable && saleCurrency === 'USD' && <fieldset className="sale-payment-method operation-wide">
             <legend>How will the customer pay?</legend>

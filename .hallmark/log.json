@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-08-26",
+    "macrostructure": "Catalogue",
+    "theme": "existing PhoneFlow",
+    "enrichment": "none",
+    "brief": "Responsive service catalogue, customer checkout, receipts, and operational reporting"
+  },
+  {
     "date": "2026-08-23",
     "macrostructure": "Narrative Workflow",
     "theme": "existing PhoneFlow",
