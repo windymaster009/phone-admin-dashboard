@@ -3,8 +3,13 @@
  * contrast: pass (40–41) · pre-emit critique: P5 H5 E5 S5 R5 V4
  */
 .pawn-header-actions { width: auto; }
-.pawn-scan-trigger { min-height: 42px; color: var(--primary); }
-.pawn-scan-trigger:hover { color: var(--text); border-color: var(--primary); background: var(--primary-soft); }
+.pawn-scan-trigger {
+  min-height: 42px;
+  color: #38bdf8;
+  border-color: rgba(56, 189, 248, .32);
+  background: rgba(14, 165, 233, .1);
+}
+.pawn-scan-trigger:hover { color: #e0f2fe; border-color: rgba(56, 189, 248, .64); background: rgba(14, 165, 233, .18); }
 .pawn-scan-trigger:active { transform: translateY(1px); }
 .pawn-scan-trigger:focus-visible,
 .pawn-guide-actions button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
