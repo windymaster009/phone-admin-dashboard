@@ -77,13 +77,7 @@ function CustomerModal({
   }, [busy, onClose])
 
   return (
-    <div
-      className="operation-modal-backdrop"
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !busy) onClose()
-      }}
-    >
+    <div className="operation-modal-backdrop" role="presentation">
       <section className="operation-modal customer-modal" role="dialog" aria-modal="true" aria-label={customer ? 'Edit customer' : 'Add customer'}>
         <header className="operation-modal-header">
           <span className="operation-modal-icon"><UserRound size={21} /></span>
