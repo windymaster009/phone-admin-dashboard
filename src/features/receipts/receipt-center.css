@@ -66,6 +66,99 @@
   background: #fff0f3;
 }
 
+/* Hallmark · component: receipt document picker · genre: modern-minimal
+ * A content-sized chooser keeps the selection task visible without a false full-screen sheet.
+ */
+.receipt-option-picker-modal .receipt-option-list {
+  flex: 0 1 auto;
+  max-height: min(440px, 52dvh);
+}
+
+.receipt-option-picker-modal .receipt-option-list > button {
+  min-height: 68px;
+}
+
+.receipt-option-picker-modal .receipt-modal-actions {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 760px) {
+  .receipt-modal-backdrop:has(.receipt-option-picker-modal) {
+    align-items: center;
+    padding: max(12px, env(safe-area-inset-top, 0px)) 12px max(76px, calc(env(safe-area-inset-bottom, 0px) + 64px));
+  }
+
+  .receipt-option-picker-modal.receipt-modal {
+    width: min(100%, 480px);
+    height: auto;
+    max-height: calc(100dvh - 88px);
+    border-radius: 18px;
+  }
+
+  .receipt-option-picker-modal .receipt-modal-header {
+    padding: 14px;
+  }
+
+  .receipt-option-picker-modal .receipt-modal-header p {
+    overflow: visible;
+    font-size: .68rem;
+    line-height: 1.4;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .receipt-option-picker-modal .receipt-option-list {
+    max-height: min(48dvh, 410px);
+    gap: 7px;
+    padding: 10px 12px;
+  }
+
+  .receipt-option-picker-modal .receipt-option-list > button {
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    gap: 9px;
+    min-height: 76px;
+    padding: 10px;
+  }
+
+  .receipt-option-picker-modal .receipt-option-list > button > span {
+    grid-row: 1 / span 2;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+  }
+
+  .receipt-option-picker-modal .receipt-option-list > button > p {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .receipt-option-picker-modal .receipt-option-list > button > div {
+    grid-column: 2;
+    grid-row: 2;
+    justify-items: start;
+    text-align: left;
+  }
+
+  .receipt-option-picker-modal .receipt-option-list > button > svg {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+
+  .receipt-option-picker-modal .receipt-modal-actions {
+    justify-content: stretch;
+    padding: 10px 12px max(12px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .receipt-option-picker-modal .receipt-modal-actions .ghost-button {
+    width: 100%;
+    min-height: 42px;
+    justify-content: center;
+  }
+
+  :root[data-font-size='comfortable'] .receipt-option-picker-modal { zoom: .9091; }
+  :root[data-font-size='large'] .receipt-option-picker-modal { zoom: .8333; }
+}
+
 .pawn-ticket-date-note {
   margin: 0 0 9px;
   padding: 7px 8px;

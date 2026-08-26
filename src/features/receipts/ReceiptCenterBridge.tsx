@@ -43,7 +43,7 @@ function DocumentIcon({ type, size = 17 }: { type: ReceiptDocumentType; size?: n
   return <HandCoins size={size} />
 }
 
-function Modal({ title, description, onClose, children, wide = false }: { title: string; description: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
+function Modal({ title, description, onClose, children, wide = false, className = '' }: { title: string; description: string; onClose: () => void; children: ReactNode; wide?: boolean; className?: string }) {
   const onCloseRef = useRef(onClose)
 
   useEffect(() => {
@@ -62,7 +62,7 @@ function Modal({ title, description, onClose, children, wide = false }: { title:
 
   return createPortal(
     <div className="receipt-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
-      <section className={`receipt-modal surface-card ${wide ? 'receipt-modal-wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
+      <section className={`receipt-modal surface-card ${wide ? 'receipt-modal-wide' : ''} ${className}`} role="dialog" aria-modal="true" aria-label={title}>
         <header className="receipt-modal-header">
           <span className="receipt-modal-icon"><ReceiptText size={21} /></span>
           <div><span className="eyebrow">Receipts & invoices</span><h2>{title}</h2><p>{description}</p></div>
@@ -76,7 +76,7 @@ function Modal({ title, description, onClose, children, wide = false }: { title:
 }
 
 function OptionPicker({ response, busy, pendingOptionKey, error, onSelect, onClose }: { response: ReceiptOptionResponse; busy: boolean; pendingOptionKey: string | null; error: string; onSelect: (option: ReceiptOption) => void; onClose: () => void }) {
-  return <Modal title={response.referenceNo} description="Choose the historical document to preview or print." onClose={onClose}>
+  return <Modal className="receipt-option-picker-modal" title={response.referenceNo} description="Choose the historical document to preview or print." onClose={onClose}>
     {error && <div className="receipt-error"><AlertTriangle size={16} /> {error}</div>}
     <div className="receipt-option-list">
       {response.options.map((option) => {
