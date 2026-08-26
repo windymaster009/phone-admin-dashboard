@@ -596,7 +596,7 @@
   .pawn-detail-modal .pawn-renewal-summary { grid-template-columns: 1fr; }
   .pawn-detail-modal .pawn-action-buttons { display: grid; grid-template-columns: 1fr 1.35fr; }
   .pawn-detail-modal .pawn-action-buttons button { width: 100%; }
-  .pawn-detail-modal .detail-modal-footer { position: sticky; bottom: 0; display: grid; grid-template-columns: 1fr; gap: 8px; padding: 11px 12px; background: var(--surface-solid); }
+  .pawn-detail-modal .detail-modal-footer { position: relative; display: grid; grid-template-columns: 1fr; align-content: start; gap: 8px; min-height: 0; padding: 11px 12px; background: var(--surface-solid); }
   .pawn-detail-modal .detail-modal-footer .receipt-detail-action { grid-column: 1; width: 100%; justify-content: center; }
   .pawn-detail-modal .detail-modal-footer .pawn-claim-action { grid-column: 1; display: grid; grid-template-columns: minmax(0, 1fr) auto; text-align: left; }
   .pawn-detail-modal .detail-modal-footer .pawn-claim-action > span { width: auto; }
