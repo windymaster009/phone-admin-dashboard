@@ -628,6 +628,9 @@ td strong { color: var(--text); }
 .inventory-detail-modal .detail-grid strong { display: block; overflow: hidden; font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .inventory-detail-modal .detail-grid .status-badge { font-size: 11px; }
 .inventory-detail-modal .detail-grid .status-badge svg { width: 16px; height: 16px; }
+.inventory-detail-modal .detail-grid .inventory-linked-pawn { display: flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--muted); font-size: 9px; }
+.inventory-detail-modal .detail-grid .inventory-linked-pawn span { display: inline; margin: 0; font-size: inherit; font-weight: 700; letter-spacing: 0; text-transform: none; }
+.inventory-detail-modal .detail-grid .inventory-linked-pawn b { overflow: hidden; color: #c4b5fd; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .inventory-detail-modal .inventory-summary-group .detail-grid { padding-top: 0; border-bottom: 0; }
 .inventory-detail-modal .detail-sections { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 0 20px 18px; }
 .inventory-detail-modal .detail-sections article { min-width: 0; min-height: 108px; padding: 13px 14px; border-radius: 11px; border-top: 1px solid color-mix(in srgb, var(--primary) 42%, transparent); }

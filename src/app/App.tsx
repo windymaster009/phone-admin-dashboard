@@ -209,6 +209,7 @@ type InventoryItem = {
   khrSellPrice?: number
   khrMinimumSellPrice?: number
   status: string
+  relatedPawn?: { _id: string; pawnNo: string; status: string } | null
 }
 
 type PawnCurrency = 'USD' | 'KHR'
@@ -2327,7 +2328,7 @@ function InventoryView() {
                   <div><span className="eyebrow">Overview</span><h4 id="inventory-summary-title">Stock and pricing</h4></div>
                 </div>
                 <div className="detail-grid">
-                  <div><span>Status</span><strong><StatusBadge status={selectedItem.status} /></strong></div>
+                  <div className="inventory-status-summary"><span>Status</span><strong><StatusBadge status={selectedItem.status} /></strong>{selectedItem.relatedPawn && <small className="inventory-linked-pawn"><span>Pawn ID</span><b className="mono">{selectedItem.relatedPawn.pawnNo}</b></small>}</div>
                   <div><span>Quantity</span><strong>{selectedItem.quantity}</strong></div>
                   <div><span>Low stock level</span><strong>{selectedItem.reorderLevel}</strong></div>
                   <div><span>Buy price</span><strong>{money.format(selectedItem.buyPrice)}</strong></div>

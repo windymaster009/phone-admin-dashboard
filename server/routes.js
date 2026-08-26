@@ -1984,7 +1984,16 @@ router.get('/inventory', requireAuth, asyncRoute(async (req, res) => {
     ]
   }
   const items = await InventoryItem.find(filter).sort({ createdAt: -1 }).limit(500)
-  res.json({ items })
+  const pawnLinks = await Pawn.find({ inventoryItem: { $in: items.map((item) => item._id) } })
+    .select('inventoryItem pawnNo status')
+    .lean()
+  const pawnByInventoryId = new Map(pawnLinks.map((pawn) => [String(pawn.inventoryItem), pawn]))
+  res.json({
+    items: items.map((item) => ({
+      ...item.toObject(),
+      relatedPawn: pawnByInventoryId.get(String(item._id)) || null,
+    })),
+  })
 }))
 
 router.get('/inventory/scan/:code', requireAuth, asyncRoute(async (req, res) => {
