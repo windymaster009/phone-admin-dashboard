@@ -1572,7 +1572,7 @@ export default function OperationModalBridge() {
       busy={busy}
       compact={kind === 'label' || (kind === 'sale' && Boolean(saleKhqr || saleCompleted)) || (kind === 'pawn' && Boolean(pawnCreated)) || (kind === 'stock' && Boolean(stockAdjustmentComplete))}
       dismissible={!(kind === 'sale' && saleKhqr && !saleCompleted)}
-      dismissOnBackdrop={!['pawn', 'purchase', 'scan', 'stock'].includes(kind)}
+      dismissOnBackdrop={!['pawn', 'purchase', 'sale', 'scan', 'stock'].includes(kind)}
       dismissOnEscape={kind !== 'pawn'}
       onClose={close}
     >
