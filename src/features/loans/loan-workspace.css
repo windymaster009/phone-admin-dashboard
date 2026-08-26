@@ -195,14 +195,13 @@
   width: 100%;
   min-width: 0;
   display: grid;
-  gap: 11px;
+  gap: 0;
   border: 1px solid var(--border-color, rgba(148, 163, 184, 0.18));
   border-radius: 13px;
   color: inherit;
   background: rgba(15, 23, 42, 0.25);
   padding: 12px;
   text-align: left;
-  cursor: pointer;
 }
 
 .loan-mobile-card:hover {
@@ -212,19 +211,20 @@
 }
 
 .loan-mobile-card.overdue { border-color: rgba(244, 63, 94, 0.38); }
-.loan-mobile-card > div { min-width: 0; display: flex; align-items: center; gap: 9px; }
-.loan-mobile-card > div p { min-width: 0; flex: 1; display: grid; gap: 2px; margin: 0; }
-.loan-mobile-card > div strong,
-.loan-mobile-card > div small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.loan-mobile-card > div small { color: var(--muted-text, #94a3b8); }
-.loan-mobile-card section { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: 8px; }
-.loan-mobile-card section span { min-width: 0; display: grid; gap: 3px; color: var(--muted-text, #94a3b8); font-size: 0.68rem; }
-.loan-mobile-card section strong { overflow: hidden; color: var(--text-color, #f8fafc); font-size: 0.78rem; text-overflow: ellipsis; white-space: nowrap; }
-.loan-mobile-card footer { color: var(--muted-text, #94a3b8); font-size: 0.69rem; }
+.loan-mobile-heading { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 9px; }
+.loan-mobile-heading .avatar { width: 34px; height: 34px; border-radius: 10px; font-size: 9px; }
+.loan-mobile-heading p { min-width: 0; display: flex; flex-direction: column; margin: 0; }
+.loan-mobile-heading p strong { overflow: hidden; color: var(--text-color, #f8fafc); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.loan-mobile-heading p small { margin-top: 4px; overflow: hidden; color: var(--muted-text, #94a3b8); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.loan-mobile-details { min-width: 0; display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr) auto; align-items: end; gap: 8px; margin-top: 9px; padding: 10px; border-radius: 11px; background: var(--bg-soft); }
+.loan-mobile-details > div { min-width: 0; display: flex; flex-direction: column; }
+.loan-mobile-details span { color: var(--muted-2, #94a3b8); font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .6px; }
+.loan-mobile-details strong { margin-top: 5px; overflow: hidden; color: var(--text-color, #f8fafc); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.loan-mobile-details small { margin-top: 4px; overflow: hidden; color: var(--muted-text, #94a3b8); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .loan-mobile-card .loan-mobile-open {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
   border-color: color-mix(in srgb, var(--primary) 34%, var(--border-color, rgba(148, 163, 184, 0.18)));
   color: var(--primary);
   background: var(--primary-soft);
@@ -776,15 +776,7 @@
   .loan-filter-row > .ghost-button { grid-column: 2; width: 42px; min-height: 38px; padding: 0; }
   .loan-filter-row > .ghost-button span { display: none; }
   .loan-mobile-list { grid-template-columns: 1fr; gap: 7px; padding: 8px 10px 10px; }
-  .loan-mobile-card { gap: 7px; padding: 10px; border-radius: 11px; }
-  .loan-mobile-card > div { gap: 8px; }
-  .loan-mobile-card > div .avatar { width: 30px; height: 30px; border-radius: 9px; font-size: 9px; }
-  .loan-mobile-card > div strong { font-size: 11px; }
-  .loan-mobile-card > div small { font-size: 9px; }
-  .loan-mobile-card section { gap: 6px; }
-  .loan-mobile-card section span { gap: 2px; font-size: 0.62rem; }
-  .loan-mobile-card section strong { font-size: 0.72rem; }
-  .loan-mobile-card footer { font-size: 0.63rem; }
+  .loan-mobile-card { gap: 0; padding: 12px; border-radius: 11px; }
   .loan-detail-summary { grid-template-columns: 1fr; }
   .loan-payment-form { grid-template-columns: 1fr; }
   .loan-payment-note,

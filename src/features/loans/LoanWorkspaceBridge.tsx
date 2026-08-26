@@ -566,10 +566,9 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
         {loading && <tr><td colSpan={7}><LoadingState compact label="Loading loans" detail="Checking balances and due dates…" /></td></tr>}
       </tbody></table></div>
       <div className="loan-mobile-list">
-        {loans.map((loan) => <article className={`loan-mobile-card ${loan.status === 'OVERDUE' ? 'overdue' : ''}`} key={loan._id}>
-          <div><span className="avatar">{loan.borrower.name.slice(0, 2).toUpperCase()}</span><p><strong>{loan.borrower.name}</strong><small>{loan.loanNo}{loan.borrower.phone ? ` · ${loan.borrower.phone}` : ''}</small></p><LoanStatusBadge status={loan.status} /></div>
-          <section><span>Remaining<strong>{money(loan.remainingBalance, loan.currency)}</strong></span><span>Due<strong>{dateText(loan.dueDate)}</strong></span><button className="icon-button loan-mobile-open" onClick={() => void openDetail(loan)} aria-label={`View loan ${loan.loanNo}`} title="View loan"><MoreHorizontal size={17} /></button></section>
-          <footer>{dueDescription(loan)}</footer>
+        {loans.map((loan) => <article className={`mobile-contract-card loan-mobile-card ${loan.status === 'OVERDUE' ? 'overdue' : ''}`} key={loan._id}>
+          <div className="mobile-contract-heading loan-mobile-heading"><span className="avatar">{loan.borrower.name.slice(0, 2).toUpperCase()}</span><p><strong>{loan.borrower.name}</strong><small>{loan.loanNo}{loan.borrower.phone ? ` · ${loan.borrower.phone}` : ''}</small></p><LoanStatusBadge status={loan.status} /></div>
+          <div className="mobile-contract-details loan-mobile-details"><div><span>Remaining</span><strong>{money(loan.remainingBalance, loan.currency)}</strong><small>{dueDescription(loan)}</small></div><div><span>Due date</span><strong>{dateText(loan.dueDate)}</strong><small>{loan.loanNo}</small></div><button className="icon-button loan-mobile-open" onClick={() => void openDetail(loan)} aria-label={`View loan ${loan.loanNo}`} title="View loan"><MoreHorizontal size={18} /></button></div>
         </article>)}
         {!loading && loans.length === 0 && <div className="loan-empty"><Banknote size={31} /><strong>No loans found</strong><span>{search || status !== 'ALL' ? 'Try another search or status filter.' : 'Create the first loan record so due dates are never forgotten.'}</span></div>}
         {loading && <LoadingState compact label="Loading loans" />}
