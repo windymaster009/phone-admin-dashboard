@@ -39,30 +39,30 @@
 .service-catalogue-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
 .service-card { min-width: 0; overflow: hidden; transition: border-color 160ms cubic-bezier(.2,.8,.2,1), background 160ms cubic-bezier(.2,.8,.2,1); }
 .service-card.selected { border-color: color-mix(in srgb, var(--primary) 75%, var(--border)); background: linear-gradient(145deg, var(--primary-soft), var(--surface-solid)); }
-.service-card-main { width: 100%; min-height: 96px; display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: start; gap: 12px; padding: 14px; border: 0; outline: 2px solid transparent; outline-offset: -2px; color: inherit; background: transparent; text-align: left; }
+.service-card-main { width: 100%; min-height: 82px; display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 10px; padding: 11px 12px; border: 0; outline: 2px solid transparent; outline-offset: -2px; color: inherit; background: transparent; text-align: left; }
 .service-card-main:focus-visible { outline-color: var(--primary); }
 .service-card-main:active { background: var(--primary-soft); }
 .service-card-main:disabled { cursor: not-allowed; opacity: .55; }
 .service-card-main > span:last-child { min-width: 0; display: flex; flex-direction: column; }
-.service-card-main small { margin-bottom: 4px; color: var(--muted); font-size: .62rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
-.service-card-main strong { overflow: hidden; color: var(--text); font-size: .82rem; text-overflow: ellipsis; white-space: nowrap; }
-.service-card-main p { display: -webkit-box; margin: 4px 0 0; overflow: hidden; color: var(--muted); font-size: .67rem; line-height: 1.45; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.service-card-main small { margin-bottom: 2px; color: var(--muted); font-size: .58rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; }
+.service-card-main strong { overflow: hidden; color: var(--text); font-size: .78rem; text-overflow: ellipsis; white-space: nowrap; }
+.service-card-main p { display: -webkit-box; margin: 3px 0 0; overflow: hidden; color: var(--muted); font-size: .64rem; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
 .service-card-icon,
 .service-panel-icon,
-.service-recent-icon { width: 38px; height: 38px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 10px; color: var(--primary); background: var(--primary-soft); }
+.service-recent-icon { width: 34px; height: 34px; display: grid; place-items: center; flex: 0 0 auto; border-radius: 9px; color: var(--primary); background: var(--primary-soft); }
 .service-tone-device_setup,
 .service-tone-data_transfer { color: var(--blue); background: color-mix(in srgb, var(--blue) 13%, var(--surface-solid)); }
 .service-tone-software { color: var(--orange); background: color-mix(in srgb, var(--orange) 13%, var(--surface-solid)); }
-.service-card-footer { min-height: 50px; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px 8px 14px; border-top: 1px solid var(--border); background: var(--bg-soft); }
+.service-card-footer { min-height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px 6px 12px; border-top: 1px solid var(--border); background: var(--bg-soft); }
 .service-card-footer > span { min-width: 0; display: grid; gap: 2px; color: var(--muted-2); font-size: .65rem; }
 .service-card-footer > span small { color: var(--muted-2); font-size: .58rem; }
-.service-card-footer strong { color: var(--text); font-size: .78rem; }
-.service-price-missing { display: inline-flex; align-items: center; gap: 5px; color: var(--orange) !important; font-weight: 700; }
-.service-set-price { min-height: 34px; display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; padding: 0 10px; border: 1px solid color-mix(in srgb, var(--primary) 36%, var(--border)); border-radius: 8px; outline: 2px solid transparent; outline-offset: 1px; color: var(--primary); background: var(--primary-soft); font-size: .64rem; font-weight: 800; white-space: nowrap; }
+.service-card-footer strong { color: var(--text); font-size: .72rem; }
+.service-price-missing { display: inline-flex; align-items: center; gap: 5px; color: var(--orange) !important; font-size: .62rem; font-weight: 700; white-space: nowrap; }
+.service-set-price { min-height: 30px; display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; padding: 0 9px; border: 1px solid color-mix(in srgb, var(--primary) 36%, var(--border)); border-radius: 8px; outline: 2px solid transparent; outline-offset: 1px; color: var(--primary); background: var(--primary-soft); font-size: .62rem; font-weight: 800; white-space: nowrap; }
 .service-set-price:focus-visible { outline-color: var(--primary); }
 .service-set-price:active { background: var(--surface-hover); }
 .service-set-price:disabled { cursor: not-allowed; opacity: .55; }
-.service-record-button { min-height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; flex: 0 0 auto; padding-inline: 10px; border: 1px solid color-mix(in srgb, var(--primary) 44%, var(--border)); border-radius: 8px; outline: 2px solid transparent; outline-offset: 1px; color: var(--primary); background: var(--primary-soft); font-size: .64rem; font-weight: 800; white-space: nowrap; }
+.service-record-button { min-height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; flex: 0 0 auto; padding-inline: 9px; border: 1px solid color-mix(in srgb, var(--primary) 44%, var(--border)); border-radius: 8px; outline: 2px solid transparent; outline-offset: 1px; color: var(--primary); background: var(--primary-soft); font-size: .62rem; font-weight: 800; white-space: nowrap; }
 .service-record-button:focus-visible { outline-color: var(--primary); }
 .service-record-button:active { background: var(--surface-hover); }
 .service-record-button:disabled { cursor: not-allowed; opacity: .55; }
@@ -139,14 +139,14 @@
   .service-catalogue-tools { grid-template-columns: minmax(0, 1fr) auto; padding: 9px; }
   .service-catalogue-tools select { grid-column: 1 / -1; grid-row: 2; }
   .service-catalogue-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .service-card-main { min-height: 92px; grid-template-columns: 32px minmax(0, 1fr); gap: 8px; padding: 11px 10px; }
-  .service-card-icon { width: 32px; height: 32px; border-radius: 9px; }
-  .service-card-main strong { font-size: .72rem; white-space: normal; line-height: 1.3; }
-  .service-card-main p { font-size: .6rem; -webkit-line-clamp: 1; }
-  .service-card-footer { min-height: 44px; padding: 6px 9px 6px 10px; }
+  .service-card-main { min-height: 76px; grid-template-columns: 30px minmax(0, 1fr); gap: 8px; padding: 9px; }
+  .service-card-icon { width: 30px; height: 30px; border-radius: 8px; }
+  .service-card-main strong { font-size: .7rem; white-space: normal; line-height: 1.25; }
+  .service-card-main p { display: none; }
+  .service-card-footer { min-height: 38px; padding: 5px 8px; }
   .service-card-footer strong { font-size: .68rem; }
   .service-set-price,
-  .service-record-button { min-height: 40px; }
+  .service-record-button { min-height: 34px; }
   .service-charge-panel { width: 100%; max-height: min(720px, calc(100dvh - max(28px, env(safe-area-inset-top)) - max(28px, env(safe-area-inset-bottom)))); }
   .service-charge-panel > header { padding: 13px; }
   .service-charge-panel form { gap: 11px; padding: 13px; }
@@ -160,9 +160,9 @@
 
 @media (max-width: 560px) {
   .service-catalogue-grid { grid-template-columns: 1fr; }
-  .service-card-main { min-height: 86px; grid-template-columns: 36px minmax(0, 1fr); padding: 12px; }
-  .service-card-icon { width: 36px; height: 36px; }
-  .service-card-main strong { font-size: .8rem; white-space: nowrap; }
+  .service-card-main { min-height: 72px; grid-template-columns: 32px minmax(0, 1fr); padding: 10px; }
+  .service-card-icon { width: 32px; height: 32px; }
+  .service-card-main strong { font-size: .76rem; white-space: nowrap; }
   .service-card-main p { font-size: .66rem; -webkit-line-clamp: 1; }
   .service-card-footer { min-height: 52px; padding: 7px 12px; }
   .service-form-pair { grid-template-columns: 1fr; }
