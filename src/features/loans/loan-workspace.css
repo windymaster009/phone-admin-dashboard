@@ -205,8 +205,7 @@
   cursor: pointer;
 }
 
-.loan-mobile-card:hover,
-.loan-mobile-card:focus-visible {
+.loan-mobile-card:hover {
   border-color: rgba(139, 92, 246, 0.5);
   background: rgba(30, 41, 59, 0.48);
   outline: none;
@@ -218,10 +217,20 @@
 .loan-mobile-card > div strong,
 .loan-mobile-card > div small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .loan-mobile-card > div small { color: var(--muted-text, #94a3b8); }
-.loan-mobile-card section { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.loan-mobile-card section { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; align-items: end; gap: 8px; }
 .loan-mobile-card section span { min-width: 0; display: grid; gap: 3px; color: var(--muted-text, #94a3b8); font-size: 0.68rem; }
 .loan-mobile-card section strong { overflow: hidden; color: var(--text-color, #f8fafc); font-size: 0.78rem; text-overflow: ellipsis; white-space: nowrap; }
 .loan-mobile-card footer { color: var(--muted-text, #94a3b8); font-size: 0.69rem; }
+.loan-mobile-card .loan-mobile-open {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--border-color, rgba(148, 163, 184, 0.18)));
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+.loan-mobile-card .loan-mobile-open:active { transform: translateY(1px); }
+.loan-mobile-card .loan-mobile-open:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 .loan-modal {
   width: min(1040px, calc(100vw - 28px));
