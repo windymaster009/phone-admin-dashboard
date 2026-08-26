@@ -2001,7 +2001,7 @@ router.get('/inventory/scan/:code', requireAuth, asyncRoute(async (req, res) => 
   if (!code) return res.status(400).json({ message: 'Scan a barcode, SKU, IMEI, or serial number' })
   const exactCode = new RegExp(`^${escapeRegex(code)}$`, 'i')
 
-  const item = await InventoryItem.findOne({
+  let item = await InventoryItem.findOne({
     $or: [
       { barcode: exactCode },
       { sku: exactCode },
@@ -2010,11 +2010,21 @@ router.get('/inventory/scan/:code', requireAuth, asyncRoute(async (req, res) => 
       { serialNumber: exactCode },
     ],
   })
-  if (!item) return res.status(404).json({ message: `No product found for ${code}` })
-  const relatedPawn = await Pawn.findOne({ inventoryItem: item._id })
-    .select('pawnNo status customer')
-    .populate('customer', 'name')
-    .lean()
+  let relatedPawn = null
+  if (item) {
+    relatedPawn = await Pawn.findOne({ inventoryItem: item._id })
+      .select('pawnNo status customer')
+      .populate('customer', 'name')
+      .lean()
+  } else {
+    relatedPawn = await Pawn.findOne({ pawnNo: exactCode })
+      .select('pawnNo status customer inventoryItem')
+      .populate('customer', 'name')
+      .populate('inventoryItem')
+      .lean()
+    item = relatedPawn?.inventoryItem || null
+  }
+  if (!item) return res.status(404).json({ message: `No product or pawn found for ${code}` })
   res.json({ item, relatedPawn })
 }))
 

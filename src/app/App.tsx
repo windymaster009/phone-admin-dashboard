@@ -898,7 +898,7 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
     }
     printInventoryLabel({
       sku: linkedItem.sku,
-      barcode: linkedItem.barcode || linkedItem.sku,
+      barcode: pawn.pawnNo,
       name: linkedItem.name || pawn.itemSnapshot.name,
       brand: linkedItem.brand || pawn.itemSnapshot.brand,
       model: [linkedItem.model || pawn.itemSnapshot.model, linkedItem.storage || pawn.itemSnapshot.storage, linkedItem.color || pawn.itemSnapshot.color].filter(Boolean).join(' '),
