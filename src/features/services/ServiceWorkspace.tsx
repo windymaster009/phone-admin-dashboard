@@ -360,7 +360,7 @@ export default function ServiceWorkspace() {
         </section>
       </main>
 
-      {chargeOpen && <div className="service-modal-backdrop service-charge-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeCharge() }}>
+      {chargeOpen && <div className="service-modal-backdrop service-charge-backdrop">
       <section className="surface-card service-charge-panel" role="dialog" aria-modal="true" aria-labelledby="service-charge-title">
         <header><span className="service-panel-icon"><CircleDollarSign size={21} /></span><div><span className="eyebrow">Service checkout</span><h3 id="service-charge-title">Record service charge</h3><p>{selected ? `${selected.name} · ${money(unitPrice, chargeCurrency)}` : 'Choose a priced service to begin.'}</p></div><button className="icon-button" type="button" onClick={closeCharge} disabled={busy} aria-label="Close service checkout"><X size={18} /></button></header>
         {selected ? <form onSubmit={recordCharge}>
