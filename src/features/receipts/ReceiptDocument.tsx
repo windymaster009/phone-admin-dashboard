@@ -52,7 +52,6 @@ function ReferenceBarcode({ reference, label, thermal = false }: { reference: st
 
   return <section className={`pawn-ticket-barcode receipt-reference-barcode${thermal ? ' pawn-ticket-barcode-thermal' : ''}`} aria-label={`Barcode for ${label.toLowerCase()} ${reference}`}>
     <svg ref={barcodeRef} aria-hidden="true" />
-    <span>Scan to find this {label.toLowerCase()}</span>
     <strong>{reference}</strong>
   </section>
 }
