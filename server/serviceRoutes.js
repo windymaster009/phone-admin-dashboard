@@ -20,6 +20,21 @@ function servicePrice(value, currency, label) {
   return roundMoney(amount)
 }
 
+function serviceCurrencyAmount(value, currency) {
+  return currency === 'KHR'
+    ? Math.round((Number(value || 0) + Number.EPSILON) / 100) * 100
+    : roundMoney(value)
+}
+
+function serviceOfferingPrice(offering, currency, exchangeRate) {
+  const savedPrice = currency === 'KHR' ? Number(offering.priceKhr) : Number(offering.priceUsd)
+  if (Number.isFinite(savedPrice) && savedPrice > 0) return savedPrice
+  if (offering.currency === currency) return Number(offering.price) || 0
+  return currency === 'KHR'
+    ? serviceCurrencyAmount(Number(offering.price || 0) * exchangeRate, 'KHR')
+    : roundMoney(Number(offering.price || 0) / exchangeRate)
+}
+
 const defaultServices = [
   ['GMAIL_SETUP', 'Gmail account setup', 'ACCOUNT_SETUP', 'Create and configure a Gmail account safely.'],
   ['TELEGRAM_SETUP', 'Telegram account setup', 'ACCOUNT_SETUP', 'Set up Telegram and basic privacy controls.'],
@@ -139,6 +154,12 @@ router.post('/charges', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), 
   const offering = await ServiceOffering.findById(req.body.offeringId)
   if (!offering || !offering.active) throw requestError(404, 'This service is no longer available')
   if (!(Number(offering.price) > 0)) throw requestError(409, 'Set a price for this service before charging the customer')
+  const currency = clean(req.body.currency || offering.currency).toUpperCase()
+  if (!['USD', 'KHR'].includes(currency)) throw requestError(400, 'Service charge currency must be USD or KHR')
+  const pricingRate = Number(offering.pricingExchangeRate)
+  const exchangeRate = Number.isFinite(pricingRate) && pricingRate > 0 ? pricingRate : fallbackExchangeRate()
+  const unitPrice = serviceOfferingPrice(offering, currency, exchangeRate)
+  if (!(unitPrice > 0)) throw requestError(409, 'Set a price for this service in the selected currency before charging the customer')
 
   let customer = null
   if (req.body.customerId) {
@@ -149,8 +170,16 @@ router.post('/charges', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), 
   const walkInName = clean(req.body.customerName) || 'Walk-in customer'
   const quantity = Number(req.body.quantity || 1)
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 1000) throw requestError(400, 'Quantity must be between 1 and 1,000')
-  const discount = roundMoney(Number(req.body.discount || 0))
-  const subtotal = roundMoney(Number(offering.price) * quantity)
+  const subtotal = serviceCurrencyAmount(unitPrice * quantity, currency)
+  const discountType = clean(req.body.discountType || 'AMOUNT').toUpperCase()
+  if (!['AMOUNT', 'PERCENT'].includes(discountType)) throw requestError(400, 'Discount type must be an amount or percentage')
+  const discountInput = Number(req.body.discount || 0)
+  if (!Number.isFinite(discountInput) || discountInput < 0) throw requestError(400, 'Discount must be zero or greater')
+  const discountPercent = discountType === 'PERCENT' ? roundMoney(discountInput) : undefined
+  if (discountPercent !== undefined && discountPercent > 100) throw requestError(400, 'Discount percentage cannot exceed 100%')
+  const discount = discountType === 'PERCENT'
+    ? serviceCurrencyAmount(subtotal * (discountPercent / 100), currency)
+    : servicePrice(discountInput, currency, 'Discount')
   if (!Number.isFinite(discount) || discount < 0 || discount > subtotal) throw requestError(400, 'Discount cannot exceed the service subtotal')
   const paymentMethod = clean(req.body.paymentMethod || 'CASH').toUpperCase()
   if (!['CASH', 'KHQR', 'BANK', 'CARD', 'OTHER'].includes(paymentMethod)) throw requestError(400, 'Choose a valid payment method')
@@ -163,20 +192,22 @@ router.post('/charges', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), 
     serviceSnapshot: { code: offering.code, name: offering.name, category: offering.category, description: offering.description },
     customer: customer?._id,
     customerSnapshot: { name: customer?.name || walkInName, phone: customer?.phone || clean(req.body.customerPhone) },
-    currency: offering.currency,
-    exchangeRate: offering.currency === 'KHR' ? fallbackExchangeRate() : 1,
-    unitPrice: offering.price,
+    currency,
+    exchangeRate: currency === 'KHR' ? exchangeRate : 1,
+    unitPrice,
     quantity,
     subtotal,
     discount,
-    total: roundMoney(subtotal - discount),
+    discountType,
+    discountPercent,
+    total: serviceCurrencyAmount(subtotal - discount, currency),
     paymentMethod,
     notes,
     createdBy: req.user._id,
   })
   await writeActivity(req, {
     action: 'CREATE', entity: 'SERVICE_CHARGE', entityId: charge._id,
-    details: { serviceNo: charge.serviceNo, service: offering.name, customer: charge.customerSnapshot.name, total: charge.total, currency: charge.currency },
+    details: { serviceNo: charge.serviceNo, service: offering.name, customer: charge.customerSnapshot.name, total: charge.total, currency: charge.currency, discountType: charge.discountType, discount: charge.discount },
   })
   res.status(201).json({ charge: await charge.populate('customer createdBy', 'name phone role') })
 }))

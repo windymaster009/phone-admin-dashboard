@@ -101,6 +101,8 @@ export default function ServiceWorkspace() {
   const [walkInName, setWalkInName] = useState('')
   const [quantity, setQuantity] = useState(1)
   const [discount, setDiscount] = useState('0')
+  const [discountType, setDiscountType] = useState<'AMOUNT' | 'PERCENT'>('AMOUNT')
+  const [chargeCurrency, setChargeCurrency] = useState<Currency>('USD')
   const [paymentMethod, setPaymentMethod] = useState('CASH')
   const [notes, setNotes] = useState('')
   const [pricing, setPricing] = useState<ServiceOffering | null>(null)
@@ -143,8 +145,28 @@ export default function ServiceWorkspace() {
   }), [services, search, category])
   const pricedServices = useMemo(() => services.filter((service) => service.price > 0), [services])
 
-  const subtotal = Number(selected?.price || 0) * quantity
-  const normalizedDiscount = Math.min(subtotal, Math.max(0, Number(discount.replaceAll(',', '')) || 0))
+  function selectedPrice(currency: Currency) {
+    if (!selected) return 0
+    const exchangeRate = Number(selected.pricingExchangeRate) > 0 ? Number(selected.pricingExchangeRate) : serviceExchangeRate
+    const savedPrice = currency === 'USD' ? Number(selected.priceUsd) : Number(selected.priceKhr)
+    if (Number.isFinite(savedPrice) && savedPrice > 0) return savedPrice
+    if (selected.currency === currency) return Number(selected.price) || 0
+    return currency === 'KHR'
+      ? Math.round((Number(selected.price || 0) * exchangeRate) / 100) * 100
+      : Math.round((Number(selected.price || 0) / exchangeRate) * 100) / 100
+  }
+
+  const unitPrice = selectedPrice(chargeCurrency)
+  const subtotal = chargeCurrency === 'KHR'
+    ? Math.round((unitPrice * quantity) / 100) * 100
+    : Math.round((unitPrice * quantity + Number.EPSILON) * 100) / 100
+  const rawDiscount = Math.max(0, Number(discount.replaceAll(',', '')) || 0)
+  const discountPercent = Math.min(100, rawDiscount)
+  const normalizedDiscount = discountType === 'PERCENT'
+    ? chargeCurrency === 'KHR'
+      ? Math.min(subtotal, Math.round((subtotal * discountPercent / 100) / 100) * 100)
+      : Math.min(subtotal, Math.round((subtotal * discountPercent / 100 + Number.EPSILON) * 100) / 100)
+    : Math.min(subtotal, rawDiscount)
   const total = Math.max(0, subtotal - normalizedDiscount)
 
   function usdToKhr(value: string) {
@@ -179,6 +201,9 @@ export default function ServiceWorkspace() {
       return
     }
     setSelected(service)
+    setChargeCurrency(service.currency)
+    setDiscount('0')
+    setDiscountType('AMOUNT')
     setChargeOpen(true)
     setError('')
   }
@@ -234,7 +259,9 @@ export default function ServiceWorkspace() {
           customerId: customerId || undefined,
           customerName: customerId ? undefined : walkInName,
           quantity,
-          discount: normalizedDiscount,
+          currency: chargeCurrency,
+          discount: discountType === 'PERCENT' ? discountPercent : normalizedDiscount,
+          discountType,
           paymentMethod,
           notes,
         }),
@@ -247,6 +274,8 @@ export default function ServiceWorkspace() {
       setWalkInName('')
       setQuantity(1)
       setDiscount('0')
+      setDiscountType('AMOUNT')
+      setChargeCurrency('USD')
       setPaymentMethod('CASH')
       setNotes('')
     } catch (reason) {
@@ -333,11 +362,12 @@ export default function ServiceWorkspace() {
 
       {chargeOpen && <div className="service-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeCharge() }}>
       <section className="surface-card service-charge-panel" role="dialog" aria-modal="true" aria-labelledby="service-charge-title">
-        <header><span className="service-panel-icon"><CircleDollarSign size={21} /></span><div><span className="eyebrow">Service checkout</span><h3 id="service-charge-title">Record service charge</h3><p>{selected ? `${selected.name} · ${money(selected.price, selected.currency)}` : 'Choose a priced service to begin.'}</p></div><button className="icon-button" type="button" onClick={closeCharge} disabled={busy} aria-label="Close service checkout"><X size={18} /></button></header>
+        <header><span className="service-panel-icon"><CircleDollarSign size={21} /></span><div><span className="eyebrow">Service checkout</span><h3 id="service-charge-title">Record service charge</h3><p>{selected ? `${selected.name} · ${money(unitPrice, chargeCurrency)}` : 'Choose a priced service to begin.'}</p></div><button className="icon-button" type="button" onClick={closeCharge} disabled={busy} aria-label="Close service checkout"><X size={18} /></button></header>
         {selected ? <form onSubmit={recordCharge}>
           <label><span>Customer</span><select value={customerId} onChange={(event) => setCustomerId(event.target.value)}><option value="">Walk-in customer</option>{customers.map((customer) => <option value={customer._id} key={customer._id}>{customer.name}{customer.phone ? ` · ${customer.phone}` : ''}</option>)}</select></label>
           {!customerId && <label><span>Customer name <small>Optional</small></span><input value={walkInName} onChange={(event) => setWalkInName(event.target.value)} placeholder="Walk-in customer" /></label>}
-          <div className="service-form-pair"><label><span>Quantity</span><input type="number" min="1" max="1000" value={quantity} onChange={(event) => setQuantity(Math.max(1, Number(event.target.value) || 1))} /></label><label><span>Discount ({selected.currency})</span><input inputMode="decimal" value={discount} onChange={(event) => setDiscount(event.target.value.replace(/[^\d.,]/g, ''))} /></label></div>
+          <div className="service-form-pair"><label><span>Currency</span><select value={chargeCurrency} onChange={(event) => { setChargeCurrency(event.target.value as Currency); setDiscount('0') }}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Cambodian Riel</option></select><small className="service-field-help">1 USD = {serviceExchangeRate.toLocaleString('en-US')} KHR</small></label><label><span>Quantity</span><input type="number" min="1" max="1000" value={quantity} onChange={(event) => setQuantity(Math.max(1, Number(event.target.value) || 1))} /><small className="service-field-help">{money(unitPrice, chargeCurrency)} each</small></label></div>
+          <div className="service-form-pair"><label><span>Discount type</span><select value={discountType} onChange={(event) => { setDiscountType(event.target.value as 'AMOUNT' | 'PERCENT'); setDiscount('0') }}><option value="AMOUNT">Money amount</option><option value="PERCENT">Percentage</option></select></label><label><span>{discountType === 'PERCENT' ? 'Discount (%)' : `Discount (${chargeCurrency})`}</span>{discountType === 'PERCENT' ? <input type="number" min="0" max="100" step="0.01" inputMode="decimal" value={discount} onChange={(event) => setDiscount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="0" /> : <MoneyInput currency={chargeCurrency} minimum={0} maximum={subtotal} value={discount} onValueChange={setDiscount} placeholder={chargeCurrency === 'KHR' ? '0' : '0.00'} />}<small className="service-field-help">{discountType === 'PERCENT' ? `${discountPercent}% = ${money(normalizedDiscount, chargeCurrency)}` : `Maximum ${money(subtotal, chargeCurrency)}`}</small></label></div>
           <label><span>Payment method</span><select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}><option value="CASH">Cash</option><option value="KHQR">KHQR</option><option value="BANK">Bank transfer</option><option value="CARD">Card</option><option value="OTHER">Other</option></select></label>
           <label><span>Work note <small>Optional</small></span><textarea maxLength={500} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="What was completed for the customer?" /></label>
           <div className="service-security-note"><ShieldCheck size={16} /><span><strong>Protect customer access</strong>Never save passwords, one-time codes, or recovery codes.</span></div>
@@ -346,13 +376,7 @@ export default function ServiceWorkspace() {
         </form> : <div className="service-panel-empty service-service-picker">
           <div className="service-picker-heading"><span className="service-picker-icon"><MessageCircle size={19} /></span><div><span className="eyebrow">Start a charge</span><strong>What service did you complete?</strong><p>Choose a priced service to add the customer and payment.</p></div></div>
           {pricedServices.length ? <>
-            <div className="service-picker-list" aria-label="Suggested priced services">
-              {pricedServices.slice(0, 3).map((service) => {
-                const Icon = categoryDetails[service.category].icon
-                return <button type="button" key={service._id} onClick={() => choose(service)}><span className={`service-picker-service-icon service-tone-${service.category.toLowerCase()}`}><Icon size={16} /></span><span><strong>{service.name}</strong><small>{categoryDetails[service.category].label}</small></span><strong>{money(service.price, service.currency)}</strong><ArrowRight size={15} /></button>
-              })}
-            </div>
-            <label className="service-picker-select"><span>{pricedServices.length > 3 ? 'Or choose another priced service' : 'Choose from available services'}</span><select autoFocus value="" onChange={(event) => {
+            <label className="service-picker-select"><span>Choose from {pricedServices.length} priced service{pricedServices.length === 1 ? '' : 's'}</span><select autoFocus value="" onChange={(event) => {
               const service = pricedServices.find((item) => item._id === event.target.value)
               if (service) choose(service)
             }} aria-label="Service to charge"><option value="">Select service</option>{pricedServices.map((service) => <option value={service._id} key={service._id}>{service.name} · {money(service.price, service.currency)}</option>)}</select></label>

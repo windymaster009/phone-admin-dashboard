@@ -47,6 +47,8 @@ const serviceChargeSchema = new Schema(
     quantity: { type: Number, min: 1, max: 1000, default: 1 },
     subtotal: { type: Number, min: 0, required: true },
     discount: { type: Number, min: 0, default: 0 },
+    discountType: { type: String, enum: ['AMOUNT', 'PERCENT'], default: 'AMOUNT' },
+    discountPercent: { type: Number, min: 0, max: 100 },
     total: { type: Number, min: 0, required: true },
     paymentMethod: { type: String, enum: ['CASH', 'KHQR', 'BANK', 'CARD', 'OTHER'], default: 'CASH' },
     status: { type: String, enum: ['COMPLETED', 'CANCELLED'], default: 'COMPLETED', index: true },
