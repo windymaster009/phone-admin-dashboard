@@ -274,8 +274,8 @@ export default function ServiceWorkspace() {
                 <span className={`service-card-icon service-tone-${service.category.toLowerCase()}`}><Icon size={21} /></span>
                 <span><small>{detail.label}</small><strong>{service.name}</strong><p>{service.description}</p></span>
               </button>
-              <footer>
-                {unpriced ? <><span className="service-price-missing"><AlertTriangle size={13} /> No price</span><button type="button" className="service-set-price" onClick={() => choose(service)}>{canPrice ? 'Set price' : 'Needs price'} <ArrowRight size={13} /></button></> : <><span><small>Standard price</small><strong>{money(service.price, service.currency)}</strong></span><button type="button" className="service-record-button" onClick={() => choose(service)}>Charge <ArrowRight size={13} /></button></>}
+              <footer className={`service-card-footer ${unpriced ? 'is-unpriced' : 'is-priced'}`}>
+                {unpriced ? <><span className="service-price-missing"><AlertTriangle size={13} /> Price needed</span><button type="button" className="service-set-price" onClick={() => choose(service)}>{canPrice ? 'Set price' : 'Needs price'} <ArrowRight size={13} /></button></> : <><span><small>Standard price</small><strong>{money(service.price, service.currency)}</strong></span><button type="button" className="service-record-button" onClick={() => choose(service)}>Charge <ArrowRight size={13} /></button></>}
               </footer>
             </article>
           })}
