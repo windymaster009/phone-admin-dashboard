@@ -89,7 +89,7 @@ kbd { border: 1px solid var(--border-strong); border-radius: 6px; padding: 3px 7
 .avatar.large { width: 34px; height: 34px; }
 .mobile-menu { display: none; width: 38px; height: 38px; border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 10px; }
 
-.main-content { padding: 22px; max-width: 1680px; margin: 0 auto; }
+.main-content { padding: 14px 22px 22px; max-width: 1680px; margin: 0 auto; }
 .section-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
 .section-header h2 { margin: 4px 0 4px; font-family: Manrope, sans-serif; font-size: clamp(23px, 2.4vw, 30px); letter-spacing: -0.8px; }
 .section-header p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.7; }

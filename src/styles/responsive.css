@@ -271,7 +271,7 @@
   .app[data-font-size='large'] .overview-kpi-card .metric-icon { width: 27px; height: 27px; }
   .app[data-font-size='large'] .overview-kpi-card h3,
   .app[data-font-size='large'] .overview-currency-value > strong { font-size: 16px; }
-  .main-content { padding: 20px 14px; }
+  .main-content { padding: 12px 14px 20px; }
   .topbar { height: 68px; }
   .topbar-actions { gap: 5px; }
   .section-header { align-items: flex-start; flex-direction: column; margin-bottom: 19px; }
