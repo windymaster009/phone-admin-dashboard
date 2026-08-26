@@ -888,6 +888,18 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
     }))
   }
 
+  function printPawnProductLabel() {
+    printInventoryLabel({
+      sku: pawn.pawnNo,
+      barcode: pawn.pawnNo,
+      name: pawn.itemSnapshot.name,
+      brand: pawn.itemSnapshot.brand,
+      model: [pawn.itemSnapshot.model, pawn.itemSnapshot.storage, pawn.itemSnapshot.color].filter(Boolean).join(' '),
+      imei1: pawn.itemSnapshot.imei,
+      sellPrice: 0,
+    })
+  }
+
   function openAction(nextAction: PawnAction) {
     setAction(nextAction)
     setActionError('')
@@ -1033,6 +1045,7 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
         {!action && <footer className="detail-modal-footer">
           {onAction && isOpen && pawn.status === 'OVERDUE' && <div className={`pawn-claim-action ${canClaimCollateral ? 'eligible' : ''}`} role="note"><span><strong>{canClaimCollateral ? 'Claim is available' : `Claim available ${claimAvailableText}`}</strong><small>Recommended claim window: 5-7 days overdue{claimRecommendedByMilliseconds > claimAvailableAtMilliseconds ? `, by ${claimRecommendedByText}` : ''}.</small></span><button className="ghost-button danger-link" onClick={() => openAction('forfeit')} disabled={!canClaimCollateral} title={canClaimCollateral ? 'Claim this collateral for shop inventory' : `Wait until ${claimAvailableText} to claim this collateral`}>Claim collateral</button></div>}
           <div className="pawn-footer-actions">
+            <button type="button" className="secondary-button pawn-label-print" onClick={printPawnProductLabel} title={`Print a tracking label for ${pawn.pawnNo}`}><Printer size={15} /> Print label</button>
             {onAction && isOpen && <><button className="secondary-button" onClick={() => openAction('payment')} disabled={duePayment <= 0} title={duePayment <= 0 ? 'No fee is due today' : `Pay ${pawnMoney(duePayment, pawnCurrency)} due today`}>Due payment</button><button className="secondary-button" onClick={() => openAction('renew')} disabled={pawn.feeModel === 'DAILY_SIMPLE' && duePayment > 0} title={pawn.feeModel === 'DAILY_SIMPLE' && duePayment > 0 ? `Pay ${pawnMoney(duePayment, pawnCurrency)} due first` : 'Add more days to this pawn'}>Extend pawn</button><button className="primary-button" onClick={() => openAction('redeem')}>Redeem item</button></>}
             {onOpenAll && <button className="secondary-button" onClick={onOpenAll}>Open pawn management <ArrowUpRight size={15} /></button>}
             <button className="ghost-button" onClick={onClose}>Close</button>
