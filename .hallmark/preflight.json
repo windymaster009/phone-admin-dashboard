@@ -6,7 +6,7 @@
   "spacing": "Existing compact operational spacing with a 4pt rhythm and 44px touch targets",
   "framework": "React 19 with Vite 7",
   "preserve": ["font stack", "palette", "navigation", "surface language"],
-  "scope": "Secure Documents workbench on desktop and mobile",
-  "audience": "Phone shop owners, managers, and authorized cashiers",
-  "primary_task": "Select a customer and safely upload, review, download, or delete encrypted evidence"
+  "scope": "Service charge catalogue and checkout on desktop and mobile",
+  "audience": "Phone shop owners, managers, and cashiers",
+  "primary_task": "Choose a priced service and record a customer payment quickly"
 }

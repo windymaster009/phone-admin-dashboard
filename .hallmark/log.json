@@ -1,6 +1,13 @@
 [
   {
     "date": "2026-08-26",
+    "macrostructure": "Index-First",
+    "theme": "existing PhoneFlow",
+    "enrichment": "none",
+    "brief": "Direct service catalogue with explicit record-charge checkout on desktop and mobile"
+  },
+  {
+    "date": "2026-08-26",
     "macrostructure": "Catalogue",
     "theme": "existing PhoneFlow",
     "enrichment": "none",

@@ -90,6 +90,7 @@ export default function ServiceWorkspace() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [charges, setCharges] = useState<ServiceCharge[]>([])
   const [selected, setSelected] = useState<ServiceOffering | null>(null)
+  const [chargeOpen, setChargeOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [category, setCategory] = useState<'ALL' | ServiceCategory>('ALL')
   const [customerId, setCustomerId] = useState('')
@@ -148,7 +149,19 @@ export default function ServiceWorkspace() {
       return
     }
     setSelected(service)
+    setChargeOpen(true)
     setError('')
+  }
+
+  function openCharge() {
+    setError('')
+    setChargeOpen(true)
+  }
+
+  function closeCharge() {
+    if (busy) return
+    setChargeOpen(false)
+    setSelected(null)
   }
 
   async function savePrice(event: FormEvent) {
@@ -164,6 +177,7 @@ export default function ServiceWorkspace() {
       setServices((items) => items.map((item) => item._id === result.service._id ? result.service : item))
       setPricing(null)
       setSelected(result.service.price > 0 ? result.service : null)
+      setChargeOpen(result.service.price > 0)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to save the service price')
     } finally {
@@ -191,6 +205,7 @@ export default function ServiceWorkspace() {
       })
       setCharges((items) => [result.charge, ...items])
       setSuccess(result.charge)
+      setChargeOpen(false)
       setSelected(null)
       setCustomerId('')
       setWalkInName('')
@@ -225,13 +240,21 @@ export default function ServiceWorkspace() {
   return <div className="service-page">
     <header className="section-header service-page-header">
       <div><span className="eyebrow">Customer services</span><h2>Service charges</h2><p>Charge for account setup, phone assistance, data transfer, and other work without changing stock.</p></div>
-      <button className="ghost-button" type="button" onClick={() => go('/reports/services')}><FileText size={16} /> Service report</button>
+      <div className="service-header-actions">
+        <button className="ghost-button" type="button" onClick={() => go('/reports/services')}><FileText size={16} /> Service report</button>
+        <button className="primary-button" type="button" onClick={openCharge}><CircleDollarSign size={17} /> Record charge</button>
+      </div>
     </header>
 
     {error && <div className="service-alert" role="alert"><AlertTriangle size={17} /><span>{error}</span><button type="button" onClick={() => setError('')} aria-label="Dismiss message"><X size={15} /></button></div>}
 
     <div className="service-layout">
       <main className="service-catalogue">
+        <section className="service-workflow" aria-label="How to record a service charge">
+          <div><span>1</span><p><strong>Choose a service</strong><small>Select a priced service below.</small></p></div>
+          <div><span>2</span><p><strong>Add customer</strong><small>Use a saved profile or walk-in.</small></p></div>
+          <div><span>3</span><p><strong>Record payment</strong><small>Confirm the total and payment method.</small></p></div>
+        </section>
         <section className="surface-card service-catalogue-tools" aria-label="Service catalogue filters">
           <div className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search services" /></div>
           <select value={category} onChange={(event) => setCategory(event.target.value as 'ALL' | ServiceCategory)} aria-label="Service category">
@@ -252,7 +275,7 @@ export default function ServiceWorkspace() {
                 <span><small>{detail.label}</small><strong>{service.name}</strong><p>{service.description}</p></span>
               </button>
               <footer>
-                {unpriced ? <><span className="service-price-missing"><AlertTriangle size={13} /> No price</span><button type="button" className="service-set-price" onClick={() => choose(service)}>{canPrice ? 'Set price' : 'Needs price'} <ArrowRight size={13} /></button></> : <><span>Standard price</span><strong>{money(service.price, service.currency)}</strong></>}
+                {unpriced ? <><span className="service-price-missing"><AlertTriangle size={13} /> No price</span><button type="button" className="service-set-price" onClick={() => choose(service)}>{canPrice ? 'Set price' : 'Needs price'} <ArrowRight size={13} /></button></> : <><span><small>Standard price</small><strong>{money(service.price, service.currency)}</strong></span><button type="button" className="service-record-button" onClick={() => choose(service)}>Charge <ArrowRight size={13} /></button></>}
               </footer>
             </article>
           })}
@@ -272,8 +295,9 @@ export default function ServiceWorkspace() {
         </section>
       </main>
 
-      <aside className="surface-card service-charge-panel" aria-label="Charge customer">
-        <header><span className="service-panel-icon"><CircleDollarSign size={21} /></span><div><span className="eyebrow">Checkout</span><h3>{selected ? selected.name : 'Choose a service'}</h3><p>{selected ? 'Confirm the customer and payment.' : 'Select a priced service from the catalogue.'}</p></div></header>
+      {chargeOpen && <div className="service-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) closeCharge() }}>
+      <section className="surface-card service-charge-panel" role="dialog" aria-modal="true" aria-labelledby="service-charge-title">
+        <header><span className="service-panel-icon"><CircleDollarSign size={21} /></span><div><span className="eyebrow">Service checkout</span><h3 id="service-charge-title">Record service charge</h3><p>{selected ? `${selected.name} · ${money(selected.price, selected.currency)}` : 'Choose a priced service to begin.'}</p></div><button className="icon-button" type="button" onClick={closeCharge} disabled={busy} aria-label="Close service checkout"><X size={18} /></button></header>
         {selected ? <form onSubmit={recordCharge}>
           <label><span>Customer</span><select value={customerId} onChange={(event) => setCustomerId(event.target.value)}><option value="">Walk-in customer</option>{customers.map((customer) => <option value={customer._id} key={customer._id}>{customer.name}{customer.phone ? ` · ${customer.phone}` : ''}</option>)}</select></label>
           {!customerId && <label><span>Customer name <small>Optional</small></span><input value={walkInName} onChange={(event) => setWalkInName(event.target.value)} placeholder="Walk-in customer" /></label>}
@@ -282,9 +306,13 @@ export default function ServiceWorkspace() {
           <label><span>Work note <small>Optional</small></span><textarea maxLength={500} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="What was completed for the customer?" /></label>
           <div className="service-security-note"><ShieldCheck size={16} /><span><strong>Protect customer access</strong>Never save passwords, one-time codes, or recovery codes.</span></div>
           <dl className="service-total"><div><dt>Subtotal</dt><dd>{money(subtotal, selected.currency)}</dd></div>{normalizedDiscount > 0 && <div><dt>Discount</dt><dd>− {money(normalizedDiscount, selected.currency)}</dd></div>}<div><dt>Total</dt><dd>{money(total, selected.currency)}</dd></div></dl>
-          <button className="primary-button service-complete" disabled={busy} type="submit"><CreditCard size={16} />{busy ? 'Saving…' : 'Complete service'}</button>
-        </form> : <div className="service-panel-empty"><MessageCircle size={28} /><strong>Ready for the next customer</strong><p>Choose a service to see its price and record payment.</p></div>}
-      </aside>
+          <button className="primary-button service-complete" disabled={busy} type="submit"><CreditCard size={16} />{busy ? 'Saving…' : 'Record charge'}</button>
+        </form> : <div className="service-panel-empty"><MessageCircle size={28} /><strong>Choose the service to charge</strong><p>Select a priced service below. Services without a price must be priced first.</p><select autoFocus value="" onChange={(event) => {
+          const service = services.find((item) => item._id === event.target.value)
+          if (service) choose(service)
+        }} aria-label="Service to charge"><option value="">Select service</option>{services.filter((service) => service.price > 0).map((service) => <option value={service._id} key={service._id}>{service.name} · {money(service.price, service.currency)}</option>)}</select></div>}
+      </section>
+      </div>}
     </div>
 
     {pricing && <div className="service-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPricing(null) }}>
