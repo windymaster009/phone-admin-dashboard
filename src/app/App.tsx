@@ -1448,7 +1448,7 @@ function PawnView() {
           title="Pawn management"
           description={error || 'Track collateral, optional customer identification, due payments, extensions, and overdue contracts.'}
           action={<div className="section-header-actions pawn-header-actions">
-            <button className="ghost-button pawn-guide-trigger" type="button" onClick={() => window.dispatchEvent(new Event('phoneflow:open-scanner'))} aria-label="Scan barcode" title="Scan barcode"><ScanLine size={18} aria-hidden="true" /></button>
+            <button className="secondary-button pawn-scan-trigger" type="button" onClick={() => window.dispatchEvent(new Event('phoneflow:open-scanner'))} aria-label="Scan product"><ScanLine size={17} aria-hidden="true" /><span>Scan product</span></button>
             <button className="primary-button" onClick={() => comingNext('New pawn')}><Plus size={17} /> New pawn</button>
           </div>}
         />

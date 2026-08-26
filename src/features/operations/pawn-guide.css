@@ -3,18 +3,18 @@
  * contrast: pass (40–41) · pre-emit critique: P5 H5 E5 S5 R5 V4
  */
 .pawn-header-actions { width: auto; }
-.pawn-guide-trigger { width: 44px; min-width: 44px; min-height: 44px; padding: 0; color: var(--primary); }
-.pawn-guide-trigger:hover { color: var(--text); border-color: var(--primary); background: var(--primary-soft); }
-.pawn-guide-trigger:active { transform: translateY(1px); }
-.pawn-guide-trigger:focus-visible,
+.pawn-scan-trigger { min-height: 42px; color: var(--primary); }
+.pawn-scan-trigger:hover { color: var(--text); border-color: var(--primary); background: var(--primary-soft); }
+.pawn-scan-trigger:active { transform: translateY(1px); }
+.pawn-scan-trigger:focus-visible,
 .pawn-guide-actions button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
-.pawn-guide-trigger:disabled,
+.pawn-scan-trigger:disabled,
 .pawn-guide-actions button:disabled { opacity: .5; cursor: not-allowed; transform: none; }
-.pawn-guide-trigger[data-state='loading'],
+.pawn-scan-trigger[data-state='loading'],
 .pawn-guide-actions button[data-state='loading'] { cursor: progress; }
-.pawn-guide-trigger[data-state='error'],
+.pawn-scan-trigger[data-state='error'],
 .pawn-guide-actions button[data-state='error'] { color: var(--rose); border-color: var(--rose); }
-.pawn-guide-trigger[data-state='success'],
+.pawn-scan-trigger[data-state='success'],
 .pawn-guide-actions button[data-state='success'] { color: var(--green); border-color: var(--green); }
 
 .pawn-guide-dialog { width: min(680px, 100%); max-height: min(720px, calc(100dvh - 48px)); }
@@ -43,7 +43,8 @@
 
 @media (max-width: 700px) {
   .pawn-page-heading .section-header .pawn-header-actions { width: auto; display: flex; gap: 7px; }
-  .pawn-page-heading .section-header .pawn-guide-trigger { width: 44px; min-width: 44px; min-height: 44px; padding: 0; }
+  .pawn-page-heading .section-header .pawn-scan-trigger { width: 40px; min-width: 40px; min-height: 40px; padding: 0; }
+  .pawn-page-heading .section-header .pawn-scan-trigger span { display: none; }
   .pawn-guide-backdrop { align-items: center; padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
   .pawn-guide-dialog { width: min(560px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); border-radius: 18px; }
   .pawn-guide-content { padding: 14px 16px; }
@@ -69,6 +70,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .pawn-guide-trigger,
+  .pawn-scan-trigger,
   .pawn-guide-actions button { transition-duration: 0.01ms; }
 }
