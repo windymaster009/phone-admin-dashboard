@@ -168,10 +168,24 @@
 }
 
 /* Keep the compact receipt masthead truly centred, even when a shop name is short. */
-.receipt-paper-thermal .receipt-document-header,
+.receipt-paper-thermal .receipt-document-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
 .receipt-paper-thermal .receipt-shop,
 .receipt-paper-thermal .receipt-title {
   width: 100%;
+  margin-inline: auto;
+  text-align: center;
+}
+
+.receipt-paper-thermal .receipt-shop {
+  display: grid;
+  justify-items: center;
 }
 
 .receipt-paper-thermal .receipt-shop > div {
