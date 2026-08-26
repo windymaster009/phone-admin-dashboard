@@ -386,7 +386,7 @@ export default function ServiceWorkspace() {
       </div>}
     </div>
 
-    {pricing && <div className="service-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPricing(null) }}>
+    {pricing && <div className="service-modal-backdrop">
       <section className="surface-card service-price-modal" role="dialog" aria-modal="true" aria-labelledby="service-price-title">
         <header><span className="service-panel-icon"><Banknote size={20} /></span><div><span className="eyebrow">Catalogue pricing</span><h3 id="service-price-title">Set service price</h3><p>{pricing.name}</p></div><button className="icon-button" type="button" onClick={() => setPricing(null)} aria-label="Close pricing"><X size={18} /></button></header>
         <form onSubmit={savePrice}>
