@@ -561,8 +561,8 @@
   }
   .pawn-detail-modal {
     width: min(100%, 500px);
-    height: min(78dvh, 680px);
-    max-height: calc(100dvh - 88px);
+    height: min(84dvh, 730px);
+    max-height: calc(100dvh - 64px);
     border-radius: 16px;
   }
   .pawn-detail-modal .detail-modal-header { padding: 14px 14px 13px; }
@@ -604,8 +604,8 @@
   .pawn-detail-modal .pawn-footer-actions { grid-column: 1; width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .pawn-detail-modal .pawn-footer-actions > * { width: 100%; justify-content: center; }
   /* Keep the sheet physically usable when the app's Display size is 110% or 120%. */
-  .app[data-font-size='comfortable'] .pawn-detail-modal { height: min(70.9091dvh, 618px); max-height: calc(90.9091dvh - 80px); zoom: .9091; }
-  .app[data-font-size='large'] .pawn-detail-modal { height: min(65dvh, 566px); max-height: calc(83.3333dvh - 72px); zoom: .8333; }
+  .app[data-font-size='comfortable'] .pawn-detail-modal { height: min(76.3636dvh, 664px); max-height: calc(90.9091dvh - 58px); zoom: .9091; }
+  .app[data-font-size='large'] .pawn-detail-modal { height: min(70dvh, 608px); max-height: calc(83.3333dvh - 54px); zoom: .8333; }
   .trade-detail-modal .detail-sections { grid-template-columns: 1fr; padding: 12px; }
   .trade-detail-modal .detail-lines, .trade-detail-modal .detail-note, .trade-refund-record { margin: 0 12px 12px; }
   .trade-detail-modal .detail-grid { padding: 12px; }
