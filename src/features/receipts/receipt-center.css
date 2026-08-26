@@ -159,6 +159,14 @@
   :root[data-font-size='large'] .receipt-option-picker-modal { zoom: .8333; }
 }
 
+.receipt-preview > div {
+  width: 100%;
+  min-height: 100%;
+  display: grid;
+  justify-items: center;
+  align-content: start;
+}
+
 .pawn-ticket-date-note {
   margin: 0 0 9px;
   padding: 7px 8px;

@@ -63,7 +63,7 @@ function Modal({ title, description, onClose, children, wide = false, className 
   }, [])
 
   return createPortal(
-    <div className="receipt-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+    <div className="receipt-modal-backdrop">
       <section className={`receipt-modal surface-card ${wide ? 'receipt-modal-wide' : ''} ${className}`} role="dialog" aria-modal="true" aria-label={title}>
         <header className="receipt-modal-header">
           <span className="receipt-modal-icon"><ReceiptText size={21} /></span>

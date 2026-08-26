@@ -61,7 +61,7 @@ function SupplierModal({ supplier, busy, error, onClose, onSubmit }: {
     }
   }, [busy, onClose])
 
-  return <div className="operation-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose() }}>
+  return <div className="operation-modal-backdrop" role="presentation">
     <section className="operation-modal supplier-modal" role="dialog" aria-modal="true" aria-label={supplier ? 'Edit supplier' : 'Add supplier'}>
       <header className="operation-modal-header">
         <span className="operation-modal-icon"><Building2 size={21} /></span>
