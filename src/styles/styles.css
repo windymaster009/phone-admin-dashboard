@@ -85,6 +85,32 @@ body { margin: 0; min-width: 320px; min-height: 100vh; color: var(--text); backg
 button, input, select { font: inherit; }
 button { cursor: pointer; }
 
+/* Hallmark · component: shared select control · genre: modern-minimal · theme: existing PhoneFlow
+ * pre-emit critique: P5 H5 E5 S5 R5 V4 · states: default · hover · focus · active · disabled · loading · error · success
+ * contrast: pass (40–41)
+ */
+select:not([multiple]) {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  padding-inline-end: 38px !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='m4 6 4 4 4-4' stroke='%2394a3b8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 12px center !important;
+  background-size: 16px !important;
+  outline: 2px solid transparent;
+  outline-offset: 1px;
+}
+select:not([multiple])::-ms-expand { display: none; }
+@media (hover: hover) and (pointer: fine) {
+  select:not([multiple]):not(:disabled):hover { background-color: var(--surface-hover); }
+}
+select:not([multiple]):focus-visible { outline-color: var(--primary); }
+select:not([multiple]):active { background-color: var(--surface-hover); }
+select:not([multiple]):disabled,
+select:not([multiple])[aria-busy='true'] { opacity: .55; cursor: not-allowed; }
+select:not([multiple])[aria-invalid='true'] { border-color: var(--rose) !important; }
+select:not([multiple])[data-state='success'] { border-color: var(--green) !important; }
+
 .app {
   --bg: #0b1020;
   --bg-soft: #10172a;
