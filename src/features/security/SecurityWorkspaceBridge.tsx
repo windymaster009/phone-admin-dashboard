@@ -10,6 +10,7 @@ import {
   Copy,
   KeyRound,
   LockKeyhole,
+  LogIn,
   LogOut,
   Monitor,
   RefreshCcw,
@@ -121,6 +122,45 @@ function eventLabel(action: string) {
   return labels[action] || action.replaceAll('_', ' ').toLowerCase().replace(/^./, (value) => value.toUpperCase())
 }
 
+type SecurityEventGroup = {
+  key: string
+  latest: SecurityEvent
+  count: number
+}
+
+function eventIcon(action: string) {
+  if (action === 'LOGIN_FAILED') return AlertTriangle
+  if (action === 'LOGIN') return LogIn
+  if (action === 'ANDROID_PAIRED' || action === 'ANDROID_PAIRING_CREATED') return Smartphone
+  if (action.startsWith('TWO_FACTOR')) return KeyRound
+  if (action === 'LOGOUT' || action.includes('SESSION_REVOKED') || action.includes('SESSIONS_REVOKED')) return LogOut
+  return ShieldCheck
+}
+
+function eventTone(action: string) {
+  if (action === 'LOGIN_FAILED' || action === 'TWO_FACTOR_DISABLED') return 'danger'
+  if (action.startsWith('TWO_FACTOR')) return 'secure'
+  if (action === 'LOGOUT' || action.includes('REVOKED')) return 'muted'
+  return 'success'
+}
+
+function eventContext(event: SecurityEvent) {
+  const details = event.details || {}
+  const deviceName = typeof details.deviceName === 'string' ? details.deviceName.trim() : ''
+  const kind = details.kind === 'ANDROID' ? 'PhoneFlow Android' : details.kind === 'WEB' ? 'Web session' : ''
+  const localAddress = !event.ipAddress || event.ipAddress === '::1' || event.ipAddress === '127.0.0.1'
+  const context = [deviceName || kind, localAddress ? 'This device' : `IP ${event.ipAddress}`].filter(Boolean)
+  if (details.twoFactor === true) context.push('Two-factor verified')
+  return context.join(' · ')
+}
+
+function eventGroupKey(event: SecurityEvent) {
+  const date = new Date(event.createdAt)
+  const day = Number.isNaN(date.getTime()) ? event.createdAt : date.toISOString().slice(0, 10)
+  const details = event.details || {}
+  return [event.action, day, event.ipAddress || '', details.deviceName || '', details.kind || ''].join('|')
+}
+
 function SecurityWorkspace() {
   const user = getSessionUser()
   const [sessions, setSessions] = useState<AuthSession[]>([])
@@ -178,7 +218,17 @@ function SecurityWorkspace() {
   const pairingExpired = Boolean(pairing && pairingSeconds <= 0)
   const activeSessions = useMemo(() => sessions.filter((session) => !session.revokedAt), [sessions])
   const otherSessions = activeSessions.filter((session) => !session.current)
-  const visibleEvents = eventsExpanded ? events : events.slice(0, 4)
+  const eventGroups = useMemo(() => events.reduce<SecurityEventGroup[]>((groups, event) => {
+    const key = eventGroupKey(event)
+    const previous = groups.at(-1)
+    if (previous?.key === key) {
+      previous.count += 1
+      return groups
+    }
+    groups.push({ key, latest: event, count: 1 })
+    return groups
+  }, []), [events])
+  const visibleEventGroups = eventsExpanded ? eventGroups : eventGroups.slice(0, 4)
   const activeStaffUsers = staffUsers?.filter((staffUser) => staffUser.active).length ?? 0
 
   const createStaffUser = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -451,13 +501,17 @@ function SecurityWorkspace() {
           </section>
 
           <section className="card security-panel security-events-panel">
-            <div className="security-panel-title"><div><h2>Recent security activity</h2><p>Sign-ins, 2FA, pairing, sign-outs, and session revocations for your account.</p></div>{events.length > 4 && <button type="button" className="security-events-toggle" onClick={() => setEventsExpanded((current) => !current)} aria-expanded={eventsExpanded}>{eventsExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}{eventsExpanded ? 'Minimize' : `Show all (${events.length})`}</button>}</div>
+            <div className="security-panel-title"><div><h2>Recent security activity</h2><p>Account sign-ins and security changes. Repeated sign-ins from the same device are grouped together.</p></div>{eventGroups.length > 4 && <button type="button" className="security-events-toggle" onClick={() => setEventsExpanded((current) => !current)} aria-expanded={eventsExpanded}>{eventsExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}{eventsExpanded ? 'Show less' : `Show all (${eventGroups.length})`}</button>}</div>
             <div className="security-event-list">
-              {visibleEvents.map((event) => <article key={event._id}>
-                <span className={`security-event-dot ${event.action === 'LOGIN_FAILED' ? 'danger' : ''}`} />
-                <div><strong>{eventLabel(event.action)}</strong><span>{event.ipAddress || 'IP not recorded'}</span></div>
-                <time>{dateTime(event.createdAt)}</time>
-              </article>)}
+              {visibleEventGroups.map((group) => {
+                const event = group.latest
+                const EventIcon = eventIcon(event.action)
+                return <article key={group.key}>
+                  <span className={`security-event-icon ${eventTone(event.action)}`}><EventIcon size={16} aria-hidden="true" /></span>
+                  <div className="security-event-content"><div><strong>{eventLabel(event.action)}</strong>{group.count > 1 && <span className="security-event-count">{group.count} times</span>}</div><span>{eventContext(event)}</span></div>
+                  <div className="security-event-timing"><time dateTime={event.createdAt}>{relativeTime(event.createdAt)}</time><small>{dateTime(event.createdAt)}</small></div>
+                </article>
+              })}
               {events.length === 0 && <div className="security-empty">No security activity has been recorded yet.</div>}
             </div>
           </section>
