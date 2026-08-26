@@ -167,6 +167,11 @@
   align-content: start;
 }
 
+/* Receipt previews can be launched from another active workflow (loan, pawn, or sale). */
+.receipt-modal-backdrop {
+  z-index: 10100;
+}
+
 .pawn-ticket-date-note {
   margin: 0 0 9px;
   padding: 7px 8px;
