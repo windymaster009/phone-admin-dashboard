@@ -10,6 +10,16 @@ const roundMoney = (value) => Math.round((Number(value || 0) + Number.EPSILON) *
 const clean = (value) => typeof value === 'string' ? value.trim() : ''
 const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
+function servicePrice(value, currency, label) {
+  const amount = Number(value)
+  if (!Number.isFinite(amount) || amount < 0) throw requestError(400, `${label} must be zero or greater`)
+  if (currency === 'KHR') {
+    if (!Number.isInteger(amount) || amount % 100 !== 0) throw requestError(400, `${label} must use whole 100 KHR increments`)
+    return amount
+  }
+  return roundMoney(amount)
+}
+
 const defaultServices = [
   ['GMAIL_SETUP', 'Gmail account setup', 'ACCOUNT_SETUP', 'Create and configure a Gmail account safely.'],
   ['TELEGRAM_SETUP', 'Telegram account setup', 'ACCOUNT_SETUP', 'Set up Telegram and basic privacy controls.'],
@@ -64,23 +74,44 @@ router.get('/catalog', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), a
 
 router.patch('/catalog/:id', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) throw requestError(400, 'Service ID is invalid')
+  const current = await ServiceOffering.findById(req.params.id)
+  if (!current) throw requestError(404, 'Service was not found')
   const update = { updatedBy: req.user._id }
-  if (req.body.price !== undefined) {
-    const price = Number(req.body.price)
-    if (!Number.isFinite(price) || price < 0) throw requestError(400, 'Price must be zero or greater')
-    update.price = roundMoney(price)
-  }
+  let currency = current.currency
   if (req.body.currency !== undefined) {
-    const currency = clean(req.body.currency).toUpperCase()
+    currency = clean(req.body.currency).toUpperCase()
     if (!['USD', 'KHR'].includes(currency)) throw requestError(400, 'Currency must be USD or KHR')
     update.currency = currency
   }
+  const hasDualCurrencyPrices = req.body.priceUsd !== undefined || req.body.priceKhr !== undefined
+  const exchangeRateInput = Number(req.body.pricingExchangeRate)
+  const exchangeRate = Number.isFinite(exchangeRateInput) && exchangeRateInput > 0
+    ? exchangeRateInput
+    : Number(current.pricingExchangeRate) > 0
+      ? Number(current.pricingExchangeRate)
+      : fallbackExchangeRate()
+  if (hasDualCurrencyPrices) {
+    const legacyUsdPrice = current.currency === 'USD'
+      ? Number(current.price)
+      : Math.round((Number(current.price || 0) / exchangeRate) * 100) / 100
+    const legacyKhrPrice = current.currency === 'KHR'
+      ? Number(current.price)
+      : Math.round((Number(current.price || 0) * exchangeRate) / 100) * 100
+    const usdPrice = servicePrice(req.body.priceUsd ?? current.priceUsd ?? legacyUsdPrice, 'USD', 'USD price')
+    const khrPrice = servicePrice(req.body.priceKhr ?? current.priceKhr ?? legacyKhrPrice, 'KHR', 'KHR price')
+    if (!(usdPrice > 0) || !(khrPrice > 0)) throw requestError(400, 'Set a price greater than zero in both currencies')
+    update.priceUsd = usdPrice
+    update.priceKhr = khrPrice
+    update.pricingExchangeRate = exchangeRate
+    update.price = currency === 'KHR' ? khrPrice : usdPrice
+  } else if (req.body.price !== undefined) {
+    update.price = servicePrice(req.body.price, currency, 'Price')
+  }
   if (req.body.active !== undefined) update.active = Boolean(req.body.active)
-  const service = await ServiceOffering.findByIdAndUpdate(req.params.id, { $set: update }, { new: true, runValidators: true })
-  if (!service) throw requestError(404, 'Service was not found')
+  const service = await ServiceOffering.findByIdAndUpdate(current._id, { $set: update }, { new: true, runValidators: true })
   await writeActivity(req, {
     action: 'UPDATE', entity: 'SERVICE_OFFERING', entityId: service._id,
-    details: { code: service.code, name: service.name, price: service.price, currency: service.currency, active: service.active },
+    details: { code: service.code, name: service.name, price: service.price, priceUsd: service.priceUsd, priceKhr: service.priceKhr, currency: service.currency, active: service.active },
   })
   res.json({ service })
 }))

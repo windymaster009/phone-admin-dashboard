@@ -24,6 +24,7 @@ import {
 } from 'lucide-react'
 import { api, getSessionUser } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
+import MoneyInput from '../../components/MoneyInput'
 import './service-workspace.css'
 
 type Currency = 'USD' | 'KHR'
@@ -37,6 +38,9 @@ type ServiceOffering = {
   description?: string
   currency: Currency
   price: number
+  priceUsd?: number
+  priceKhr?: number
+  pricingExchangeRate?: number
   active: boolean
 }
 
@@ -100,8 +104,10 @@ export default function ServiceWorkspace() {
   const [paymentMethod, setPaymentMethod] = useState('CASH')
   const [notes, setNotes] = useState('')
   const [pricing, setPricing] = useState<ServiceOffering | null>(null)
-  const [price, setPrice] = useState('')
+  const [priceUsd, setPriceUsd] = useState('')
+  const [priceKhr, setPriceKhr] = useState('')
   const [priceCurrency, setPriceCurrency] = useState<Currency>('USD')
+  const [serviceExchangeRate, setServiceExchangeRate] = useState(4100)
   const [success, setSuccess] = useState<ServiceCharge | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -112,11 +118,12 @@ export default function ServiceWorkspace() {
     setError('')
     try {
       const [catalog, customerResult, chargeResult] = await Promise.all([
-        api<{ services: ServiceOffering[] }>('/services/catalog'),
+        api<{ services: ServiceOffering[]; exchangeRate?: number }>('/services/catalog'),
         api<{ customers: Customer[] }>('/customers'),
         api<{ charges: ServiceCharge[] }>('/services/charges'),
       ])
       setServices(catalog.services)
+      if (Number(catalog.exchangeRate) > 0) setServiceExchangeRate(Number(catalog.exchangeRate))
       setCustomers(customerResult.customers)
       setCharges(chargeResult.charges)
       setSelected((current) => current ? catalog.services.find((item) => item._id === current._id) || null : null)
@@ -139,12 +146,34 @@ export default function ServiceWorkspace() {
   const normalizedDiscount = Math.min(subtotal, Math.max(0, Number(discount.replaceAll(',', '')) || 0))
   const total = Math.max(0, subtotal - normalizedDiscount)
 
+  function usdToKhr(value: string) {
+    if (value === '') return ''
+    return String(Math.round((Number(value || 0) * serviceExchangeRate) / 100) * 100)
+  }
+
+  function khrToUsd(value: string) {
+    if (value === '') return ''
+    return String(Math.round((Number(value || 0) / serviceExchangeRate) * 100) / 100)
+  }
+
+  function openPricing(service: ServiceOffering) {
+    const rate = Number(service.pricingExchangeRate) > 0 ? Number(service.pricingExchangeRate) : serviceExchangeRate
+    const savedUsd = Number(service.priceUsd)
+    const savedKhr = Number(service.priceKhr)
+    const legacyUsd = service.currency === 'USD' ? Number(service.price) : Math.round((Number(service.price || 0) / rate) * 100) / 100
+    const legacyKhr = service.currency === 'KHR' ? Number(service.price) : Math.round((Number(service.price || 0) * rate) / 100) * 100
+    const usd = Number.isFinite(savedUsd) && savedUsd > 0 ? savedUsd : legacyUsd
+    const khr = Number.isFinite(savedKhr) && savedKhr > 0 ? savedKhr : legacyKhr
+    setPricing(service)
+    setPriceCurrency(service.currency)
+    setPriceUsd(usd > 0 ? String(usd) : '')
+    setPriceKhr(khr > 0 ? String(khr) : '')
+  }
+
   function choose(service: ServiceOffering) {
     if (!(service.price > 0)) {
       if (canPrice) {
-        setPricing(service)
-        setPrice('')
-        setPriceCurrency(service.currency)
+        openPricing(service)
       } else setError('A manager needs to set this service price before it can be charged.')
       return
     }
@@ -172,7 +201,13 @@ export default function ServiceWorkspace() {
     try {
       const result = await api<{ service: ServiceOffering }>(`/services/catalog/${pricing._id}`, {
         method: 'PATCH',
-        body: JSON.stringify({ price: Number(price.replaceAll(',', '')), currency: priceCurrency }),
+        body: JSON.stringify({
+          price: Number((priceCurrency === 'USD' ? priceUsd : priceKhr).replaceAll(',', '')),
+          currency: priceCurrency,
+          priceUsd: Number(priceUsd.replaceAll(',', '')),
+          priceKhr: Number(priceKhr.replaceAll(',', '')),
+          pricingExchangeRate: serviceExchangeRate,
+        }),
       })
       setServices((items) => items.map((item) => item._id === result.service._id ? result.service : item))
       setPricing(null)
@@ -318,7 +353,21 @@ export default function ServiceWorkspace() {
     {pricing && <div className="service-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPricing(null) }}>
       <section className="surface-card service-price-modal" role="dialog" aria-modal="true" aria-labelledby="service-price-title">
         <header><span className="service-panel-icon"><Banknote size={20} /></span><div><span className="eyebrow">Catalogue pricing</span><h3 id="service-price-title">Set service price</h3><p>{pricing.name}</p></div><button className="icon-button" type="button" onClick={() => setPricing(null)} aria-label="Close pricing"><X size={18} /></button></header>
-        <form onSubmit={savePrice}><div className="service-form-pair"><label><span>Currency</span><select value={priceCurrency} onChange={(event) => setPriceCurrency(event.target.value as Currency)}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Cambodian Riel</option></select></label><label><span>Standard price</span><input autoFocus required inputMode="decimal" value={price} onChange={(event) => setPrice(event.target.value.replace(/[^\d.,]/g, ''))} placeholder={priceCurrency === 'KHR' ? '10,000' : '2.50'} /></label></div><p className="service-price-help">This becomes the default checkout price. A manager can change it later.</p><footer><button className="ghost-button" type="button" onClick={() => setPricing(null)}>Cancel</button><button className="primary-button" disabled={busy || !(Number(price.replaceAll(',', '')) > 0)} type="submit">Save price</button></footer></form>
+        <form onSubmit={savePrice}>
+          <div className="service-price-heading"><div><span className="eyebrow">Two-currency price</span><p>Enter either amount; the matching price updates automatically.</p></div><small>1 USD = {serviceExchangeRate.toLocaleString('en-US')} KHR</small></div>
+          <div className="service-price-columns">
+            <section className={`service-currency-price ${priceCurrency === 'USD' ? 'is-default' : ''}`}>
+              <header><span className="service-currency-mark">$</span><div><strong>US Dollar</strong><small>USD</small></div><label className="service-default-currency"><input type="radio" name="service-price-currency" checked={priceCurrency === 'USD'} onChange={() => setPriceCurrency('USD')} /><span>Checkout default</span></label></header>
+              <label><span>Standard price</span><div className="service-price-input"><span>$</span><MoneyInput autoFocus currency="USD" minimum={0.01} required value={priceUsd} onValueChange={(value) => { setPriceUsd(value); setPriceKhr(usdToKhr(value)) }} placeholder="2.50" aria-label="Service price in US dollars" /></div></label>
+            </section>
+            <section className={`service-currency-price ${priceCurrency === 'KHR' ? 'is-default' : ''}`}>
+              <header><span className="service-currency-mark">៛</span><div><strong>Cambodian Riel</strong><small>KHR</small></div><label className="service-default-currency"><input type="radio" name="service-price-currency" checked={priceCurrency === 'KHR'} onChange={() => setPriceCurrency('KHR')} /><span>Checkout default</span></label></header>
+              <label><span>Standard price</span><div className="service-price-input"><span>៛</span><MoneyInput currency="KHR" minimum={100} required value={priceKhr} onValueChange={(value) => { setPriceKhr(value); setPriceUsd(khrToUsd(value)) }} placeholder="10,000" aria-label="Service price in Cambodian riel" /></div></label>
+            </section>
+          </div>
+          <p className="service-price-help">The selected default currency is used when staff record this service charge.</p>
+          <footer><button className="ghost-button" type="button" onClick={() => setPricing(null)}>Cancel</button><button className="primary-button" disabled={busy || !(Number(priceUsd) > 0) || !(Number(priceKhr) > 0)} type="submit">Save price</button></footer>
+        </form>
       </section>
     </div>}
 

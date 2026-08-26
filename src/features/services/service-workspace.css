@@ -117,6 +117,25 @@
 .service-price-modal { width: min(520px, 100%); overflow: hidden; }
 .service-price-modal > header .icon-button { margin-left: auto; }
 .service-price-modal form { display: grid; gap: 13px; padding: 16px; }
+.service-price-heading { display: flex; align-items: end; justify-content: space-between; gap: 12px; }
+.service-price-heading > div { min-width: 0; }
+.service-price-heading .eyebrow { font-size: .58rem; }
+.service-price-heading p { margin: 3px 0 0; color: var(--muted); font-size: .65rem; line-height: 1.45; }
+.service-price-heading > small { flex: 0 0 auto; color: var(--primary); font-size: .61rem; font-weight: 800; white-space: nowrap; }
+.service-price-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+.service-currency-price { min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 11px; background: var(--bg-soft); }
+.service-currency-price.is-default { border-color: color-mix(in srgb, var(--primary) 62%, var(--border)); background: color-mix(in srgb, var(--primary) 8%, var(--bg-soft)); }
+.service-currency-price > header { display: grid; grid-template-columns: 28px minmax(0, 1fr); align-items: center; gap: 7px; margin-bottom: 10px; }
+.service-currency-mark { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; color: var(--primary); background: var(--primary-soft); font-size: .78rem; font-weight: 900; }
+.service-currency-price > header > div { min-width: 0; display: grid; gap: 1px; }
+.service-currency-price > header strong { overflow: hidden; color: var(--text); font-size: .69rem; text-overflow: ellipsis; white-space: nowrap; }
+.service-currency-price > header small { color: var(--muted); font-size: .56rem; font-weight: 800; }
+.service-default-currency { grid-column: 1 / -1; display: inline-flex !important; align-items: center; gap: 5px; margin-top: 2px; color: var(--muted) !important; font-size: .58rem !important; font-weight: 700; }
+.service-default-currency input { width: 14px !important; min-height: 14px !important; margin: 0; padding: 0 !important; border: 0 !important; border-radius: 50% !important; outline: 0 !important; accent-color: var(--primary); background: transparent !important; }
+.service-price-input { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; border: 1px solid var(--border-strong); border-radius: 9px; overflow: hidden; background: var(--bg); }
+.service-price-input:focus-within { border-color: color-mix(in srgb, var(--primary) 72%, var(--border)); outline: 2px solid var(--primary); outline-offset: 1px; }
+.service-price-input > span { padding: 0 0 0 10px; color: var(--muted); font-size: .7rem; font-weight: 800; }
+.service-price-input input { min-width: 0; min-height: 38px; border: 0; border-radius: 0; outline: 0 !important; padding: 0 9px 0 6px; background: transparent; }
 .service-price-help { margin: 0; color: var(--muted); font-size: .68rem; line-height: 1.5; }
 .service-price-modal form footer { display: flex; justify-content: flex-end; gap: 9px; padding-top: 3px; }
 .service-success-modal { width: min(420px, 100%); display: flex; flex-direction: column; align-items: center; padding: 28px; text-align: center; }
@@ -173,6 +192,9 @@
   .service-success-modal > div { width: 100%; }
   .service-price-modal form footer > *,
   .service-success-modal > div > * { flex: 1; }
+  .service-price-heading { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .service-price-columns { grid-template-columns: 1fr; }
+  .service-currency-price { padding: 9px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
