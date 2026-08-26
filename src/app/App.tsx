@@ -14,6 +14,7 @@ import {
   Calculator,
   CalendarRange,
   ChevronDown,
+  ChevronRight,
   CircleDollarSign,
   Clock3,
   Database,
@@ -1286,7 +1287,7 @@ function DashboardView({ goTo, user, onReady }: { goTo: (key: NavKey) => void; u
                 <div className="mobile-contract-details">
                   <div><span>Loan</span><strong>{pawnMoney(row.principal, row.currency)}</strong><small>{exchangeRate && pawnEquivalentText(row.principal, row.currency || 'USD', exchangeRate, row.exchangeRate)}</small></div>
                   <div><span>Due date</span><strong>{dateText(row.dueDate)}</strong><small className="mono">{row.pawnNo}</small></div>
-                  <button className="icon-button" onClick={() => setSelectedPawn(row)} aria-label={`View contract ${row.pawnNo}`}><MoreHorizontal size={18} /></button>
+                  <button className="icon-button mobile-contract-open" onClick={() => setSelectedPawn(row)} aria-label={`Open contract ${row.pawnNo}`}><ChevronRight size={18} /></button>
                 </div>
               </article>
             ))}
@@ -1474,7 +1475,7 @@ function PawnView() {
               <div className="mobile-contract-details">
                 <div><span>Due now</span><strong>{pawnMoney(pawnOutstanding(row), row.currency)}</strong><small>{exchangeRate && pawnEquivalentText(pawnOutstanding(row), row.currency || 'USD', exchangeRate, row.exchangeRate)}</small></div>
                 <div><span>Due date</span><strong>{dateText(row.dueDate)}</strong><small className={row.identificationVerified ? 'verified' : 'pawn-id-optional'}>{row.identificationVerified ? <><BadgeCheck size={11} /> ID verified</> : 'ID not provided'}</small></div>
-                <button className="icon-button" onClick={() => setSelectedPawn(row)} aria-label={`View ${row.pawnNo}`}><MoreHorizontal size={18} /></button>
+                <button className="icon-button mobile-contract-open" onClick={() => setSelectedPawn(row)} aria-label={`Open contract ${row.pawnNo}`}><ChevronRight size={18} /></button>
               </div>
             </article>
           ))}

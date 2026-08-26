@@ -546,7 +546,16 @@
   .pawn-management-mobile-list .mobile-contract-heading p small { max-width: 100%; }
   .pawn-management-mobile-list .mobile-contract-details { grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr) auto; gap: 8px; margin-top: 9px; padding: 10px; }
   .pawn-management-mobile-list .mobile-contract-details > div:nth-child(2) small { display: flex; align-items: center; gap: 4px; }
-  .pawn-management-mobile-list .mobile-contract-details .icon-button { width: 34px; height: 34px; }
+  .pawn-management-mobile-list .mobile-contract-details .mobile-contract-open {
+    width: 40px;
+    height: 40px;
+    border-color: color-mix(in srgb, var(--primary) 34%, var(--border));
+    border-radius: 11px;
+    color: var(--primary);
+    background: var(--primary-soft);
+  }
+  .pawn-management-mobile-list .mobile-contract-details .mobile-contract-open:active { transform: translateY(1px); }
+  .pawn-management-mobile-list .mobile-contract-details .mobile-contract-open:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
   .transaction-row { grid-template-columns: auto 1fr auto; }
   .transaction-row .status-badge, .transaction-row > strong { display: none; }
   .workflow-note { grid-template-columns: auto 1fr; align-items: start; }
