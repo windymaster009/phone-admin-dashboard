@@ -157,7 +157,7 @@ function Modal({ title, eyebrow, description, onClose, compact = false, confirma
   }, [onClose])
 
   return createPortal(
-    <div className="operation-modal-backdrop loan-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+    <div className="operation-modal-backdrop loan-modal-backdrop" role="presentation">
       <section className={`operation-modal loan-modal${compact ? ' operation-modal-compact' : ''}${confirmation ? ' loan-modal-confirmation' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
         <header className="operation-modal-header">
           <span className="operation-modal-icon"><Banknote size={21} /></span>
