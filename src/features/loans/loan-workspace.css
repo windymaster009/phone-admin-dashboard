@@ -775,7 +775,8 @@
 
   .loan-modal-backdrop {
     align-items: center;
-    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    /* Reserve room for mobile browser controls so the centred dialog feels visually centred. */
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(76px, calc(env(safe-area-inset-bottom) + 64px)) max(16px, env(safe-area-inset-left));
   }
 
   .loan-modal {
