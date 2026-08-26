@@ -57,7 +57,7 @@
 .service-card-footer > span { min-width: 0; display: grid; gap: 2px; color: var(--muted-2); font-size: .65rem; }
 .service-card-footer > span small { color: var(--muted-2); font-size: .58rem; }
 .service-card-footer strong { color: var(--text); font-size: .72rem; }
-.service-price-missing { display: inline-flex; align-items: center; gap: 5px; color: var(--orange) !important; font-size: .62rem; font-weight: 700; white-space: nowrap; }
+.service-card-footer > .service-price-missing { display: inline-flex; align-items: center; gap: 5px; color: var(--orange) !important; font-size: .62rem; font-weight: 700; white-space: nowrap; }
 .service-set-price { min-height: 30px; display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto; padding: 0 9px; border: 1px solid color-mix(in srgb, var(--primary) 36%, var(--border)); border-radius: 8px; outline: 2px solid transparent; outline-offset: 1px; color: var(--primary); background: var(--primary-soft); font-size: .62rem; font-weight: 800; white-space: nowrap; }
 .service-set-price:focus-visible { outline-color: var(--primary); }
 .service-set-price:active { background: var(--surface-hover); }
