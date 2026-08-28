@@ -838,7 +838,7 @@ function pawnOutstanding(pawn: Pawn) {
   return Math.max(0, (pawn.remainingPrincipal ?? pawn.principal) + (pawn.accruedInterest || 0) + (pawn.fees || 0))
 }
 
-function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; onClose: () => void; onOpenAll?: () => void; onAction?: (action: PawnAction, payload: Record<string, unknown>) => Promise<void> }) {
+function PawnDetailModal({ pawn, onClose, onOpenAll, onAction, onDelete, canDelete = false }: { pawn: Pawn; onClose: () => void; onOpenAll?: () => void; onAction?: (action: PawnAction, payload: Record<string, unknown>) => Promise<void>; onDelete?: () => Promise<void>; canDelete?: boolean }) {
   const [action, setAction] = useState<PawnAction | null>(null)
   const [amount, setAmount] = useState('')
   const [newDueDate, setNewDueDate] = useState('')
@@ -846,10 +846,14 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
   const [note, setNote] = useState('')
   const [actionError, setActionError] = useState('')
   const [actionBusy, setActionBusy] = useState(false)
+  const [deleteConfirmation, setDeleteConfirmation] = useState(false)
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const outstanding = pawnOutstanding(pawn)
   const pawnCurrency: PawnCurrency = pawn.currency === 'KHR' ? 'KHR' : 'USD'
   const currencyLabel = pawnCurrency === 'KHR' ? 'KHR' : '$'
   const isOpen = ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED'].includes(pawn.status)
+  const deleteEligible = isOpen && !pawn.amountPaid && !(pawn.renewals?.length)
   const remainingPrincipal = pawn.remainingPrincipal ?? pawn.principal
   const currentFee = pawn.feeModel === 'DAILY_SIMPLE' ? pawn.feeSummary?.accruedFee || 0 : pawn.accruedInterest || 0
   const duePaymentRaw = currentFee + (pawn.fees || 0)
@@ -945,15 +949,35 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
       setActionBusy(false)
     }
   }
+
+  async function deletePawn() {
+    if (!onDelete) return
+    setDeleteBusy(true)
+    setDeleteError('')
+    try {
+      await onDelete()
+      setDeleteConfirmation(false)
+      onClose()
+    } catch (reason) {
+      setDeleteError(reason instanceof Error ? reason.message : 'Unable to delete this pawn contract')
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
+
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') {
+        if (deleteConfirmation) setDeleteConfirmation(false)
+        else onClose()
+      }
     }
     document.addEventListener('keydown', closeOnEscape)
     return () => document.removeEventListener('keydown', closeOnEscape)
-  }, [onClose])
+  }, [deleteConfirmation, onClose])
 
   return (
+    <>
     <div className="modal-backdrop" role="presentation">
       <section className="detail-modal pawn-detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="pawn-detail-title">
         <header className="detail-modal-header">
@@ -1054,12 +1078,32 @@ function PawnDetailModal({ pawn, onClose, onOpenAll, onAction }: { pawn: Pawn; o
           <div className="pawn-footer-actions">
             <button type="button" className="secondary-button pawn-label-print" onClick={printPawnProductLabel} title="Print the linked collateral inventory label"><Printer size={15} /> Print label</button>
             {onAction && isOpen && <><button className="secondary-button" onClick={() => openAction('payment')} disabled={duePayment <= 0} title={duePayment <= 0 ? 'No fee is due today' : `Pay ${pawnMoney(duePayment, pawnCurrency)} due today`}>Due payment</button><button className="secondary-button" onClick={() => openAction('renew')} disabled={pawn.feeModel === 'DAILY_SIMPLE' && duePayment > 0} title={pawn.feeModel === 'DAILY_SIMPLE' && duePayment > 0 ? `Pay ${pawnMoney(duePayment, pawnCurrency)} due first` : 'Add more days to this pawn'}>Extend pawn</button><button className="primary-button" onClick={() => openAction('redeem')}>Redeem item</button></>}
+            {canDelete && onDelete && <button type="button" className="ghost-button danger-button pawn-delete-action" onClick={() => { setDeleteError(''); setDeleteConfirmation(true) }} disabled={!deleteEligible} title={deleteEligible ? 'Permanently delete this untouched pawn contract' : 'Only an untouched open pawn contract can be deleted'}><Trash2 size={15} /> Delete contract</button>}
             {onOpenAll && <button className="secondary-button" onClick={onOpenAll}>Open pawn management <ArrowUpRight size={15} /></button>}
             <button className="ghost-button" onClick={onClose}>Close</button>
           </div>
         </footer>}
       </section>
     </div>
+    {deleteConfirmation && <div className="modal-backdrop pawn-delete-backdrop" role="presentation">
+      <section className="detail-modal pawn-delete-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="pawn-delete-title">
+        <header className="detail-modal-header">
+          <div><span className="eyebrow">Permanent deletion</span><h3 id="pawn-delete-title">Delete this pawn?</h3><p>This cannot be undone.</p></div>
+          <button type="button" className="icon-button" onClick={() => setDeleteConfirmation(false)} disabled={deleteBusy} aria-label="Close delete confirmation"><X size={18} /></button>
+        </header>
+        <div className="pawn-delete-content">
+          <span className="pawn-delete-icon"><Trash2 size={22} /></span>
+          <div><strong>{pawn.pawnNo}</strong><p>{pawn.customer?.name || 'Unknown customer'} - {pawn.itemSnapshot.name}</p></div>
+          <p>The contract, its collateral item, and related receipts will be removed. The customer record will remain.</p>
+          {deleteError && <p className="pawn-delete-error" role="alert"><AlertTriangle size={16} /> {deleteError}</p>}
+        </div>
+        <footer className="detail-modal-footer pawn-delete-actions">
+          <button type="button" className="ghost-button" onClick={() => setDeleteConfirmation(false)} disabled={deleteBusy}>Keep contract</button>
+          <button type="button" className="danger-button" onClick={() => void deletePawn()} disabled={deleteBusy}>{deleteBusy ? 'Deleting...' : 'Delete permanently'}</button>
+        </footer>
+      </section>
+    </div>}
+    </>
   )
 }
 
@@ -1382,7 +1426,7 @@ function DashboardView({ goTo, user, onReady }: { goTo: (key: NavKey) => void; u
   )
 }
 
-function PawnView() {
+function PawnView({ user }: { user: SessionUser }) {
   const [pawns, setPawns] = useState<Pawn[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedPawn, setSelectedPawn] = useState<Pawn | null>(null)
@@ -1435,6 +1479,13 @@ function PawnView() {
         detail: { reference: updatedPawn.pawnNo, sourceSubId },
       }))
     }
+  }
+
+  async function deletePawn() {
+    if (!selectedPawn) return
+    const pawnToDelete = selectedPawn
+    await api<{ deleted: true; pawnNo: string }>(`/pawns/${pawnToDelete._id}`, { method: 'DELETE' })
+    setPawns((current) => current.filter((pawn) => pawn._id !== pawnToDelete._id))
   }
 
   const openPawns = pawns.filter((pawn) => ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED'].includes(pawn.status))
@@ -1510,7 +1561,7 @@ function PawnView() {
           {!loading && visiblePawns.length === 0 && <p className="mobile-contract-empty">No pawn contracts match these filters.</p>}
         </div>
       </article>
-      {selectedPawn && <PawnDetailModal pawn={selectedPawn} onClose={() => setSelectedPawn(null)} onAction={updatePawn} />}
+      {selectedPawn && <PawnDetailModal pawn={selectedPawn} onClose={() => setSelectedPawn(null)} onAction={updatePawn} canDelete={user.role === 'OWNER'} onDelete={deletePawn} />}
     </>
   )
 }
@@ -3166,6 +3217,7 @@ function CustomerReportModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
+    <>
     <div className={`modal-backdrop customer-report-backdrop ${activityReport ? 'is-full-report-open' : ''}`} role="presentation">
       <section className={`detail-modal surface-card customer-report-modal ${activityReport ? 'is-full-report' : ''}`} role="dialog" aria-modal="true" aria-labelledby="customer-report-title" onClick={(event) => event.stopPropagation()}>
         <header className="detail-modal-header">
@@ -3249,6 +3301,7 @@ function CustomerReportModal({ onClose }: { onClose: () => void }) {
         </div>
       </section>
     </div>
+    </>
   )
 }
 
@@ -4064,7 +4117,7 @@ function App({
   const renderView = () => {
     switch (active) {
       case 'dashboard': return <DashboardView goTo={changePage} user={user} onReady={() => setInitialViewReady(true)} />
-      case 'pawn': return <PawnView />
+      case 'pawn': return <PawnView user={user} />
       case 'trade': return <TradeView />
       case 'services': return <ServiceWorkspace />
       case 'inventory': return <InventoryView />

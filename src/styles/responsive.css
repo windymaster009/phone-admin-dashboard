@@ -577,6 +577,14 @@
     align-items: center;
     padding: max(12px, env(safe-area-inset-top, 0px)) 12px max(76px, calc(env(safe-area-inset-bottom, 0px) + 64px));
   }
+  .modal-backdrop:has(.pawn-delete-modal) {
+    align-items: center;
+    padding: max(12px, env(safe-area-inset-top, 0px)) 12px max(76px, calc(env(safe-area-inset-bottom, 0px) + 64px));
+  }
+  .pawn-delete-modal { width: min(100%, 430px); max-height: min(68dvh, 520px); }
+  .pawn-delete-content { padding: 16px; }
+  .pawn-delete-actions { display: grid; grid-template-columns: 1fr 1.15fr; padding: 12px 16px; }
+  .pawn-delete-actions > button { width: 100%; justify-content: center; }
   .pawn-detail-modal {
     width: min(100%, 500px);
     height: min(84dvh, 730px);

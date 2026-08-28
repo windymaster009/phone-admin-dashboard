@@ -22,6 +22,8 @@ import {
   usdKhrFromPayway,
 } from './integrations/payway/index.js'
 import { ActivityLog, Customer, InventoryItem, Pawn, PaywayIntent, Supplier, Trade, User } from './models.js'
+import { Receipt } from './receiptModels.js'
+import { CustomerDocument } from './documentModels.js'
 import { AndroidPairing, AuthSession } from './authSessionModels.js'
 import { TwoFactorChallenge, TwoFactorCredential, TwoFactorSetup } from './twoFactorModels.js'
 import { Loan } from './loanModels.js'
@@ -2572,6 +2574,59 @@ router.post('/pawns/:id/forfeit', requireAuth, allowRoles('OWNER', 'MANAGER'), a
   })
   await writeActivity(req, { action: 'FORFEIT', entity: 'PAWN', entityId: pawn._id })
   res.json({ pawn: pawnResponse(pawn) })
+}))
+
+router.delete('/pawns/:id', requireAuth, allowRoles('OWNER'), asyncRoute(async (req, res) => {
+  const pawn = await Pawn.findById(req.params.id)
+  if (!pawn) throw requestError(404, 'Pawn contract not found')
+
+  const isOpen = openPawnStatuses.includes(pawn.status)
+  const hasPayments = (pawn.payments?.length || 0) > 0 || Number(pawn.amountPaid || 0) > 0
+  const hasExtensions = (pawn.renewals?.length || 0) > 0
+  if (!isOpen || hasPayments || hasExtensions) {
+    throw requestError(409, 'Only an untouched open pawn contract can be deleted. Contracts with payments, extensions, or a closed status must remain in the record.')
+  }
+
+  const documentCount = await CustomerDocument.countDocuments({ relatedType: 'PAWN', relatedId: pawn._id })
+  if (documentCount > 0) {
+    throw requestError(409, 'Delete the secure documents linked to this pawn before deleting the contract.')
+  }
+
+  const pawnId = pawn._id
+  const inventoryItemId = pawn.inventoryItem
+  const auditDetails = {
+    pawnNo: pawn.pawnNo,
+    customer: pawn.customer,
+    collateral: pawn.itemSnapshot?.name,
+  }
+  const removeRecords = async (session) => {
+    const options = session ? { session } : undefined
+    await Receipt.deleteMany({ sourceType: 'PAWN', sourceId: pawnId }, options)
+    if (inventoryItemId) await InventoryItem.deleteOne({ _id: inventoryItemId }, options)
+    await Pawn.deleteOne({ _id: pawnId }, options)
+  }
+
+  const session = await mongoose.startSession()
+  try {
+    try {
+      await session.withTransaction(() => removeRecords(session))
+    } catch (error) {
+      const unsupported = /transaction numbers are only allowed|does not support transactions|transaction is not supported|replica set/i.test(error?.message || '')
+      if (!unsupported) throw error
+      await removeRecords()
+    }
+  } finally {
+    await session.endSession()
+  }
+
+  await writeActivity(req, {
+    action: 'DELETE',
+    entity: 'PAWN',
+    entityId: pawnId,
+    details: auditDetails,
+  })
+
+  res.json({ deleted: true, pawnNo: pawn.pawnNo })
 }))
 
 async function createMultiDevicePurchase(req, res) {

@@ -709,6 +709,18 @@ td strong { color: var(--text); }
 .pawn-detail-modal .detail-modal-footer { position: relative; z-index: 2; flex: 0 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px 14px; background: var(--surface-solid); box-shadow: 0 -12px 30px rgba(3,7,18,.2); }
 .pawn-detail-modal .detail-modal-footer .receipt-detail-action { grid-column: 1; justify-self: start; }
 .pawn-footer-actions { grid-column: 2; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 9px; }
+.pawn-delete-action { color: var(--rose); }
+.pawn-delete-backdrop { z-index: 90; }
+.pawn-delete-modal { width: min(460px, 100%); max-height: min(480px, calc(100vh - 48px)); overflow: hidden; }
+.pawn-delete-content { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; padding: 22px; }
+.pawn-delete-icon { width: 42px; height: 42px; display: grid; place-items: center; grid-row: span 2; border-radius: 12px; color: var(--rose); background: color-mix(in srgb, var(--rose) 13%, transparent); }
+.pawn-delete-content > div { min-width: 0; display: grid; align-content: center; gap: 4px; }
+.pawn-delete-content strong { color: var(--text); font: 800 15px Manrope, sans-serif; overflow-wrap: anywhere; }
+.pawn-delete-content p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.pawn-delete-content > p { grid-column: 1 / -1; padding: 12px; border: 1px solid color-mix(in srgb, var(--rose) 26%, var(--border)); border-radius: 11px; background: color-mix(in srgb, var(--rose) 7%, var(--bg-soft)); }
+.pawn-delete-error { display: flex; align-items: flex-start; gap: 8px; color: var(--rose) !important; }
+.pawn-delete-error svg { flex: 0 0 auto; margin-top: 1px; }
+.pawn-delete-actions { display: flex; justify-content: flex-end; gap: 10px; padding: 14px 22px; border-top: 1px solid var(--border); }
 .pawn-balance-summary { margin: 18px; padding: 18px; border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border)); border-radius: 15px; background: linear-gradient(135deg, var(--primary-soft), var(--bg-soft)); }
 .pawn-balance-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
 .pawn-balance-heading h4,
