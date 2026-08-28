@@ -12,6 +12,7 @@ import {
   MessageCircle,
   MonitorSmartphone,
   PackageCheck,
+  Pencil,
   ReceiptText,
   RefreshCcw,
   Search,
@@ -340,7 +341,7 @@ export default function ServiceWorkspace() {
                 <span><small>{detail.label}</small><strong>{service.name}</strong><p>{service.description}</p></span>
               </button>
               <footer className={`service-card-footer ${unpriced ? 'is-unpriced' : 'is-priced'}`}>
-                {unpriced ? <><span className="service-price-missing"><AlertTriangle size={13} /> Price needed</span><button type="button" className="service-set-price" onClick={() => choose(service)}>{canPrice ? 'Set price' : 'Needs price'} <ArrowRight size={13} /></button></> : <><span><small>Standard price</small><strong>{money(service.price, service.currency)}</strong></span><button type="button" className="service-record-button" onClick={() => choose(service)}>Charge <ArrowRight size={13} /></button></>}
+                {unpriced ? <><span className="service-price-missing"><AlertTriangle size={13} /> Price needed</span><button type="button" className="service-set-price" onClick={() => choose(service)}>{canPrice ? 'Set price' : 'Needs price'} <ArrowRight size={13} /></button></> : <><span><small>Standard price</small><strong>{money(service.price, service.currency)}</strong></span><div className="service-priced-actions">{canPrice && <button type="button" className="service-change-price" onClick={() => openPricing(service)} aria-label={`Change price for ${service.name}`}><Pencil size={13} /><span>Change price</span></button>}<button type="button" className="service-record-button" onClick={() => choose(service)}>Charge <ArrowRight size={13} /></button></div></>}
               </footer>
             </article>
           })}

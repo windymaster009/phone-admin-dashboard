@@ -66,6 +66,10 @@
 .service-record-button:focus-visible { outline-color: var(--primary); }
 .service-record-button:active { background: var(--surface-hover); }
 .service-record-button:disabled { cursor: not-allowed; opacity: .55; }
+.service-priced-actions { display: inline-flex; align-items: center; justify-content: flex-end; gap: 5px; min-width: 0; }
+.service-change-price { min-height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 4px; flex: 0 0 auto; padding-inline: 8px; border: 1px solid var(--border-strong); border-radius: 8px; outline: 2px solid transparent; outline-offset: 1px; color: var(--muted); background: transparent; font-size: .62rem; font-weight: 800; white-space: nowrap; }
+.service-change-price:focus-visible { outline-color: var(--primary); }
+.service-change-price:active { color: var(--text); background: var(--surface-hover); }
 
 .service-charge-panel { width: min(680px, 100%); max-height: min(760px, calc(100dvh - 36px)); display: flex; flex-direction: column; overflow: hidden; }
 .service-charge-panel > header,
@@ -185,7 +189,10 @@
   .service-card-footer { min-height: 38px; padding: 5px 8px; }
   .service-card-footer strong { font-size: .68rem; }
   .service-set-price,
-  .service-record-button { min-height: 34px; }
+  .service-record-button,
+  .service-change-price { min-height: 34px; }
+  .service-change-price { width: 34px; padding: 0; }
+  .service-change-price span { display: none; }
   .service-charge-panel { width: 100%; max-height: min(720px, calc(100dvh - max(28px, env(safe-area-inset-top)) - max(28px, env(safe-area-inset-bottom)))); }
   .service-charge-backdrop { align-items: start; padding-top: max(16px, env(safe-area-inset-top)); }
   .service-charge-panel > header { padding: 13px; }
@@ -227,6 +234,7 @@
   .service-card-main:hover { background: var(--surface-hover); }
   .service-set-price:hover { border-color: var(--primary); }
   .service-record-button:hover { border-color: var(--primary); background: var(--surface-hover); }
+  .service-change-price:hover { color: var(--primary); border-color: color-mix(in srgb, var(--primary) 50%, var(--border)); background: var(--primary-soft); }
 }
 
 @media (max-width: 760px) {
