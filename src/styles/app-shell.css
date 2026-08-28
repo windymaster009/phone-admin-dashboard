@@ -706,10 +706,11 @@ td strong { color: var(--text); }
 .pawn-detail-body { min-height: 0; flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
 .pawn-detail-body::-webkit-scrollbar { width: 8px; }
 .pawn-detail-body::-webkit-scrollbar-thumb { border: 2px solid transparent; border-radius: 999px; background: var(--border-strong); background-clip: padding-box; }
-.pawn-detail-modal .detail-modal-footer { position: relative; z-index: 2; flex: 0 0 auto; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px 14px; background: var(--surface-solid); box-shadow: 0 -12px 30px rgba(3,7,18,.2); }
+.pawn-detail-modal .detail-modal-footer { position: relative; z-index: 2; flex: 0 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); align-items: center; gap: 10px; padding: 14px 20px; background: var(--surface-solid); box-shadow: 0 -12px 30px rgba(3,7,18,.2); }
 .pawn-detail-modal .detail-modal-footer .receipt-detail-action { grid-column: 1; justify-self: start; }
-.pawn-footer-actions { grid-column: 2; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 9px; }
-.pawn-delete-action { color: var(--rose); }
+.pawn-footer-actions { grid-column: 1; width: 100%; display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: 9px; }
+.pawn-delete-action { color: var(--rose); border-color: color-mix(in srgb, var(--rose) 52%, var(--border)); background: color-mix(in srgb, var(--rose) 8%, transparent); }
+.pawn-delete-action:not(:disabled):hover { color: #fff; border-color: var(--rose); background: color-mix(in srgb, var(--rose) 26%, var(--bg-soft)); }
 .pawn-delete-backdrop { z-index: 90; }
 .pawn-delete-modal { width: min(460px, 100%); max-height: min(480px, calc(100vh - 48px)); overflow: hidden; }
 .pawn-delete-content { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; padding: 22px; }
