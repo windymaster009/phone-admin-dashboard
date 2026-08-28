@@ -119,7 +119,14 @@ app.use((req, res, next) => {
   res.setHeader('X-Request-ID', req.id)
   next()
 })
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }))
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  contentSecurityPolicy: {
+    directives: {
+      imgSrc: ["'self'", 'data:', 'https://ik.imagekit.io'],
+    },
+  },
+}))
 app.use(cors({
   origin(origin, callback) {
     const allowed = (process.env.CLIENT_ORIGIN || 'http://localhost:5173')

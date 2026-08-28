@@ -77,6 +77,7 @@ const inventoryItemSchema = new Schema(
     compatibleModels: [String],
     oemQuality: { type: String, trim: true },
     imageUrl: { type: String, trim: true },
+    imagekitFileId: { type: String, trim: true, select: false },
     quantity: { type: Number, min: 0, default: 1 },
     reorderLevel: { type: Number, min: 0, default: 2 },
     buyPrice: { type: Number, min: 0, default: 0 },

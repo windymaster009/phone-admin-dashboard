@@ -1,10 +1,8 @@
 import { randomUUID, timingSafeEqual } from 'node:crypto'
-import fs from 'node:fs/promises'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import mongoose from 'mongoose'
+import sharp from 'sharp'
 import {
   allowRoles,
   clearSessionCookie,
@@ -46,8 +44,6 @@ import {
 } from './pawnFeeService.js'
 
 const router = Router()
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const inventoryUploadDir = path.resolve(__dirname, '../uploads/inventory')
 const dummyPasswordHash = bcrypt.hashSync('phoneflow-invalid-password', 12)
 const overviewTimeZone = 'Asia/Phnom_Penh'
 const cambodiaOffsetMs = 7 * 60 * 60 * 1000
@@ -323,6 +319,64 @@ function pawnAmountToUsd(amount, currency, exchangeRate) {
 
 function saleCurrencyCode(value) {
   return String(value || '').toUpperCase() === 'KHR' ? 'KHR' : 'USD'
+}
+
+const imageKitUploadUrl = 'https://upload.imagekit.io/api/v1/files/upload'
+const imageKitFilesUrl = 'https://api.imagekit.io/v1/files'
+
+function imageKitConfiguration() {
+  const privateKey = clean(process.env.IMAGEKIT_PRIVATE_KEY)
+  if (!privateKey) throw requestError(503, 'ImageKit is not configured. Add IMAGEKIT_PRIVATE_KEY to the server environment.')
+  return {
+    privateKey,
+    folder: clean(process.env.IMAGEKIT_FOLDER) || '/phoneflow/inventory',
+  }
+}
+
+function imageKitAuthorization(privateKey) {
+  return `Basic ${Buffer.from(`${privateKey}:`).toString('base64')}`
+}
+
+async function imageKitError(response, fallback) {
+  const body = await response.json().catch(() => null)
+  return body?.message || body?.error?.message || body?.error || fallback
+}
+
+async function uploadInventoryImage(buffer, item) {
+  const { privateKey, folder } = imageKitConfiguration()
+  const image = await sharp(buffer)
+    .rotate()
+    .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
+    .jpeg({ quality: 86, mozjpeg: true })
+    .toBuffer()
+  const safeItemName = clean(item.sku || item._id)?.replace(/[^a-zA-Z0-9_-]/g, '_') || 'inventory-item'
+  const filename = `${safeItemName}-${randomUUID()}.jpg`
+  const form = new FormData()
+  form.set('file', new Blob([image], { type: 'image/jpeg' }), filename)
+  form.set('fileName', filename)
+  form.set('folder', folder)
+  form.set('useUniqueFileName', 'false')
+  form.set('tags', `phoneflow,inventory,${item._id}`)
+
+  const response = await fetch(imageKitUploadUrl, {
+    method: 'POST',
+    headers: { Authorization: imageKitAuthorization(privateKey) },
+    body: form,
+  })
+  if (!response.ok) throw requestError(502, await imageKitError(response, 'ImageKit could not store the product photo'))
+  const uploaded = await response.json()
+  if (!uploaded?.url || !uploaded?.fileId) throw requestError(502, 'ImageKit returned an incomplete upload response')
+  return { imageUrl: uploaded.url, imagekitFileId: uploaded.fileId }
+}
+
+async function deleteImageKitImage(fileId) {
+  if (!fileId) return
+  const { privateKey } = imageKitConfiguration()
+  const response = await fetch(`${imageKitFilesUrl}/${encodeURIComponent(fileId)}`, {
+    method: 'DELETE',
+    headers: { Authorization: imageKitAuthorization(privateKey) },
+  })
+  if (!response.ok && response.status !== 404) throw requestError(502, await imageKitError(response, 'ImageKit could not delete the product photo'))
 }
 
 function saleExchangeRate(currency, value) {
@@ -2052,11 +2106,10 @@ router.post('/inventory', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), 
     createdBy: req.user._id,
   })
   if (rawImageData) {
-    const { buffer, extension } = decodeImageDataUrl(rawImageData)
-    await fs.mkdir(inventoryUploadDir, { recursive: true })
-    const filename = `${item._id}-${randomUUID()}.${extension}`
-    await fs.writeFile(path.join(inventoryUploadDir, filename), buffer)
-    item.imageUrl = `/uploads/inventory/${filename}`
+    const { buffer } = decodeImageDataUrl(rawImageData)
+    const uploadedImage = await uploadInventoryImage(buffer, item)
+    item.imageUrl = uploadedImage.imageUrl
+    item.imagekitFileId = uploadedImage.imagekitFileId
     await item.save()
   }
   await writeActivity(req, { action: 'CREATE', entity: 'INVENTORY', entityId: item._id, details: { sku: item.sku } })
@@ -2204,24 +2257,25 @@ router.post('/inventory/:id/adjust', requireAuth, allowRoles('OWNER', 'MANAGER',
 }))
 
 router.post('/inventory/:id/photo', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
-  const current = await InventoryItem.findById(req.params.id)
+  const current = await InventoryItem.findById(req.params.id).select('+imagekitFileId')
   if (!current) return res.status(404).json({ message: 'Inventory item not found' })
 
-  const { buffer, extension } = decodeImageDataUrl(req.body.imageData)
-  await fs.mkdir(inventoryUploadDir, { recursive: true })
-  const filename = `${current._id}-${randomUUID()}.${extension}`
-  const filepath = path.join(inventoryUploadDir, filename)
-  await fs.writeFile(filepath, buffer)
-
-  const imageUrl = `/uploads/inventory/${filename}`
-  const item = await InventoryItem.findByIdAndUpdate(current._id, { imageUrl }, { new: true, runValidators: true })
-  await writeActivity(req, { action: 'UPDATE', entity: 'INVENTORY', entityId: item._id, details: { imageUrl } })
+  const { buffer } = decodeImageDataUrl(req.body.imageData)
+  const uploadedImage = await uploadInventoryImage(buffer, current)
+  const previousImageFileId = current.imagekitFileId
+  const item = await InventoryItem.findByIdAndUpdate(current._id, uploadedImage, { new: true, runValidators: true })
+  if (previousImageFileId && previousImageFileId !== uploadedImage.imagekitFileId) {
+    await deleteImageKitImage(previousImageFileId)
+  }
+  await writeActivity(req, { action: 'UPDATE', entity: 'INVENTORY', entityId: item._id, details: { imageUrl: uploadedImage.imageUrl } })
   res.json({ item })
 }))
 
 router.delete('/inventory/:id/photo', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
-  const item = await InventoryItem.findByIdAndUpdate(req.params.id, { $unset: { imageUrl: '' } }, { new: true, runValidators: true })
-  if (!item) return res.status(404).json({ message: 'Inventory item not found' })
+  const current = await InventoryItem.findById(req.params.id).select('+imagekitFileId')
+  if (!current) return res.status(404).json({ message: 'Inventory item not found' })
+  await deleteImageKitImage(current.imagekitFileId)
+  const item = await InventoryItem.findByIdAndUpdate(current._id, { $unset: { imageUrl: '', imagekitFileId: '' } }, { new: true, runValidators: true })
   await writeActivity(req, { action: 'UPDATE', entity: 'INVENTORY', entityId: item._id, details: { imageUrl: null } })
   res.json({ item })
 }))
