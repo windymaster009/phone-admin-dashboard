@@ -635,10 +635,6 @@
 .refund-decision {
   display: grid;
   gap: var(--space-refund-md);
-  padding: var(--space-refund-md);
-  border: var(--rule-refund-strong);
-  border-radius: var(--radius-refund-md);
-  background: var(--color-refund-input);
 }
 
 .refund-decision-header {
@@ -808,8 +804,7 @@
 }
 
 .refund-form input,
-.refund-form select,
-.refund-form textarea {
+.refund-form select {
   width: 100%;
   border: var(--rule-refund-strong);
   border-radius: var(--radius-refund-sm);
@@ -827,50 +822,46 @@
   padding-inline: var(--space-refund-sm);
 }
 
-.refund-form textarea {
-  min-height: 5rem;
-  padding: var(--space-refund-sm);
-  resize: vertical;
-}
-
-.refund-form input:hover,
-.refund-form select:hover,
-.refund-form textarea:hover {
-  border-color: var(--color-refund-muted);
+@media (hover: hover) and (pointer: fine) {
+  .refund-form input:hover,
+  .refund-form select:hover {
+    border-color: var(--color-refund-muted);
+  }
 }
 
 .refund-form input:focus-visible,
-.refund-form select:focus-visible,
-.refund-form textarea:focus-visible {
+.refund-form select:focus-visible {
   border-color: var(--color-refund-accent);
   outline-color: var(--color-refund-accent);
 }
 
 .refund-form input:active,
-.refund-form select:active,
-.refund-form textarea:active {
+.refund-form select:active {
   border-color: var(--color-refund-accent);
 }
 
 .refund-form input[aria-invalid='true'],
-.refund-form select[aria-invalid='true'],
-.refund-form textarea[aria-invalid='true'] {
+.refund-form select[aria-invalid='true'] {
   border-color: var(--color-refund-danger);
 }
 
 .refund-form input:disabled,
-.refund-form select:disabled,
-.refund-form textarea:disabled {
+.refund-form select:disabled {
   cursor: not-allowed;
-  opacity: 0.5;
+  opacity: 0.55;
 }
 
 .refund-form-fields label > small,
 .refund-confirm > small {
+  min-height: 1lh;
   color: var(--color-refund-muted);
   font-size: var(--text-refund-xs);
   font-weight: 500;
   line-height: 1.5;
+}
+
+.refund-form-fields input[aria-invalid='true'] + small {
+  color: var(--color-refund-danger);
 }
 
 .refund-confirm {
