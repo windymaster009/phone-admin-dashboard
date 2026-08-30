@@ -560,8 +560,11 @@ async function buildSaleQuote(lines, session, role, currency = 'USD', exchangeRa
     }
     const { unitPrice: savedUnitPrice, minimumUnitPrice } = salePricing(item, role, currency, exchangeRate)
     const tolerance = currency === 'KHR' ? 0 : 0.001
+    const requestedPriceDiffers = line.unitPrice !== undefined
+      && Math.abs(Number(line.unitPrice) - savedUnitPrice) > tolerance
+    const manualPriceRequested = line.manualUnitPrice === true || (role === 'OWNER' && requestedPriceDiffers)
     let unitPrice = savedUnitPrice
-    if (line.manualUnitPrice === true) {
+    if (manualPriceRequested) {
       if (role !== 'OWNER') throw requestError(403, 'Only the owner can enter a manual selling price')
       unitPrice = saleCurrencyAmount(line.unitPrice, currency, 'Manual selling price', false)
       if (unitPrice + tolerance < minimumUnitPrice) {
@@ -570,7 +573,7 @@ async function buildSaleQuote(lines, session, role, currency = 'USD', exchangeRa
       }
     } else {
       if (minimumUnitPrice > savedUnitPrice) throw requestError(409, `${item.name} has an invalid minimum selling price`)
-      if (line.unitPrice !== undefined && Math.abs(Number(line.unitPrice) - savedUnitPrice) > tolerance) {
+      if (requestedPriceDiffers) {
         throw requestError(409, `${item.name} has a new selling price. Refresh and try again`)
       }
     }
@@ -3070,14 +3073,17 @@ router.post('/payway/khqr', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER
   }
   if (!Number.isInteger(quantity) || quantity < 1) throw requestError(400, 'Quantity must be a whole number greater than zero')
   const { unitPrice: savedUnitPrice, minimumUnitPrice } = salePricing(item, req.user.role)
+  const requestedPriceDiffers = rawUnitPrice !== undefined
+    && Math.abs(Number(rawUnitPrice) - savedUnitPrice) > 0.001
+  const manualPriceRequested = manualUnitPrice === true || (req.user.role === 'OWNER' && requestedPriceDiffers)
   let unitPrice = savedUnitPrice
-  if (manualUnitPrice === true) {
+  if (manualPriceRequested) {
     if (req.user.role !== 'OWNER') throw requestError(403, 'Only the owner can enter a manual selling price')
     unitPrice = saleCurrencyAmount(rawUnitPrice, 'USD', 'Manual selling price', false)
     if (unitPrice < minimumUnitPrice) throw requestError(400, `Manual selling price cannot be below $${minimumUnitPrice.toFixed(2)}`)
   } else {
     if (minimumUnitPrice > savedUnitPrice) throw requestError(409, `${item.name} has an invalid minimum selling price`)
-    if (rawUnitPrice !== undefined && Math.abs(Number(rawUnitPrice) - savedUnitPrice) > 0.001) {
+    if (requestedPriceDiffers) {
       throw requestError(409, 'The selling price changed. Refresh the product and try again')
     }
   }
@@ -3200,8 +3206,7 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
   const initialQuote = await buildSaleQuote(items, undefined, req.user.role, currency, exchangeRate)
   const verifiedDiscount = saleDiscount(discount, initialQuote.subtotal, initialQuote.minimumTotal, currency)
   const transactionTotal = roundSaleCurrency(initialQuote.subtotal - verifiedDiscount, currency)
-  const minimumSaleTotal = currency === 'KHR' ? 100 : 0.01
-  if (transactionTotal < minimumSaleTotal) throw requestError(400, `Sale total must be at least ${currency === 'KHR' ? '100 KHR' : '$0.01'}`)
+  if (transactionTotal <= 0) throw requestError(400, 'Discount must leave a sale total greater than zero')
   let paymentIntent
   if (paymentMethod === 'KHQR') {
     paymentIntent = await authorizedPaywayIntent(req, paywayTransactionId)

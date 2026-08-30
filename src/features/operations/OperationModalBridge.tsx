@@ -1300,7 +1300,9 @@ export default function OperationModalBridge() {
       return
     }
     const quantity = selected.category === 'PHONE' ? 1 : Number(saleQuantity || 1)
-    const unitPrice = inventorySalePrice(selected, saleCurrency, usdKhrRate)
+    const unitPrice = saleManualPriceEnabled
+      ? Number(saleManualPrice)
+      : inventorySalePrice(selected, saleCurrency, usdKhrRate)
     const discount = Number(saleDiscount || 0)
     const total = Math.max(0, quantity * unitPrice - discount)
     const configuredMinimum = inventorySalePrice(selected, saleCurrency, usdKhrRate, true)
