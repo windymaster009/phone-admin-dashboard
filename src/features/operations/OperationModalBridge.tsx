@@ -130,7 +130,7 @@ type CompletedStockAdjustment = {
 type SaleDraft = {
   type: 'SELL'
   customer?: string
-  items: Array<{ inventoryItem: string; name: string; quantity: number; unitPrice: number }>
+  items: Array<{ inventoryItem: string; name: string; quantity: number; unitPrice: number; manualUnitPrice?: boolean }>
   discount: number
   amountPaid: number
   paymentMethod: SalePaymentMethod
@@ -530,6 +530,8 @@ export default function OperationModalBridge() {
   const [saleCustomerId, setSaleCustomerId] = useState('')
   const [saleQuantity, setSaleQuantity] = useState('1')
   const [saleDiscount, setSaleDiscount] = useState('0')
+  const [saleManualPriceEnabled, setSaleManualPriceEnabled] = useState(false)
+  const [saleManualPrice, setSaleManualPrice] = useState('')
   const [saleWarrantyDays, setSaleWarrantyDays] = useState('')
   const [saleAmountPaid, setSaleAmountPaid] = useState('')
   const [saleNotes, setSaleNotes] = useState('')
@@ -674,6 +676,7 @@ export default function OperationModalBridge() {
   const purchasePaidInvalid = purchasePaid > purchaseTotal
     || (purchaseCurrency === 'KHR' && (!Number.isInteger(purchasePaid) || purchasePaid % 100 !== 0))
   const selectedSaleItem = inventory.find((item) => item._id === saleItemId)
+  const canManuallyPriceSale = getSessionUser()?.role === 'OWNER'
   const stockMatches = useMemo(() => {
     const search = stockSearch.trim().toLowerCase()
     return inventory.filter((item) => !search || [item.name, item.sku, item.barcode, item.imei1, item.brand, item.model]
@@ -702,7 +705,8 @@ export default function OperationModalBridge() {
         && Number(resultingStockQuantity) >= 0),
   )
   const effectiveSaleQuantity = selectedSaleItem?.category === 'PHONE' ? 1 : Math.max(1, Number(saleQuantity) || 1)
-  const saleUnitPrice = inventorySalePrice(selectedSaleItem, saleCurrency, usdKhrRate)
+  const savedSaleUnitPrice = inventorySalePrice(selectedSaleItem, saleCurrency, usdKhrRate)
+  const saleUnitPrice = saleManualPriceEnabled ? Number(saleManualPrice) : savedSaleUnitPrice
   const saleSubtotal = effectiveSaleQuantity * saleUnitPrice
   const configuredMinimumSalePrice = inventorySalePrice(selectedSaleItem, saleCurrency, usdKhrRate, true)
   const effectiveMinimumSalePrice = configuredMinimumSalePrice > 0
@@ -715,7 +719,8 @@ export default function OperationModalBridge() {
   const saleTotal = Math.max(0, saleSubtotal - saleDiscountAmount)
   const salePaidAmount = saleAmountPaid === '' ? saleTotal : Math.max(0, Number(saleAmountPaid) || 0)
   const saleBalance = Math.max(0, saleTotal - salePaidAmount)
-  const salePriceInvalid = Boolean(selectedSaleItem && saleUnitPrice <= 0)
+  const salePriceInvalid = Boolean(selectedSaleItem && (!Number.isFinite(saleUnitPrice) || saleUnitPrice <= 0
+    || (saleCurrency === 'KHR' && (!Number.isInteger(saleUnitPrice) || saleUnitPrice % 100 !== 0))))
   const saleStockPricingInvalid = configuredMinimumSalePrice > saleUnitPrice
   const saleDiscountInvalid = saleDiscountAmount > saleMaximumDiscount
     || (saleCurrency === 'KHR' && (!Number.isInteger(saleDiscountAmount) || saleDiscountAmount % 100 !== 0))
@@ -741,8 +746,10 @@ export default function OperationModalBridge() {
       ? 'Loading stock...'
       : !saleItemId
         ? 'Select a product first'
-        : salePriceInvalid || saleStockPricingInvalid
-          ? 'Complete sale'
+        : salePriceInvalid
+          ? 'Enter a valid price'
+          : saleStockPricingInvalid
+            ? 'Price is below minimum'
             : saleDiscountInvalid
               ? 'Reduce discount'
               : salePaidInvalid
@@ -945,6 +952,8 @@ export default function OperationModalBridge() {
     setSaleCustomerId('')
     setSaleQuantity('1')
     setSaleDiscount('0')
+    setSaleManualPriceEnabled(false)
+    setSaleManualPrice('')
     setSaleWarrantyDays('')
     setSaleAmountPaid('')
     setSaleNotes('')
@@ -1093,6 +1102,8 @@ export default function OperationModalBridge() {
     setSaleItemId(scannedItem._id)
     setSaleCurrency(scannedItem.pricingCurrency === 'KHR' ? 'KHR' : 'USD')
     setSaleDiscount('0')
+    setSaleManualPriceEnabled(false)
+    setSaleManualPrice('')
     setSaleWarrantyDays('')
     setSaleAmountPaid('')
     setError('')
@@ -1323,7 +1334,7 @@ export default function OperationModalBridge() {
     const payload: SaleDraft = {
       type: 'SELL' as const,
       customer: saleCustomerId || undefined,
-      items: [{ inventoryItem: selected._id, name: selected.name, quantity, unitPrice }],
+      items: [{ inventoryItem: selected._id, name: selected.name, quantity, unitPrice, manualUnitPrice: saleManualPriceEnabled || undefined }],
       discount,
       amountPaid,
       paymentMethod: salePaymentMethod,
@@ -1343,6 +1354,7 @@ export default function OperationModalBridge() {
             customer: saleCustomerId || undefined,
             quantity,
             unitPrice,
+            manualUnitPrice: saleManualPriceEnabled || undefined,
             discount,
           }),
         })
@@ -1969,6 +1981,8 @@ export default function OperationModalBridge() {
             setSalePaymentMethod('CASH')
             setSaleQuantity('1')
             setSaleDiscount('0')
+            setSaleManualPriceEnabled(false)
+            setSaleManualPrice('')
             setSaleWarrantyDays('')
             setSaleAmountPaid('')
           }}><option value="" disabled>{saleInventoryLoading ? 'Loading available stock...' : inventory.length === 0 ? 'No stock available to sell' : 'Select available stock'}</option>{inventory.map((item) => <option key={item._id} value={item._id}>{item.name}{item.imei1 ? ` — ${item.imei1}` : ''} — Qty {item.quantity} — {inventoryNativeSalePriceText(item)}</option>)}</select>{!saleInventoryLoading && inventory.length === 0 && <small>Add an in-stock product before creating a sale.</small>}</label>
@@ -1976,16 +1990,18 @@ export default function OperationModalBridge() {
             setSaleCurrency(event.target.value as SaleCurrency)
             setSalePaymentMethod('CASH')
             setSaleDiscount('0')
+            setSaleManualPriceEnabled(false)
+            setSaleManualPrice('')
             setSaleAmountPaid('')
           }}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Cambodian Riel</option></select><small>1 USD = {riel.format(usdKhrRate)} KHR</small></label>
           <label>Quantity<input type="number" min="1" max={selectedSaleItem?.quantity} value={effectiveSaleQuantity} disabled={!saleItemId || selectedSaleItem?.category === 'PHONE'} onChange={(event) => { setSaleQuantity(event.target.value); setSaleDiscount('0'); setSaleAmountPaid('') }} /></label>
-          <div className={`sale-price-display${salePriceInvalid || saleStockPricingInvalid ? ' needs-price' : ''}`} role="group" aria-label={`Selling price in ${saleCurrency}`}>
-            <span>Selling price ({saleCurrency})</span>
-            <strong>{selectedSaleItem ? saleAmountText(saleUnitPrice, saleCurrency) : 'Select a product'}</strong>
+          <div className={`sale-price-display${salePriceInvalid || saleStockPricingInvalid ? ' needs-price' : ''}${saleManualPriceEnabled ? ' manual-price' : ''}`} role="group" aria-label={`Selling price in ${saleCurrency}`}>
+            <div className="sale-price-heading"><span>Selling price ({saleCurrency})</span>{canManuallyPriceSale && selectedSaleItem && <button type="button" className="sale-price-mode-button" aria-pressed={saleManualPriceEnabled} onClick={() => { const next = !saleManualPriceEnabled; setSaleManualPriceEnabled(next); setSaleManualPrice(next ? String(savedSaleUnitPrice) : ''); setSaleDiscount('0'); setSaleAmountPaid('') }}>{saleManualPriceEnabled ? 'Use saved price' : 'Enter manually'}</button>}</div>
+            {saleManualPriceEnabled ? <MoneyInput required currency={saleCurrency} minimum={configuredMinimumSalePrice > 0 ? configuredMinimumSalePrice : 0} value={saleManualPrice} onValueChange={(value) => { setSaleManualPrice(value); setSaleDiscount('0'); setSaleAmountPaid('') }} placeholder={saleCurrency === 'KHR' ? '0' : '0.00'} /> : <strong>{selectedSaleItem ? saleAmountText(saleUnitPrice, saleCurrency) : 'Select a product'}</strong>}
             {selectedSaleItem
               ? salePriceInvalid || saleStockPricingInvalid
                 ? <button type="button" className="sale-price-configure" onClick={openSelectedSaleItemPricing}><Banknote size={13} aria-hidden="true" />{saleStockPricingInvalid ? 'Fix price' : 'Set price'}</button>
-                : <small>Configured in Stock Information</small>
+                : <small>{saleManualPriceEnabled ? `Manual price for this sale only${configuredMinimumSalePrice > 0 ? ` · Minimum ${saleAmountText(configuredMinimumSalePrice, saleCurrency)}` : ''}` : 'Configured in Stock Information'}</small>
               : <small>Choose inventory first</small>}
           </div>
           <label className={saleDiscountInvalid ? 'field-invalid' : ''}>Discount ({saleCurrency})<MoneyInput currency={saleCurrency} minimum={0} maximum={saleMaximumDiscount} value={saleDiscount} disabled={!saleItemId} onValueChange={setSaleDiscount} placeholder={saleCurrency === 'KHR' ? '0' : '0.00'} />{selectedSaleItem && <small>{saleCurrency === 'KHR' && saleDiscountAmount % 100 !== 0 ? 'Use a whole KHR amount in increments of 100' : `${saleDiscountInvalid ? 'Maximum discount is' : 'Maximum allowed:'} ${saleAmountText(saleMaximumDiscount, saleCurrency)}`}</small>}</label>

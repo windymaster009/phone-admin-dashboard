@@ -523,9 +523,6 @@ function salePricing(item, role, currency = 'USD', exchangeRate = 1) {
     : role === 'CASHIER'
       ? unitPrice
       : 0
-  if (minimumUnitPrice > unitPrice) {
-    throw requestError(409, `${item.name} has an invalid minimum selling price`)
-  }
   return { unitPrice, minimumUnitPrice, normalizedUnitPrice }
 }
 
@@ -561,11 +558,25 @@ async function buildSaleQuote(lines, session, role, currency = 'USD', exchangeRa
     if (!item || item.status !== 'IN_STOCK' || item.quantity < quantity) {
       throw requestError(409, `${line.name || 'Item'} does not have enough available stock`)
     }
-    const { unitPrice, minimumUnitPrice, normalizedUnitPrice } = salePricing(item, role, currency, exchangeRate)
+    const { unitPrice: savedUnitPrice, minimumUnitPrice } = salePricing(item, role, currency, exchangeRate)
     const tolerance = currency === 'KHR' ? 0 : 0.001
-    if (line.unitPrice !== undefined && Math.abs(Number(line.unitPrice) - unitPrice) > tolerance) {
-      throw requestError(409, `${item.name} has a new selling price. Refresh and try again`)
+    let unitPrice = savedUnitPrice
+    if (line.manualUnitPrice === true) {
+      if (role !== 'OWNER') throw requestError(403, 'Only the owner can enter a manual selling price')
+      unitPrice = saleCurrencyAmount(line.unitPrice, currency, 'Manual selling price', false)
+      if (unitPrice + tolerance < minimumUnitPrice) {
+        const minimumText = currency === 'KHR' ? `${minimumUnitPrice.toLocaleString()} KHR` : `$${minimumUnitPrice.toFixed(2)}`
+        throw requestError(400, `Manual selling price cannot be below ${minimumText}`)
+      }
+    } else {
+      if (minimumUnitPrice > savedUnitPrice) throw requestError(409, `${item.name} has an invalid minimum selling price`)
+      if (line.unitPrice !== undefined && Math.abs(Number(line.unitPrice) - savedUnitPrice) > tolerance) {
+        throw requestError(409, `${item.name} has a new selling price. Refresh and try again`)
+      }
     }
+    const normalizedUnitPrice = currency === 'KHR'
+      ? saleAmountToUsd(unitPrice, currency, exchangeRate)
+      : unitPrice
     subtotal = roundSaleCurrency(subtotal + quantity * unitPrice, currency)
     minimumTotal = roundSaleCurrency(minimumTotal + quantity * minimumUnitPrice, currency)
     inventoryUpdates.push({ item, quantity })
@@ -3048,6 +3059,7 @@ router.post('/payway/khqr', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER
     customer,
     quantity: rawQuantity = 1,
     unitPrice: rawUnitPrice,
+    manualUnitPrice = false,
     discount: rawDiscount = 0,
   } = req.body
   const item = await InventoryItem.findById(inventoryItem)
@@ -3057,9 +3069,17 @@ router.post('/payway/khqr', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER
     throw requestError(409, 'The selected item is no longer available')
   }
   if (!Number.isInteger(quantity) || quantity < 1) throw requestError(400, 'Quantity must be a whole number greater than zero')
-  const { unitPrice, minimumUnitPrice } = salePricing(item, req.user.role)
-  if (rawUnitPrice !== undefined && Math.abs(Number(rawUnitPrice) - unitPrice) > 0.001) {
-    throw requestError(409, 'The selling price changed. Refresh the product and try again')
+  const { unitPrice: savedUnitPrice, minimumUnitPrice } = salePricing(item, req.user.role)
+  let unitPrice = savedUnitPrice
+  if (manualUnitPrice === true) {
+    if (req.user.role !== 'OWNER') throw requestError(403, 'Only the owner can enter a manual selling price')
+    unitPrice = saleCurrencyAmount(rawUnitPrice, 'USD', 'Manual selling price', false)
+    if (unitPrice < minimumUnitPrice) throw requestError(400, `Manual selling price cannot be below $${minimumUnitPrice.toFixed(2)}`)
+  } else {
+    if (minimumUnitPrice > savedUnitPrice) throw requestError(409, `${item.name} has an invalid minimum selling price`)
+    if (rawUnitPrice !== undefined && Math.abs(Number(rawUnitPrice) - savedUnitPrice) > 0.001) {
+      throw requestError(409, 'The selling price changed. Refresh the product and try again')
+    }
   }
 
   const subtotal = roundMoney(quantity * unitPrice)
@@ -3276,7 +3296,7 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
       console.error(`Unable to close completed PayWay transaction ${paywayTransactionId}:`, error.message)
     })
   }
-  await writeActivity(req, { action: 'CREATE', entity: 'TRADE', entityId: trade._id, details: { tradeNo: trade.tradeNo, type: 'SELL', currency, total: transactionTotal, warrantyDays } })
+  await writeActivity(req, { action: 'CREATE', entity: 'TRADE', entityId: trade._id, details: { tradeNo: trade.tradeNo, type: 'SELL', currency, total: transactionTotal, warrantyDays, manualPrice: items.some((line) => line?.manualUnitPrice === true) } })
   await trade.populate('customer', 'name phone')
   await trade.populate('items.inventoryItem', 'sku barcode name category brand model imei1 condition quantity buyPrice sellPrice status')
   res.status(201).json({ trade })

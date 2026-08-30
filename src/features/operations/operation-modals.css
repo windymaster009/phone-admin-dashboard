@@ -971,7 +971,24 @@ body.operation-modal-open {
 .sale-inventory-field { order: -2; }
 .sale-customer-field { order: -1; }
 .sale-price-display { min-width: 0; display: flex; flex-direction: column; gap: 7px; color: var(--muted, #8f9bb4); font-size: 12px; font-weight: 700; }
+.sale-price-heading { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sale-price-mode-button {
+  min-height: 24px;
+  padding: 3px 8px;
+  border: 1px solid color-mix(in srgb, var(--primary, #a78bfa) 42%, transparent);
+  border-radius: 7px;
+  color: var(--primary, #a78bfa);
+  background: color-mix(in srgb, var(--primary, #a78bfa) 8%, transparent);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 800;
+  cursor: pointer;
+}
+.sale-price-mode-button:hover,
+.sale-price-mode-button[aria-pressed='true'] { border-color: var(--primary, #a78bfa); background: color-mix(in srgb, var(--primary, #a78bfa) 15%, transparent); }
+.sale-price-mode-button:focus-visible { outline: 2px solid var(--primary, #a78bfa); outline-offset: 2px; }
 .sale-price-display strong { min-height: 46px; display: flex; align-items: center; padding: 0 13px; border: 1px solid var(--border-strong, rgba(255,255,255,.12)); border-radius: 11px; color: var(--text, #f4f6fb); background: color-mix(in srgb, var(--bg-soft, #10172a) 78%, transparent); font-size: 15px; }
+.sale-price-display.manual-price > input { min-height: 46px; border-color: color-mix(in srgb, var(--primary, #a78bfa) 58%, transparent); }
 .sale-price-display small { color: var(--primary, #a78bfa); font-size: 10px; font-weight: 700; }
 .sale-price-display.needs-price strong { border-color: color-mix(in srgb, var(--primary, #a78bfa) 48%, transparent); }
 .sale-price-configure {
