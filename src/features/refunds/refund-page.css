@@ -364,6 +364,28 @@
   flex: 0 0 auto;
 }
 
+.refund-warranty-active { --refund-stage-color: var(--color-refund-success); }
+.refund-warranty-expired,
+.refund-warranty-no-warranty { --refund-stage-color: var(--color-refund-danger); }
+.refund-warranty-not-recorded { --refund-stage-color: var(--color-refund-warning); }
+
+.refund-warranty-label {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  gap: var(--space-refund-2xs);
+  overflow: hidden;
+  color: var(--refund-stage-color);
+  font-size: var(--text-refund-xs);
+  font-weight: 800;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.refund-warranty-label svg { flex: 0 0 auto; }
+
 .refund-queue-item-bottom small {
   min-width: 0;
   overflow: hidden;
@@ -683,6 +705,53 @@
   font-weight: 500;
   line-height: 1.55;
 }
+
+.refund-warranty-note {
+  border-inline-start-color: var(--refund-stage-color);
+  color: var(--refund-stage-color);
+  background: color-mix(in srgb, var(--refund-stage-color) 7%, var(--color-refund-input));
+}
+
+.refund-warranty-note small {
+  max-width: 70ch;
+  color: var(--color-refund-muted);
+  font-size: var(--text-refund-xs);
+  font-weight: 500;
+  line-height: 1.55;
+}
+
+.refund-warranty-blocked {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-refund-sm);
+  margin-block-start: var(--space-refund-md);
+  padding: var(--space-refund-md);
+  border: 1px solid color-mix(in srgb, var(--refund-stage-color) 38%, var(--color-refund-rule));
+  border-radius: var(--radius-refund-md);
+  color: var(--refund-stage-color);
+  background: color-mix(in srgb, var(--refund-stage-color) 8%, var(--color-refund-input));
+}
+
+.refund-warranty-blocked > span {
+  width: 2.5rem;
+  height: 2.5rem;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: var(--radius-refund-sm);
+  background: color-mix(in srgb, var(--refund-stage-color) 14%, transparent);
+}
+
+.refund-warranty-blocked h4 { margin: 0 0 var(--space-refund-2xs); }
+.refund-warranty-blocked p,
+.refund-warranty-blocked small {
+  display: block;
+  margin: 0;
+  color: var(--color-refund-muted);
+  font-size: var(--text-refund-xs);
+  line-height: 1.55;
+}
+.refund-warranty-blocked small { margin-block-start: var(--space-refund-xs); color: var(--refund-stage-color); font-weight: 800; }
 
 .refund-form-fields label,
 .refund-confirm {

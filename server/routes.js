@@ -27,7 +27,7 @@ import { TwoFactorChallenge, TwoFactorCredential, TwoFactorSetup } from './twoFa
 import { Loan } from './loanModels.js'
 import { refreshLoanStatuses } from './loanDashboardRoutes.js'
 import { preventCustomerDeletionWithDocuments } from './documentGuards.js'
-import { normalizeTradeRefundRequest, restoreReturnedInventory } from './tradeRefundService.js'
+import { normalizeSaleWarrantyDays, normalizeTradeRefundRequest, restoreReturnedInventory } from './tradeRefundService.js'
 import {
   DAILY_PAWN_FEE_RATE,
   addPawnDays,
@@ -3156,6 +3156,7 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
     currency: requestedCurrency = 'USD',
     exchangeRate: requestedExchangeRate,
     paywayTransactionId,
+    warrantyDays: requestedWarrantyDays,
     notes,
   } = req.body
   if (type !== 'SELL') throw requestError(400, 'Use the purchase workflow to buy inventory')
@@ -3164,6 +3165,10 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
   }
   if (!['USD', 'KHR'].includes(String(requestedCurrency).toUpperCase())) throw requestError(400, 'Sale currency must be USD or KHR')
   const currency = saleCurrencyCode(requestedCurrency)
+  const warrantyDays = normalizeSaleWarrantyDays(requestedWarrantyDays)
+  const warrantyExpiresAt = warrantyDays > 0
+    ? new Date(Date.now() + warrantyDays * 86_400_000)
+    : undefined
   if (paymentMethod === 'KHQR' && currency !== 'USD') throw requestError(400, 'KHQR sales currently support USD only')
   const exchangeRate = saleExchangeRate(currency, requestedExchangeRate)
   if (paymentMethod === 'KHQR') requirePaywayFeature()
@@ -3248,6 +3253,8 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
         balance: saleAmountToUsd(transactionBalance, currency, exchangeRate),
         paymentStatus: paymentState(currentTransactionTotal, paid),
         paymentMethod,
+        warrantyDays,
+        warrantyExpiresAt,
         paywayTransactionId: paywayTransactionId || undefined,
         notes: clean(notes),
         createdBy: req.user._id,
@@ -3269,7 +3276,7 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
       console.error(`Unable to close completed PayWay transaction ${paywayTransactionId}:`, error.message)
     })
   }
-  await writeActivity(req, { action: 'CREATE', entity: 'TRADE', entityId: trade._id, details: { tradeNo: trade.tradeNo, type: 'SELL', currency, total: transactionTotal } })
+  await writeActivity(req, { action: 'CREATE', entity: 'TRADE', entityId: trade._id, details: { tradeNo: trade.tradeNo, type: 'SELL', currency, total: transactionTotal, warrantyDays } })
   await trade.populate('customer', 'name phone')
   await trade.populate('items.inventoryItem', 'sku barcode name category brand model imei1 condition quantity buyPrice sellPrice status')
   res.status(201).json({ trade })

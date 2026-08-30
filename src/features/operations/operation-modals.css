@@ -997,6 +997,37 @@ body.operation-modal-open {
 .sale-price-configure:focus-visible { outline: 2px solid var(--primary, #a78bfa); outline-offset: 2px; }
 .sale-price-configure:active { transform: translateY(1px); }
 .sale-price-configure:disabled { opacity: .5; cursor: not-allowed; }
+.sale-warranty-input {
+  min-width: 0;
+  min-height: 46px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 0 13px;
+  border: 1px solid var(--border-strong, rgba(255,255,255,.12));
+  border-radius: 11px;
+  color: var(--muted, #8f9bb4);
+  background: color-mix(in srgb, var(--bg-soft, #10172a) 78%, transparent);
+}
+.sale-warranty-input:focus-within {
+  border-color: var(--primary, #8b5cf6);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary, #8b5cf6) 24%, transparent);
+}
+.sale-warranty-input input {
+  min-width: 0;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+}
+.sale-warranty-input span {
+  color: var(--muted, #8f9bb4);
+  font-size: 11px;
+  font-weight: 800;
+}
+.sale-warranty-field.field-invalid .sale-warranty-input { border-color: var(--danger, #fb7185); }
 .sale-payment-method {
   min-width: 0;
   display: grid;
@@ -1836,6 +1867,15 @@ body.operation-modal-open {
   .operation-modal-sale .sale-price-display strong {
     min-height: 44px;
     font-size: 12px;
+  }
+
+  .operation-modal-sale .sale-warranty-input {
+    min-height: 44px;
+    padding-inline: 11px;
+  }
+
+  .operation-modal-sale .sale-warranty-input input {
+    min-height: 42px;
   }
 
   .operation-modal-sale .sale-price-display small,

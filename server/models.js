@@ -284,6 +284,8 @@ const tradeSchema = new Schema(
       enum: ['CASH', 'KHQR', 'BANK', 'CARD', 'OTHER'],
       default: 'CASH',
     },
+    warrantyDays: { type: Number, min: 0, max: 3650 },
+    warrantyExpiresAt: Date,
     paywayTransactionId: { type: String, unique: true, sparse: true, index: true },
     status: { type: String, enum: ['COMPLETED', 'CANCELLED', 'RETURNED'], default: 'COMPLETED' },
     refund: {

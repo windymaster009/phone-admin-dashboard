@@ -6,6 +6,7 @@ import {
   Banknote,
   Barcode,
   Camera,
+  CalendarRange,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -135,6 +136,7 @@ type SaleDraft = {
   paymentMethod: SalePaymentMethod
   currency: SaleCurrency
   exchangeRate: number
+  warrantyDays: number
   notes: string
 }
 
@@ -528,6 +530,7 @@ export default function OperationModalBridge() {
   const [saleCustomerId, setSaleCustomerId] = useState('')
   const [saleQuantity, setSaleQuantity] = useState('1')
   const [saleDiscount, setSaleDiscount] = useState('0')
+  const [saleWarrantyDays, setSaleWarrantyDays] = useState('')
   const [saleAmountPaid, setSaleAmountPaid] = useState('')
   const [saleNotes, setSaleNotes] = useState('')
   const [saleNotesOpen, setSaleNotesOpen] = useState(false)
@@ -718,6 +721,11 @@ export default function OperationModalBridge() {
     || (saleCurrency === 'KHR' && (!Number.isInteger(saleDiscountAmount) || saleDiscountAmount % 100 !== 0))
   const salePaidInvalid = salePaymentMethod === 'CASH' && (salePaidAmount > saleTotal
     || (saleCurrency === 'KHR' && (!Number.isInteger(salePaidAmount) || salePaidAmount % 100 !== 0)))
+  const saleWarrantyDayCount = Number(saleWarrantyDays)
+  const saleWarrantyInvalid = saleWarrantyDays.trim() === ''
+    || !Number.isInteger(saleWarrantyDayCount)
+    || saleWarrantyDayCount < 0
+    || saleWarrantyDayCount > 3650
   const saleActionDisabled = busy
     || saleInventoryLoading
     || !saleItemId
@@ -725,6 +733,7 @@ export default function OperationModalBridge() {
     || saleStockPricingInvalid
     || saleDiscountInvalid
     || salePaidInvalid
+    || saleWarrantyInvalid
     || saleTotal < (saleCurrency === 'KHR' ? 100 : 0.01)
   const saleActionLabel = busy
     ? salePaymentMethod === 'KHQR' ? 'Generating KHQR...' : 'Saving sale...'
@@ -738,6 +747,8 @@ export default function OperationModalBridge() {
               ? 'Reduce discount'
               : salePaidInvalid
                 ? 'Check amount paid'
+                : saleWarrantyInvalid
+                  ? 'Enter warranty days'
                 : saleTotal < (saleCurrency === 'KHR' ? 100 : 0.01)
                   ? 'Enter a valid amount'
                   : salePaymentMethod === 'KHQR'
@@ -934,6 +945,7 @@ export default function OperationModalBridge() {
     setSaleCustomerId('')
     setSaleQuantity('1')
     setSaleDiscount('0')
+    setSaleWarrantyDays('')
     setSaleAmountPaid('')
     setSaleNotes('')
     setSaleNotesOpen(false)
@@ -1081,6 +1093,7 @@ export default function OperationModalBridge() {
     setSaleItemId(scannedItem._id)
     setSaleCurrency(scannedItem.pricingCurrency === 'KHR' ? 'KHR' : 'USD')
     setSaleDiscount('0')
+    setSaleWarrantyDays('')
     setSaleAmountPaid('')
     setError('')
     setKind('sale')
@@ -1316,6 +1329,7 @@ export default function OperationModalBridge() {
       paymentMethod: salePaymentMethod,
       currency: saleCurrency,
       exchangeRate: saleCurrency === 'KHR' ? usdKhrRate : 1,
+      warrantyDays: saleWarrantyDayCount,
       notes: saleNotes,
     }
     try {
@@ -1955,6 +1969,7 @@ export default function OperationModalBridge() {
             setSalePaymentMethod('CASH')
             setSaleQuantity('1')
             setSaleDiscount('0')
+            setSaleWarrantyDays('')
             setSaleAmountPaid('')
           }}><option value="" disabled>{saleInventoryLoading ? 'Loading available stock...' : inventory.length === 0 ? 'No stock available to sell' : 'Select available stock'}</option>{inventory.map((item) => <option key={item._id} value={item._id}>{item.name}{item.imei1 ? ` — ${item.imei1}` : ''} — Qty {item.quantity} — {inventoryNativeSalePriceText(item)}</option>)}</select>{!saleInventoryLoading && inventory.length === 0 && <small>Add an in-stock product before creating a sale.</small>}</label>
           <label>Currency<select value={saleCurrency} onChange={(event) => {
@@ -1974,6 +1989,7 @@ export default function OperationModalBridge() {
               : <small>Choose inventory first</small>}
           </div>
           <label className={saleDiscountInvalid ? 'field-invalid' : ''}>Discount ({saleCurrency})<MoneyInput currency={saleCurrency} minimum={0} maximum={saleMaximumDiscount} value={saleDiscount} disabled={!saleItemId} onValueChange={setSaleDiscount} placeholder={saleCurrency === 'KHR' ? '0' : '0.00'} />{selectedSaleItem && <small>{saleCurrency === 'KHR' && saleDiscountAmount % 100 !== 0 ? 'Use a whole KHR amount in increments of 100' : `${saleDiscountInvalid ? 'Maximum discount is' : 'Maximum allowed:'} ${saleAmountText(saleMaximumDiscount, saleCurrency)}`}</small>}</label>
+          <label className={`sale-warranty-field${saleWarrantyInvalid && saleWarrantyDays !== '' ? ' field-invalid' : ''}`}>Warranty period<div className="sale-warranty-input"><CalendarRange size={16} aria-hidden="true" /><input required type="number" inputMode="numeric" min="0" max="3650" step="1" value={saleWarrantyDays} onChange={(event) => setSaleWarrantyDays(event.target.value)} placeholder="Enter days" /><span>days</span></div><small>{saleWarrantyDays === '' ? 'Enter 0 when this sale has no refund warranty.' : saleWarrantyInvalid ? 'Use a whole number from 0 to 3650.' : saleWarrantyDayCount === 0 ? 'No refund warranty for this sale.' : `Refundable for ${saleWarrantyDayCount} day${saleWarrantyDayCount === 1 ? '' : 's'} after the sale.`}</small></label>
           {paywayAvailable && saleCurrency === 'USD' && <fieldset className="sale-payment-method operation-wide">
             <legend>How will the customer pay?</legend>
             <button type="button" className={salePaymentMethod === 'CASH' ? 'active cash' : 'cash'} onClick={() => setSalePaymentMethod('CASH')}>

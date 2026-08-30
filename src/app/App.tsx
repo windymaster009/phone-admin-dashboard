@@ -35,6 +35,8 @@ import {
   ShoppingCart,
   Smartphone,
   Server,
+  ShieldCheck,
+  ShieldX,
   Sun,
   Trash2,
   TrendingDown,
@@ -302,6 +304,8 @@ type Trade = {
   amountPaid: number
   balance: number
   paymentMethod: string
+  warrantyDays?: number
+  warrantyExpiresAt?: string
   status: string
   refund?: {
     amount: number
@@ -1722,20 +1726,33 @@ function TradeView() {
 }
 
 type RefundQueueFilter = 'ALL' | 'COMPLETED' | 'RETURNED'
-type RefundWarningStage = {
-  number: 1 | 2 | 3 | 4
+type RefundWarrantyState = {
+  state: 'ACTIVE' | 'EXPIRED' | 'NO_WARRANTY' | 'NOT_RECORDED'
+  refundable: boolean
   label: string
-  message: string
-  saleAgeDays: number
+  detail: string
 }
 
-function refundWarningStage(trade: Trade): RefundWarningStage {
+function refundWarrantyState(trade: Trade): RefundWarrantyState {
+  if (trade.warrantyDays === undefined || trade.warrantyDays === null) {
+    return { state: 'NOT_RECORDED', refundable: true, label: 'Warranty not recorded', detail: 'This is an older sale. A manager can review it manually.' }
+  }
+  if (trade.warrantyDays <= 0) {
+    return { state: 'NO_WARRANTY', refundable: false, label: 'Not refundable', detail: 'This sale was recorded with 0 warranty days.' }
+  }
+
   const soldAt = new Date(trade.createdAt).getTime()
-  const saleAgeDays = Number.isFinite(soldAt) ? Math.max(0, Math.floor((Date.now() - soldAt) / 86_400_000)) : 0
-  if (saleAgeDays <= 3) return { number: 1, label: 'Full refund review', message: 'Inspect the product condition, identifiers, quantity, and included accessories before recording a full refund.', saleAgeDays }
-  if (saleAgeDays <= 7) return { number: 2, label: 'Defect review', message: 'Check whether the return is caused by a verified product defect before recording a full refund.', saleAgeDays }
-  if (saleAgeDays <= 14) return { number: 3, label: 'Warranty review', message: 'Review repair or exchange options with the customer before deciding on a full refund.', saleAgeDays }
-  return { number: 4, label: 'Late return review', message: 'This sale is outside the normal return period. Review the reason and product condition carefully before continuing.', saleAgeDays }
+  const savedExpiry = trade.warrantyExpiresAt ? new Date(trade.warrantyExpiresAt).getTime() : Number.NaN
+  const expiresAt = Number.isFinite(savedExpiry) ? savedExpiry : soldAt + trade.warrantyDays * 86_400_000
+  if (!Number.isFinite(expiresAt)) {
+    return { state: 'NOT_RECORDED', refundable: true, label: 'Warranty not recorded', detail: 'The warranty date is unavailable. Review this sale manually.' }
+  }
+
+  if (expiresAt < Date.now()) {
+    return { state: 'EXPIRED', refundable: false, label: 'Warranty expired', detail: `Expired ${dateText(new Date(expiresAt).toISOString())}.` }
+  }
+  const daysLeft = Math.max(1, Math.ceil((expiresAt - Date.now()) / 86_400_000))
+  return { state: 'ACTIVE', refundable: true, label: `Refundable · ${daysLeft} day${daysLeft === 1 ? '' : 's'} left`, detail: `${trade.warrantyDays}-day warranty ends ${dateText(new Date(expiresAt).toISOString())}.` }
 }
 
 function RefundStatusBadge({ status }: { status: Trade['status'] }) {
@@ -1784,7 +1801,8 @@ function RefundsView({ user }: { user: SessionUser }) {
     setCompletedTradeNo('')
   }, [selectedId])
 
-  const eligibleCount = trades.filter((trade) => trade.status === 'COMPLETED').length
+  const openCount = trades.filter((trade) => trade.status === 'COMPLETED').length
+  const eligibleCount = trades.filter((trade) => trade.status === 'COMPLETED' && refundWarrantyState(trade).refundable).length
   const refundedCount = trades.filter((trade) => trade.status === 'RETURNED').length
   const filteredTrades = useMemo(() => {
     const query = search.trim().toLowerCase()
@@ -1800,11 +1818,12 @@ function RefundsView({ user }: { user: SessionUser }) {
     })
   }, [filter, search, trades])
   const selectedTrade = trades.find((trade) => trade._id === selectedId)
-  const selectedWarningStage = selectedTrade ? refundWarningStage(selectedTrade) : null
+  const selectedWarranty = selectedTrade ? refundWarrantyState(selectedTrade) : null
   const queueHeading = filter === 'COMPLETED' ? 'Not refunded' : filter === 'RETURNED' ? 'Refunded' : 'All sales'
   const canSubmit = Boolean(
     selectedTrade
     && selectedTrade.status === 'COMPLETED'
+    && selectedWarranty?.refundable
     && reason.trim().length >= 5
     && inventoryDisposition
     && confirmation === selectedTrade.tradeNo
@@ -1870,7 +1889,7 @@ function RefundsView({ user }: { user: SessionUser }) {
         <label className="refund-search"><span className="sr-only">Search sales</span><Search size={17} aria-hidden="true" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search receipt, customer, phone, or item" /></label>
         <div className="refund-filters" aria-label="Filter refund queue">
           {([
-            ['COMPLETED', 'Not refunded', eligibleCount],
+            ['COMPLETED', 'Not refunded', openCount],
             ['RETURNED', 'Refunded', refundedCount],
             ['ALL', 'All', trades.length],
           ] as [RefundQueueFilter, string, number][]).map(([value, label, count]) => (
@@ -1886,13 +1905,14 @@ function RefundsView({ user }: { user: SessionUser }) {
           <div className="refund-queue-list">
             {loading && <LoadingState compact label="Loading refundable sales" detail="Reading completed and refunded transactions…" />}
             {!loading && filteredTrades.map((trade) => {
-              const warningStage = refundWarningStage(trade)
+              const warranty = refundWarrantyState(trade)
+              const WarrantyIcon = warranty.refundable ? ShieldCheck : ShieldX
               return (
                 <button ref={selectedId === trade._id ? selectedRefundRowRef : undefined} key={trade._id} type="button" className={`refund-queue-item ${trade.status === 'RETURNED' ? 'refund-queue-item-refunded' : 'refund-queue-item-open'} ${selectedId === trade._id ? 'active' : ''}`} onClick={() => { setSelectedId(trade._id); setMobileRefundStep('review') }} aria-pressed={selectedId === trade._id}>
                   <span className="refund-queue-item-top"><strong>{trade.tradeNo}</strong><RefundStatusBadge status={trade.status} /></span>
                   <span className="refund-queue-party">{tradePartyName(trade)}</span>
                   <span className="refund-queue-items">{trade.items.map((item) => `${item.name} ×${item.quantity}`).join(', ')}</span>
-                  <span className={`refund-stage-label refund-stage-${warningStage.number}`}><AlertTriangle size={12} aria-hidden="true" />Stage {warningStage.number} · {warningStage.label}</span>
+                  <span className={`refund-warranty-label refund-warranty-${warranty.state.toLowerCase().replace('_', '-')}`}><WarrantyIcon size={12} aria-hidden="true" />{warranty.label}</span>
                   <span className="refund-queue-item-bottom"><small>{trade.status === 'RETURNED' && trade.refund ? `Refunded ${dateText(trade.refund.refundedAt)} · ${trade.refund.refundedBy?.name || 'manager'}` : `Sold ${dateText(trade.createdAt)}`}</small><strong>{tradeTransactionMoney(trade, trade.transactionAmountPaid, trade.amountPaid)}</strong></span>
                 </button>
               )
@@ -1920,12 +1940,17 @@ function RefundsView({ user }: { user: SessionUser }) {
                     <dl><div><dt>Stock</dt><dd>{selectedTrade.refund.inventoryDisposition === 'RESTOCK' ? 'Restored to available stock' : 'Not returned to saleable stock'}</dd></div><div><dt>Recorded</dt><dd>{dateText(selectedTrade.refund.refundedAt)} by {selectedTrade.refund.refundedBy?.name || 'manager'}</dd></div></dl>
                   </div>
                 </section>
+              ) : selectedWarranty && !selectedWarranty.refundable ? (
+                <section className={`refund-warranty-blocked refund-warranty-${selectedWarranty.state.toLowerCase().replace('_', '-')}`} role="status">
+                  <span><ShieldX size={22} aria-hidden="true" /></span>
+                  <div><h4>{selectedWarranty.label}</h4><p>{selectedWarranty.detail}</p><small>A refund cannot be recorded for this sale.</small></div>
+                </section>
               ) : (
                 <form className="refund-form" onSubmit={recordRefund}>
                   <section className="refund-decision" aria-labelledby="refund-decision-title">
                     <header className="refund-decision-header">
                       <div><span>Refund decision</span><h4 id="refund-decision-title">Refund {tradeTransactionMoney(selectedTrade, selectedTrade.transactionAmountPaid, selectedTrade.amountPaid)}</h4><p>Return this amount by {titleStatus(selectedTrade.paymentMethod)} after reviewing the sale.</p></div>
-                      {selectedWarningStage && <span className={`refund-review-tag refund-stage-${selectedWarningStage.number}`}><AlertTriangle size={15} aria-hidden="true" />Stage {selectedWarningStage.number} · {selectedWarningStage.label}</span>}
+                      {selectedWarranty && <span className={`refund-review-tag refund-warranty-${selectedWarranty.state.toLowerCase().replace('_', '-')}`}><ShieldCheck size={15} aria-hidden="true" />{selectedWarranty.label}</span>}
                     </header>
                     <div className="refund-form-fields">
                       <label><span>Refund reason</span><textarea required minLength={5} maxLength={500} rows={2} value={reason} aria-invalid={reason.length > 0 && reason.trim().length < 5} onChange={(event) => setReason(event.target.value)} placeholder="Why is the customer returning this sale?" /><small>Use a specific reason for the audit history.</small></label>
@@ -1946,6 +1971,8 @@ function RefundsView({ user }: { user: SessionUser }) {
                     <div><dt>Payment recorded</dt><dd>{titleStatus(selectedTrade.paymentMethod)}</dd></div>
                     <div><dt>Sale total</dt><dd>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionTotal, selectedTrade.total)}</dd></div>
                     <div><dt>Recorded by</dt><dd>{selectedTrade.createdBy?.name || 'Staff member'}</dd></div>
+                    <div><dt>Warranty</dt><dd>{selectedWarranty?.label || 'Not recorded'}</dd></div>
+                    <div><dt>Warranty status</dt><dd>{selectedWarranty?.detail || 'Review manually'}</dd></div>
                   </dl>
                   <section className="refund-items" aria-labelledby="refund-items-title">
                     <h4 id="refund-items-title">Items in this sale</h4>
@@ -1953,7 +1980,7 @@ function RefundsView({ user }: { user: SessionUser }) {
                       <div key={`${item.name}-${index}`}><span><strong>{item.name}</strong><small>Quantity {item.quantity}</small></span><strong>{tradeTransactionMoney(selectedTrade, item.originalUnitPrice === undefined ? undefined : item.originalUnitPrice * item.quantity, item.unitPrice * item.quantity)}</strong></div>
                     ))}
                   </section>
-                  {selectedWarningStage && <aside className={`refund-record-only refund-stage-warning refund-stage-${selectedWarningStage.number}`}><AlertTriangle size={18} aria-hidden="true" /><p><strong>Stage {selectedWarningStage.number} · {selectedWarningStage.label}</strong><span>{selectedWarningStage.message}</span><small>Sold {selectedWarningStage.saleAgeDays === 0 ? 'today' : `${selectedWarningStage.saleAgeDays} day${selectedWarningStage.saleAgeDays === 1 ? '' : 's'} ago`}. PhoneFlow records the refund and stock change only; return {tradeTransactionMoney(selectedTrade, selectedTrade.transactionAmountPaid, selectedTrade.amountPaid)} to the customer using your shop’s current process.</small></p></aside>}
+                  {selectedWarranty && <aside className={`refund-record-only refund-warranty-note refund-warranty-${selectedWarranty.state.toLowerCase().replace('_', '-')}`}><ShieldCheck size={18} aria-hidden="true" /><p><strong>{selectedWarranty.label}</strong><span>{selectedWarranty.detail}</span><small>Inspect the returned items before restoring them to saleable stock. PhoneFlow records the refund and stock change; return {tradeTransactionMoney(selectedTrade, selectedTrade.transactionAmountPaid, selectedTrade.amountPaid)} using your shop’s current process.</small></p></aside>}
                 </div>
               </details>
             </>
