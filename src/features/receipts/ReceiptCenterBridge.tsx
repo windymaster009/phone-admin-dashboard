@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, Banknote, ChevronRight, HandCoins, Landmark, LoaderCircle, Printer, ReceiptText, RefreshCcw, Search, ShoppingCart, X } from 'lucide-react'
-import { api } from '../../lib/api'
+import { api, defaultShopProfile, type ShopProfile } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
 import ReceiptDocument, { receiptPrintStyles } from './ReceiptDocument'
 import type { ReceiptDocumentType, ReceiptLayout, ReceiptOption, ReceiptOptionResponse, ReceiptRecord, ReceiptSourceType } from './receipt-types'
@@ -111,7 +111,7 @@ function Viewer({ initialReceipt, initialLayout = 'A4', onClose, onUpdated }: { 
   async function printReceipt() {
     const popup = window.open('', '_blank', 'width=980,height=760')
     if (!popup) {
-      setError('The browser blocked the print window. Allow pop-ups for PhoneFlow and try again.')
+      setError(`The browser blocked the print window. Allow pop-ups for ${receipt.snapshot?.shop.name || 'this shop'} and try again.`)
       return
     }
     popup.opener = null
@@ -235,9 +235,16 @@ export default function ReceiptCenterBridge() {
   const [pendingOptionKey, setPendingOptionKey] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [version, setVersion] = useState(0)
+  const [shopName, setShopName] = useState(defaultShopProfile.name)
   const directRoute = useRef(window.location.pathname === '/receipts')
   const generationController = useRef<AbortController | null>(null)
   const generationClosed = useRef(false)
+
+  useEffect(() => {
+    api<{ shop: ShopProfile }>('/shop')
+      .then(({ shop }) => setShopName(shop.name))
+      .catch(() => undefined)
+  }, [])
 
   const locate = useCallback(() => {
     const main = document.querySelector<HTMLElement>('.main-content')
@@ -323,8 +330,8 @@ export default function ReceiptCenterBridge() {
   useEffect(() => {
     if (!mainTarget) return
     mainTarget.classList.toggle('receipt-route-active', active)
-    if (active) { document.querySelectorAll('.sidebar-nav button.active').forEach((button) => button.classList.remove('active')); document.title = 'Receipts · PhoneFlow' }
-  }, [active, mainTarget])
+    if (active) { document.querySelectorAll('.sidebar-nav button.active').forEach((button) => button.classList.remove('active')); document.title = `Receipts · ${shopName}` }
+  }, [active, mainTarget, shopName])
 
   const openPage = () => { if (window.location.pathname !== '/receipts') window.history.pushState({ view: 'receipts' }, '', '/receipts'); setActive(true) }
 

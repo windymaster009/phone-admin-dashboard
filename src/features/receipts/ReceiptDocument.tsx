@@ -282,7 +282,7 @@ export default function ReceiptDocument({ receipt, layout }: { receipt: ReceiptR
         {snapshot.signatureLabels.map((label) => <div key={label}><span /><strong>{label}</strong></div>)}
       </section> : null}
 
-      <footer><strong>{snapshot.shop.footer || 'Thank you for your business.'}</strong><small>Immutable PhoneFlow receipt snapshot · Printed {receipt.printCount} time{receipt.printCount === 1 ? '' : 's'}</small></footer>
+      <footer><strong>{snapshot.shop.footer || 'Thank you for your business.'}</strong><small>Immutable {snapshot.shop.name} receipt snapshot · Printed {receipt.printCount} time{receipt.printCount === 1 ? '' : 's'}</small></footer>
     </article>
   )
 }
