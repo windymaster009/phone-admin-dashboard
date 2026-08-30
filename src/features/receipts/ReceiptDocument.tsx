@@ -125,6 +125,8 @@ function Totals({ snapshot }: { snapshot: ReceiptSnapshot }) {
       {Number(snapshot.discount || 0) > 0 && <Row label="Discount" value={`-${money(snapshot.discount, snapshot.currency)}`} />}
       <div className="receipt-grand-total"><span>{refund ? 'Refund total' : 'Total'}</span><strong>{money(snapshot.total, snapshot.currency)}</strong></div>
       {snapshot.amountPaid !== undefined && <Row label={refund ? 'Refunded' : 'Amount paid'} value={money(snapshot.amountPaid, snapshot.currency)} />}
+      {!refund && snapshot.amountReceived !== undefined && snapshot.amountReceived > snapshot.total && <Row label="Amount received" value={money(snapshot.amountReceived, snapshot.currency)} />}
+      {!refund && snapshot.changeDue !== undefined && snapshot.changeDue > 0 && <Row label="Change" value={money(snapshot.changeDue, snapshot.currency)} />}
       {snapshot.balance !== undefined && <Row label={refund ? 'Remaining due' : 'Balance'} value={money(snapshot.balance, snapshot.currency)} />}
     </section>
   )
@@ -194,6 +196,7 @@ export default function ReceiptDocument({ receipt, layout }: { receipt: ReceiptR
 
   const pawnReceipt = ['PAWN_CONTRACT', 'PAWN_PAYMENT', 'PAWN_REDEMPTION'].includes(snapshot.documentType)
   const loanReceipt = ['LOAN_AGREEMENT', 'LOAN_PAYMENT'].includes(snapshot.documentType)
+  const saleReceipt = snapshot.documentType === 'SALE_RECEIPT'
 
   return (
     <article className={`receipt-paper receipt-paper-${layout.toLowerCase()}`}>
@@ -273,7 +276,9 @@ export default function ReceiptDocument({ receipt, layout }: { receipt: ReceiptR
       <Totals snapshot={snapshot} />
       {snapshot.notes && <section className="receipt-section"><h3>Notes</h3><p>{snapshot.notes}</p></section>}
 
-      {snapshot.signatureLabels?.length ? <section className="receipt-signatures">
+      {saleReceipt && <ReferenceBarcode reference={snapshot.referenceNo} label="sale refund" thermal={layout === 'THERMAL'} />}
+
+      {!saleReceipt && snapshot.signatureLabels?.length ? <section className="receipt-signatures">
         {snapshot.signatureLabels.map((label) => <div key={label}><span /><strong>{label}</strong></div>)}
       </section> : null}
 

@@ -1886,7 +1886,16 @@ function RefundsView({ user }: { user: SessionUser }) {
       />
 
       <div className="refund-toolbar surface-card">
-        <label className="refund-search"><span className="sr-only">Search sales</span><Search size={17} aria-hidden="true" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search receipt, customer, phone, or item" /></label>
+        <label className="refund-search"><span className="sr-only">Scan a sale barcode or search sales</span><ScanLine size={17} aria-hidden="true" /><input value={search} onChange={(event) => setSearch(event.target.value)} onKeyDown={(event) => {
+          if (event.key !== 'Enter') return
+          event.preventDefault()
+          const code = event.currentTarget.value.trim().toUpperCase()
+          const match = trades.find((trade) => trade.tradeNo.toUpperCase() === code)
+          if (match) {
+            setSelectedId(match._id)
+            setMobileRefundStep('review')
+          }
+        }} placeholder="Scan sale barcode or search receipt, customer, phone, or item" autoComplete="off" /></label>
         <div className="refund-filters" aria-label="Filter refund queue">
           {([
             ['COMPLETED', 'Not refunded', openCount],

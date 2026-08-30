@@ -77,6 +77,8 @@ export type ReceiptSnapshot = {
   discount?: number
   total: number
   amountPaid?: number
+  amountReceived?: number
+  changeDue?: number
   balance?: number
   paymentMethod?: string
   paymentStatus?: string

@@ -3172,6 +3172,7 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
     items = [],
     discount = 0,
     amountPaid,
+    amountReceived: requestedAmountReceived,
     paymentMethod = 'CASH',
     currency: requestedCurrency = 'USD',
     exchangeRate: requestedExchangeRate,
@@ -3224,11 +3225,16 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
       throw requestError(409, 'KHQR payment amount or currency does not match this sale')
     }
   }
-  const paid = saleCurrencyAmount(paymentMethod === 'KHQR' || amountPaid === undefined ? transactionTotal : amountPaid, currency, 'Amount paid')
+  const amountReceived = saleCurrencyAmount(
+    paymentMethod === 'KHQR'
+      ? transactionTotal
+      : requestedAmountReceived ?? amountPaid ?? transactionTotal,
+    currency,
+    'Amount received',
+  )
+  const paid = roundSaleCurrency(Math.min(amountReceived, transactionTotal), currency)
+  const changeDue = roundSaleCurrency(Math.max(0, amountReceived - transactionTotal), currency)
   const paymentTolerance = currency === 'KHR' ? 0 : 0.001
-  if (paid > transactionTotal + paymentTolerance) {
-    throw requestError(400, 'Amount paid must be between zero and the sale total')
-  }
   const transactionBalance = roundSaleCurrency(Math.max(0, transactionTotal - paid), currency)
 
   const session = await mongoose.startSession()
@@ -3265,11 +3271,15 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
         transactionSubtotal: quote.subtotal,
         transactionTotal: currentTransactionTotal,
         transactionAmountPaid: paid,
+        transactionAmountReceived: amountReceived,
+        transactionChangeDue: changeDue,
         transactionBalance,
         subtotal: saleAmountToUsd(quote.subtotal, currency, exchangeRate),
         discount: saleAmountToUsd(currentDiscount, currency, exchangeRate),
         total: saleAmountToUsd(currentTransactionTotal, currency, exchangeRate),
         amountPaid: saleAmountToUsd(paid, currency, exchangeRate),
+        amountReceived: saleAmountToUsd(amountReceived, currency, exchangeRate),
+        changeDue: saleAmountToUsd(changeDue, currency, exchangeRate),
         balance: saleAmountToUsd(transactionBalance, currency, exchangeRate),
         paymentStatus: paymentState(currentTransactionTotal, paid),
         paymentMethod,
@@ -3296,7 +3306,7 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
       console.error(`Unable to close completed PayWay transaction ${paywayTransactionId}:`, error.message)
     })
   }
-  await writeActivity(req, { action: 'CREATE', entity: 'TRADE', entityId: trade._id, details: { tradeNo: trade.tradeNo, type: 'SELL', currency, total: transactionTotal, warrantyDays, manualPrice: items.some((line) => line?.manualUnitPrice === true) } })
+  await writeActivity(req, { action: 'CREATE', entity: 'TRADE', entityId: trade._id, details: { tradeNo: trade.tradeNo, type: 'SELL', currency, total: transactionTotal, amountReceived, changeDue, warrantyDays, manualPrice: items.some((line) => line?.manualUnitPrice === true) } })
   await trade.populate('customer', 'name phone')
   await trade.populate('items.inventoryItem', 'sku barcode name category brand model imei1 condition quantity buyPrice sellPrice status')
   res.status(201).json({ trade })

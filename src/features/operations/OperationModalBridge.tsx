@@ -133,6 +133,7 @@ type SaleDraft = {
   items: Array<{ inventoryItem: string; name: string; quantity: number; unitPrice: number; manualUnitPrice?: boolean }>
   discount: number
   amountPaid: number
+  amountReceived: number
   paymentMethod: SalePaymentMethod
   currency: SaleCurrency
   exchangeRate: number
@@ -717,15 +718,16 @@ export default function OperationModalBridge() {
   const saleMaximumDiscount = Math.max(0, saleSubtotal - effectiveSaleQuantity * effectiveMinimumSalePrice)
   const saleDiscountAmount = Math.max(0, Number(saleDiscount) || 0)
   const saleTotal = Math.max(0, saleSubtotal - saleDiscountAmount)
-  const salePaidAmount = saleAmountPaid === '' ? saleTotal : Math.max(0, Number(saleAmountPaid) || 0)
-  const saleBalance = Math.max(0, saleTotal - salePaidAmount)
+  const saleReceivedAmount = saleAmountPaid === '' ? saleTotal : Math.max(0, Number(saleAmountPaid) || 0)
+  const saleBalance = Math.max(0, saleTotal - saleReceivedAmount)
+  const saleChangeDue = Math.max(0, saleReceivedAmount - saleTotal)
   const salePriceInvalid = Boolean(selectedSaleItem && (!Number.isFinite(saleUnitPrice) || saleUnitPrice <= 0
     || (saleCurrency === 'KHR' && (!Number.isInteger(saleUnitPrice) || saleUnitPrice % 100 !== 0))))
   const saleStockPricingInvalid = configuredMinimumSalePrice > saleUnitPrice
   const saleDiscountInvalid = saleDiscountAmount > saleMaximumDiscount
     || (saleCurrency === 'KHR' && (!Number.isInteger(saleDiscountAmount) || saleDiscountAmount % 100 !== 0))
-  const salePaidInvalid = salePaymentMethod === 'CASH' && (salePaidAmount > saleTotal
-    || (saleCurrency === 'KHR' && (!Number.isInteger(salePaidAmount) || salePaidAmount % 100 !== 0)))
+  const salePaidInvalid = salePaymentMethod === 'CASH' && (!Number.isFinite(saleReceivedAmount)
+    || (saleCurrency === 'KHR' && (!Number.isInteger(saleReceivedAmount) || saleReceivedAmount % 100 !== 0)))
   const saleWarrantyDayCount = Number(saleWarrantyDays)
   const saleWarrantyInvalid = saleWarrantyDays.trim() === ''
     || !Number.isInteger(saleWarrantyDayCount)
@@ -1325,18 +1327,20 @@ export default function OperationModalBridge() {
           : 'Set a valid selling price in Stock Information before completing this sale')
       return
     }
-    const amountPaid = salePaymentMethod === 'KHQR' ? total : saleAmountPaid === '' ? total : Number(saleAmountPaid)
-    if (!Number.isFinite(amountPaid) || amountPaid < 0 || amountPaid > total || (saleCurrency === 'KHR' && (!Number.isInteger(amountPaid) || amountPaid % 100 !== 0))) {
+    const amountReceived = salePaymentMethod === 'KHQR' ? total : saleAmountPaid === '' ? total : Number(saleAmountPaid)
+    if (!Number.isFinite(amountReceived) || amountReceived < 0 || (saleCurrency === 'KHR' && (!Number.isInteger(amountReceived) || amountReceived % 100 !== 0))) {
       setBusy(false)
-      setError(saleCurrency === 'KHR' ? 'Amount paid must use whole 100 KHR increments and cannot exceed the total' : 'Amount paid cannot be greater than the sale total')
+      setError(saleCurrency === 'KHR' ? 'Amount received must use whole 100 KHR increments' : 'Enter a valid amount received')
       return
     }
+    const amountPaid = Math.min(total, amountReceived)
     const payload: SaleDraft = {
       type: 'SELL' as const,
       customer: saleCustomerId || undefined,
       items: [{ inventoryItem: selected._id, name: selected.name, quantity, unitPrice, manualUnitPrice: saleManualPriceEnabled || undefined }],
       discount,
       amountPaid,
+      amountReceived,
       paymentMethod: salePaymentMethod,
       currency: saleCurrency,
       exchangeRate: saleCurrency === 'KHR' ? usdKhrRate : 1,
@@ -2015,15 +2019,15 @@ export default function OperationModalBridge() {
               <span className="khqr-payment-option-logo"><img src={khqrLogo} alt="" /></span><p><strong>Pay with KHQR</strong><small>{paywayAvailable ? 'ABA PayWay sandbox' : 'PayWay unavailable'}</small></p>{salePaymentMethod === 'KHQR' && <CheckCircle2 size={18} />}
             </button>
           </fieldset>}
-          {salePaymentMethod === 'CASH' && <label className={`sale-amount-received operation-wide${salePaidInvalid ? ' field-invalid' : ''}`}>Amount received ({saleCurrency}) <small className="optional-marker">Defaults to total</small><MoneyInput currency={saleCurrency} minimum={0} maximum={saleTotal || undefined} value={saleAmountPaid} onValueChange={setSaleAmountPaid} placeholder={saleCurrency === 'KHR' ? riel.format(Math.round(saleTotal)) : saleTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} />{salePaidInvalid && <small>{saleCurrency === 'KHR' && salePaidAmount % 100 !== 0 ? 'Use a whole KHR amount in increments of 100' : `Amount received cannot exceed ${saleAmountText(saleTotal, saleCurrency)}`}</small>}</label>}
+          {salePaymentMethod === 'CASH' && <label className={`sale-amount-received operation-wide${salePaidInvalid ? ' field-invalid' : ''}`}>Amount received ({saleCurrency}) <small className="optional-marker">Change is calculated automatically</small><MoneyInput currency={saleCurrency} minimum={0} value={saleAmountPaid} onValueChange={setSaleAmountPaid} placeholder={saleCurrency === 'KHR' ? riel.format(Math.round(saleTotal)) : saleTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} />{salePaidInvalid ? <small>Use a valid {saleCurrency === 'KHR' ? 'whole KHR amount in increments of 100' : 'cash amount'}.</small> : saleChangeDue > 0 ? <small>Change due: {saleAmountText(saleChangeDue, saleCurrency)}</small> : null}</label>}
           <section className="sale-summary operation-wide" aria-labelledby="sale-summary-title">
             <header><div><span>Sale summary</span><strong id="sale-summary-title">{selectedSaleItem ? `${selectedSaleItem.name} × ${effectiveSaleQuantity}` : 'No item selected'}</strong></div><b>{salePaymentMethod === 'KHQR' ? 'KHQR' : 'Cash'}</b></header>
             <div className="sale-summary-calculation">
               <span><small>Subtotal</small><strong>{saleAmountText(saleSubtotal, saleCurrency)}</strong></span>
               <span><small>Discount</small><strong>− {saleAmountText(saleDiscountAmount, saleCurrency)}</strong></span>
               <span className="total"><small>Total</small><strong>{saleAmountText(saleTotal, saleCurrency)}</strong></span>
-              <span><small>Received</small><strong>{saleAmountText(salePaymentMethod === 'KHQR' ? saleTotal : salePaidAmount, saleCurrency)}</strong></span>
-              <span className={salePaymentMethod === 'KHQR' || saleBalance <= 0 ? 'settled' : 'due'}><small>Balance</small><strong>{saleAmountText(salePaymentMethod === 'KHQR' ? 0 : saleBalance, saleCurrency)}</strong></span>
+              <span><small>Received</small><strong>{saleAmountText(salePaymentMethod === 'KHQR' ? saleTotal : saleReceivedAmount, saleCurrency)}</strong></span>
+              <span className={salePaymentMethod === 'KHQR' || saleBalance <= 0 ? 'settled' : 'due'}><small>{saleChangeDue > 0 ? 'Change' : 'Balance'}</small><strong>{saleAmountText(salePaymentMethod === 'KHQR' ? 0 : saleChangeDue > 0 ? saleChangeDue : saleBalance, saleCurrency)}</strong></span>
             </div>
           </section>
           <div className="sale-notes operation-wide">

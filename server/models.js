@@ -270,6 +270,8 @@ const tradeSchema = new Schema(
     transactionSubtotal: { type: Number, min: 0 },
     transactionTotal: { type: Number, min: 0 },
     transactionAmountPaid: { type: Number, min: 0 },
+    transactionAmountReceived: { type: Number, min: 0 },
+    transactionChangeDue: { type: Number, min: 0 },
     transactionBalance: { type: Number, min: 0 },
     paymentStatus: { type: String, enum: ['PAID', 'PARTIAL', 'UNPAID'] },
     purchaseWorkflowVersion: { type: Number },
@@ -278,6 +280,8 @@ const tradeSchema = new Schema(
     discount: { type: Number, min: 0, default: 0 },
     total: { type: Number, min: 0, required: true },
     amountPaid: { type: Number, min: 0, default: 0 },
+    amountReceived: { type: Number, min: 0 },
+    changeDue: { type: Number, min: 0 },
     balance: { type: Number, min: 0, default: 0 },
     paymentMethod: {
       type: String,

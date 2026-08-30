@@ -143,6 +143,16 @@ function buildTradeSnapshot(trade, documentType) {
   const subtotal = tradeDisplayAmount(trade, trade.transactionSubtotal, trade.subtotal)
   const total = tradeDisplayAmount(trade, trade.transactionTotal, trade.total)
   const amountPaid = tradeDisplayAmount(trade, trade.transactionAmountPaid, trade.amountPaid)
+  const hasAmountReceived = trade.transactionAmountReceived !== undefined && trade.transactionAmountReceived !== null
+    || trade.amountReceived !== undefined && trade.amountReceived !== null
+  const hasChangeDue = trade.transactionChangeDue !== undefined && trade.transactionChangeDue !== null
+    || trade.changeDue !== undefined && trade.changeDue !== null
+  const amountReceived = hasAmountReceived
+    ? tradeDisplayAmount(trade, trade.transactionAmountReceived, trade.amountReceived)
+    : undefined
+  const changeDue = hasChangeDue
+    ? tradeDisplayAmount(trade, trade.transactionChangeDue, trade.changeDue)
+    : undefined
   const balance = tradeDisplayAmount(trade, trade.transactionBalance, trade.balance)
 
   return {
@@ -161,15 +171,15 @@ function buildTradeSnapshot(trade, documentType) {
     discount: currency === 'KHR' ? roundMoney(Math.max(0, subtotal - total)) : roundMoney(trade.discount),
     total,
     amountPaid,
+    amountReceived,
+    changeDue,
     balance,
     paymentMethod: trade.paymentMethod || 'OTHER',
     paymentStatus: trade.paymentStatus || (balance <= 0.005 ? 'PAID' : amountPaid > 0 ? 'PARTIAL' : 'UNPAID'),
     transactionStatus: trade.status,
     notes: trade.notes || '',
     staff: trade.createdBy ? { name: trade.createdBy.name, role: trade.createdBy.role } : null,
-    signatureLabels: documentType === 'SALE_RECEIPT'
-      ? ['Customer signature', 'Cashier signature']
-      : ['Seller signature', 'Shop representative'],
+    signatureLabels: documentType === 'SALE_RECEIPT' ? [] : ['Seller signature', 'Shop representative'],
   }
 }
 
