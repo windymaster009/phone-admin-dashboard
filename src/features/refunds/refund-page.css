@@ -48,9 +48,18 @@
   border-radius: var(--radius-refund-md);
 }
 
+.refund-search-tools {
+  min-width: 0;
+  max-width: 46rem;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-refund-xs);
+}
+
 .refund-search {
   min-width: 16rem;
-  max-width: 34rem;
+  max-width: none;
   min-height: 2.75rem;
   display: flex;
   flex: 1;
@@ -95,6 +104,35 @@
 
 .refund-search input:disabled {
   cursor: not-allowed;
+}
+
+.refund-scan-trigger {
+  min-height: 2.75rem;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  transition: color var(--dur-refund-micro) var(--ease-refund-out), background-color var(--dur-refund-micro) var(--ease-refund-out), border-color var(--dur-refund-micro) var(--ease-refund-out), transform var(--dur-refund-micro) var(--ease-refund-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .refund-scan-trigger:hover {
+    border-color: var(--blue);
+    background: color-mix(in srgb, var(--blue) 16%, transparent);
+  }
+}
+
+.refund-scan-trigger:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.refund-scan-trigger:active {
+  transform: translateY(1px);
+}
+
+.refund-scan-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
 }
 
 .refund-filters {
@@ -939,6 +977,326 @@
   gap: var(--space-refund-2xs);
 }
 
+/* Hallmark · component: receipt scanner · genre: modern-minimal · theme: existing shop system
+ * states: default · hover · focus · active · disabled · loading · error · success
+ * contrast: pass (40–41) · pre-emit critique: P5 H5 E5 S5 R5 V4
+ */
+.refund-scanner-modal {
+  position: fixed;
+  inset: 0;
+  width: min(36rem, calc(100% - 2rem));
+  height: fit-content;
+  max-height: min(48rem, calc(100dvh - 2rem));
+  margin: auto;
+  padding: 0;
+  overflow: hidden auto;
+  border: var(--rule-refund-strong);
+  border-radius: var(--radius-refund-lg);
+  outline: 0;
+  color: var(--color-refund-ink);
+  background: var(--color-refund-surface-solid);
+  font-family: var(--font-refund-body);
+}
+
+.refund-scanner-modal::backdrop {
+  background: color-mix(in srgb, var(--color-refund-page) 78%, transparent);
+  backdrop-filter: blur(var(--space-refund-xs));
+}
+
+.refund-scanner-header {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-refund-sm);
+  padding: var(--space-refund-lg);
+  border-block-end: var(--rule-refund);
+  background: color-mix(in srgb, var(--color-refund-accent) 10%, var(--color-refund-surface-solid));
+}
+
+.refund-scanner-icon {
+  width: 2.625rem;
+  height: 2.625rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--blue) 32%, transparent);
+  border-radius: var(--radius-refund-sm);
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+}
+
+.refund-scanner-header > div {
+  min-width: 0;
+}
+
+.refund-scanner-header > div > span {
+  color: var(--blue);
+  font-size: var(--text-refund-xs);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.refund-scanner-header h2,
+.refund-scanner-intro h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-refund-display);
+  font-style: normal;
+}
+
+.refund-scanner-header h2 {
+  margin-block: var(--space-refund-2xs);
+  font-size: var(--text-refund-lg);
+}
+
+.refund-scanner-header p,
+.refund-scanner-intro p {
+  max-width: 52ch;
+  margin: 0;
+  color: var(--color-refund-muted);
+  font-size: var(--text-refund-sm);
+  line-height: 1.5;
+}
+
+.refund-scanner-close {
+  width: 2.75rem;
+  height: 2.75rem;
+  display: grid;
+  place-items: center;
+  border: var(--rule-refund);
+  border-radius: var(--radius-refund-sm);
+  color: var(--color-refund-muted);
+  background: transparent;
+  transition: color var(--dur-refund-micro) var(--ease-refund-out), background-color var(--dur-refund-micro) var(--ease-refund-out), transform var(--dur-refund-micro) var(--ease-refund-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .refund-scanner-close:hover {
+    color: var(--color-refund-ink);
+    background: var(--color-refund-surface-hover);
+  }
+}
+
+.refund-scanner-close:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.refund-scanner-close:active {
+  transform: translateY(1px);
+}
+
+.refund-scanner-close:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+}
+
+.refund-scanner-workflow {
+  display: grid;
+  padding: var(--space-refund-lg);
+}
+
+.refund-scanner-intro {
+  display: grid;
+  gap: var(--space-refund-2xs);
+  margin-block-end: var(--space-refund-md);
+}
+
+.refund-scanner-intro h3 {
+  font-size: var(--text-refund-base);
+}
+
+.refund-scanner-code {
+  display: grid;
+  gap: var(--space-refund-sm);
+  padding: var(--space-refund-md);
+  border: var(--rule-refund-strong);
+  border-radius: var(--radius-refund-md);
+  background: var(--color-refund-input);
+}
+
+.refund-scanner-method {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-refund-sm);
+}
+
+.refund-scanner-method > span {
+  width: 2.5rem;
+  height: 2.5rem;
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: var(--radius-refund-sm);
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+}
+
+.refund-scanner-method > div {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-refund-2xs);
+}
+
+.refund-scanner-method strong {
+  color: var(--color-refund-ink);
+  font-size: var(--text-refund-sm);
+}
+
+.refund-scanner-method small,
+.refund-scanner-code > small,
+.refund-camera-scanner > small {
+  color: var(--color-refund-muted);
+  font-size: var(--text-refund-xs);
+  line-height: 1.5;
+}
+
+.refund-scanner-input-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-refund-xs);
+}
+
+.refund-scanner-input-row input {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.75rem;
+  padding-inline: var(--space-refund-sm);
+  border: var(--rule-refund-strong);
+  border-radius: var(--radius-refund-sm);
+  outline: 2px solid transparent;
+  outline-offset: 1px;
+  color: var(--color-refund-ink);
+  background: var(--color-refund-page);
+  font-family: var(--font-refund-body);
+  font-size: var(--text-refund-sm);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .refund-scanner-input-row input:hover {
+    background: var(--color-refund-surface-hover);
+  }
+}
+
+.refund-scanner-input-row input:focus-visible {
+  border-color: var(--blue);
+  outline-color: var(--blue);
+}
+
+.refund-scanner-input-row input:active {
+  border-color: var(--blue);
+}
+
+.refund-scanner-input-row input:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.refund-scanner-input-row .primary-button,
+.refund-camera-scanner .secondary-button {
+  min-height: 2.75rem;
+  white-space: nowrap;
+}
+
+.refund-scanner-input-row .primary-button:focus-visible,
+.refund-camera-scanner .secondary-button:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.refund-scanner-input-row .primary-button:active,
+.refund-camera-scanner .secondary-button:active {
+  transform: translateY(1px);
+}
+
+.refund-scanner-input-row .primary-button:disabled,
+.refund-camera-scanner .secondary-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  transform: none;
+}
+
+.refund-scanner-divider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-refund-sm);
+  margin-block: var(--space-refund-md);
+  color: var(--color-refund-muted);
+  font-size: var(--text-refund-xs);
+}
+
+.refund-scanner-divider::before,
+.refund-scanner-divider::after {
+  content: '';
+  height: 1px;
+  flex: 1;
+  background: var(--color-refund-rule);
+}
+
+.refund-scanner-divider span {
+  white-space: nowrap;
+}
+
+.refund-camera-scanner {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-refund-xs) var(--space-refund-sm);
+}
+
+#phoneflow-refund-barcode-reader {
+  width: 100%;
+  display: none;
+  grid-column: 1 / -1;
+  overflow: hidden;
+  border: var(--rule-refund-strong);
+  border-radius: var(--radius-refund-md);
+  background: var(--color-refund-page);
+}
+
+#phoneflow-refund-barcode-reader.active {
+  display: block;
+}
+
+#phoneflow-refund-barcode-reader video {
+  width: 100% !important;
+  max-height: 20rem;
+  object-fit: cover;
+}
+
+#phoneflow-refund-barcode-reader img {
+  display: none;
+}
+
+.refund-camera-scanner .secondary-button[aria-pressed='true'] {
+  border-color: var(--blue);
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 16%, transparent);
+}
+
+.refund-scanner-error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-refund-xs);
+  margin: 0 0 var(--space-refund-md);
+  padding: var(--space-refund-sm);
+  border: 1px solid color-mix(in srgb, var(--color-refund-danger) 38%, var(--color-refund-rule));
+  border-radius: var(--radius-refund-sm);
+  color: var(--color-refund-danger);
+  background: color-mix(in srgb, var(--color-refund-danger) 8%, var(--color-refund-input));
+  font-size: var(--text-refund-sm);
+  line-height: 1.5;
+}
+
+.refund-scanner-error svg {
+  flex: 0 0 auto;
+}
+
 .refund-success-backdrop {
   position: fixed;
   inset: 0;
@@ -1102,9 +1460,31 @@
     flex-direction: column;
   }
 
+  .refund-search-tools {
+    max-width: none;
+  }
+
   .refund-search {
     min-width: 0;
     max-width: none;
+  }
+
+  .refund-scan-trigger {
+    min-height: 2.75rem;
+  }
+
+  .refund-scanner-modal {
+    width: min(36rem, calc(100% - 2rem));
+    max-height: calc(100dvh - 2rem);
+  }
+
+  .refund-scanner-header,
+  .refund-scanner-workflow {
+    padding: var(--space-refund-md);
+  }
+
+  #phoneflow-refund-barcode-reader video {
+    max-height: 13rem;
   }
 
   .refund-filters {
@@ -1218,6 +1598,48 @@
     display: none;
   }
 
+  .refund-search-tools {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .refund-scan-trigger {
+    width: 2.75rem;
+    padding-inline: 0;
+  }
+
+  .refund-scan-trigger span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+  }
+
+  .refund-scanner-header {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: var(--space-refund-xs);
+  }
+
+  .refund-scanner-icon {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+
+  .refund-scanner-header p {
+    font-size: var(--text-refund-xs);
+  }
+
+  .refund-scanner-input-row,
+  .refund-camera-scanner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .refund-scanner-input-row .primary-button,
+  .refund-camera-scanner .secondary-button {
+    width: 100%;
+  }
+
   .refund-summary,
   .refund-form-fields,
   .refund-complete dl,
@@ -1262,5 +1684,12 @@
     animation-duration: var(--dur-refund-micro) !important;
     animation-iteration-count: 1 !important;
     transition-duration: var(--dur-refund-micro) !important;
+  }
+
+  .refund-scan-trigger:active,
+  .refund-scanner-close:active,
+  .refund-scanner-input-row .primary-button:active,
+  .refund-camera-scanner .secondary-button:active {
+    transform: none;
   }
 }

@@ -1,12 +1,12 @@
 {
-  "date": "2026-08-25",
+  "date": "2026-08-30",
   "font_stack": "Inter body with Manrope display",
   "palette": "Existing dark/light PhoneFlow tokens in src/styles/styles.css",
   "motion": "Restrained CSS state transitions with a reduced-motion fallback",
   "spacing": "Existing compact operational spacing with a 4pt rhythm and 44px touch targets",
   "framework": "React 19 with Vite 7",
   "preserve": ["font stack", "palette", "navigation", "surface language"],
-  "scope": "Service charge catalogue and checkout on desktop and mobile",
+  "scope": "Operational dashboard components on desktop and mobile",
   "audience": "Phone shop owners, managers, and cashiers",
-  "primary_task": "Choose a priced service and record a customer payment quickly"
+  "primary_task": "Keep scanning and record lookup controls consistent across operational pages"
 }
