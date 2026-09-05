@@ -10,6 +10,10 @@ const tokenListeners = new Set<() => void>()
 const inFlightReads = new Map<string, Promise<unknown>>()
 let authTransitionInProgress = false
 
+export function clearInFlightRequests(): void {
+  inFlightReads.clear()
+}
+
 export type { SessionUser }
 
 export function getToken(): string | null {

@@ -164,8 +164,9 @@ export default function RefundsView({ user }: { user: SessionUser }) {
     }
     api<{ trades: Trade[] }>('/refunds')
       .then((result) => {
-        setTrades(result.trades)
-        setSelectedId((current) => current || result.trades.find((trade) => trade.status === 'COMPLETED')?._id || result.trades[0]?._id || '')
+        const items = Array.isArray(result?.trades) ? result.trades : []
+        setTrades(items)
+        setSelectedId((current) => current || items.find((trade) => trade.status === 'COMPLETED')?._id || items[0]?._id || '')
       })
       .catch((error: Error) => setLoadError(error.message))
       .finally(() => setLoading(false))

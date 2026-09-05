@@ -17,7 +17,7 @@ export default function TradeView() {
 
   useEffect(() => {
     api<{ trades: Trade[] }>('/trades')
-      .then((result) => setTrades(result.trades))
+      .then((result) => setTrades(Array.isArray(result?.trades) ? result.trades : []))
       .catch((reason: Error) => setError(reason.message))
       .finally(() => setLoading(false))
   }, [])

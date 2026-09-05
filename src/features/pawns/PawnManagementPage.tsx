@@ -21,7 +21,7 @@ export default function PawnView({ user }: { user: SessionUser }) {
 
   useEffect(() => {
     api<{ pawns: Pawn[] }>('/pawns')
-      .then((result) => setPawns(result.pawns))
+      .then((result) => setPawns(Array.isArray(result?.pawns) ? result.pawns : []))
       .catch((reason: Error) => setError(reason.message))
       .finally(() => setLoading(false))
   }, [])
@@ -31,7 +31,7 @@ export default function PawnView({ user }: { user: SessionUser }) {
       if (statusFilter !== 'ALL' && pawn.status !== statusFilter) return false
       const query = searchTerm.trim().toLowerCase()
       if (!query) return true
-      return [pawn.pawnNo, pawn.customer?.name, pawn.itemSnapshot.name, pawn.itemSnapshot.imei]
+      return [pawn.pawnNo, pawn.customer?.name, pawn.itemSnapshot?.name, pawn.itemSnapshot?.imei]
         .some((value) => value?.toLowerCase().includes(query))
     })
     .sort((a, b) => {

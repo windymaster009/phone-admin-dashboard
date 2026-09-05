@@ -203,7 +203,7 @@ export default function LoanDashboardPanel({
             <p>
               <span>Repaid</span>
               {dualMoney(usd?.paid || 0, khr?.paid || 0)}
-              <em>{summary?.counts.paid || 0} fully paid loans</em>
+              <em>{summary?.counts?.paid || 0} fully paid loans</em>
             </p>
           </article>
         </div>
@@ -214,7 +214,7 @@ export default function LoanDashboardPanel({
               <span className="eyebrow">Follow-up list</span>
               <h4>Urgent borrowers</h4>
             </div>
-            <span>{data?.urgentLoans.length || 0}</span>
+            <span>{data?.urgentLoans?.length || 0}</span>
           </div>
 
           {loading && !data ? (
@@ -222,7 +222,7 @@ export default function LoanDashboardPanel({
               <RefreshCcw className="loan-dashboard-spin" size={22} />
               <span>Loading loan data...</span>
             </div>
-          ) : data?.urgentLoans.length ? (
+          ) : data?.urgentLoans?.length ? (
             <div className="loan-dashboard-urgent-list">
               {data.urgentLoans.map((loan) => (
                 <button key={loan._id} onClick={handleOpenLoans}>

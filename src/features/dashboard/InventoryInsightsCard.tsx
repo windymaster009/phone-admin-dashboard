@@ -59,7 +59,7 @@ export default function InventoryInsightsCard() {
     setError('')
     try {
       const result = await api<InventoryResponse>('/inventory', {}, { deduplicate: true })
-      setItems(result.items)
+      setItems(Array.isArray(result?.items) ? result.items : [])
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to load inventory values')
     } finally {

@@ -132,14 +132,14 @@ export default function CashFlowCard() {
   const points = useMemo(() => {
     if (!data) return []
     if (period === 'week') return buildWeekPoints(data.weekPerformance || [])
-    return period === 'month' ? buildMonthPoints(data.dailyPerformance) : buildYearPoints(data.monthlyPerformance)
+    return period === 'month' ? buildMonthPoints(data.dailyPerformance || []) : buildYearPoints(data.monthlyPerformance || [])
   }, [data, period])
 
   const totals = useMemo(() => {
     if (!data) return { sales: 0, purchases: 0, net: 0 }
     if (period === 'month') {
-      const sales = valueForType(data.monthPerformance, 'SELL')
-      const purchases = valueForType(data.monthPerformance, 'BUY')
+      const sales = valueForType(data.monthPerformance || [], 'SELL')
+      const purchases = valueForType(data.monthPerformance || [], 'BUY')
       return { sales, purchases, net: sales - purchases }
     }
     const sales = points.reduce((sum, point) => sum + point.sales, 0)

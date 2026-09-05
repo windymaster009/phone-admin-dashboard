@@ -210,8 +210,9 @@ export default function ActivityReportDropdown({
     setError('')
     try {
       const result = await api<{ logs: ActivityLog[] }>('/activity-logs')
-      setLogs(result.logs)
-      updateUnread(result.logs)
+      const items = Array.isArray(result?.logs) ? result.logs : []
+      setLogs(items)
+      updateUnread(items)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to load the activity report')
     } finally {

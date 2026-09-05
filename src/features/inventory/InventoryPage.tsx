@@ -64,7 +64,7 @@ export default function InventoryView() {
 
   useEffect(() => {
     api<{ items: InventoryItem[] }>('/inventory')
-      .then((result) => setItems(result.items))
+      .then((result) => setItems(Array.isArray(result?.items) ? result.items : []))
       .catch((reason: Error) => setError(reason.message))
       .finally(() => setLoading(false))
   }, [])

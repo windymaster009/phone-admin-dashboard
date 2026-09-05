@@ -197,7 +197,7 @@ export default function DashboardView({ goTo, user, onReady }: { goTo: (key: Nav
     void loadDashboard()
   }, [])
 
-  const metrics = data ? [
+  const metrics = data?.metrics ? [
     { label: "Today's sales", value: money.format(data.metrics.salesToday), secondaryValue: khrText(data.metrics.salesToday, exchangeRate), change: `${money.format(data.metrics.purchasesToday)} purchases${exchangeRate ? ` · ${khrText(data.metrics.purchasesToday, exchangeRate)}` : ''}`, trend: 'up' as const, icon: CircleDollarSign, tone: 'violet' },
     { label: 'Active pawn value', value: money.format(data.metrics.activePawnValue), secondaryValue: khrText(data.metrics.activePawnValue, exchangeRate), change: `${data.metrics.overdueContracts} overdue`, trend: data.metrics.overdueContracts > 0 ? 'down' as const : 'up' as const, icon: HandCoins, tone: 'blue' },
     { label: 'Phones in stock', value: String(data.metrics.phonesInStock), change: `${data.metrics.lowStock} low stock`, trend: data.metrics.lowStock > 0 ? 'down' as const : 'up' as const, icon: Smartphone, tone: 'orange' },
@@ -206,8 +206,8 @@ export default function DashboardView({ goTo, user, onReady }: { goTo: (key: Nav
   const monthLabels = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D']
   const monthlyNet = monthLabels.map((_, index) => {
     const month = index + 1
-    const sales = data?.monthlyPerformance.find((item) => item._id.month === month && item._id.type === 'SELL')?.total || 0
-    const purchases = data?.monthlyPerformance.find((item) => item._id.month === month && item._id.type === 'BUY')?.total || 0
+    const sales = data?.monthlyPerformance?.find((item) => item._id.month === month && item._id.type === 'SELL')?.total || 0
+    const purchases = data?.monthlyPerformance?.find((item) => item._id.month === month && item._id.type === 'BUY')?.total || 0
     return sales - purchases
   })
   const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate()
@@ -222,14 +222,14 @@ export default function DashboardView({ goTo, user, onReady }: { goTo: (key: Nav
   const performanceLabels = performancePeriod === 'month' ? dayLabels : monthLabels
   const performanceSales = performancePeriod === 'month'
     ? data?.monthPerformance?.find((item) => item._id === 'SELL')?.total || 0
-    : data?.monthlyPerformance.filter((item) => item._id.type === 'SELL').reduce((sum, item) => sum + item.total, 0) || 0
+    : (data?.monthlyPerformance || []).filter((item) => item._id.type === 'SELL').reduce((sum, item) => sum + item.total, 0) || 0
   const performancePurchases = performancePeriod === 'month'
     ? data?.monthPerformance?.find((item) => item._id === 'BUY')?.total || 0
-    : data?.monthlyPerformance.filter((item) => item._id.type === 'BUY').reduce((sum, item) => sum + item.total, 0) || 0
+    : (data?.monthlyPerformance || []).filter((item) => item._id.type === 'BUY').reduce((sum, item) => sum + item.total, 0) || 0
   const performanceNet = performanceSales - performancePurchases
   const maxPerformanceValue = Math.max(...performanceValues.map((value) => Math.abs(value)), 1)
   const hasPerformanceData = performanceValues.some((value) => value !== 0)
-  const inventoryMix = data?.inventoryMix.length ? data.inventoryMix : [{ _id: 'PHONE', count: 0, value: 0 }, { _id: 'ACCESSORY', count: 0, value: 0 }, { _id: 'SPARE_PART', count: 0, value: 0 }]
+  const inventoryMix = data?.inventoryMix?.length ? data.inventoryMix : [{ _id: 'PHONE', count: 0, value: 0 }, { _id: 'ACCESSORY', count: 0, value: 0 }, { _id: 'SPARE_PART', count: 0, value: 0 }]
   const totalInventoryValue = inventoryMix.reduce((sum, item) => sum + item.value, 0)
   const phoneValue = inventoryMix.find((item) => item._id === 'PHONE')?.value || 0
   const accessoryValue = inventoryMix.find((item) => item._id === 'ACCESSORY')?.value || 0
@@ -332,7 +332,7 @@ export default function DashboardView({ goTo, user, onReady }: { goTo: (key: Nav
                     <td><button className="icon-button" onClick={() => setSelectedPawn(row)} aria-label={`View contract ${row.pawnNo}`}><MoreHorizontal size={18} /></button></td>
                   </tr>
                 ))}
-                {data?.recentPawns.length === 0 && <tr><td colSpan={6}>No pawn contracts in the database yet.</td></tr>}
+                {data?.recentPawns?.length === 0 && <tr><td colSpan={6}>No pawn contracts in the database yet.</td></tr>}
               </tbody>
             </table>
           </div>
@@ -351,7 +351,7 @@ export default function DashboardView({ goTo, user, onReady }: { goTo: (key: Nav
                 </div>
               </article>
             ))}
-            {data?.recentPawns.length === 0 && <p className="mobile-contract-empty">No pawn contracts in the database yet.</p>}
+            {data?.recentPawns?.length === 0 && <p className="mobile-contract-empty">No pawn contracts in the database yet.</p>}
           </div>
         </article>
         </div>
