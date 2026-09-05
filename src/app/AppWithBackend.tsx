@@ -15,6 +15,7 @@ import {
 } from '../lib/api'
 import { safeStorage, STORAGE_KEYS } from '../lib/storage'
 import { reportFrontendError } from '../lib/errorReporting'
+import type { AppFontSize } from './types'
 
 const loadApp = () => import('./App')
 const loadAuthScreen = () => import('./AuthScreen')
@@ -22,7 +23,6 @@ const App = lazy(loadApp)
 const AuthScreen = lazy(loadAuthScreen)
 
 type AppTheme = 'dark' | 'light'
-type AppFontSize = 'default' | 'comfortable' | 'large'
 
 function getInitialTheme(): AppTheme {
   if (typeof document !== 'undefined') {
