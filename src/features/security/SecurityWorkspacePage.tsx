@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import QRCode from 'react-qr-code'
+import './security-workspace.css'
+import './two-factor.css'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -161,7 +163,7 @@ function eventGroupKey(event: SecurityEvent) {
   return [event.action, day, event.ipAddress || '', details.deviceName || '', details.kind || ''].join('|')
 }
 
-function SecurityWorkspace() {
+export default function SecurityWorkspacePage() {
   const user = getSessionUser()
   const [sessions, setSessions] = useState<AuthSession[]>([])
   const [events, setEvents] = useState<SecurityEvent[]>([])
@@ -564,72 +566,4 @@ function SecurityWorkspace() {
       </div>
     </div>
   )
-}
-
-export default function SecurityWorkspaceBridge() {
-  const [mainTarget, setMainTarget] = useState<HTMLElement | null>(null)
-  const [navTarget, setNavTarget] = useState<HTMLElement | null>(null)
-  const [active, setActive] = useState(() => window.location.pathname === '/security')
-  const directRoute = useRef(window.location.pathname === '/security')
-
-  const locate = useCallback(() => {
-    setMainTarget(document.querySelector<HTMLElement>('.main-content'))
-    let host = document.querySelector<HTMLElement>('.security-nav-host')
-    if (!host) {
-      const group = Array.from(document.querySelectorAll<HTMLElement>('.nav-group')).find((item) => item.querySelector('.nav-group-label')?.textContent?.trim() === 'Finance & Control')
-      if (group) {
-        host = document.createElement('span')
-        host.className = 'security-nav-host'
-        const settings = Array.from(group.querySelectorAll<HTMLElement>(':scope > button')).find((button) => button.textContent?.includes('Settings'))
-        if (settings) settings.before(host)
-        else group.append(host)
-      }
-    }
-    setNavTarget(host)
-  }, [])
-
-  useEffect(() => {
-    locate()
-    const observer = new MutationObserver(locate)
-    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] })
-    const pop = () => setActive(window.location.pathname === '/security')
-    const sidebar = (event: MouseEvent) => {
-      const button = event.target instanceof Element ? event.target.closest('.sidebar-nav button') : null
-      if (button && !button.closest('.security-nav-host')) setActive(false)
-    }
-    window.addEventListener('popstate', pop)
-    document.addEventListener('click', sidebar, true)
-    return () => {
-      observer.disconnect()
-      window.removeEventListener('popstate', pop)
-      document.removeEventListener('click', sidebar, true)
-      document.querySelector('.security-nav-host')?.remove()
-      document.querySelector('.main-content')?.classList.remove('security-route-active')
-    }
-  }, [locate])
-
-  useEffect(() => {
-    if (!directRoute.current || !mainTarget) return
-    if (window.location.pathname !== '/security') window.history.replaceState({ view: 'security' }, '', '/security')
-    setActive(true)
-  }, [mainTarget])
-
-  useEffect(() => {
-    if (!mainTarget) return
-    mainTarget.classList.toggle('security-route-active', active)
-    if (active) {
-      document.querySelectorAll('.sidebar-nav button.active').forEach((button) => button.classList.remove('active'))
-      document.title = 'Security · PhoneFlow'
-    }
-  }, [active, mainTarget])
-
-  const openPage = () => {
-    if (window.location.pathname !== '/security') window.history.pushState({ view: 'security' }, '', '/security')
-    setActive(true)
-  }
-
-  return <>
-    {navTarget && createPortal(<button className={active ? 'active' : ''} onClick={openPage}><ShieldCheck size={19} /><span>Security</span></button>, navTarget)}
-    {active && mainTarget && createPortal(<SecurityWorkspace />, mainTarget)}
-  </>
 }

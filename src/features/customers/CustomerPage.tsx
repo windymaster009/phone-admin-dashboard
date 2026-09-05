@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ButtonHTMLAttributes, type FormEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import './customer-workspace.css'
 import {
   AlertTriangle,
   BadgeCheck,
@@ -180,7 +181,7 @@ function DeleteCustomerModal({ customer, busy, error, onClose, onConfirm }: {
   )
 }
 
-function CustomerPage() {
+export default function CustomerPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -349,27 +350,4 @@ function CustomerPage() {
       {success && <CustomerSuccessModal success={success} onClose={() => setSuccess(null)} />}
     </div>
   )
-}
-
-export default function CustomerWorkspaceBridge() {
-  const [target, setTarget] = useState<HTMLElement | null>(null)
-  const [active, setActive] = useState(false)
-
-  useEffect(() => {
-    const sync = () => {
-      const main = document.querySelector<HTMLElement>('.main-content')
-      const activeButton = document.querySelector<HTMLElement>('.sidebar-nav .nav-group button.active')
-      const label = activeButton?.querySelector('span')?.textContent?.trim()
-      setTarget(main)
-      setActive(label === 'Customers')
-    }
-
-    sync()
-    const observer = new MutationObserver(sync)
-    observer.observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] })
-    return () => observer.disconnect()
-  }, [])
-
-  if (!target || !active) return null
-  return createPortal(<CustomerPage />, target)
 }

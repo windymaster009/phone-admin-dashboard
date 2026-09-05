@@ -64,60 +64,28 @@ import {
   setStoredValuations,
 } from '../lib/storage'
 import { printInventoryLabel } from '../features/inventory/barcode'
-import BackupStatusBridge from '../features/backup/BackupStatusBridge'
 import SupplierWorkspace from '../features/suppliers/SupplierWorkspace'
 import ServiceWorkspace from '../features/services/ServiceWorkspace'
+import LoanDashboardPanel from '../features/loans/LoanDashboardPanel'
+import CashFlowCard from '../features/dashboard/CashFlowCard'
+import InventoryInsightsCard from '../features/dashboard/InventoryInsightsCard'
+import BackupStatusCard from '../features/backup/BackupStatusCard'
+import ActivityReportDropdown from '../features/activity/ActivityReportDropdown'
+import LoanPage from '../features/loans/LoanPage'
+import CustomerPage from '../features/customers/CustomerPage'
+import ReceiptCenterPage from '../features/receipts/ReceiptCenterPage'
+import SecureDocumentsPage from '../features/documents/SecureDocumentsPage'
+import SecurityWorkspacePage from '../features/security/SecurityWorkspacePage'
+import OperationModalBridge from '../features/operations/OperationModalBridge'
+import ReceiptCenterBridge from '../features/receipts/ReceiptCenterBridge'
+import NotFoundView from '../components/NotFoundView'
+import { useRouter, getNavGroups, type RouteKey } from './routing'
 import '../features/backup/backup-status.css'
 import '../features/refunds/refund-page.css'
 
-type NavKey =
-  | 'dashboard'
-  | 'pawn'
-  | 'trade'
-  | 'services'
-  | 'inventory'
-  | 'customers'
-  | 'suppliers'
-  | 'depreciation'
-  | 'refunds'
-  | 'businessOverview'
-  | 'reports'
-  | 'settings'
-
-type NavItem = {
-  key: NavKey
-  label: string
-  icon: LucideIcon
-  badge?: string
-  roles?: SessionUser['role'][]
-}
+type NavKey = RouteKey
 
 type AppFontSize = 'default' | 'comfortable' | 'large'
-
-const viewPaths: Record<NavKey, string> = {
-  dashboard: '/dashboard',
-  pawn: '/pawn-management',
-  trade: '/buy-sell',
-  services: '/services',
-  inventory: '/stock',
-  customers: '/customers',
-  suppliers: '/suppliers',
-  depreciation: '/depreciation',
-  refunds: '/refunds',
-  businessOverview: '/business-overview',
-  reports: '/reports',
-  settings: '/settings',
-}
-
-function viewFromPath(pathname: string): NavKey {
-  const normalizedPath = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname
-  const match = (Object.entries(viewPaths) as [NavKey, string][]).find(([, path]) => path === normalizedPath)
-
-  // Both the site root and /admin open the main dashboard.
-  if (normalizedPath === '/' || normalizedPath === '/admin') return 'dashboard'
-  if (normalizedPath.startsWith('/reports/')) return 'reports'
-  return match?.[0] || 'dashboard'
-}
 
 type Customer = {
   _id: string
@@ -564,34 +532,6 @@ type OperationalReportData = {
   notes?: string[]
 }
 
-const navGroups: { label: string; items: NavItem[] }[] = [
-  {
-    label: 'Overview',
-    items: [{ key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard }],
-  },
-  {
-    label: 'Operations',
-    items: [
-      { key: 'pawn', label: 'Pawn Management', icon: HandCoins },
-      { key: 'trade', label: 'Buy & Sell', icon: ShoppingCart },
-      { key: 'services', label: 'Services', icon: Wrench },
-      { key: 'inventory', label: 'Stock Information', icon: Boxes },
-      { key: 'customers', label: 'Customers', icon: Users },
-      { key: 'suppliers', label: 'Suppliers', icon: Building2 },
-      { key: 'refunds', label: 'Refunds', icon: RefreshCcw, roles: ['OWNER', 'MANAGER'] },
-    ],
-  },
-  {
-    label: 'Finance & Control',
-    items: [
-      { key: 'depreciation', label: 'Depreciation', icon: TrendingDown },
-      { key: 'businessOverview', label: 'Business Overview', icon: BarChart3 },
-      { key: 'reports', label: 'Reports', icon: FileText },
-      { key: 'settings', label: 'Settings', icon: Settings },
-    ],
-  },
-]
-
 const demoMetrics = [
   {
     label: "Today's sales",
@@ -826,7 +766,21 @@ const titleStatus = (status: string) => {
   if (status === 'PAWN_FORFEIT') return 'Pawn claim'
   return status.replaceAll('_', ' ').toLowerCase().replace(/(^|\s)\S/g, (letter) => letter.toUpperCase())
 }
-const comingNext = (label: string) => window.alert(`${label} form is next. The tables and dashboard are connected to MongoDB now.`)
+const openOperationModal = (kindOrLabel: string) => {
+  const value = kindOrLabel.toLowerCase()
+  let kind: 'stock' | 'purchase' | 'sale' | 'pawn' | null = null
+  if (value.includes('stock')) kind = 'stock'
+  else if (value.includes('purchase')) kind = 'purchase'
+  else if (value.includes('sale')) kind = 'sale'
+  else if (value.includes('pawn')) kind = 'pawn'
+
+  if (kind) {
+    window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind } }))
+  } else {
+    window.alert(`${kindOrLabel} form is coming next.`)
+  }
+}
+const comingNext = openOperationModal
 
 function StatusBadge({ status }: { status: string }) {
   const label = titleStatus(status)
@@ -1289,33 +1243,17 @@ function DashboardView({ goTo, user, onReady }: { goTo: (key: NavKey) => void; u
 
       <section className="dashboard-grid">
         <div className="dashboard-column dashboard-primary-column">
-        <article className="surface-card performance-card">
-          <div className="card-heading">
-            <div>
-              <span className="eyebrow">Revenue overview</span>
-              <h3>Shop performance</h3>
+        <ErrorBoundary boundaryName="CashFlowCard" compact>
+          <article className="surface-card performance-card dashboard-performance-bridge-active">
+            <div className="dashboard-performance-host">
+              <CashFlowCard />
             </div>
-            <select className="ghost-button performance-period-select" value={performancePeriod} onChange={(event) => setPerformancePeriod(event.target.value as 'month' | 'year')} aria-label="Performance period">
-              <option value="month">This month</option>
-              <option value="year">This year</option>
-            </select>
-          </div>
+          </article>
+        </ErrorBoundary>
 
-          <div className="revenue-total">
-            <div className="revenue-amount"><strong>{money.format(performanceNet)}</strong>{exchangeRate && <small>{khrText(performanceNet, exchangeRate)}</small>}</div>
-            <span className={performanceNet < 0 ? 'negative' : ''}>{performanceNet < 0 ? <ArrowDownRight size={15} /> : <ArrowUpRight size={15} />} net cash movement this {performancePeriod}</span>
-          </div>
-
-          <div className={`chart-shell ${performancePeriod === 'month' ? 'daily-chart' : ''}`} aria-label={`${performancePeriod === 'month' ? 'Daily' : 'Monthly'} net cash movement chart`}>
-            {!hasPerformanceData && <div className="chart-empty"><BarChart3 size={22} /><strong>No completed transactions</strong><span>Sales and purchases will appear here when they are completed.</span></div>}
-            {performanceValues.map((total, index) => (
-              <div className="chart-column" key={index}>
-                <span className={total < 0 ? 'negative' : ''} style={{ height: `${total === 0 ? 3 : Math.max((Math.abs(total) / maxPerformanceValue) * 100, 12)}%` }} title={`${money.format(total)}${exchangeRate ? ` / ${khrText(total, exchangeRate)}` : ''}`} />
-                <small>{performancePeriod === 'month' && index % 5 !== 0 && index !== performanceValues.length - 1 ? '' : performanceLabels[index]}</small>
-              </div>
-            ))}
-          </div>
-        </article>
+        <ErrorBoundary boundaryName="LoanDashboardPanel" compact>
+          <LoanDashboardPanel />
+        </ErrorBoundary>
 
         <article className="surface-card table-card dashboard-recent-contracts-card">
           <div className="card-heading table-heading">
@@ -1379,36 +1317,13 @@ function DashboardView({ goTo, user, onReady }: { goTo: (key: NavKey) => void; u
 
         <div className="dashboard-column dashboard-secondary-column">
 
-        <article className="surface-card inventory-mix-card">
-          <div className="card-heading">
-            <div>
-              <span className="eyebrow">Stock value</span>
-              <h3>Inventory mix</h3>
+        <ErrorBoundary boundaryName="InventoryInsightsCard" compact>
+          <article className="surface-card inventory-mix-card inventory-insights-bridge-active">
+            <div className="inventory-insights-host">
+              <InventoryInsightsCard />
             </div>
-            <div className="card-options" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setInventoryMenuOpen(false) }}>
-              <button className={`icon-button ${inventoryMenuOpen ? 'open' : ''}`} onClick={() => setInventoryMenuOpen((current) => !current)} aria-label="Inventory options" aria-expanded={inventoryMenuOpen}><MoreHorizontal size={19} /></button>
-              {inventoryMenuOpen && <div className="card-options-menu surface-card" role="menu">
-                <button onClick={() => goTo('inventory')} role="menuitem"><Boxes size={16} />Open inventory</button>
-                <button onClick={() => { setInventoryMenuOpen(false); comingNext('Adjust stock') }} role="menuitem"><Plus size={16} />Adjust stock</button>
-                <button onClick={() => { setInventoryMenuOpen(false); void loadDashboard(true) }} role="menuitem" disabled={refreshing}><RefreshCcw size={16} />{refreshing ? 'Refreshing…' : 'Refresh values'}</button>
-              </div>}
-            </div>
-          </div>
-          <div className="donut-wrap">
-            <div className="donut-chart" style={donutStyle} aria-label={`Total inventory value ${inventoryValueText}`}>
-              <span className="donut-center">
-                <strong className={`donut-value donut-value-${inventoryValueSize}`}>{inventoryValueText}</strong>
-                {exchangeRate && <small className="donut-khr">{khrText(totalInventoryValue, exchangeRate)}</small>}
-                <small>Total value</small>
-              </span>
-            </div>
-          </div>
-          <div className="legend-list">
-            {inventoryMix.map((item, index) => (
-              <div key={item._id}><span className={`legend-dot ${['dot-violet', 'dot-blue', 'dot-orange'][index] || 'dot-violet'}`} /><p>{titleStatus(item._id)}<small>{item.count} units</small></p><span className="legend-money"><strong>{money.format(item.value)}</strong>{exchangeRate && <small>{khrText(item.value, exchangeRate)}</small>}</span></div>
-            ))}
-          </div>
-        </article>
+          </article>
+        </ErrorBoundary>
 
         <article className="surface-card quick-actions-card">
           <div className="card-heading">
@@ -4143,27 +4058,24 @@ function App({
   onFontSizeChange: (fontSize: AppFontSize) => void
   onWorkspaceReady: () => void
 }) {
-  const [active, setActive] = useState<NavKey>(() => viewFromPath(window.location.pathname))
+  const { navigate, routeKey, currentRoute, isUnknownRoute, currentPath, canonicalPath } = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [overdueLoans, setOverdueLoans] = useState(0)
+  const [activityOpen, setActivityOpen] = useState(false)
+  const [activityUnread, setActivityUnread] = useState(0)
   const [initialViewReady, setInitialViewReady] = useState(() => {
-    const initialView = viewFromPath(window.location.pathname)
-    return initialView !== 'dashboard' && initialView !== 'businessOverview'
+    return routeKey !== 'dashboard' && routeKey !== 'businessOverview'
   })
   const profileMenuRef = useRef<HTMLDivElement>(null)
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null)
+  const notificationButtonRef = useRef<HTMLButtonElement>(null)
   const sidebarRef = useRef<HTMLElement>(null)
 
-  const changePage = (key: NavKey) => {
-    setActive(key)
+  const changePage = (to: string) => {
     setMobileOpen(false)
     setProfileOpen(false)
-    const nextPath = viewPaths[key]
-    if (window.location.pathname !== nextPath) {
-      const navigationState = { view: key }
-      window.history.pushState(navigationState, '', nextPath)
-      window.dispatchEvent(new PopStateEvent('popstate', { state: navigationState }))
-    }
+    navigate(to)
   }
 
   useEffect(() => {
@@ -4171,28 +4083,32 @@ function App({
   }, [initialViewReady, onWorkspaceReady])
 
   useEffect(() => {
-    const currentView = viewFromPath(window.location.pathname)
-    const canonicalPath = currentView === 'reports' && window.location.pathname.startsWith('/reports/')
-      ? window.location.pathname.replace(/\/+$/, '')
-      : viewPaths[currentView]
-
-    if (window.location.pathname !== canonicalPath) {
-      window.history.replaceState({ view: currentView }, '', canonicalPath)
+    if (currentPath !== canonicalPath && !isUnknownRoute) {
+      navigate(canonicalPath, { replace: true })
     }
+  }, [currentPath, canonicalPath, isUnknownRoute, navigate])
 
-    const handlePopState = () => {
-      setActive(viewFromPath(window.location.pathname))
-      setMobileOpen(false)
-      setProfileOpen(false)
+  useEffect(() => {
+    let mounted = true
+    const checkLoans = async () => {
+      try {
+        const res = await api<{ summary: { counts: { overdue: number } } }>('/loans/summary')
+        if (mounted) setOverdueLoans(res.summary?.counts?.overdue || 0)
+      } catch {
+        // unauthenticated or offline
+      }
     }
-
-    window.addEventListener('popstate', handlePopState)
-    return () => window.removeEventListener('popstate', handlePopState)
+    void checkLoans()
+    const timer = window.setInterval(checkLoans, 60_000)
+    return () => {
+      mounted = false
+      window.clearInterval(timer)
+    }
   }, [])
 
   useEffect(() => {
-    document.title = `${navGroups.flatMap((group) => group.items).find((item) => item.key === active)?.label || 'Dashboard'} · ${shop.name}`
-  }, [active, shop.name])
+    document.title = `${currentRoute?.label || (isUnknownRoute ? 'Not Found' : 'Dashboard')} · ${shop.name}`
+  }, [currentRoute, isUnknownRoute, shop.name])
 
   useEffect(() => {
     if (!profileOpen) return
@@ -4267,22 +4183,45 @@ function App({
   }, [mobileOpen])
 
   const renderView = () => {
-    switch (active) {
-      case 'dashboard': return <DashboardView goTo={changePage} user={user} onReady={() => setInitialViewReady(true)} />
-      case 'pawn': return <PawnView user={user} />
-      case 'trade': return <TradeView />
-      case 'services': return <ServiceWorkspace />
-      case 'inventory': return <InventoryView />
-      case 'customers': return <CustomersView />
-      case 'suppliers': return <SupplierWorkspace />
-      case 'depreciation': return <DepreciationView goTo={changePage} />
-      case 'refunds': return <RefundsView user={user} />
-      case 'businessOverview': return <BusinessOverviewView onReady={() => setInitialViewReady(true)} />
-      case 'reports': return <ReportsView />
-      case 'settings': return <SettingsView user={user} onLogout={onLogout} fontSize={fontSize} onFontSizeChange={onFontSizeChange} />
-      default: return <DashboardView goTo={changePage} user={user} onReady={() => setInitialViewReady(true)} />
+    switch (routeKey) {
+      case 'dashboard':
+        return <DashboardView goTo={changePage} user={user} onReady={() => setInitialViewReady(true)} />
+      case 'pawn':
+        return <PawnView user={user} />
+      case 'loans':
+        return <LoanPage onSummary={(s) => setOverdueLoans(s.counts.overdue)} />
+      case 'trade':
+        return <TradeView />
+      case 'services':
+        return <ServiceWorkspace />
+      case 'inventory':
+        return <InventoryView />
+      case 'customers':
+        return <CustomerPage />
+      case 'suppliers':
+        return <SupplierWorkspace />
+      case 'depreciation':
+        return <DepreciationView goTo={changePage} />
+      case 'refunds':
+        return <RefundsView user={user} />
+      case 'businessOverview':
+        return <BusinessOverviewView onReady={() => setInitialViewReady(true)} />
+      case 'reports':
+        return <ReportsView />
+      case 'receipts':
+        return <ReceiptCenterPage />
+      case 'secureDocuments':
+        return <SecureDocumentsPage />
+      case 'security':
+        return <SecurityWorkspacePage />
+      case 'settings':
+        return <SettingsView user={user} onLogout={onLogout} fontSize={fontSize} onFontSizeChange={onFontSizeChange} />
+      default:
+        return <NotFoundView onGoHome={() => changePage('/dashboard')} />
     }
   }
+
+  const activeNavGroups = useMemo(() => getNavGroups(user.role, overdueLoans), [user.role, overdueLoans])
 
   return (
     <div
@@ -4299,13 +4238,18 @@ function App({
         </div>
 
         <nav className="sidebar-nav" aria-label="Main menu">
-          {navGroups.map((group) => (
+          {activeNavGroups.map((group) => (
             <div className="nav-group" key={group.label}>
               <span className="nav-group-label">{group.label}</span>
-              {group.items.filter((item) => !item.roles || item.roles.includes(user.role)).map((item) => {
+              {group.items.map((item) => {
                 const Icon = item.icon
+                const isActive = routeKey === item.key
                 return (
-                  <button className={active === item.key ? 'active' : ''} key={item.key} onClick={() => changePage(item.key)}>
+                  <button
+                    className={isActive ? 'active' : ''}
+                    key={item.key}
+                    onClick={() => changePage(item.pathname)}
+                  >
                     <Icon size={19} />
                     <span>{item.label}</span>
                     {item.badge && <small>{item.badge}</small>}
@@ -4317,10 +4261,7 @@ function App({
         </nav>
 
         <div className="sidebar-footer">
-          <div className="support-card">
-            <span><BadgeCheck size={19} /></span>
-            <p><strong>Daily backup</strong><small>Checking status</small></p>
-          </div>
+          <BackupStatusCard />
         </div>
       </aside>
 
@@ -4336,7 +4277,22 @@ function App({
             >
               {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
             </button>
-            <button className="icon-button notification-button" aria-label="Notifications"><Bell size={18} /><span /></button>
+            <button
+              ref={notificationButtonRef}
+              className="icon-button notification-button"
+              aria-label="Notifications"
+              aria-expanded={activityOpen}
+              onClick={() => setActivityOpen((curr) => !curr)}
+            >
+              <Bell size={18} />
+              {activityUnread > 0 && <span />}
+            </button>
+            <ActivityReportDropdown
+              anchorRef={notificationButtonRef}
+              open={activityOpen}
+              onClose={() => setActivityOpen(false)}
+              onUnreadChange={setActivityUnread}
+            />
             <div className="profile-menu" ref={profileMenuRef}>
               <button
                 className={`topbar-user ${profileOpen ? 'open' : ''}`}
@@ -4360,7 +4316,7 @@ function App({
                     <strong>{titleStatus(user.role)}</strong>
                   </div>
                   <div className="profile-dropdown-actions">
-                    <button role="menuitem" onClick={() => changePage('settings')}><Settings size={16} /><span>Account settings</span></button>
+                    <button role="menuitem" onClick={() => changePage('/settings')}><Settings size={16} /><span>Account settings</span></button>
                     <button className="logout-action" role="menuitem" onClick={onLogout}><LogOut size={16} /><span>Log out</span></button>
                   </div>
                 </div>
@@ -4369,13 +4325,15 @@ function App({
           </div>
         </header>
         <main className="main-content">
-          <ErrorBoundary boundaryName={`Screen:${active}`} key={active}>
+          <ErrorBoundary boundaryName={`Screen:${routeKey}`} key={routeKey}>
             {renderView()}
           </ErrorBoundary>
         </main>
       </div>
-      <ErrorBoundary boundaryName="BackupStatusBridge" compact>
-        <BackupStatusBridge />
+
+      <ErrorBoundary boundaryName="GlobalOverlays" compact>
+        <OperationModalBridge />
+        <ReceiptCenterBridge />
       </ErrorBoundary>
     </div>
   )

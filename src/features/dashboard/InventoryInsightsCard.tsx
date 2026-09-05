@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { createPortal } from 'react-dom'
+import './inventory-insights.css'
+import { useRouter } from '../../app/routing'
 import { AlertTriangle, Boxes, DollarSign, PackageOpen, RefreshCcw, TrendingUp } from 'lucide-react'
 import { api } from '../../lib/api'
 
@@ -47,7 +48,8 @@ const categoryClass: Record<InventoryItem['category'], string> = {
   OTHER: 'other',
 }
 
-function InventoryInsightsCard() {
+export default function InventoryInsightsCard() {
+  const { navigate } = useRouter()
   const [items, setItems] = useState<InventoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -104,8 +106,7 @@ function InventoryInsightsCard() {
   }, [items])
 
   const openInventory = () => {
-    window.history.pushState({ view: 'inventory' }, '', '/stock')
-    window.dispatchEvent(new PopStateEvent('popstate'))
+    navigate('/stock')
   }
 
   return (
@@ -188,60 +189,3 @@ function InventoryInsightsCard() {
   )
 }
 
-export default function InventoryInsightsBridge() {
-  const [target, setTarget] = useState<HTMLElement | null>(null)
-
-  useEffect(() => {
-    let currentCard: HTMLElement | null = null
-    let currentHost: HTMLElement | null = null
-
-    const cleanup = () => {
-      currentCard?.classList.remove('inventory-insights-bridge-active')
-      currentHost?.remove()
-      currentCard = null
-      currentHost = null
-    }
-
-    const locate = () => {
-      const normalized = window.location.pathname.length > 1 ? window.location.pathname.replace(/\/+$/, '') : window.location.pathname
-      const onDashboard = normalized === '/' || normalized === '/admin' || normalized === '/dashboard'
-      if (!onDashboard) {
-        cleanup()
-        setTarget(null)
-        return
-      }
-
-      const card = document.querySelector<HTMLElement>('.inventory-mix-card')
-      if (!card) {
-        cleanup()
-        setTarget(null)
-        return
-      }
-      if (card === currentCard && currentHost?.isConnected) return
-
-      cleanup()
-      const host = document.createElement('div')
-      host.className = 'inventory-insights-host'
-      card.append(host)
-      card.classList.add('inventory-insights-bridge-active')
-      currentCard = card
-      currentHost = host
-      setTarget(host)
-    }
-
-    locate()
-    const observer = new MutationObserver(locate)
-    observer.observe(document.body, { childList: true, subtree: true })
-    window.addEventListener('popstate', locate)
-    const timer = window.setInterval(locate, 1_000)
-
-    return () => {
-      observer.disconnect()
-      window.removeEventListener('popstate', locate)
-      window.clearInterval(timer)
-      cleanup()
-    }
-  }, [])
-
-  return target ? createPortal(<InventoryInsightsCard />, target) : null
-}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import './loan-workspace.css'
 import {
   AlertTriangle,
   Barcode,
@@ -67,7 +68,7 @@ type CurrencySummary = {
   overdue: number
 }
 
-type LoanSummary = {
+export type LoanSummary = {
   byCurrency: Record<Currency, CurrencySummary>
   counts: { total: number; open: number; dueSoon: number; overdue: number; paid: number }
 }
@@ -82,8 +83,8 @@ type LoanPaymentConfirmation = {
   status: LoanStatus
 }
 
-const emptyCurrencySummary = (): CurrencySummary => ({ lent: 0, expected: 0, paid: 0, outstanding: 0, dueSoon: 0, overdue: 0 })
-const emptySummary = (): LoanSummary => ({
+export const emptyCurrencySummary = (): CurrencySummary => ({ lent: 0, expected: 0, paid: 0, outstanding: 0, dueSoon: 0, overdue: 0 })
+export const emptySummary = (): LoanSummary => ({
   byCurrency: { USD: emptyCurrencySummary(), KHR: emptyCurrencySummary() },
   counts: { total: 0, open: 0, dueSoon: 0, overdue: 0, paid: 0 },
 })
@@ -445,7 +446,14 @@ function LoanDetailModal({ detail, user, busy, error, paymentConfirmation, cance
   </Modal>
 }
 
-function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (summary: LoanSummary) => void }) {
+export interface LoanPageProps {
+  summary?: LoanSummary
+  onSummary?: (summary: LoanSummary) => void
+}
+
+export default function LoanPage({ summary: externalSummary, onSummary }: LoanPageProps = {}) {
+  const [internalSummary, setInternalSummary] = useState<LoanSummary>(emptySummary)
+  const summary = externalSummary || internalSummary
   const [loans, setLoans] = useState<Loan[]>([])
   const [user, setUser] = useState<SessionUser | null>(null)
   const [search, setSearch] = useState('')
@@ -472,7 +480,8 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
       if (status !== 'ALL') query.set('status', status)
       const result = await api<{ loans: Loan[]; summary: LoanSummary }>(`/loans?${query.toString()}`)
       setLoans(result.loans)
-      onSummary(result.summary)
+      setInternalSummary(result.summary)
+      onSummary?.(result.summary)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to load loans')
     } finally {
@@ -675,79 +684,4 @@ function LoanPage({ summary, onSummary }: { summary: LoanSummary; onSummary: (su
     {showScanner && <ScanLoanModal busy={busy} error={scannerError} onClose={() => { if (!busy) { setShowScanner(false); setScannerError('') } }} onScan={(value) => void findLoanByBarcode(value)} />}
     {detail && <LoanDetailModal detail={detail} user={user} busy={busy} error={modalError} paymentConfirmation={paymentConfirmation} cancelConfirmation={cancelConfirmation} deleteConfirmation={deleteConfirmation} onClose={() => { if (!busy) { setDetail(null); setPaymentConfirmation(null); setCancelConfirmation(false); setDeleteConfirmation(false) } }} onPayment={recordPayment} onDueDate={changeDueDate} onCancel={() => { setModalError(''); setCancelConfirmation(true) }} onConfirmCancel={cancelLoan} onDelete={() => { setModalError(''); setPaymentConfirmation(null); setCancelConfirmation(false); setDeleteConfirmation(true) }} onConfirmDelete={deleteLoan} onCancelConfirmationClose={() => { if (!busy) { setCancelConfirmation(false); setModalError('') } }} onDeleteConfirmationClose={() => { if (!busy) { setDeleteConfirmation(false); setModalError('') } }} />}
   </div>
-}
-
-export default function LoanWorkspaceBridge() {
-  const [navTarget, setNavTarget] = useState<HTMLElement | null>(null)
-  const [mainTarget, setMainTarget] = useState<HTMLElement | null>(null)
-  const [active, setActive] = useState(() => window.location.pathname === '/loans')
-  const [summary, setSummary] = useState<LoanSummary>(emptySummary)
-
-  const loadSummary = useCallback(async () => {
-    try { setSummary((await api<{ summary: LoanSummary }>('/loans/summary')).summary) }
-    catch { /* The bridge also exists before authentication. */ }
-  }, [])
-
-  useEffect(() => {
-    const locate = () => {
-      const main = document.querySelector<HTMLElement>('.main-content')
-      if (main) setMainTarget(main)
-      let host = document.querySelector<HTMLElement>('.loan-nav-portal-host')
-      if (!host) {
-        const operations = Array.from(document.querySelectorAll<HTMLElement>('.nav-group')).find((group) => group.querySelector('.nav-group-label')?.textContent?.trim() === 'Operations')
-        if (operations) {
-          host = document.createElement('span')
-          host.className = 'loan-nav-portal-host'
-          const pawn = Array.from(operations.querySelectorAll<HTMLElement>(':scope > button')).find((button) => button.textContent?.includes('Pawn Management'))
-          if (pawn) pawn.after(host)
-          else operations.append(host)
-        }
-      }
-      if (host) setNavTarget(host)
-    }
-    locate()
-    const observer = new MutationObserver(locate)
-    observer.observe(document.body, { childList: true, subtree: true })
-    const sidebarClick = (event: MouseEvent) => {
-      const button = event.target instanceof Element ? event.target.closest('.sidebar-nav button') : null
-      if (button && !button.closest('.loan-nav-portal-host')) setActive(false)
-    }
-    const popState = () => setActive(window.location.pathname === '/loans')
-    document.addEventListener('click', sidebarClick, true)
-    window.addEventListener('popstate', popState)
-    return () => {
-      observer.disconnect()
-      document.removeEventListener('click', sidebarClick, true)
-      window.removeEventListener('popstate', popState)
-      document.querySelector('.loan-nav-portal-host')?.remove()
-      document.querySelector('.main-content')?.classList.remove('loan-route-active')
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!mainTarget) return
-    mainTarget.classList.toggle('loan-route-active', active)
-    if (active) {
-      document.querySelectorAll('.sidebar-nav button.active').forEach((button) => button.classList.remove('active'))
-      document.title = 'Loans · PhoneFlow'
-      void loadSummary()
-    }
-  }, [active, loadSummary, mainTarget])
-
-  useEffect(() => {
-    if (!navTarget) return
-    void loadSummary()
-    const timer = window.setInterval(() => void loadSummary(), 60_000)
-    return () => window.clearInterval(timer)
-  }, [loadSummary, navTarget])
-
-  const openLoans = () => {
-    if (window.location.pathname !== '/loans') window.history.pushState({ view: 'loans' }, '', '/loans')
-    setActive(true)
-  }
-
-  return <>
-    {navTarget && createPortal(<button className={active ? 'active' : ''} onClick={openLoans}><Banknote size={19} /><span>Loans</span>{summary.counts.overdue > 0 && <small>{summary.counts.overdue} overdue</small>}</button>, navTarget)}
-    {active && mainTarget && createPortal(<LoanPage summary={summary} onSummary={setSummary} />, mainTarget)}
-  </>
 }

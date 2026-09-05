@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useState } from 'react'
-import DeferredBridges from './DeferredBridges'
+import { RouterProvider } from './routing'
 import StartupScreen from './StartupScreen'
 import ErrorBoundary from '../components/ErrorBoundary'
 import {
@@ -176,23 +176,24 @@ export default function AppWithBackend() {
     <>
       <ErrorBoundary boundaryName="AuthenticatedApp">
         <Suspense fallback={<StartupScreen stage="opening-workspace" shop={shop} />}>
-          <App
-            theme={theme}
-            onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
-            fontSize={fontSize}
-            onFontSizeChange={setFontSize}
-            user={user}
-            shop={shop}
-            onWorkspaceReady={() => setWorkspaceReady(true)}
-            onLogout={() => {
-              void api('/auth/logout', { method: 'POST' }).catch(() => undefined).finally(() => {
-                setToken(null)
-                setSessionUser(null)
-                setUser(null)
-              })
-            }}
-          />
-          <DeferredBridges />
+          <RouterProvider>
+            <App
+              theme={theme}
+              onToggleTheme={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
+              fontSize={fontSize}
+              onFontSizeChange={setFontSize}
+              user={user}
+              shop={shop}
+              onWorkspaceReady={() => setWorkspaceReady(true)}
+              onLogout={() => {
+                void api('/auth/logout', { method: 'POST' }).catch(() => undefined).finally(() => {
+                  setToken(null)
+                  setSessionUser(null)
+                  setUser(null)
+                })
+              }}
+            />
+          </RouterProvider>
         </Suspense>
       </ErrorBoundary>
       {!workspaceReady && (

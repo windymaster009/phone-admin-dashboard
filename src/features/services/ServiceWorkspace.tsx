@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useRouter } from '../../app/routing'
 import {
   AlertTriangle,
   ArrowRight,
@@ -83,12 +84,9 @@ function titleCase(value: string) {
   return value.toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
-function go(path: string) {
-  if (window.location.pathname !== path) window.history.pushState({}, '', path)
-  window.dispatchEvent(new PopStateEvent('popstate'))
-}
-
 export default function ServiceWorkspace() {
+  const { navigate } = useRouter()
+  const go = (path: string) => navigate(path)
   const session = getSessionUser()
   const canPrice = session?.role === 'OWNER' || session?.role === 'MANAGER'
   const [services, setServices] = useState<ServiceOffering[]>([])

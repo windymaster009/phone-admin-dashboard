@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { useRouter } from '../../app/routing'
 import QRCode from 'react-qr-code'
 import khqrLogo from '../../../server/integrations/payway/img/khqr.svg'
 import {
@@ -480,6 +481,7 @@ function CameraBarcodeReader({ onScan, onError, readerId = 'phoneflow-barcode-re
 }
 
 export default function OperationModalBridge() {
+  const { navigate } = useRouter()
   const [kind, setKind] = useState<ModalKind | null>(null)
   const [stockSearch, setStockSearch] = useState('')
   const [selectedStockItem, setSelectedStockItem] = useState<InventoryItem | null>(null)
@@ -771,17 +773,20 @@ export default function OperationModalBridge() {
   }, [kind, saleItemId, salePaymentMethod, saleTotal])
 
   useEffect(() => {
-    const originalAlert = window.alert.bind(window)
-    window.alert = (message?: unknown) => {
-      const modal = parsePlaceholderAlert(String(message || ''))
-      if (modal) {
+    const handleOpenOperation = (event: Event) => {
+      const detail = (event as CustomEvent<{ kind?: ModalKind }>).detail
+      if (detail?.kind) {
         setError('')
-        setKind(modal)
-        return
+        if (detail.kind === 'pawn') {
+          setPawnCreated(null)
+          setPawnAttempted(false)
+          setPawnStep(1)
+        }
+        setKind(detail.kind)
       }
-      originalAlert(String(message || ''))
     }
-    return () => { window.alert = originalAlert }
+    window.addEventListener('phoneflow:open-operation', handleOpenOperation)
+    return () => window.removeEventListener('phoneflow:open-operation', handleOpenOperation)
   }, [])
 
   useEffect(() => {
@@ -979,6 +984,16 @@ export default function OperationModalBridge() {
     setSellerName('')
     setSellerPhone('')
     setSellerNationalId('')
+    setPaywayAvailable(false)
+    setSaleInventoryLoading(false)
+    khqrFinalizing.current = false
+    khqrChecking.current = false
+    setSellerType('WALK_IN')
+    setSupplierId('')
+    setSellerCustomerId('')
+    setSellerName('')
+    setSellerPhone('')
+    setSellerNationalId('')
     setPurchaseDate(localDateValue())
     setPurchasePaymentMethod('CASH')
     setPurchaseCurrency('USD')
@@ -988,17 +1003,16 @@ export default function OperationModalBridge() {
     setPurchaseStep(1)
     setPurchaseAttempted(false)
     setPurchaseInventoryLoading(false)
-    if (shouldRefresh) window.location.reload()
   }
 
   const close = () => {
     if (busy) return
     if (kind === 'stock' && stockAdjustmentComplete) {
-      window.location.reload()
+      resetAndClose()
       return
     }
     if (kind === 'pawn' && pawnCreated) {
-      window.location.reload()
+      resetAndClose()
       return
     }
     if (saleQrZoomed) {
@@ -1006,12 +1020,12 @@ export default function OperationModalBridge() {
       return
     }
     if (kind === 'sale' && saleCompleted) {
-      window.location.reload()
+      resetAndClose()
       return
     }
     if (kind === 'sale' && saleKhqr) {
       if (salePaymentPhase === 'COMPLETED') {
-        window.location.reload()
+        resetAndClose()
         return
       }
       if (salePaymentPhase === 'CANCELLED') {
@@ -1039,11 +1053,7 @@ export default function OperationModalBridge() {
 
     const item = selectedSaleItem
     resetAndClose()
-    const navigationState = { view: 'inventory' }
-    if (window.location.pathname !== '/stock') {
-      window.history.pushState(navigationState, '', '/stock')
-    }
-    window.dispatchEvent(new PopStateEvent('popstate', { state: navigationState }))
+    navigate('/stock')
     window.setTimeout(() => {
       window.dispatchEvent(new CustomEvent('phoneflow:open-stock-item', { detail: { item } }))
     }, 0)
@@ -1280,8 +1290,7 @@ export default function OperationModalBridge() {
         setLabelItems(purchasedItems)
         setKind('label')
       } else {
-        setKind(null)
-        window.location.reload()
+        resetAndClose()
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to save purchase')
@@ -1613,7 +1622,7 @@ export default function OperationModalBridge() {
             <div><dt>Result</dt><dd><span>{stockAdjustmentComplete.detail}</span></dd></div>
           </dl>
         </div>
-        <footer className="operation-modal-actions"><button type="button" className="primary-button record-created-done" onClick={() => window.location.reload()}><CheckCircle2 size={16} /> Done</button></footer>
+        <footer className="operation-modal-actions"><button type="button" className="primary-button record-created-done" onClick={() => resetAndClose()}><CheckCircle2 size={16} /> Done</button></footer>
       </section>}
 
       {kind === 'stock' && !stockAdjustmentComplete && <form className="operation-form stock-adjustment-form" onSubmit={submitStock}>
@@ -1841,7 +1850,7 @@ export default function OperationModalBridge() {
         </div>
         <footer className="operation-modal-actions record-created-actions">
           <button type="button" className="secondary-button" onClick={printCreatedPawnTicket}><Printer size={16} /> Print 80mm pawn ticket</button>
-          <button type="button" className="primary-button record-created-done" onClick={() => window.location.reload()}><CheckCircle2 size={16} /> Done</button>
+          <button type="button" className="primary-button record-created-done" onClick={() => resetAndClose()}><CheckCircle2 size={16} /> Done</button>
         </footer>
       </section>}
 
@@ -1973,7 +1982,7 @@ export default function OperationModalBridge() {
         </div>
         <footer className="operation-modal-actions record-created-actions">
           <button type="button" className="secondary-button" onClick={printCompletedSaleReceipt} data-modal-initial-focus><Printer size={16} /> Print receipt</button>
-          <button type="button" className="primary-button record-created-done" onClick={() => window.location.reload()}><CheckCircle2 size={16} /> Done</button>
+          <button type="button" className="primary-button record-created-done" onClick={() => resetAndClose()}><CheckCircle2 size={16} /> Done</button>
         </footer>
       </section>}
 
@@ -2071,7 +2080,7 @@ export default function OperationModalBridge() {
         </div>}
         {salePaymentPhase !== 'COMPLETED' && <div className={`khqr-inline-status status-${salePaymentPhase.toLowerCase()}`}>{salePaymentPhase === 'SCANNED' || salePaymentPhase === 'APPROVED' ? <CheckCircle2 size={15} /> : salePaymentPhase === 'CANCELLED' ? <X size={15} /> : <RefreshCw size={15} className={busy || salePaymentPhase === 'ERROR' ? '' : 'spinning'} />}<p><strong>{salePaymentStatus}</strong><small>{salePaymentPhase === 'CANCELLED' ? 'The cashier cancelled this payment request' : salePaymentPhase === 'SCANNED' ? 'Waiting for PayWay to approve the payment' : salePaymentPhase === 'ERROR' ? 'Use Check now to retry verification' : 'Checking securely with ABA PayWay every 3 seconds'}</small></p></div>}
         {salePaymentPhase !== 'COMPLETED' && <p className="khqr-security-note">{salePaymentPhase === 'CANCELLED' ? 'No sale was created and inventory was not deducted.' : 'Inventory will not be deducted until PayWay confirms payment.'}</p>}
-        <footer className="operation-modal-actions">{salePaymentPhase === 'COMPLETED' ? <button type="button" className="primary-button khqr-done-button" onClick={() => window.location.reload()}><CheckCircle2 size={16} /> Done</button> : salePaymentPhase === 'CANCELLED' ? <><button type="button" className="ghost-button" onClick={resetAndClose}>Close</button><button type="button" className="primary-button" onClick={restartKhqrPayment}>Start another payment</button></> : <><button type="button" className="ghost-button" onClick={cancelKhqrPayment} disabled={busy}>Cancel payment</button>{saleKhqr.deeplink && <a className="primary-button khqr-mobile-link" href={saleKhqr.deeplink}>Open ABA Mobile</a>}<button type="button" className="secondary-button" onClick={() => void checkKhqrPayment()} disabled={busy}><RefreshCw size={16} /> Check now</button></>}</footer>
+        <footer className="operation-modal-actions">{salePaymentPhase === 'COMPLETED' ? <button type="button" className="primary-button khqr-done-button" onClick={resetAndClose}><CheckCircle2 size={16} /> Done</button> : salePaymentPhase === 'CANCELLED' ? <><button type="button" className="ghost-button" onClick={resetAndClose}>Close</button><button type="button" className="primary-button" onClick={restartKhqrPayment}>Start another payment</button></> : <><button type="button" className="ghost-button" onClick={cancelKhqrPayment} disabled={busy}>Cancel payment</button>{saleKhqr.deeplink && <a className="primary-button khqr-mobile-link" href={saleKhqr.deeplink}>Open ABA Mobile</a>}<button type="button" className="secondary-button" onClick={() => void checkKhqrPayment()} disabled={busy}><RefreshCw size={16} /> Check now</button></>}</footer>
         {saleQrZoomed && <div className="khqr-zoom-backdrop" role="presentation">
           <section className="khqr-zoom-dialog" role="dialog" aria-modal="true" aria-label={`Enlarged KHQR payment for $${saleKhqr.amount.toFixed(2)}`}>
             <button type="button" className="khqr-zoom-close" onClick={() => setSaleQrZoomed(false)} aria-label="Close enlarged KHQR"><X size={20} /></button>

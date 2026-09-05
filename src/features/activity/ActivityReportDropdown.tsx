@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Activity,
@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { api } from '../../lib/api'
 import { safeStorage } from '../../lib/storage'
+import './activity-report.css'
 
 type ActivityUser = {
   _id: string
@@ -98,108 +99,111 @@ function relativeTime(value: string) {
   if (hours < 24) return `${hours}h ago`
   const days = Math.floor(hours / 24)
   if (days < 7) return `${days}d ago`
-  return new Intl.DateTimeFormat('en-GB', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  }).format(new Date(value))
+  return new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(new Date(value))
 }
 
 function activityTitle(log: ActivityLog) {
+  const label = actionLabels[log.action] || titleCase(log.action)
+  const entity = titleCase(log.entity)
   const details = log.details || {}
-  const action = actionLabels[log.action] || titleCase(log.action)
+  const target = details.pawnNo
+    || details.loanNo
+    || details.tradeNo
+    || details.sku
+    || details.customerName
+    || details.name
+    || ''
 
-  if (log.entity === 'TRADE') {
-    const type = String(details.type || '').toUpperCase()
-    const reference = String(details.tradeNo || '').trim()
-    return `${action} ${type === 'SELL' ? 'sale' : type === 'BUY' ? 'purchase' : 'transaction'}${reference ? ` ${reference}` : ''}`
-  }
-
-  if (log.entity === 'PAWN') {
-    const reference = String(details.pawnNo || '').trim()
-    if (log.action === 'DUE_REMINDER') return `Pawn ${reference || 'contract'} is due tomorrow`
-    return `${action} pawn contract${reference ? ` ${reference}` : ''}`
-  }
-
-  if (log.entity === 'INVENTORY') {
-    const reference = String(details.sku || '').trim()
-    return `${action} stock item${reference ? ` ${reference}` : ''}`
-  }
-
-  if (log.entity === 'CUSTOMER') {
-    const name = String(details.name || '').trim()
-    return `${action} customer${name ? ` ${name}` : ''}`
-  }
-
-  if (log.entity === 'USER') {
-    return `${action} staff account`
-  }
-
-  return `${action} ${titleCase(log.entity)}`
+  return [label, entity, target].filter(Boolean).join(' ')
 }
 
 function activitySummary(log: ActivityLog) {
   const details = log.details || {}
-  const parts: string[] = []
-  const currency = details.currency || 'USD'
+  const pieces: string[] = []
 
-  if (details.total !== undefined) parts.push(`Total ${formatMoney(details.total, currency)}`)
-  if (details.principal !== undefined) parts.push(`Principal ${formatMoney(details.principal, currency)}`)
-  if (details.amount !== undefined) parts.push(`Amount ${formatMoney(details.amount, currency)}`)
-  if (details.customer) parts.push(`Customer ${String(details.customer)}`)
-  if (details.fee !== undefined) parts.push(`Fee ${formatMoney(details.fee, currency)}`)
-  if (details.role) parts.push(`Role ${titleCase(String(details.role))}`)
-  if (details.phone) parts.push(String(details.phone))
+  if (details.amount !== undefined) {
+    pieces.push(formatMoney(details.amount, details.currency))
+  }
+  if (details.itemSnapshot && typeof details.itemSnapshot === 'object') {
+    const item = details.itemSnapshot as { name?: string }
+    if (item.name) pieces.push(item.name)
+  }
+  if (details.phone) pieces.push(String(details.phone))
+  if (details.role) pieces.push(titleCase(String(details.role)))
+  if (details.note) pieces.push(String(details.note))
 
-  return parts.join(' · ') || `${titleCase(log.entity)} record ${log.entityId ? log.entityId.slice(-6).toUpperCase() : ''}`.trim()
+  return pieces.filter(Boolean).join(' · ')
 }
 
 function ActivityRow({ log, unread }: { log: ActivityLog; unread: boolean }) {
-  const Icon = entityIcons[log.entity] || Activity
-  const actor = log.user?.name || 'System'
+  const EntityIcon = entityIcons[log.entity] || UserRound
+  const initials = (log.user?.name || 'PF')
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase()
 
   return (
-    <article className={`activity-report-row ${unread ? 'unread' : ''}`}>
-      <span className={`activity-report-row-icon entity-${log.entity.toLowerCase()}`}><Icon size={17} /></span>
-      <div className="activity-report-row-copy">
-        <div className="activity-report-row-heading">
+    <article className={`activity-row ${unread ? 'activity-unread' : ''}`}>
+      <span className="activity-icon">
+        <EntityIcon size={16} />
+      </span>
+      <div className="activity-content">
+        <div className="activity-headline">
           <strong>{activityTitle(log)}</strong>
-          <time title={new Date(log.createdAt).toLocaleString()}>{relativeTime(log.createdAt)}</time>
+          <time dateTime={log.createdAt}>{relativeTime(log.createdAt)}</time>
         </div>
-        <p>{activitySummary(log)}</p>
-        <small><UserRound size={12} /> {actor}{log.user?.role ? ` · ${titleCase(log.user.role)}` : ''}</small>
+        {activitySummary(log) && <p className="activity-details">{activitySummary(log)}</p>}
+        <div className="activity-meta">
+          <span className="activity-avatar" title={log.user?.email || log.user?.name || 'System'}>
+            {initials}
+          </span>
+          <span>{log.user?.name || 'System'}</span>
+          {log.ipAddress && <small className="activity-ip">{log.ipAddress}</small>}
+        </div>
       </div>
-      {unread && <span className="activity-report-new-dot" title="New activity" />}
     </article>
   )
 }
 
-export default function ActivityReportBridge() {
-  const [button, setButton] = useState<HTMLButtonElement | null>(null)
-  const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null)
-  const [open, setOpen] = useState(false)
+export interface ActivityReportDropdownProps {
+  anchorRef?: RefObject<HTMLElement | null>
+  open: boolean
+  onClose: () => void
+  onUnreadChange?: (count: number) => void
+}
+
+export default function ActivityReportDropdown({
+  anchorRef,
+  open,
+  onClose,
+  onUnreadChange,
+}: ActivityReportDropdownProps) {
   const [logs, setLogs] = useState<ActivityLog[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [entity, setEntity] = useState('ALL')
-  const [unreadCount, setUnreadCount] = useState(0)
-  const [position, setPosition] = useState<Position>({ top: 68, right: 20 })
-  const panelRef = useRef<HTMLElement | null>(null)
+  const [position, setPosition] = useState<Position>({ top: 60, right: 16 })
+  const panelRef = useRef<HTMLElement>(null)
 
   const lastSeen = useCallback(() => {
-    const stored = safeStorage.getItem(LAST_SEEN_KEY)
-    return stored ? new Date(stored).getTime() : 0
+    const raw = safeStorage.getItem(LAST_SEEN_KEY)
+    const timestamp = raw ? new Date(raw).getTime() : 0
+    return Number.isFinite(timestamp) ? timestamp : 0
   }, [])
 
   const updateUnread = useCallback((items: ActivityLog[]) => {
     const seenAt = lastSeen()
-    if (!seenAt && items[0]) {
-      safeStorage.setItem(LAST_SEEN_KEY, items[0].createdAt)
-      setUnreadCount(0)
+    if (!seenAt) {
+      if (items[0]) safeStorage.setItem(LAST_SEEN_KEY, items[0].createdAt)
+      onUnreadChange?.(0)
       return
     }
-    setUnreadCount(items.filter((item) => new Date(item.createdAt).getTime() > seenAt).length)
-  }, [lastSeen])
+    const count = items.filter((item) => new Date(item.createdAt).getTime() > seenAt).length
+    onUnreadChange?.(count)
+  }, [lastSeen, onUnreadChange])
 
   const load = useCallback(async (showSpinner = false) => {
     if (showSpinner) setLoading(true)
@@ -218,66 +222,27 @@ export default function ActivityReportBridge() {
   const markSeen = useCallback(() => {
     if (logs[0]) safeStorage.setItem(LAST_SEEN_KEY, logs[0].createdAt)
     else safeStorage.setItem(LAST_SEEN_KEY, new Date().toISOString())
-    setUnreadCount(0)
-  }, [logs])
+    onUnreadChange?.(0)
+  }, [logs, onUnreadChange])
 
   const refreshPosition = useCallback(() => {
-    if (!button) return
-    const rect = button.getBoundingClientRect()
+    const anchor = anchorRef?.current
+    if (!anchor) return
+    const rect = anchor.getBoundingClientRect()
     setPosition({
       top: Math.round(rect.bottom + 10),
       right: Math.max(12, Math.round(window.innerWidth - rect.right)),
     })
-  }, [button])
+  }, [anchorRef])
 
   useEffect(() => {
-    const sync = () => {
-      const nextButton = document.querySelector<HTMLButtonElement>('.notification-button')
-      setButton(nextButton)
-      setPortalRoot(document.querySelector<HTMLElement>('.app'))
-    }
-
-    sync()
-    const observer = new MutationObserver(sync)
-    observer.observe(document.body, { subtree: true, childList: true })
-    return () => observer.disconnect()
-  }, [])
-
-  useEffect(() => {
-    if (!button) return
-
-    const handleClick = (event: Event) => {
-      event.preventDefault()
-      event.stopPropagation()
-      refreshPosition()
-      setOpen((current) => !current)
-    }
-
-    button.title = 'Open activity report'
-    button.setAttribute('aria-haspopup', 'dialog')
-    button.addEventListener('click', handleClick)
     void load(false)
-
     const interval = window.setInterval(() => {
       if (!document.hidden) void load(false)
     }, POLL_INTERVAL_MS)
 
-    return () => {
-      button.removeEventListener('click', handleClick)
-      window.clearInterval(interval)
-    }
-  }, [button, load, refreshPosition])
-
-  useEffect(() => {
-    if (!button) return
-    const badge = button.querySelector<HTMLSpanElement>('span')
-    if (!badge) return
-
-    badge.classList.add('activity-report-badge')
-    badge.textContent = unreadCount > 99 ? '99+' : String(unreadCount || '')
-    badge.hidden = unreadCount === 0
-    button.setAttribute('aria-label', unreadCount > 0 ? `Activity report, ${unreadCount} unread` : 'Activity report')
-  }, [button, unreadCount])
+    return () => window.clearInterval(interval)
+  }, [load])
 
   useEffect(() => {
     if (!open) return
@@ -286,11 +251,11 @@ export default function ActivityReportBridge() {
 
     const closeOutside = (event: MouseEvent) => {
       const target = event.target as Node
-      if (panelRef.current?.contains(target) || button?.contains(target)) return
-      setOpen(false)
+      if (panelRef.current?.contains(target) || anchorRef?.current?.contains(target)) return
+      onClose()
     }
     const closeEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false)
+      if (event.key === 'Escape') onClose()
     }
     const reposition = () => refreshPosition()
 
@@ -305,7 +270,7 @@ export default function ActivityReportBridge() {
       window.removeEventListener('resize', reposition)
       window.removeEventListener('scroll', reposition, true)
     }
-  }, [button, load, open, refreshPosition])
+  }, [anchorRef, load, onClose, open, refreshPosition])
 
   useEffect(() => {
     if (open && logs.length > 0) markSeen()
@@ -334,7 +299,7 @@ export default function ActivityReportBridge() {
     return logs.filter((log) => new Date(log.createdAt).getTime() >= startTime).length
   }, [logs])
 
-  if (!open || !portalRoot) return null
+  if (!open) return null
 
   return createPortal(
     <section
@@ -352,7 +317,7 @@ export default function ActivityReportBridge() {
           <h3>Activity report</h3>
           <p>Every important shop action is recorded automatically.</p>
         </div>
-        <button className="icon-button" onClick={() => setOpen(false)} aria-label="Close activity report"><X size={17} /></button>
+        <button className="icon-button" onClick={onClose} aria-label="Close activity report"><X size={17} /></button>
       </header>
 
       <div className="activity-report-summary">
@@ -362,7 +327,10 @@ export default function ActivityReportBridge() {
       </div>
 
       <div className="activity-report-controls">
-        <label className="activity-report-search"><Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search staff or action" /></label>
+        <label className="activity-report-search">
+          <Search size={15} />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search staff or action" />
+        </label>
         <select value={entity} onChange={(event) => setEntity(event.target.value)} aria-label="Filter activity type">
           <option value="ALL">All modules</option>
           <option value="TRADE">Sales & purchases</option>
@@ -371,7 +339,9 @@ export default function ActivityReportBridge() {
           <option value="CUSTOMER">Customers</option>
           <option value="USER">Staff</option>
         </select>
-        <button className="icon-button" onClick={() => void load(true)} disabled={loading} title="Refresh report"><RefreshCcw size={15} className={loading ? 'activity-spin' : ''} /></button>
+        <button className="icon-button" onClick={() => void load(true)} disabled={loading} title="Refresh report">
+          <RefreshCcw size={15} className={loading ? 'activity-spin' : ''} />
+        </button>
       </div>
 
       {error && <div className="activity-report-error"><AlertTriangle size={16} /> {error}</div>}
@@ -384,6 +354,6 @@ export default function ActivityReportBridge() {
         ))}
       </div>
     </section>,
-    portalRoot,
+    document.body,
   )
 }

@@ -1,5 +1,6 @@
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import './backup-status.css'
 import { AlertTriangle, BadgeCheck, Check, Download, FileUp, RefreshCcw, RotateCcw, Trash2, X } from 'lucide-react'
 import { ApiError, api, setAuthTransitionInProgress, setToken } from '../../lib/api'
 import { safeStorage } from '../../lib/storage'
@@ -83,8 +84,7 @@ function backupAge(candidateDate: string, latestDate?: string) {
     : { tone: 'newer', label: `${distance} newer than the latest`, detail: `Latest is ${backupTime(latestDate)}` }
 }
 
-export default function BackupStatusBridge() {
-  const [host, setHost] = useState<HTMLElement | null>(null)
+export default function BackupStatusCard() {
   const [status, setStatus] = useState<BackupStatus | null>(null)
   const [backups, setBackups] = useState<BackupMetadata[]>([])
   const [error, setError] = useState('')
@@ -104,26 +104,6 @@ export default function BackupStatusBridge() {
   const restoreFileInput = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    const locate = () => setHost(document.querySelector<HTMLElement>('.sidebar-footer .support-card'))
-    locate()
-    const observer = new MutationObserver(locate)
-    observer.observe(document.body, { childList: true, subtree: true })
-    return () => observer.disconnect()
-  }, [])
-
-  useEffect(() => {
-    if (!host) return
-    const originalChildren = Array.from(host.children) as HTMLElement[]
-    originalChildren.forEach((child) => { child.hidden = true })
-    host.classList.add('backup-status-host')
-    return () => {
-      originalChildren.forEach((child) => { child.hidden = false })
-      host.classList.remove('backup-status-host')
-    }
-  }, [host])
-
-  useEffect(() => {
-    if (!host) return
     let active = true
 
     const load = async () => {
@@ -138,13 +118,13 @@ export default function BackupStatusBridge() {
       }
     }
 
-    load()
+    void load()
     const timer = window.setInterval(load, 60_000)
     return () => {
       active = false
       window.clearInterval(timer)
     }
-  }, [host])
+  }, [])
 
   useEffect(() => {
     if (!managerOpen) return
@@ -412,7 +392,6 @@ export default function BackupStatusBridge() {
     }
   }, [busy, error, status])
 
-  if (!host) return null
   const Icon = view.Icon
   const selectedCount = selectedBackups.size
   const allBackupsSelected = backups.length > 0 && selectedCount === backups.length
@@ -425,7 +404,7 @@ export default function BackupStatusBridge() {
 
   return (
     <>
-      {createPortal(
+      <div className="support-card backup-status-host">
         <button
           type="button"
           className={`backup-status-content backup-${view.tone}`}
@@ -438,9 +417,8 @@ export default function BackupStatusBridge() {
             <strong>{view.title}</strong>
             <small>{view.detail}</small>
           </span>
-        </button>,
-        host,
-      )}
+        </button>
+      </div>
 
       {managerOpen && createPortal(
         <div className="backup-manager-backdrop" role="presentation">

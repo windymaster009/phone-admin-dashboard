@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import './dashboard-performance.css'
 import { ArrowDownRight, ArrowUpRight, BarChart3, RefreshCcw, TrendingDown, TrendingUp } from 'lucide-react'
 import { api } from '../../lib/api'
 
@@ -106,7 +106,7 @@ function metricTone(value: number) {
   return 'neutral'
 }
 
-function CashFlowCard() {
+export default function CashFlowCard() {
   const [period, setPeriod] = useState<PerformancePeriod>('month')
   const [data, setData] = useState<DashboardPerformanceData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -277,62 +277,4 @@ function CashFlowCard() {
       )}
     </section>
   )
-}
-
-export default function DashboardPerformanceBridge() {
-  const [target, setTarget] = useState<HTMLElement | null>(null)
-
-  useEffect(() => {
-    let currentCard: HTMLElement | null = null
-    let currentHost: HTMLElement | null = null
-
-    const cleanup = () => {
-      currentCard?.classList.remove('dashboard-performance-bridge-active')
-      currentHost?.remove()
-      currentCard = null
-      currentHost = null
-    }
-
-    const locate = () => {
-      const normalized = window.location.pathname.length > 1 ? window.location.pathname.replace(/\/+$/, '') : window.location.pathname
-      const onDashboard = normalized === '/' || normalized === '/admin' || normalized === '/dashboard'
-      if (!onDashboard) {
-        if (currentCard || currentHost) cleanup()
-        setTarget(null)
-        return
-      }
-
-      const card = document.querySelector<HTMLElement>('.performance-card')
-      if (!card) {
-        if (currentCard || currentHost) cleanup()
-        setTarget(null)
-        return
-      }
-      if (card === currentCard && currentHost?.isConnected) return
-
-      cleanup()
-      const host = document.createElement('div')
-      host.className = 'dashboard-performance-host'
-      card.append(host)
-      card.classList.add('dashboard-performance-bridge-active')
-      currentCard = card
-      currentHost = host
-      setTarget(host)
-    }
-
-    locate()
-    const observer = new MutationObserver(locate)
-    observer.observe(document.body, { childList: true, subtree: true })
-    window.addEventListener('popstate', locate)
-    const timer = window.setInterval(locate, 1_000)
-
-    return () => {
-      observer.disconnect()
-      window.removeEventListener('popstate', locate)
-      window.clearInterval(timer)
-      cleanup()
-    }
-  }, [])
-
-  return target ? createPortal(<CashFlowCard />, target) : null
 }

@@ -114,9 +114,6 @@ function Viewer({ initialReceipt, initialLayout = 'A4', onClose, onUpdated }: { 
       setError(`The browser blocked the print window. Allow pop-ups for ${receipt.snapshot?.shop.name || 'this shop'} and try again.`)
       return
     }
-    popup.opener = null
-    popup.document.write('<!doctype html><title>Preparing receipt...</title><style>body{display:grid;min-height:100vh;place-items:center;font:14px Arial;color:#475569}</style>Preparing receipt...')
-    popup.document.close()
 
     setBusy(true)
     setError('')
@@ -158,110 +155,19 @@ function Viewer({ initialReceipt, initialLayout = 'A4', onClose, onUpdated }: { 
   </Modal>
 }
 
-function Workspace({ refreshVersion, onOpen }: { refreshVersion: number; onOpen: (receipt: ReceiptRecord) => void }) {
-  const [receipts, setReceipts] = useState<ReceiptRecord[]>([])
-  const [search, setSearch] = useState('')
-  const [type, setType] = useState('ALL')
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    setError('')
-    try {
-      const query = new URLSearchParams()
-      if (search.trim()) query.set('search', search.trim())
-      if (type !== 'ALL') query.set('documentType', type)
-      const result = await api<{ receipts: ReceiptRecord[] }>(`/receipts?${query}`)
-      setReceipts(result.receipts)
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to load receipts')
-    } finally {
-      setLoading(false)
-    }
-  }, [search, type])
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => void load(), 180)
-    return () => window.clearTimeout(timer)
-  }, [load, refreshVersion])
-
-  async function open(receipt: ReceiptRecord) {
-    try {
-      const result = await api<{ receipt: ReceiptRecord }>(`/receipts/${receipt._id}`)
-      onOpen(result.receipt)
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to open receipt')
-    }
-  }
-
-  const stats = useMemo(() => ({
-    documents: receipts.length,
-    sales: receipts.filter((item) => item.documentType === 'SALE_RECEIPT').length,
-    contract: receipts.filter((item) => ['PAWN_CONTRACT', 'LOAN_AGREEMENT'].includes(item.documentType)).length,
-    prints: receipts.reduce((sum, item) => sum + Number(item.printCount || 0), 0),
-  }), [receipts])
-
-  return <div className="receipt-workspace-bridge">
-    <div className="section-header"><div><span className="eyebrow">Finance & control</span><h2>Receipts & invoices</h2><p>Search immutable sales, purchase, service, pawn, and loan documents and reprint them in A4 or thermal format.</p></div><button className="ghost-button" onClick={() => void load()} disabled={loading}><RefreshCcw size={16} /> Refresh</button></div>
-    {error && <div className="receipt-error"><AlertTriangle size={16} /> {error}</div>}
-    <section className="receipt-stat-grid">
-      <article className="surface-card"><ReceiptText /><p>Documents<strong>{stats.documents}</strong><small>saved snapshots</small></p></article>
-      <article className="surface-card"><ShoppingCart /><p>Sales receipts<strong>{stats.sales}</strong><small>customer invoices</small></p></article>
-      <article className="surface-card"><Landmark /><p>Agreements<strong>{stats.contract}</strong><small>pawn and loan contracts</small></p></article>
-      <article className="surface-card"><Printer /><p>Total prints<strong>{stats.prints}</strong><small>including reprints</small></p></article>
-    </section>
-    <article className="surface-card table-card page-table receipt-table-card">
-      <div className="filter-row receipt-filter-row"><div className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search receipt, reference, name or phone" /></div><select className="ghost-button filter-select" value={type} onChange={(event) => setType(event.target.value)}><option value="ALL">All documents</option><option value="SALE_RECEIPT">Sales receipts</option><option value="PURCHASE_RECEIPT">Purchase receipts</option><option value="SERVICE_RECEIPT">Service receipts</option><option value="REFUND_RECEIPT">Refund receipts</option><option value="PAWN_CONTRACT">Pawn contracts</option><option value="PAWN_PAYMENT">Pawn payments</option><option value="PAWN_REDEMPTION">Pawn redemptions</option><option value="LOAN_AGREEMENT">Loan agreements</option><option value="LOAN_PAYMENT">Loan repayments</option></select></div>
-      <div className="table-scroll receipt-desktop-table"><table><thead><tr><th>Receipt</th><th>Document</th><th>Customer / borrower</th><th>Reference</th><th>Amount</th><th>Issued</th><th>Prints</th><th /></tr></thead><tbody>
-        {receipts.map((receipt) => <tr key={receipt._id}><td><strong className="mono">{receipt.receiptNo}</strong></td><td><span className="receipt-type"><DocumentIcon type={receipt.documentType} /> {documentLabel(receipt.documentType)}</span></td><td><strong>{receipt.partyName || 'Walk-in customer'}</strong><small className="table-subtext">{receipt.partyPhone || 'No phone'}</small></td><td className="mono">{receipt.referenceNo}</td><td><strong>{money(receipt.total, receipt.currency)}</strong></td><td>{dateText(receipt.issuedAt)}</td><td>{receipt.printCount}</td><td><button className="icon-button" onClick={() => void open(receipt)}><ChevronRight size={17} /></button></td></tr>)}
-        {!loading && receipts.length === 0 && <tr><td colSpan={8}>No receipt documents match these filters.</td></tr>}{loading && receipts.length === 0 && <tr><td colSpan={8}><LoadingState compact label="Loading receipts" detail="Reading printable records…" /></td></tr>}
-      </tbody></table></div>
-      <div className="receipt-mobile-list">{receipts.map((receipt) => <button key={receipt._id} onClick={() => void open(receipt)}><span><DocumentIcon type={receipt.documentType} /></span><p><strong>{receipt.partyName || 'Walk-in customer'}</strong><small>{receipt.receiptNo} · {receipt.referenceNo}</small><small>{documentLabel(receipt.documentType)}</small></p><div><strong>{money(receipt.total, receipt.currency)}</strong><small>{dateText(receipt.issuedAt)} · {receipt.printCount} prints</small></div><ChevronRight size={16} /></button>)}{loading && receipts.length === 0 && <LoadingState compact label="Loading receipts" />}{!loading && receipts.length === 0 && <div className="receipt-empty">No receipt documents yet.</div>}</div>
-    </article>
-  </div>
-}
-
 export default function ReceiptCenterBridge() {
-  const [mainTarget, setMainTarget] = useState<HTMLElement | null>(null)
-  const [navTarget, setNavTarget] = useState<HTMLElement | null>(null)
   const [actionTarget, setActionTarget] = useState<HTMLElement | null>(null)
   const [context, setContext] = useState<SourceContext | null>(null)
-  const [active, setActive] = useState(() => window.location.pathname === '/receipts')
   const [picker, setPicker] = useState<ReceiptOptionResponse | null>(null)
   const [viewer, setViewer] = useState<ViewerState | null>(null)
-  const [reloadAfterViewerClose, setReloadAfterViewerClose] = useState(false)
   const [busy, setBusy] = useState(false)
   const [pendingOptionKey, setPendingOptionKey] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [version, setVersion] = useState(0)
-  const [shopName, setShopName] = useState(defaultShopProfile.name)
-  const directRoute = useRef(window.location.pathname === '/receipts')
   const generationController = useRef<AbortController | null>(null)
   const generationClosed = useRef(false)
 
-  useEffect(() => {
-    api<{ shop: ShopProfile }>('/shop')
-      .then(({ shop }) => setShopName(shop.name))
-      .catch(() => undefined)
-  }, [])
-
   const locate = useCallback(() => {
-    const main = document.querySelector<HTMLElement>('.main-content')
-    setMainTarget(main)
-
-    let navHost = document.querySelector<HTMLElement>('.receipt-nav-host')
-    if (!navHost) {
-      const group = Array.from(document.querySelectorAll<HTMLElement>('.nav-group')).find((item) => item.querySelector('.nav-group-label')?.textContent?.trim() === 'Finance & Control')
-      if (group) {
-        navHost = document.createElement('span')
-        navHost.className = 'receipt-nav-host'
-        const settings = Array.from(group.querySelectorAll<HTMLElement>(':scope > button')).find((button) => button.textContent?.includes('Settings'))
-        if (settings) settings.before(navHost); else group.append(navHost)
-      }
-    }
-    setNavTarget(navHost)
-
     const tradeOrPawn = document.querySelector<HTMLElement>('.trade-detail-modal, .pawn-detail-modal')
     if (tradeOrPawn) {
       const footer = tradeOrPawn.querySelector<HTMLElement>('.detail-modal-footer')
@@ -308,32 +214,11 @@ export default function ReceiptCenterBridge() {
     locate()
     const observer = new MutationObserver(locate)
     observer.observe(document.body, { childList: true, subtree: true })
-    const pop = () => { setActive(window.location.pathname === '/receipts'); locate() }
-    const sidebar = (event: MouseEvent) => {
-      const button = event.target instanceof Element ? event.target.closest('.sidebar-nav button') : null
-      if (button && !button.closest('.receipt-nav-host')) setActive(false)
-    }
-    window.addEventListener('popstate', pop)
-    document.addEventListener('click', sidebar, true)
     return () => {
-      observer.disconnect(); window.removeEventListener('popstate', pop); document.removeEventListener('click', sidebar, true)
-      document.querySelector('.receipt-nav-host')?.remove(); document.querySelectorAll('.receipt-action-host').forEach((host) => host.remove()); document.querySelector('.main-content')?.classList.remove('receipt-route-active')
+      observer.disconnect()
+      document.querySelectorAll('.receipt-action-host').forEach((host) => host.remove())
     }
   }, [locate])
-
-  useEffect(() => {
-    if (!directRoute.current || !mainTarget) return
-    if (window.location.pathname !== '/receipts') window.history.replaceState({ view: 'receipts' }, '', '/receipts')
-    setActive(true)
-  }, [mainTarget])
-
-  useEffect(() => {
-    if (!mainTarget) return
-    mainTarget.classList.toggle('receipt-route-active', active)
-    if (active) { document.querySelectorAll('.sidebar-nav button.active').forEach((button) => button.classList.remove('active')); document.title = `Receipts · ${shopName}` }
-  }, [active, mainTarget, shopName])
-
-  const openPage = () => { if (window.location.pathname !== '/receipts') window.history.pushState({ view: 'receipts' }, '', '/receipts'); setActive(true) }
 
   const generate = useCallback(async (source: SourceContext, option: ReceiptOption, initialLayout: ReceiptLayout = 'A4') => {
     generationController.current?.abort()
@@ -372,7 +257,6 @@ export default function ReceiptCenterBridge() {
       const detail = (event as CustomEvent<{ reference?: string; sourceSubId?: string }>).detail
       const reference = detail?.reference?.trim()
       if (!reference) return
-      setReloadAfterViewerClose(false)
       const sourceSubId = detail?.sourceSubId?.trim() || 'latest-contract'
       void generate(
         { sourceType: 'PAWN', reference },
@@ -384,7 +268,6 @@ export default function ReceiptCenterBridge() {
       const detail = (event as CustomEvent<{ reference?: string; currency?: 'USD' | 'KHR'; refreshOnClose?: boolean }>).detail
       const reference = detail?.reference?.trim()
       if (!reference) return
-      setReloadAfterViewerClose(Boolean(detail?.refreshOnClose))
       void generate(
         { sourceType: 'TRADE', reference },
         { documentType: 'SALE_RECEIPT', sourceSubId: 'trade', label: 'Sales receipt / invoice', issuedAt: new Date().toISOString(), amount: 0, currency: detail?.currency === 'KHR' ? 'KHR' : 'USD' },
@@ -395,7 +278,6 @@ export default function ReceiptCenterBridge() {
       const detail = (event as CustomEvent<{ reference?: string; currency?: 'USD' | 'KHR'; refreshOnClose?: boolean }>).detail
       const reference = detail?.reference?.trim()
       if (!reference) return
-      setReloadAfterViewerClose(Boolean(detail?.refreshOnClose))
       void generate(
         { sourceType: 'TRADE', reference },
         { documentType: 'REFUND_RECEIPT', sourceSubId: 'refund', label: 'Refund receipt', issuedAt: new Date().toISOString(), amount: 0, currency: detail?.currency === 'KHR' ? 'KHR' : 'USD' },
@@ -414,17 +296,14 @@ export default function ReceiptCenterBridge() {
 
   const closeViewer = useCallback(() => {
     setViewer(null)
-    if (reloadAfterViewerClose) {
-      setReloadAfterViewerClose(false)
-      window.location.reload()
-    }
-  }, [reloadAfterViewerClose])
+  }, [])
 
   const closePicker = useCallback(() => {
     generationClosed.current = true
     generationController.current?.abort()
     generationController.current = null
     setPendingOptionKey(null)
+
     setBusy(false)
     setPicker(null)
     setError('')
@@ -444,9 +323,7 @@ export default function ReceiptCenterBridge() {
   }, [context, generate])
 
   return <>
-    {navTarget && createPortal(<button className={active ? 'active' : ''} onClick={openPage}><ReceiptText size={19} /><span>Receipts</span></button>, navTarget)}
     {actionTarget && context && createPortal(<button className="secondary-button receipt-detail-action" onClick={() => void openDocuments()} disabled={busy}><Printer size={15} /> {busy ? 'Loading...' : context.sourceType === 'TRADE' ? 'Print receipt' : 'Documents'}</button>, actionTarget)}
-    {active && mainTarget && createPortal(<Workspace refreshVersion={version} onOpen={(receipt) => { setReloadAfterViewerClose(false); setViewer({ receipt }) }} />, mainTarget)}
     {picker && context && <OptionPicker response={picker} busy={busy} pendingOptionKey={pendingOptionKey} error={error} onSelect={(option) => void generate(context, option)} onClose={closePicker} />}
     {viewer && <Viewer key={viewer.receipt._id} initialReceipt={viewer.receipt} initialLayout={viewer.initialLayout} onClose={closeViewer} onUpdated={(receipt) => { setViewer((current) => current ? { ...current, receipt } : null); setVersion((value) => value + 1) }} />}
     {!picker && !viewer && error && createPortal(<div className="receipt-toast"><AlertTriangle size={16} /> {error}<button onClick={() => setError('')}><X size={14} /></button></div>, document.body)}

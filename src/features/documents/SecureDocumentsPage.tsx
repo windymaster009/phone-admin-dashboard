@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { createPortal } from 'react-dom'
+import './secure-documents.css'
 import {
   AlertTriangle, ChevronDown, Download, Eye, FileImage, FileText, FolderLock, IdCard, Image,
   LockKeyhole, RefreshCcw, Search, ShieldCheck, Trash2, Upload, UserRound, Users, X,
@@ -55,7 +56,7 @@ function fileDataUrl(file: File) {
 }
 function initials(name = '') { return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || 'CU' }
 
-function VaultWorkspace() {
+export default function SecureDocumentsPage() {
   const user = getSessionUser()
   const canDelete = user?.role === 'OWNER' || user?.role === 'MANAGER'
   const [customers, setCustomers] = useState<Customer[]>([])
@@ -224,34 +225,4 @@ function VaultWorkspace() {
 
     <dialog ref={deleteDialogRef} className="secure-delete-dialog" onClose={() => setPendingDelete(null)}><div className="secure-delete-dialog-content"><span className="secure-delete-mark"><Trash2 size={21} aria-hidden="true" /></span><div><h3>Delete this secure document?</h3><p><strong>{pendingDelete?.originalName}</strong> will be permanently removed. This action cannot be undone.</p></div><div className="secure-delete-actions"><button type="button" className="ghost-button" onClick={() => setPendingDelete(null)} disabled={busy}>Cancel</button><button type="button" className="danger-button" onClick={() => void confirmDelete()} disabled={busy}>{busy ? 'Deleting…' : 'Delete document'}</button></div></div></dialog>
   </div>
-}
-
-export default function SecureDocumentsBridge() {
-  const user = getSessionUser(); const allowed = user?.role !== 'STOCK'
-  const [mainTarget, setMainTarget] = useState<HTMLElement | null>(null); const [navTarget, setNavTarget] = useState<HTMLElement | null>(null)
-  const [active, setActive] = useState(() => window.location.pathname === '/secure-documents'); const directRoute = useRef(window.location.pathname === '/secure-documents')
-  const locate = useCallback(() => {
-    if (!allowed) return
-    setMainTarget(document.querySelector<HTMLElement>('.main-content'))
-    let host = document.querySelector<HTMLElement>('.secure-document-nav-host')
-    if (!host) {
-      const group = Array.from(document.querySelectorAll<HTMLElement>('.nav-group')).find((item) => item.querySelector('.nav-group-label')?.textContent?.trim() === 'Finance & Control')
-      if (group) { host = document.createElement('span'); host.className = 'secure-document-nav-host'; const receiptHost = group.querySelector('.receipt-nav-host')
-        if (receiptHost) receiptHost.before(host); else { const settings = Array.from(group.querySelectorAll<HTMLElement>(':scope > button')).find((button) => button.textContent?.includes('Settings')); if (settings) settings.before(host); else group.append(host) } }
-    }
-    setNavTarget(host)
-  }, [allowed])
-  useEffect(() => {
-    if (!allowed) return
-    locate(); const observer = new MutationObserver(locate); observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] })
-    const pop = () => setActive(window.location.pathname === '/secure-documents')
-    const sidebar = (event: MouseEvent) => { const button = event.target instanceof Element ? event.target.closest('.sidebar-nav button') : null; if (button && !button.closest('.secure-document-nav-host')) setActive(false) }
-    window.addEventListener('popstate', pop); document.addEventListener('click', sidebar, true)
-    return () => { observer.disconnect(); window.removeEventListener('popstate', pop); document.removeEventListener('click', sidebar, true); document.querySelector('.secure-document-nav-host')?.remove(); document.querySelector('.main-content')?.classList.remove('secure-documents-route-active') }
-  }, [allowed, locate])
-  useEffect(() => { if (!directRoute.current || !mainTarget) return; if (window.location.pathname !== '/secure-documents') window.history.replaceState({ view: 'secure-documents' }, '', '/secure-documents'); setActive(true) }, [mainTarget])
-  useEffect(() => { if (!mainTarget) return; mainTarget.classList.toggle('secure-documents-route-active', active); if (active) { document.querySelectorAll('.sidebar-nav button.active').forEach((button) => button.classList.remove('active')); document.title = 'Secure Documents · PhoneFlow' } }, [active, mainTarget])
-  if (!allowed) return null
-  const openPage = () => { if (window.location.pathname !== '/secure-documents') window.history.pushState({ view: 'secure-documents' }, '', '/secure-documents'); setActive(true) }
-  return <>{navTarget && createPortal(<button className={active ? 'active' : ''} onClick={openPage}><FolderLock size={19} aria-hidden="true" /><span>Secure Documents</span></button>, navTarget)}{active && mainTarget && createPortal(<VaultWorkspace />, mainTarget)}</>
 }
