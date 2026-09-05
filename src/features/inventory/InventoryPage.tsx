@@ -9,6 +9,7 @@ import SectionHeader from '../../components/SectionHeader'
 import StatusBadge from '../../components/StatusBadge'
 import { getStoredInventoryView, setStoredInventoryView } from '../../lib/storage'
 import { printInventoryLabel } from './barcode'
+import './inventory-page.css'
 
 const categoryMeta: Record<InventoryItem['category'], { label: string; tone: 'violet' | 'blue' | 'orange'; Icon: LucideIcon; fallback: string }> = {
   PHONE: { label: 'Phones', tone: 'violet', Icon: Smartphone, fallback: 'Phone' },

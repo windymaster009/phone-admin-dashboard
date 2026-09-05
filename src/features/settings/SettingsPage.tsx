@@ -5,6 +5,7 @@ import { titleStatus } from '../../lib/presentation'
 import SectionHeader from '../../components/SectionHeader'
 import { getStoredValuations, clearStoredValuations } from '../../lib/storage'
 import type { AppFontSize } from '../../app/types'
+import './settings-page.css'
 
 export default function SettingsView({
   user,

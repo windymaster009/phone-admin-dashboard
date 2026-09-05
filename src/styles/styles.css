@@ -1,173 +1,84 @@
-/* Hallmark Â· component: customer report modal Â· genre: utilitarian Â· theme: existing PhoneFlow
- * pre-emit critique: P5 H5 E4 S5 R5 V4 Â· states: default Â· hover Â· focus Â· active Â· disabled Â· loading Â· error Â· success
- * contrast: pass (40â€“41)
+/**
+ * PhoneFlow Global Base Styles & Resets
  */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@600;700;800&display=swap');
 
-:root,
-:root[data-theme='dark'] {
-  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-body: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-display: Manrope, sans-serif;
-  --bg: #0b1020;
-  --bg-soft: #10172a;
-  --sidebar: #0d1425;
-  --surface: rgba(20, 29, 51, 0.84);
-  --surface-solid: #151e34;
-  --surface-hover: #1a2540;
-  --border: rgba(255, 255, 255, 0.075);
-  --border-strong: rgba(255, 255, 255, 0.12);
-  --text: #f4f6fb;
-  --muted: #8f9bb4;
-  --muted-2: #69748d;
-  --primary: #8b5cf6;
-  --primary-strong: #7c3aed;
-  --primary-soft: rgba(139, 92, 246, 0.14);
-  --blue: #38bdf8;
-  --orange: #fb923c;
-  --rose: #fb7185;
-  --green: #34d399;
-  --chart-primary: #8b5cf6;
-  --chart-blue: #38bdf8;
-  --chart-orange: #fb923c;
-  --chart-green: #34d399;
-  --chart-neutral: #94a3b8;
-  --surface-color: var(--surface-solid);
-  --text-color: var(--text);
-  --muted-text: var(--muted);
-  --border-color: var(--border);
-  --input-bg: var(--bg-soft);
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  --dur-micro: 120ms;
-  color-scheme: dark;
+/* ==========================================================================
+   Global Resets & Normalization
+   ========================================================================== */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  min-height: 100%;
+  overflow-x: clip;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  font-family: var(--font-body);
   color: var(--text);
-  background: var(--bg);
+  background-color: var(--bg);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-}
-:root[data-theme='light'] {
-  --bg: #eaf1eb;
-  --bg-soft: #e2ebe4;
-  --sidebar: #f3f7f3;
-  --surface: rgba(246, 250, 246, 0.88);
-  --surface-solid: #f5f9f5;
-  --surface-hover: #dce9df;
-  --border: rgba(31, 73, 48, 0.10);
-  --border-strong: rgba(31, 73, 48, 0.17);
-  --text: #17251d;
-  --muted: #5f7467;
-  --muted-2: #829388;
-  --primary: #2f8f5b;
-  --primary-strong: #237348;
-  --primary-soft: rgba(47, 143, 91, 0.12);
-  --blue: #268f89;
-  --orange: #d47a27;
-  --rose: #d9576d;
-  --green: #238b57;
-  --chart-primary: #2f8f5b;
-  --chart-blue: #268f89;
-  --chart-orange: #d47a27;
-  --chart-green: #238b57;
-  --chart-neutral: #71867a;
-  --surface-color: var(--surface-solid);
-  --text-color: var(--text);
-  --muted-text: var(--muted);
-  --border-color: var(--border);
-  --input-bg: var(--bg-soft);
-  color-scheme: light;
-  color: var(--text);
-  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-* { box-sizing: border-box; }
-html, body { width: 100%; min-height: 100%; overflow-x: clip; }
-body { margin: 0; min-width: 320px; min-height: 100vh; color: var(--text); background: var(--bg); }
-button, input, select { font: inherit; }
-button { cursor: pointer; }
-
-/* Hallmark · component: shared select control · genre: modern-minimal · theme: existing PhoneFlow
- * pre-emit critique: P5 H5 E5 S5 R5 V4 · states: default · hover · focus · active · disabled · loading · error · success
- * contrast: pass (40–41)
- */
-select:not([multiple]) {
-  appearance: none !important;
-  -webkit-appearance: none !important;
-  padding-inline-end: 38px !important;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='m4 6 4 4 4-4' stroke='%2394a3b8' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
-  background-repeat: no-repeat !important;
-  background-position: right 12px center !important;
-  background-size: 16px !important;
-  outline: 2px solid transparent;
-  outline-offset: 1px;
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
 }
-select:not([multiple])::-ms-expand { display: none; }
-@media (hover: hover) and (pointer: fine) {
-  select:not([multiple]):not(:disabled):hover { background-color: var(--surface-hover); }
-}
-select:not([multiple]):focus-visible { outline-color: var(--primary); }
-select:not([multiple]):active { background-color: var(--surface-hover); }
-select:not([multiple]):disabled,
-select:not([multiple])[aria-busy='true'] { opacity: .55; cursor: not-allowed; }
-select:not([multiple])[aria-invalid='true'] { border-color: var(--rose) !important; }
-select:not([multiple])[data-state='success'] { border-color: var(--green) !important; }
 
+button {
+  cursor: pointer;
+}
+
+/* ==========================================================================
+   Accessibility: Focus Outlines & Reduced Motion
+   ========================================================================== */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ==========================================================================
+   App Shell Root Styling & Background Gradients
+   ========================================================================== */
 .app {
-  --bg: #0b1020;
-  --bg-soft: #10172a;
-  --sidebar: #0d1425;
-  --surface: rgba(20, 29, 51, 0.84);
-  --surface-solid: #151e34;
-  --surface-hover: #1a2540;
-  --border: rgba(255, 255, 255, 0.075);
-  --border-strong: rgba(255, 255, 255, 0.12);
-  --text: #f4f6fb;
-  --muted: #8f9bb4;
-  --muted-2: #69748d;
-  --primary: #8b5cf6;
-  --primary-strong: #7c3aed;
-  --primary-soft: rgba(139, 92, 246, 0.14);
-  --blue: #38bdf8;
-  --orange: #fb923c;
-  --rose: #fb7185;
-  --green: #34d399;
-  --chart-primary: #8b5cf6;
-  --chart-blue: #38bdf8;
-  --chart-orange: #fb923c;
-  --chart-green: #34d399;
-  --chart-neutral: #94a3b8;
   min-height: 100vh;
-  background:
+  background-color: var(--bg);
+  background-image:
     radial-gradient(circle at 76% -10%, rgba(124, 58, 237, 0.16), transparent 30%),
     radial-gradient(circle at 30% 10%, rgba(14, 165, 233, 0.08), transparent 25%),
-    radial-gradient(circle, rgba(167, 139, 250, 0.13) 1px, transparent 1.2px),
-    var(--bg);
+    radial-gradient(circle, rgba(167, 139, 250, 0.13) 1px, transparent 1.2px);
   background-size: auto, auto, 22px 22px;
   background-attachment: fixed;
   color: var(--text);
 }
 
 .app[data-theme='light'] {
-  --bg: #eaf1eb;
-  --bg-soft: #e2ebe4;
-  --sidebar: #f3f7f3;
-  --surface: rgba(246, 250, 246, 0.88);
-  --surface-solid: #f5f9f5;
-  --surface-hover: #dce9df;
-  --border: rgba(31, 73, 48, 0.10);
-  --border-strong: rgba(31, 73, 48, 0.17);
-  --text: #17251d;
-  --muted: #5f7467;
-  --muted-2: #829388;
-  --primary: #2f8f5b;
-  --primary-strong: #237348;
-  --primary-soft: rgba(47, 143, 91, 0.12);
-  --blue: #268f89;
-  --green: #238b57;
-  --chart-primary: #2f8f5b;
-  --chart-blue: #268f89;
-  --chart-orange: #d47a27;
-  --chart-green: #238b57;
-  --chart-neutral: #71867a;
   background-color: var(--bg);
   background-image:
     radial-gradient(circle at 78% -8%, rgba(47, 143, 91, 0.16), transparent 32%),
@@ -177,6 +88,7 @@ select:not([multiple])[data-state='success'] { border-color: var(--green) !impor
   background-attachment: fixed;
 }
 
+/* Light Theme Aesthetic Overrides */
 .app[data-theme='light'] .brand-mark {
   background: linear-gradient(135deg, #49a56f, #237348);
   box-shadow: 0 10px 26px rgba(35, 115, 72, 0.24);
@@ -220,7 +132,7 @@ select:not([multiple])[data-state='success'] { border-color: var(--green) !impor
 }
 
 .app[data-theme='light'] .surface-card {
-  box-shadow: 0 12px 30px rgba(31, 73, 48, 0.07);
+  box-shadow: var(--shadow-lg);
 }
 
 .app[data-theme='light'] .chart-column span {
@@ -244,6 +156,9 @@ select:not([multiple])[data-state='success'] { border-color: var(--green) !impor
   color: var(--primary-strong);
 }
 
+/* ==========================================================================
+   Font Size / Display Scaling System
+   ========================================================================== */
 .app[data-font-size='default'] {
   zoom: 1;
 }
@@ -256,9 +171,6 @@ select:not([multiple])[data-state='success'] { border-color: var(--green) !impor
   zoom: 1.2;
 }
 
-/* Keep the compact phone typography, but make the full dashboard readable at
-   normal laptop and desktop viewing distances. These values also preserve the
-   user's Display size preference instead of overriding it. */
 @media (min-width: 901px) {
   .app[data-font-size='default'] {
     zoom: 1.12;

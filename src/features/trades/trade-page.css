@@ -1,0 +1,260 @@
+/**
+ * Trade Feature Styles (Buy / Sell & Transaction History)
+ */
+
+.trade-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.trade-action {
+  padding: 24px;
+  min-height: 220px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.trade-action::after {
+  content: '';
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  right: -70px;
+  top: -70px;
+  border-radius: 50%;
+  background: rgba(139, 92, 246, 0.07);
+}
+
+.sell-action::after {
+  background: rgba(56, 189, 248, 0.07);
+}
+
+.trade-icon {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  color: var(--primary);
+  background: var(--primary-soft);
+  margin-bottom: 24px;
+}
+
+.sell-action .trade-icon {
+  color: var(--blue);
+  background: rgba(56, 189, 248, 0.11);
+}
+
+.trade-action h3 {
+  margin: 5px 0 8px;
+  font-family: var(--font-display);
+  font-size: 21px;
+}
+
+.trade-action p {
+  max-width: 520px;
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.7;
+}
+
+.transaction-list {
+  padding: 4px 18px 16px;
+}
+
+.trade-table-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.transaction-collapse-button svg {
+  transition: transform 160ms ease;
+}
+
+.trade-transactions-card:not(.collapsed) .transaction-collapse-button svg {
+  transform: rotate(180deg);
+}
+
+.trade-transactions-card.collapsed {
+  min-height: 0;
+}
+
+.trade-transactions-card.collapsed .table-heading {
+  padding-bottom: 20px;
+}
+
+.transaction-row {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) auto auto auto;
+  align-items: center;
+  gap: 15px;
+  padding: 14px 3px;
+  border-top: 1px solid var(--border);
+}
+
+.transaction-icon {
+  width: 37px;
+  height: 37px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+}
+
+.transaction-icon svg {
+  width: 17px;
+}
+
+.transaction-icon.sale {
+  color: var(--green);
+  background: rgba(52, 211, 153, 0.11);
+}
+
+.transaction-icon.purchase {
+  color: var(--orange);
+  background: rgba(251, 146, 60, 0.11);
+}
+
+.transaction-row p {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.transaction-row p strong {
+  font-size: 11px;
+}
+
+.transaction-row p small {
+  color: var(--muted);
+  margin-top: 4px;
+  font-size: 9px;
+}
+
+.money-in {
+  color: var(--green);
+  font-size: 11px;
+}
+
+.money-out {
+  color: var(--orange);
+  font-size: 11px;
+}
+
+/* Trade Detail Modal */
+.trade-detail-modal {
+  width: min(980px, 100%);
+  max-height: calc(100vh - 48px);
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  align-items: start;
+  overflow-y: auto;
+}
+
+.trade-detail-modal .detail-modal-header,
+.trade-detail-modal .detail-grid,
+.trade-detail-modal .detail-note,
+.trade-detail-modal .trade-refund-record,
+.trade-detail-modal .detail-modal-footer {
+  grid-column: 1 / -1;
+}
+
+.trade-detail-modal .detail-modal-header {
+  padding: 19px 21px;
+}
+
+.trade-detail-modal .detail-modal-header h3 {
+  margin: 4px 0;
+  font-size: 21px;
+}
+
+.trade-detail-modal .detail-grid {
+  padding: 14px 18px;
+}
+
+.trade-detail-modal .detail-grid div {
+  min-height: 68px;
+  padding: 12px;
+}
+
+.trade-detail-modal .detail-sections {
+  grid-column: 1;
+  grid-template-columns: 1fr;
+  align-self: stretch;
+  padding: 0 7px 14px 18px;
+}
+
+.trade-detail-modal .detail-sections article {
+  min-height: 91px;
+}
+
+.trade-detail-modal .detail-lines {
+  grid-column: 2;
+  align-self: stretch;
+  margin: 0 18px 14px 7px;
+}
+
+.trade-detail-modal .detail-line {
+  padding: 10px 0;
+}
+
+.trade-detail-modal .detail-note {
+  margin: 0 18px 14px;
+  padding: 13px 16px;
+}
+
+.trade-detail-modal .detail-modal-footer {
+  padding: 12px 18px;
+}
+
+.trade-refund-record {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 0 18px 14px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--rose) 28%, var(--border));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--rose) 7%, var(--bg-soft));
+}
+
+.trade-refund-record > span {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  color: var(--rose);
+  background: color-mix(in srgb, var(--rose) 12%, transparent);
+}
+
+.trade-refund-record > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.trade-refund-record strong {
+  color: var(--text);
+  font-size: var(--text-xs);
+}
+
+.trade-refund-record small {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.trade-refund-record p {
+  margin: 2px 0;
+  color: var(--text);
+  font-size: var(--text-2xs);
+  line-height: 1.5;
+}

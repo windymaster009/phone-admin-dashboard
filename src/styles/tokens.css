@@ -1,0 +1,203 @@
+/**
+ * PhoneFlow Design System Tokens
+ * Defines semantic color palettes, typography, spacing, radii, shadows, z-index, and layout dimensions.
+ */
+
+:root {
+  /* Typography */
+  --font-body: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-display: Manrope, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --text-2xs: 0.625rem;  /* 10px */
+  --text-xs: 0.75rem;    /* 12px */
+  --text-sm: 0.8125rem;  /* 13px */
+  --text-base: 0.875rem; /* 14px */
+  --text-md: 1rem;       /* 16px */
+  --text-lg: 1.125rem;   /* 18px */
+  --text-xl: 1.3125rem;  /* 21px */
+  --text-2xl: 1.625rem;  /* 26px */
+  --text-3xl: 2rem;      /* 32px */
+
+  /* Spacing Scale */
+  --space-1: 0.25rem; /* 4px */
+  --space-2: 0.5rem;  /* 8px */
+  --space-3: 0.75rem; /* 12px */
+  --space-4: 1rem;    /* 16px */
+  --space-5: 1.25rem; /* 20px */
+  --space-6: 1.5rem;  /* 24px */
+  --space-8: 2rem;    /* 32px */
+
+  /* Border Radii */
+  --radius-xs: 6px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 14px;
+  --radius-2xl: 17px;
+  --radius-full: 9999px;
+
+  /* Z-Index Layers */
+  --z-base: 1;
+  --z-sticky: 20;
+  --z-sidebar: 30;
+  --z-dropdown: 50;
+  --z-backdrop: 80;
+  --z-modal: 90;
+  --z-toast: 100;
+
+  /* Layout Dimensions */
+  --sidebar-width: 248px;
+  --topbar-height: 64px;
+  --content-max-width: 1680px;
+
+  /* Transitions & Animation Timing */
+  --transition-fast: 0.12s ease;
+  --transition-normal: 0.18s ease;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-micro: 120ms;
+
+  /* Semantic Status Colors (Shared across themes) */
+  --status-active: #20d9a0;
+  --status-warning: #f5b942;
+  --status-danger: #fb6476;
+  --status-info: #63a8f0;
+  --status-pawn: #b48af4;
+  --status-repair: #f58a68;
+  --status-neutral: #929dad;
+
+  /* Refund Module Compatibility Tokens */
+  --color-refund-page: var(--bg);
+  --color-refund-surface: var(--surface);
+  --color-refund-surface-solid: var(--surface-solid);
+  --color-refund-surface-hover: var(--surface-hover);
+  --color-refund-input: var(--bg-soft);
+  --color-refund-rule: var(--border);
+  --color-refund-rule-strong: var(--border-strong);
+  --color-refund-ink: var(--text);
+  --color-refund-muted: var(--muted);
+  --color-refund-muted-2: var(--muted-2);
+  --color-refund-accent: var(--primary);
+  --color-refund-accent-soft: var(--primary-soft);
+  --color-refund-danger: var(--rose);
+  --color-refund-on-danger: oklch(16% 0.02 275);
+  --color-refund-warning: var(--orange);
+  --color-refund-success: var(--green);
+  --font-refund-display: var(--font-display);
+  --font-refund-body: var(--font-body);
+  --space-refund-2xs: var(--space-1);
+  --space-refund-xs: var(--space-2);
+  --space-refund-sm: var(--space-3);
+  --space-refund-md: var(--space-4);
+  --space-refund-lg: var(--space-6);
+  --space-refund-xl: var(--space-8);
+  --text-refund-xs: 0.6875rem;
+  --text-refund-sm: var(--text-sm);
+  --text-refund-base: var(--text-md);
+  --text-refund-lg: 1.25rem;
+  --ease-refund-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-refund-in: cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-refund-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-refund-micro: 120ms;
+  --dur-refund-short: 220ms;
+  --rule-refund: 1px solid var(--border);
+  --rule-refund-strong: 1px solid var(--border-strong);
+  --radius-refund-sm: var(--radius-md);
+  --radius-refund-md: var(--radius-xl);
+  --radius-refund-lg: var(--radius-2xl);
+}
+
+/* ==========================================================================
+   Dark Theme (Default)
+   ========================================================================== */
+:root,
+:root[data-theme='dark'],
+.app[data-theme='dark'] {
+  --bg: #0b1020;
+  --bg-soft: #10172a;
+  --sidebar: #0d1425;
+  --surface: rgba(20, 29, 51, 0.84);
+  --surface-solid: #151e34;
+  --surface-hover: #1a2540;
+  --border: rgba(255, 255, 255, 0.075);
+  --border-strong: rgba(255, 255, 255, 0.12);
+  --text: #f4f6fb;
+  --muted: #8f9bb4;
+  --muted-2: #69748d;
+  --primary: #8b5cf6;
+  --primary-strong: #7c3aed;
+  --primary-soft: rgba(139, 92, 246, 0.14);
+  --blue: #38bdf8;
+  --orange: #fb923c;
+  --rose: #fb7185;
+  --green: #34d399;
+
+  /* Chart & Analytics Tokens */
+  --chart-primary: #8b5cf6;
+  --chart-blue: #38bdf8;
+  --chart-orange: #fb923c;
+  --chart-green: #34d399;
+  --chart-neutral: #94a3b8;
+
+  /* Legacy & Helper Aliases */
+  --surface-color: var(--surface-solid);
+  --text-color: var(--text);
+  --muted-text: var(--muted);
+  --border-color: var(--border);
+  --input-bg: var(--bg-soft);
+
+  /* Elevation Shadows */
+  --shadow-sm: 0 2px 6px rgba(0, 0, 0, 0.25);
+  --shadow-md: 0 9px 24px rgba(124, 58, 237, 0.2);
+  --shadow-lg: 0 14px 38px rgba(0, 0, 0, 0.24);
+  --shadow-xl: 0 22px 60px rgba(0, 0, 0, 0.35);
+
+  color-scheme: dark;
+}
+
+/* ==========================================================================
+   Light Theme
+   ========================================================================== */
+:root[data-theme='light'],
+.app[data-theme='light'] {
+  --bg: #eaf1eb;
+  --bg-soft: #e2ebe4;
+  --sidebar: #f3f7f3;
+  --surface: rgba(246, 250, 246, 0.88);
+  --surface-solid: #f5f9f5;
+  --surface-hover: #dce9df;
+  --border: rgba(31, 73, 48, 0.10);
+  --border-strong: rgba(31, 73, 48, 0.17);
+  --text: #17251d;
+  --muted: #5f7467;
+  --muted-2: #829388;
+  --primary: #2f8f5b;
+  --primary-strong: #237348;
+  --primary-soft: rgba(47, 143, 91, 0.12);
+  --blue: #268f89;
+  --orange: #d47a27;
+  --rose: #d9576d;
+  --green: #238b57;
+
+  /* Chart & Analytics Tokens */
+  --chart-primary: #2f8f5b;
+  --chart-blue: #268f89;
+  --chart-orange: #d47a27;
+  --chart-green: #238b57;
+  --chart-neutral: #71867a;
+
+  /* Legacy & Helper Aliases */
+  --surface-color: var(--surface-solid);
+  --text-color: var(--text);
+  --muted-text: var(--muted);
+  --border-color: var(--border);
+  --input-bg: var(--bg-soft);
+
+  /* Elevation Shadows */
+  --shadow-sm: 0 2px 6px rgba(31, 73, 48, 0.05);
+  --shadow-md: 0 9px 24px rgba(35, 115, 72, 0.14);
+  --shadow-lg: 0 12px 30px rgba(31, 73, 48, 0.07);
+  --shadow-xl: 0 20px 50px rgba(31, 73, 48, 0.12);
+
+  color-scheme: light;
+}

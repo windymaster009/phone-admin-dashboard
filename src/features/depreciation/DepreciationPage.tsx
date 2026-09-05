@@ -7,6 +7,7 @@ import SectionHeader from '../../components/SectionHeader'
 import { getStoredValuations, setStoredValuations, safeStorage } from '../../lib/storage'
 import { getPawnAutoCalculatePreference, PAWN_AUTO_CALCULATE_EVENT, savePawnAutoCalculatePreference } from '../../lib/pawnPreferences'
 import type { RouteKey } from '../../app/routing'
+import './depreciation-page.css'
 
 type NavKey = RouteKey
 

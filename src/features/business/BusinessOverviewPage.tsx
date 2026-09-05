@@ -6,6 +6,7 @@ import { currency, money, tradePartyName, tradeTransactionMoney, riel, dateText,
 import LoadingState from '../../components/LoadingState'
 import SectionHeader from '../../components/SectionHeader'
 import StatusBadge from '../../components/StatusBadge'
+import './business-overview.css'
 
 function overviewKhr(amount: number) {
   return `${riel.format(Math.round((Number(amount) || 0) / 100) * 100)} KHR`

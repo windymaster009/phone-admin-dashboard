@@ -6,6 +6,7 @@ import { dateText, money, pawnEquivalentText, pawnMoney, pawnUsdValue, useExchan
 import MoneyInput from '../../components/MoneyInput'
 import StatusBadge from '../../components/StatusBadge'
 import { printInventoryLabel } from '../inventory/barcode'
+import './pawn-management.css'
 
 export function pawnOutstanding(pawn: Pawn) {
   if (pawn.feeModel === 'DAILY_SIMPLE' && pawn.feeSummary) return pawn.feeSummary.redemptionTotal

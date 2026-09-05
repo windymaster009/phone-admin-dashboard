@@ -6,6 +6,7 @@ import { money, tradePartyName, tradePartyPhone, tradeTransactionMoney, dateText
 import LoadingState from '../../components/LoadingState'
 import SectionHeader from '../../components/SectionHeader'
 import StatusBadge from '../../components/StatusBadge'
+import './trade-page.css'
 
 export default function TradeView() {
   const [trades, setTrades] = useState<Trade[]>([])

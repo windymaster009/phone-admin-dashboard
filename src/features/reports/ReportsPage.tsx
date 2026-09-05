@@ -7,6 +7,7 @@ import LoadingState from '../../components/LoadingState'
 import SectionHeader from '../../components/SectionHeader'
 import StatusBadge from '../../components/StatusBadge'
 import { BusinessPerformanceChart } from '../business/BusinessOverviewPage'
+import './reports-page.css'
 
 const reportSections = [
   { slug: 'sales', title: 'Sales', description: 'Revenue, COGS, gross profit, items sold', icon: CircleDollarSign, tone: 'violet' },

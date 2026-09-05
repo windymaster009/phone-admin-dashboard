@@ -7,6 +7,7 @@ import LoadingState from '../../components/LoadingState'
 import SectionHeader from '../../components/SectionHeader'
 import StatusBadge from '../../components/StatusBadge'
 import PawnDetailModal, { pawnOutstanding } from './PawnDetailModal'
+import './pawn-management.css'
 
 export default function PawnView({ user }: { user: SessionUser }) {
   const [pawns, setPawns] = useState<Pawn[]>([])

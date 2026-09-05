@@ -1,0 +1,490 @@
+/**
+ * Depreciation & Valuation Calculator Feature Styles
+ */
+
+.calculator-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(360px, 0.75fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.valuation-side {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 16px;
+}
+
+.calculator-mark {
+  width: 39px;
+  height: 39px;
+  display: grid;
+  place-items: center;
+  border-radius: 11px;
+  color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.calculation-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.calculation-mode-toggle {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  background: var(--bg-soft);
+  transition: border-color var(--transition-normal), color var(--transition-normal), background var(--transition-normal), box-shadow var(--transition-normal);
+}
+
+.calculation-mode-toggle:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--primary) 48%, var(--border));
+}
+
+.calculation-mode-toggle:focus-visible {
+  outline: 0;
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.calculation-mode-toggle > span {
+  width: 28px;
+  height: 16px;
+  position: relative;
+  flex: 0 0 auto;
+  border-radius: var(--radius-full);
+  background: var(--border-strong);
+  transition: background var(--transition-normal);
+}
+
+.calculation-mode-toggle > span::after {
+  content: '';
+  width: 10px;
+  height: 10px;
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
+  transition: transform var(--transition-normal), background var(--transition-normal);
+}
+
+.calculation-mode-toggle strong {
+  color: currentColor;
+  font-size: 9px;
+  white-space: nowrap;
+}
+
+.calculation-mode-toggle small {
+  min-width: 17px;
+  color: var(--muted-2);
+  font-size: 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.calculation-mode-toggle.active {
+  color: var(--primary);
+  border-color: color-mix(in srgb, var(--primary) 45%, transparent);
+  background: var(--primary-soft);
+}
+
+.calculation-mode-toggle.active > span {
+  background: var(--primary);
+}
+
+.calculation-mode-toggle.active > span::after {
+  transform: translateX(12px);
+  background: #fff;
+}
+
+.calculation-mode-toggle.active small {
+  color: var(--primary);
+}
+
+.calculator-section {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.calculator-section-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.calculator-section-heading strong,
+.pawn-policy-control > div strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.calculator-section-heading small,
+.pawn-policy-control > div small {
+  color: var(--muted-2);
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.calculator-section .form-grid {
+  margin-top: 14px;
+}
+
+.calculator-risk-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.calculator-accessories {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.calculator-accessories legend {
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+}
+
+.calculator-accessories > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.calculator-risk-grid .calculator-accessories label {
+  min-height: 32px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  flex-direction: row;
+  align-items: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  background: var(--bg-soft);
+  font-size: 8px;
+  cursor: pointer;
+  transition: color var(--transition-normal), border-color var(--transition-normal), background var(--transition-normal);
+}
+
+.calculator-risk-grid .calculator-accessories label:has(input:checked) {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--primary) 42%, transparent);
+  background: var(--primary-soft);
+}
+
+.calculator-risk-grid .calculator-accessories input {
+  width: 14px;
+  height: 14px;
+  min-height: 14px;
+  flex: 0 0 14px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  box-shadow: none;
+  appearance: auto;
+  accent-color: var(--primary);
+}
+
+.calculator-accessories > small {
+  display: block;
+  margin-top: 7px;
+  color: var(--muted-2);
+  font-size: 8px;
+}
+
+.pawn-policy-control {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(280px, 1.2fr);
+  align-items: start;
+  gap: 22px;
+  margin-top: 20px;
+  padding: 14px 17px;
+  border: 1px solid color-mix(in srgb, var(--primary) 20%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--primary) 6%, transparent);
+}
+
+.pawn-policy-control > div {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.pawn-policy-control label {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+}
+
+.pawn-rate-value {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.pawn-rate-value span {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 17px;
+  margin-top: 24px;
+}
+
+.form-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+}
+
+.form-grid input,
+.form-grid select {
+  width: 100%;
+  height: 43px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  outline: 0;
+  padding: 0 12px;
+  color: var(--text);
+  background: var(--bg-soft);
+  transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
+}
+
+.form-grid input:focus,
+.form-grid select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.pawn-id-optional {
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+}
+
+.range-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.range-label strong {
+  color: var(--primary);
+  font-size: var(--text-lg);
+}
+
+.range-label small {
+  color: var(--muted-2);
+  font-weight: 500;
+}
+
+.range-input {
+  padding: 0;
+  accent-color: var(--primary);
+  border: 0;
+  box-shadow: none;
+  cursor: pointer;
+}
+
+.valuation-result-card {
+  background: linear-gradient(155deg, color-mix(in srgb, var(--primary) 15%, transparent), var(--surface) 45%);
+}
+
+.valuation-result-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.valuation-status {
+  padding: 5px 8px;
+  border-radius: var(--radius-full);
+  font-size: 8px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.valuation-status.eligible {
+  color: var(--green);
+  background: rgba(52, 211, 153, 0.1);
+}
+
+.valuation-status.blocked {
+  color: var(--rose);
+  background: rgba(251, 113, 133, 0.1);
+}
+
+.valuation-hero {
+  margin: 18px 0;
+  padding: 23px 16px;
+  text-align: center;
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent);
+  border-radius: var(--radius-xl);
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+}
+
+.valuation-hero small,
+.valuation-hero span {
+  display: block;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.valuation-hero strong {
+  display: block;
+  margin: 7px 0;
+  color: var(--primary);
+  font: 800 36px var(--font-display);
+}
+
+.valuation-hero .khr-equivalent {
+  margin: -2px 0 9px;
+  color: var(--text);
+  font: 700 16px var(--font-display);
+}
+
+.valuation-hero .exchange-rate-source {
+  margin-top: 10px;
+  color: var(--muted-2);
+  font-size: 8px;
+}
+
+.calculation-breakdown {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.calculation-breakdown div {
+  display: flex;
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: var(--text-2xs);
+}
+
+.calculation-breakdown strong {
+  color: var(--text);
+}
+
+.calculation-breakdown .estimated-row {
+  margin-top: 3px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+}
+
+.calculation-breakdown .reserve-row {
+  padding: 10px;
+  border-radius: var(--radius-md);
+  color: var(--blue);
+  background: rgba(56, 189, 248, 0.07);
+}
+
+.calculation-breakdown .reserve-row strong {
+  color: var(--blue);
+}
+
+.valuation-ineligible .valuation-hero {
+  border-color: rgba(251, 113, 133, 0.2);
+  background: rgba(251, 113, 133, 0.07);
+}
+
+.valuation-ineligible .valuation-hero strong {
+  color: var(--rose);
+}
+
+.workflow-note {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 16px;
+  margin-top: 16px;
+  padding: 20px;
+}
+
+.workflow-note-icon {
+  width: 49px;
+  height: 49px;
+  display: grid;
+  place-items: center;
+  color: var(--blue);
+  border-radius: var(--radius-xl);
+  background: rgba(56, 189, 248, 0.11);
+}
+
+.workflow-note h3 {
+  margin: 4px 0 5px;
+  font: 700 15px var(--font-display);
+}
+
+.workflow-note p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-2xs);
+  line-height: 1.6;
+}
+
+.valuation-side .valuation-checklist {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  margin-top: 0;
+  padding: 16px;
+}
+
+.valuation-side .valuation-checklist .workflow-note-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: var(--radius-lg);
+}
+
+.valuation-side .valuation-checklist .verification-chips {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+}
+
+.verification-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
+.verification-chips span {
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  color: var(--muted);
+  background: var(--bg-soft);
+  font-size: 8px;
+  font-weight: 700;
+}
