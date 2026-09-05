@@ -1,50 +1,27 @@
-const TOKEN_KEY = 'phoneflow_token'
-const SESSION_USER_KEY = 'phoneflow_session_user'
+import {
+  getStoredSessionUser,
+  getStoredToken,
+  setStoredSessionUser,
+  setStoredToken,
+  type SessionUser,
+} from './storage'
+
 const tokenListeners = new Set<() => void>()
 const inFlightReads = new Map<string, Promise<unknown>>()
 let authTransitionInProgress = false
 
-export type SessionUser = {
-  id: string
-  name: string
-  email: string
-  role: 'OWNER' | 'MANAGER' | 'CASHIER' | 'STOCK'
-  active: boolean
-}
+export type { SessionUser }
 
-const validRoles = new Set<SessionUser['role']>(['OWNER', 'MANAGER', 'CASHIER', 'STOCK'])
-
-export function getToken() {
-  return localStorage.getItem(TOKEN_KEY)
+export function getToken(): string | null {
+  return getStoredToken()
 }
 
 export function getSessionUser(): SessionUser | null {
-  try {
-    const stored = localStorage.getItem(SESSION_USER_KEY)
-    if (!stored) return null
-
-    const user = JSON.parse(stored) as Partial<SessionUser>
-    if (
-      typeof user.id !== 'string'
-      || typeof user.name !== 'string'
-      || typeof user.email !== 'string'
-      || !validRoles.has(user.role as SessionUser['role'])
-      || typeof user.active !== 'boolean'
-    ) {
-      localStorage.removeItem(SESSION_USER_KEY)
-      return null
-    }
-
-    return user as SessionUser
-  } catch {
-    localStorage.removeItem(SESSION_USER_KEY)
-    return null
-  }
+  return getStoredSessionUser()
 }
 
 export function setSessionUser(user: SessionUser | null) {
-  if (user) localStorage.setItem(SESSION_USER_KEY, JSON.stringify(user))
-  else localStorage.removeItem(SESSION_USER_KEY)
+  setStoredSessionUser(user)
 }
 
 export function subscribeToTokenChanges(listener: () => void) {
@@ -56,11 +33,7 @@ export function subscribeToTokenChanges(listener: () => void) {
 
 export function setToken(token: string | null) {
   const previousToken = getToken()
-  if (token) localStorage.setItem(TOKEN_KEY, token)
-  else {
-    localStorage.removeItem(TOKEN_KEY)
-    setSessionUser(null)
-  }
+  setStoredToken(token)
 
   if (!token || previousToken !== token) {
     tokenListeners.forEach((listener) => listener())

@@ -27,6 +27,7 @@ import {
   X,
 } from 'lucide-react'
 import { api, getSessionUser } from '../../lib/api'
+import { safeStorage } from '../../lib/storage'
 import MoneyInput from '../../components/MoneyInput'
 import { getPawnAutoCalculatePreference, PAWN_AUTO_CALCULATE_EVENT, savePawnAutoCalculatePreference } from '../../lib/pawnPreferences'
 import { BarcodeGraphic, printInventoryLabels } from '../inventory/barcode'
@@ -856,7 +857,7 @@ export default function OperationModalBridge() {
         .finally(() => setPurchaseInventoryLoading(false))
     }
     if (kind === 'pawn') {
-      const saved = sessionStorage.getItem('phoneflow_last_valuation')
+      const saved = safeStorage.getItem('phoneflow_last_valuation', 'session')
       let importedExchangeRate = false
       if (saved) {
         try {
@@ -893,7 +894,7 @@ export default function OperationModalBridge() {
           setPawnValuation(null)
           setError('The calculator valuation could not be imported. Review the contract values before continuing.')
         } finally {
-          sessionStorage.removeItem('phoneflow_last_valuation')
+          safeStorage.removeItem('phoneflow_last_valuation', 'session')
         }
       }
       if (!importedExchangeRate) {

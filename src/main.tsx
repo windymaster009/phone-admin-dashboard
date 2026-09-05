@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import AppWithBackend from './app/AppWithBackend'
+import ErrorBoundary from './components/ErrorBoundary'
 import './styles'
 import './features/dashboard/dashboard-performance.css'
 import './features/dashboard/dashboard-density.css'
@@ -19,6 +20,8 @@ import './features/security/two-factor.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AppWithBackend />
+    <ErrorBoundary boundaryName="ApplicationRoot">
+      <AppWithBackend />
+    </ErrorBoundary>
   </StrictMode>,
 )

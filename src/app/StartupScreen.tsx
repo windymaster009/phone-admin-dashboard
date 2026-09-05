@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  AlertTriangle,
   Check,
   Clock3,
   Database,
@@ -45,8 +46,22 @@ const stageCopy: Record<StartupStage, StageCopy> = {
   },
 }
 
-export default function StartupScreen({ stage = 'checking-session', overlay = false, shop }: { stage?: StartupStage; overlay?: boolean; shop: ShopProfile }) {
-  const [online, setOnline] = useState(() => navigator.onLine)
+export default function StartupScreen({
+  stage = 'checking-session',
+  overlay = false,
+  shop,
+  error,
+  onRetry,
+  onDismissOverlay,
+}: {
+  stage?: StartupStage
+  overlay?: boolean
+  shop: ShopProfile
+  error?: { message: string; retryable?: boolean } | null
+  onRetry?: () => void
+  onDismissOverlay?: () => void
+}) {
+  const [online, setOnline] = useState(() => (typeof navigator !== 'undefined' ? navigator.onLine : true))
   const [slow, setSlow] = useState(false)
   const copy = stageCopy[stage]
   const brandedCopy = {
@@ -72,10 +87,13 @@ export default function StartupScreen({ stage = 'checking-session', overlay = fa
   }, [stage])
 
   const statusMessage = useMemo(() => {
+    if (error) return error.message
     if (!online) return 'Your device is offline. Reconnect to continue.'
     if (slow) return 'This is taking longer than usual. The API or database may still be starting.'
     return brandedCopy.message
-  }, [brandedCopy.message, online, slow])
+  }, [brandedCopy.message, error, online, slow])
+
+  const hasAlert = Boolean(error || !online || slow)
 
   return (
     <div
@@ -110,16 +128,20 @@ export default function StartupScreen({ stage = 'checking-session', overlay = fa
           </div>
 
           <div className="startup-content">
-            <span className="startup-eyebrow">{online ? copy.eyebrow : 'Connection required'}</span>
-            <h1>{online ? brandedCopy.title : 'You are offline'}</h1>
+            <span className="startup-eyebrow">
+              {error ? 'Connection error' : online ? copy.eyebrow : 'Connection required'}
+            </span>
+            <h1>
+              {error ? 'Service unavailable' : online ? brandedCopy.title : 'You are offline'}
+            </h1>
             <p>{statusMessage}</p>
 
             <div className="startup-progress" aria-label={`Loading ${shop.name}`}><span /></div>
 
             <div className="startup-steps" aria-label="Startup progress">
               {copy.steps.map((label, index) => {
-                const complete = online && index < copy.activeStep
-                const active = online && index === copy.activeStep
+                const complete = !error && online && index < copy.activeStep
+                const active = !error && online && index === copy.activeStep
                 const StepIcon = index === 0 ? ShieldCheck : index === 1 ? Database : LayoutDashboard
                 return (
                   <div key={label} className={`startup-step${complete ? ' complete' : ''}${active ? ' active' : ''}`}>
@@ -130,14 +152,45 @@ export default function StartupScreen({ stage = 'checking-session', overlay = fa
               })}
             </div>
 
-            {(!online || slow) && (
+            {hasAlert && (
               <div className="startup-help" role="alert">
-                <span className="startup-help-icon">{online ? <Clock3 size={18} /> : <WifiOff size={18} />}</span>
+                <span className="startup-help-icon">
+                  {error ? <AlertTriangle size={18} /> : online ? <Clock3 size={18} /> : <WifiOff size={18} />}
+                </span>
                 <div>
-                  <strong>{online ? 'Still working…' : 'No network connection'}</strong>
-                  <span>{online ? 'Check that the PhoneFlow API and MongoDB are running.' : 'Reconnect, then retry loading the app.'}</span>
+                  <strong>
+                    {error
+                      ? 'Connection issue'
+                      : online
+                        ? 'Still working…'
+                        : 'No network connection'}
+                  </strong>
+                  <span>
+                    {error
+                      ? (error.message || 'Check that the PhoneFlow API and MongoDB are running.')
+                      : online
+                        ? 'Check that the PhoneFlow API and MongoDB are running.'
+                        : 'Reconnect, then retry loading the app.'}
+                  </span>
                 </div>
-                <button type="button" onClick={() => window.location.reload()}><RefreshCcw size={15} /> Retry</button>
+                <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={() => (onRetry ? onRetry() : window.location.reload())}
+                    aria-label="Retry connecting to the service"
+                  >
+                    <RefreshCcw size={15} /> Retry
+                  </button>
+                  {overlay && onDismissOverlay && (
+                    <button
+                      type="button"
+                      onClick={onDismissOverlay}
+                      aria-label="Continue to workspace"
+                    >
+                      Open workspace
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>

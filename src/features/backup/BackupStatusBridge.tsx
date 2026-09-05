@@ -2,6 +2,7 @@ import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, BadgeCheck, Check, Download, FileUp, RefreshCcw, RotateCcw, Trash2, X } from 'lucide-react'
 import { ApiError, api, setAuthTransitionInProgress, setToken } from '../../lib/api'
+import { safeStorage } from '../../lib/storage'
 
 type BackupMetadata = {
   filename: string
@@ -362,15 +363,11 @@ export default function BackupStatusBridge() {
         method: 'POST',
         body: JSON.stringify({ confirmation: restoreConfirmation }),
       })
-      try {
-        sessionStorage.setItem('phoneflow_restore_success', JSON.stringify({
-          restoredAt: result.restored.createdAt,
-          filename: result.restored.filename,
-          safetyBackupAt: result.safetyBackup.completedAt,
-        }))
-      } catch {
-        // The in-app completion screen still confirms success when storage is unavailable.
-      }
+      safeStorage.setJSON('phoneflow_restore_success', {
+        restoredAt: result.restored.createdAt,
+        filename: result.restored.filename,
+        safetyBackupAt: result.safetyBackup.completedAt,
+      }, 'session')
       setRestoreSuccess(result)
       setRestoreBusy(false)
     } catch (reason) {

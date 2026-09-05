@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { motion } from 'framer-motion'
 import { AlertTriangle, BadgeCheck, ChevronDown, ExternalLink, Github, KeyRound, ShieldCheck, Smartphone } from 'lucide-react'
 import { ApiError, api, setToken, type SessionUser, type ShopProfile } from '../lib/api'
+import { safeStorage } from '../lib/storage'
 
 function ErrorNotice({ message }: { message: string }) {
   return <div className="error-notice"><AlertTriangle size={16} /> {message}</div>
@@ -13,13 +14,11 @@ type RestoreSuccessNotice = {
 }
 
 function readRestoreSuccessNotice(): RestoreSuccessNotice | null {
-  try {
-    const stored = sessionStorage.getItem('phoneflow_restore_success')
-    sessionStorage.removeItem('phoneflow_restore_success')
-    return stored ? JSON.parse(stored) as RestoreSuccessNotice : null
-  } catch {
-    return null
+  const notice = safeStorage.getJSON<RestoreSuccessNotice | null>('phoneflow_restore_success', null, undefined, 'session')
+  if (notice) {
+    safeStorage.removeItem('phoneflow_restore_success', 'session')
   }
+  return notice
 }
 
 function RestoreNotice({ notice }: { notice: RestoreSuccessNotice }) {

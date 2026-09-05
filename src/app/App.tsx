@@ -54,6 +54,15 @@ import { api, type SessionUser, type ShopProfile } from '../lib/api'
 import { getPawnAutoCalculatePreference, PAWN_AUTO_CALCULATE_EVENT, savePawnAutoCalculatePreference } from '../lib/pawnPreferences'
 import LoadingState from '../components/LoadingState'
 import MoneyInput from '../components/MoneyInput'
+import ErrorBoundary from '../components/ErrorBoundary'
+import {
+  clearStoredValuations,
+  getStoredInventoryView,
+  getStoredValuations,
+  safeStorage,
+  setStoredInventoryView,
+  setStoredValuations,
+} from '../lib/storage'
 import { printInventoryLabel } from '../features/inventory/barcode'
 import BackupStatusBridge from '../features/backup/BackupStatusBridge'
 import SupplierWorkspace from '../features/suppliers/SupplierWorkspace'
@@ -2175,7 +2184,7 @@ function InventoryView() {
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('ALL')
   const [statusFilter, setStatusFilter] = useState('ALL')
-  const [inventoryView, setInventoryView] = useState<'large' | 'details'>(() => localStorage.getItem('phoneflow_inventory_view') === 'details' ? 'details' : 'large')
+  const [inventoryView, setInventoryView] = useState<'large' | 'details'>(getStoredInventoryView)
   const [error, setError] = useState('')
   const exchangeRate = useExchangeRate()
   const usdKhrRate = Number(exchangeRate?.usdKhr) > 0 ? Number(exchangeRate?.usdKhr) : 4100
@@ -2229,7 +2238,7 @@ function InventoryView() {
 
   function changeInventoryView(view: 'large' | 'details') {
     setInventoryView(view)
-    localStorage.setItem('phoneflow_inventory_view', view)
+    setStoredInventoryView(view)
   }
 
   function openPriceEditor() {
@@ -2721,8 +2730,8 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
       maximumPawn: result.maximumPawn,
       usdKhrRate: exchangeRate?.usdKhr,
     }
-    const previous = JSON.parse(localStorage.getItem('phoneflow_valuations') || '[]') as unknown[]
-    localStorage.setItem('phoneflow_valuations', JSON.stringify([record, ...previous].slice(0, 50)))
+    const previous = getStoredValuations()
+    setStoredValuations([record, ...previous].slice(0, 50))
     window.alert('Valuation saved on this device.')
   }
 
@@ -2752,7 +2761,7 @@ function DepreciationView({ goTo }: { goTo: (key: NavKey) => void }) {
       maximumPawn: result.maximumPawn,
       usdKhrRate: exchangeRate?.usdKhr,
     }
-    sessionStorage.setItem('phoneflow_last_valuation', JSON.stringify(valuation))
+    safeStorage.setJSON('phoneflow_last_valuation', valuation, 'session')
     goTo('pawn')
     window.dispatchEvent(new CustomEvent('phoneflow:open-pawn', { detail: { valuationId: valuation.id } }))
   }
@@ -3972,7 +3981,7 @@ function SettingsView({
   fontSize: AppFontSize
   onFontSizeChange: (fontSize: AppFontSize) => void
 }) {
-  const savedValuations = JSON.parse(localStorage.getItem('phoneflow_valuations') || '[]') as unknown[]
+  const [savedValuations, setSavedValuations] = useState<unknown[]>(getStoredValuations)
   const fontSizeOptions: Array<{
     value: AppFontSize
     label: string
@@ -4103,7 +4112,7 @@ function SettingsView({
             <button
               className="ghost-button danger-button"
               disabled={savedValuations.length === 0}
-              onClick={() => { localStorage.removeItem('phoneflow_valuations'); window.location.reload() }}
+              onClick={() => { clearStoredValuations(); setSavedValuations([]) }}
             >
               <Trash2 size={15} />Clear records
             </button>
@@ -4359,9 +4368,15 @@ function App({
             </div>
           </div>
         </header>
-        <main className="main-content">{renderView()}</main>
+        <main className="main-content">
+          <ErrorBoundary boundaryName={`Screen:${active}`} key={active}>
+            {renderView()}
+          </ErrorBoundary>
+        </main>
       </div>
-      <BackupStatusBridge />
+      <ErrorBoundary boundaryName="BackupStatusBridge" compact>
+        <BackupStatusBridge />
+      </ErrorBoundary>
     </div>
   )
 }

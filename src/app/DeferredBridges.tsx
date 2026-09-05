@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
+import ErrorBoundary from '../components/ErrorBoundary'
 
 const DashboardPerformanceBridge = lazy(() => import('../features/dashboard/DashboardPerformanceBridge'))
 const InventoryInsightsBridge = lazy(() => import('../features/dashboard/InventoryInsightsBridge'))
@@ -74,14 +75,65 @@ export default function DeferredBridges() {
 
   return (
     <>
-      {dashboardReady && <Suspense fallback={null}><DashboardPerformanceBridge /><InventoryInsightsBridge /></Suspense>}
-      {operationsReady && <Suspense fallback={null}><OperationModalBridge /></Suspense>}
-      {customersReady && <Suspense fallback={null}><CustomerWorkspaceBridge /></Suspense>}
-      {activityReady && <Suspense fallback={null}><ActivityReportBridge /></Suspense>}
-      {loansReady && <Suspense fallback={null}><LoanWorkspaceBridge /><LoanDashboardBridge /><LoanRouteCompatibility /></Suspense>}
-      {receiptsReady && <Suspense fallback={null}><ReceiptCenterBridge /></Suspense>}
-      {documentsReady && <Suspense fallback={null}><SecureDocumentsBridge /></Suspense>}
-      {securityReady && <Suspense fallback={null}><SecurityWorkspaceBridge /></Suspense>}
+      {dashboardReady && (
+        <ErrorBoundary boundaryName="Deferred:DashboardBridges" compact>
+          <Suspense fallback={null}>
+            <DashboardPerformanceBridge />
+            <InventoryInsightsBridge />
+          </Suspense>
+        </ErrorBoundary>
+      )}
+      {operationsReady && (
+        <ErrorBoundary boundaryName="Deferred:OperationModalBridge" compact>
+          <Suspense fallback={null}>
+            <OperationModalBridge />
+          </Suspense>
+        </ErrorBoundary>
+      )}
+      {customersReady && (
+        <ErrorBoundary boundaryName="Deferred:CustomerWorkspaceBridge" compact>
+          <Suspense fallback={null}>
+            <CustomerWorkspaceBridge />
+          </Suspense>
+        </ErrorBoundary>
+      )}
+      {activityReady && (
+        <ErrorBoundary boundaryName="Deferred:ActivityReportBridge" compact>
+          <Suspense fallback={null}>
+            <ActivityReportBridge />
+          </Suspense>
+        </ErrorBoundary>
+      )}
+      {loansReady && (
+        <ErrorBoundary boundaryName="Deferred:LoanBridges" compact>
+          <Suspense fallback={null}>
+            <LoanWorkspaceBridge />
+            <LoanDashboardBridge />
+            <LoanRouteCompatibility />
+          </Suspense>
+        </ErrorBoundary>
+      )}
+      {receiptsReady && (
+        <ErrorBoundary boundaryName="Deferred:ReceiptCenterBridge" compact>
+          <Suspense fallback={null}>
+            <ReceiptCenterBridge />
+          </Suspense>
+        </ErrorBoundary>
+      )}
+      {documentsReady && (
+        <ErrorBoundary boundaryName="Deferred:SecureDocumentsBridge" compact>
+          <Suspense fallback={null}>
+            <SecureDocumentsBridge />
+          </Suspense>
+        </ErrorBoundary>
+      )}
+      {securityReady && (
+        <ErrorBoundary boundaryName="Deferred:SecurityWorkspaceBridge" compact>
+          <Suspense fallback={null}>
+            <SecurityWorkspaceBridge />
+          </Suspense>
+        </ErrorBoundary>
+      )}
     </>
   )
 }

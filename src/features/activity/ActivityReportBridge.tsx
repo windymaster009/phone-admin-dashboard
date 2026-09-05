@@ -18,6 +18,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { api } from '../../lib/api'
+import { safeStorage } from '../../lib/storage'
 
 type ActivityUser = {
   _id: string
@@ -186,14 +187,14 @@ export default function ActivityReportBridge() {
   const panelRef = useRef<HTMLElement | null>(null)
 
   const lastSeen = useCallback(() => {
-    const stored = window.localStorage.getItem(LAST_SEEN_KEY)
+    const stored = safeStorage.getItem(LAST_SEEN_KEY)
     return stored ? new Date(stored).getTime() : 0
   }, [])
 
   const updateUnread = useCallback((items: ActivityLog[]) => {
     const seenAt = lastSeen()
     if (!seenAt && items[0]) {
-      window.localStorage.setItem(LAST_SEEN_KEY, items[0].createdAt)
+      safeStorage.setItem(LAST_SEEN_KEY, items[0].createdAt)
       setUnreadCount(0)
       return
     }
@@ -215,8 +216,8 @@ export default function ActivityReportBridge() {
   }, [updateUnread])
 
   const markSeen = useCallback(() => {
-    if (logs[0]) window.localStorage.setItem(LAST_SEEN_KEY, logs[0].createdAt)
-    else window.localStorage.setItem(LAST_SEEN_KEY, new Date().toISOString())
+    if (logs[0]) safeStorage.setItem(LAST_SEEN_KEY, logs[0].createdAt)
+    else safeStorage.setItem(LAST_SEEN_KEY, new Date().toISOString())
     setUnreadCount(0)
   }, [logs])
 
