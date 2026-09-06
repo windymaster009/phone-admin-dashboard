@@ -139,6 +139,7 @@ export default function BusinessOverviewView({ onReady }: { onReady: () => void 
   const [error, setError] = useState('')
 
   useEffect(() => {
+    let active = true
     if (period === 'custom' && (!customFrom || !customTo || customFrom > customTo)) return
     const query = new URLSearchParams({ period })
     if (period === 'custom') {
@@ -148,10 +149,22 @@ export default function BusinessOverviewView({ onReady }: { onReady: () => void 
     setLoading(true)
     setError('')
     api<BusinessOverviewData>(`/business-overview?${query.toString()}`)
-      .then(setData)
-      .catch((reason: Error) => setError(reason.message))
-      .finally(() => { setLoading(false); onReady() })
-  }, [period, customFrom, customTo])
+      .then((result) => {
+        if (active) setData(result)
+      })
+      .catch((reason: Error) => {
+        if (active) setError(reason.message)
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false)
+          onReady()
+        }
+      })
+    return () => {
+      active = false
+    }
+  }, [period, customFrom, customTo, onReady])
 
   const periodLabel = data?.period.label || 'This Month'
   const salesRevenueValue = money.format(data?.financial.salesRevenue || 0)

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, Calculator, CircleDollarSign, HandCoins, MoreHorizontal, Package, Plus, ScanLine, ShoppingCart, Smartphone, Users } from 'lucide-react'
 import { api, type SessionUser } from '../../lib/api'
 import type { Customer, Pawn, DashboardData } from '../../types/domain'
@@ -9,7 +9,7 @@ import StatusBadge from '../../components/StatusBadge'
 import type { RouteKey } from '../../app/routing'
 
 type NavKey = RouteKey
-import PawnDetailModal from '../pawns/PawnDetailModal'
+const PawnDetailModal = lazy(() => import('../pawns/PawnDetailModal'))
 import CashFlowCard from './CashFlowCard'
 import InventoryInsightsCard from './InventoryInsightsCard'
 import LoanDashboardPanel from '../loans/LoanDashboardPanel'
@@ -53,94 +53,7 @@ const demoMetrics = [
   },
 ]
 
-const pawnRows = [
-  {
-    id: 'PW-2026-0188',
-    customer: 'Sokha Chan',
-    phone: 'iPhone 15 Pro Max',
-    value: '$720',
-    loan: '$350',
-    due: '18 Jul 2026',
-    status: 'Due soon',
-    idVerified: true,
-  },
-  {
-    id: 'PW-2026-0187',
-    customer: 'Dara Vann',
-    phone: 'Samsung S24 Ultra',
-    value: '$640',
-    loan: '$300',
-    due: '21 Jul 2026',
-    status: 'Active',
-    idVerified: true,
-  },
-  {
-    id: 'PW-2026-0185',
-    customer: 'Maly Touch',
-    phone: 'iPhone 13',
-    value: '$320',
-    loan: '$145',
-    due: '12 Jul 2026',
-    status: 'Overdue',
-    idVerified: true,
-  },
-  {
-    id: 'PW-2026-0182',
-    customer: 'Vicheka Lim',
-    phone: 'Google Pixel 8 Pro',
-    value: '$410',
-    loan: '$190',
-    due: '28 Jul 2026',
-    status: 'Active',
-    idVerified: false,
-  },
-]
 
-const inventoryRows = [
-  {
-    sku: 'PH-APL-15PM-256-BLK',
-    item: 'iPhone 15 Pro Max 256GB',
-    type: 'Second-hand phone',
-    stock: 4,
-    buy: '$650',
-    sell: '$789',
-    status: 'In stock',
-  },
-  {
-    sku: 'PH-SAM-S24U-512-GRY',
-    item: 'Samsung S24 Ultra 512GB',
-    type: 'New phone',
-    stock: 7,
-    buy: '$820',
-    sell: '$949',
-    status: 'In stock',
-  },
-  {
-    sku: 'AC-ANK-ADP-20W',
-    item: 'Anker 20W USB-C Adapter',
-    type: 'Accessory',
-    stock: 3,
-    buy: '$9',
-    sell: '$16',
-    status: 'Low stock',
-  },
-  {
-    sku: 'SP-APL-IP13-OLED',
-    item: 'iPhone 13 OLED LCD',
-    type: 'Spare part',
-    stock: 2,
-    buy: '$78',
-    sell: '$110',
-    status: 'Low stock',
-  },
-]
-
-const transactions = [
-  { id: 'SL-00982', title: 'Sold iPhone 14 Pro', person: 'Nita Heng', amount: '+$620', type: 'Sale' },
-  { id: 'BY-00514', title: 'Bought Samsung Z Flip 5', person: 'Sothea Keo', amount: '-$330', type: 'Purchase' },
-  { id: 'SL-00981', title: 'Sold 2 accessories', person: 'Walk-in customer', amount: '+$41', type: 'Sale' },
-  { id: 'BY-00513', title: 'Bought iPhone 12', person: 'Rithy Meas', amount: '-$185', type: 'Purchase' },
-]
 
 function MetricCard({
   label,
@@ -179,23 +92,31 @@ export default function DashboardView({ goTo, user, onReady }: { goTo: (key: Nav
   const [error, setError] = useState('')
   const exchangeRate = useExchangeRate()
 
-  const loadDashboard = async (showRefresh = false) => {
-    if (showRefresh) setRefreshing(true)
-    try {
-      setData(await api<DashboardData>('/dashboard'))
-      setError('')
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Could not load dashboard data')
-    } finally {
-      setLoading(false)
-      onReady()
-      if (showRefresh) setRefreshing(false)
-    }
-  }
-
   useEffect(() => {
+    let active = true
+    const loadDashboard = async (showRefresh = false) => {
+      if (showRefresh) setRefreshing(true)
+      try {
+        const result = await api<DashboardData>('/dashboard')
+        if (!active) return
+        setData(result)
+        setError('')
+      } catch (reason) {
+        if (!active) return
+        setError(reason instanceof Error ? reason.message : 'Could not load dashboard data')
+      } finally {
+        if (active) {
+          setLoading(false)
+          onReady()
+          if (showRefresh) setRefreshing(false)
+        }
+      }
+    }
     void loadDashboard()
-  }, [])
+    return () => {
+      active = false
+    }
+  }, [onReady])
 
   const metrics = data?.metrics ? [
     { label: "Today's sales", value: money.format(data.metrics.salesToday), secondaryValue: khrText(data.metrics.salesToday, exchangeRate), change: `${money.format(data.metrics.purchasesToday)} purchases${exchangeRate ? ` · ${khrText(data.metrics.purchasesToday, exchangeRate)}` : ''}`, trend: 'up' as const, icon: CircleDollarSign, tone: 'violet' },
@@ -384,14 +305,16 @@ export default function DashboardView({ goTo, user, onReady }: { goTo: (key: Nav
         </div>
       </section>
       {selectedPawn && (
-        <PawnDetailModal
-          pawn={selectedPawn}
-          onClose={() => setSelectedPawn(null)}
-          onOpenAll={() => {
-            setSelectedPawn(null)
-            goTo('pawn')
-          }}
-        />
+        <Suspense fallback={null}>
+          <PawnDetailModal
+            pawn={selectedPawn}
+            onClose={() => setSelectedPawn(null)}
+            onOpenAll={() => {
+              setSelectedPawn(null)
+              goTo('pawn')
+            }}
+          />
+        </Suspense>
       )}
     </>
   )

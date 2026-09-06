@@ -205,18 +205,30 @@ export default function ActivityReportDropdown({
     onUnreadChange?.(count)
   }, [lastSeen, onUnreadChange])
 
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
   const load = useCallback(async (showSpinner = false) => {
+    if (!mountedRef.current) return
     if (showSpinner) setLoading(true)
     setError('')
     try {
       const result = await api<{ logs: ActivityLog[] }>('/activity-logs')
+      if (!mountedRef.current) return
       const items = Array.isArray(result?.logs) ? result.logs : []
       setLogs(items)
       updateUnread(items)
     } catch (reason) {
+      if (!mountedRef.current) return
       setError(reason instanceof Error ? reason.message : 'Unable to load the activity report')
     } finally {
-      if (showSpinner) setLoading(false)
+      if (mountedRef.current && showSpinner) setLoading(false)
     }
   }, [updateUnread])
 
@@ -239,7 +251,7 @@ export default function ActivityReportDropdown({
   useEffect(() => {
     void load(false)
     const interval = window.setInterval(() => {
-      if (!document.hidden) void load(false)
+      if (!document.hidden && mountedRef.current) void load(false)
     }, POLL_INTERVAL_MS)
 
     return () => window.clearInterval(interval)

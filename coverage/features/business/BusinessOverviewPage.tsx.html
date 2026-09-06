@@ -25,28 +25,28 @@
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>0/105</span>
+                <span class='fraction'>0/112</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>0/181</span>
+                <span class='fraction'>0/187</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Functions</span>
-                <span class='fraction'>0/30</span>
+                <span class='fraction'>0/32</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
                 <span class="strong">0% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>0/84</span>
+                <span class='fraction'>0/90</span>
             </div>
         
             
@@ -311,7 +311,20 @@
 <a name='L246'></a><a href='#L246'>246</a>
 <a name='L247'></a><a href='#L247'>247</a>
 <a name='L248'></a><a href='#L248'>248</a>
-<a name='L249'></a><a href='#L249'>249</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<a name='L249'></a><a href='#L249'>249</a>
+<a name='L250'></a><a href='#L250'>250</a>
+<a name='L251'></a><a href='#L251'>251</a>
+<a name='L252'></a><a href='#L252'>252</a>
+<a name='L253'></a><a href='#L253'>253</a>
+<a name='L254'></a><a href='#L254'>254</a>
+<a name='L255'></a><a href='#L255'>255</a>
+<a name='L256'></a><a href='#L256'>256</a>
+<a name='L257'></a><a href='#L257'>257</a>
+<a name='L258'></a><a href='#L258'>258</a>
+<a name='L259'></a><a href='#L259'>259</a>
+<a name='L260'></a><a href='#L260'>260</a>
+<a name='L261'></a><a href='#L261'>261</a>
+<a name='L262'></a><a href='#L262'>262</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -457,13 +470,26 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
@@ -700,6 +726,7 @@ export default function <span class="fstat-no" title="function not covered" >Bus
   const [error, setError<span class="cstat-no" title="statement not covered" >] = useState('')</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >  useEffect(<span class="fstat-no" title="function not covered" >() =&gt; {</span></span>
+    let active = <span class="cstat-no" title="statement not covered" >true</span>
 <span class="cstat-no" title="statement not covered" >    if (period === 'custom' &amp;&amp; (!customFrom || !customTo || customFrom &gt; customTo)) <span class="cstat-no" title="statement not covered" >return</span></span>
     const query = <span class="cstat-no" title="statement not covered" >new URLSearchParams({ period })</span>
 <span class="cstat-no" title="statement not covered" >    if (period === 'custom') {</span>
@@ -709,10 +736,22 @@ export default function <span class="fstat-no" title="function not covered" >Bus
 <span class="cstat-no" title="statement not covered" >    setLoading(true)</span>
 <span class="cstat-no" title="statement not covered" >    setError('')</span>
 <span class="cstat-no" title="statement not covered" >    api&lt;BusinessOverviewData&gt;(`/business-overview?${query.toString()}`)</span>
-      .then(setData)
-      .catch(<span class="fstat-no" title="function not covered" >(r</span>eason: Error) =&gt; <span class="cstat-no" title="statement not covered" >setError(reason.message))</span>
-      .finally(<span class="fstat-no" title="function not covered" >() =&gt; {</span> <span class="cstat-no" title="statement not covered" >setLoading(false); <span class="cstat-no" title="statement not covered" >o</span>nReady() }</span>)
-  }, [period, customFrom, customTo])
+      .then(<span class="fstat-no" title="function not covered" >(r</span>esult) =&gt; {
+<span class="cstat-no" title="statement not covered" >        if (active) <span class="cstat-no" title="statement not covered" >setData(result)</span></span>
+      })
+      .catch(<span class="fstat-no" title="function not covered" >(r</span>eason: Error) =&gt; {
+<span class="cstat-no" title="statement not covered" >        if (active) <span class="cstat-no" title="statement not covered" >setError(reason.message)</span></span>
+      })
+      .finally(<span class="fstat-no" title="function not covered" >() =&gt; {</span>
+<span class="cstat-no" title="statement not covered" >        if (active) {</span>
+<span class="cstat-no" title="statement not covered" >          setLoading(false)</span>
+<span class="cstat-no" title="statement not covered" >          onReady()</span>
+        }
+      })
+<span class="cstat-no" title="statement not covered" >    return <span class="fstat-no" title="function not covered" >() =&gt; {</span></span>
+<span class="cstat-no" title="statement not covered" >      active = false</span>
+    }
+  }, [period, customFrom, customTo, onReady])
 &nbsp;
   const periodLabel = <span class="cstat-no" title="statement not covered" >data?.period.label || 'This Month'</span>
   const salesRevenueValue = <span class="cstat-no" title="statement not covered" >money.format(data?.financial.salesRevenue || 0)</span>
@@ -814,7 +853,7 @@ export default function <span class="fstat-no" title="function not covered" >Bus
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-09-06T07:33:14.326Z
+                at 2026-09-06T07:52:31.223Z
             </div>
         <script src="../../prettify.js"></script>
         <script>

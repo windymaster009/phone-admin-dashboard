@@ -1,31 +1,33 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Bell, ChevronDown, LogOut, Menu, Moon, Settings, Smartphone, Sun, X } from 'lucide-react'
 import { api, type SessionUser, type ShopProfile } from '../lib/api'
 import { titleStatus } from '../lib/presentation'
 import ErrorBoundary from '../components/ErrorBoundary'
+import LoadingState from '../components/LoadingState'
 import NotFoundView from '../components/NotFoundView'
 import DashboardPage from '../features/dashboard/DashboardPage'
-import PawnManagementPage from '../features/pawns/PawnManagementPage'
-import TradePage from '../features/trades/TradePage'
-import ServiceWorkspace from '../features/services/ServiceWorkspace'
-import InventoryPage from '../features/inventory/InventoryPage'
-import CustomerPage from '../features/customers/CustomerPage'
-import SupplierWorkspace from '../features/suppliers/SupplierWorkspace'
-import DepreciationPage from '../features/depreciation/DepreciationPage'
-import RefundsPage from '../features/refunds/RefundsPage'
-import BusinessOverviewPage from '../features/business/BusinessOverviewPage'
-import ReportsPage from '../features/reports/ReportsPage'
-import LoanPage from '../features/loans/LoanPage'
-import ReceiptCenterPage from '../features/receipts/ReceiptCenterPage'
-import SecureDocumentsPage from '../features/documents/SecureDocumentsPage'
-import SecurityWorkspacePage from '../features/security/SecurityWorkspacePage'
-import SettingsPage from '../features/settings/SettingsPage'
-import BackupStatusCard from '../features/backup/BackupStatusCard'
 import ActivityReportDropdown from '../features/activity/ActivityReportDropdown'
-import OperationModalBridge from '../features/operations/OperationModalBridge'
-import ReceiptCenterBridge from '../features/receipts/ReceiptCenterBridge'
 import { getNavGroups, useRouter } from './routing'
 import type { AppFontSize } from './types'
+
+const PawnManagementPage = lazy(() => import('../features/pawns/PawnManagementPage'))
+const TradePage = lazy(() => import('../features/trades/TradePage'))
+const ServiceWorkspace = lazy(() => import('../features/services/ServiceWorkspace'))
+const InventoryPage = lazy(() => import('../features/inventory/InventoryPage'))
+const CustomerPage = lazy(() => import('../features/customers/CustomerPage'))
+const SupplierWorkspace = lazy(() => import('../features/suppliers/SupplierWorkspace'))
+const DepreciationPage = lazy(() => import('../features/depreciation/DepreciationPage'))
+const RefundsPage = lazy(() => import('../features/refunds/RefundsPage'))
+const BusinessOverviewPage = lazy(() => import('../features/business/BusinessOverviewPage'))
+const ReportsPage = lazy(() => import('../features/reports/ReportsPage'))
+const LoanPage = lazy(() => import('../features/loans/LoanPage'))
+const ReceiptCenterPage = lazy(() => import('../features/receipts/ReceiptCenterPage'))
+const SecureDocumentsPage = lazy(() => import('../features/documents/SecureDocumentsPage'))
+const SecurityWorkspacePage = lazy(() => import('../features/security/SecurityWorkspacePage'))
+const SettingsPage = lazy(() => import('../features/settings/SettingsPage'))
+const BackupStatusCard = lazy(() => import('../features/backup/BackupStatusCard'))
+const OperationModalBridge = lazy(() => import('../features/operations/OperationModalBridge'))
+const ReceiptCenterBridge = lazy(() => import('../features/receipts/ReceiptCenterBridge'))
 
 function App({
   user,
@@ -60,11 +62,11 @@ function App({
   const notificationButtonRef = useRef<HTMLButtonElement>(null)
   const sidebarRef = useRef<HTMLElement>(null)
 
-  const changePage = (to: string) => {
+  const changePage = useCallback((to: string) => {
     setMobileOpen(false)
     setProfileOpen(false)
     navigate(to)
-  }
+  }, [navigate])
 
   useEffect(() => {
     if (initialViewReady) onWorkspaceReady()
@@ -79,6 +81,7 @@ function App({
   useEffect(() => {
     let mounted = true
     const checkLoans = async () => {
+      if (document.hidden) return
       try {
         const res = await api<{ summary: { counts: { overdue: number } } }>('/loans/summary')
         if (mounted) setOverdueLoans(res.summary?.counts?.overdue || 0)
@@ -249,7 +252,9 @@ function App({
         </nav>
 
         <div className="sidebar-footer">
-          <BackupStatusCard />
+          <Suspense fallback={null}>
+            <BackupStatusCard />
+          </Suspense>
         </div>
       </aside>
 
@@ -314,14 +319,18 @@ function App({
         </header>
         <main className="main-content">
           <ErrorBoundary boundaryName={`Screen:${routeKey}`} key={routeKey}>
-            {renderView()}
+            <Suspense fallback={<LoadingState label="Loading view..." detail="Preparing application workspace…" />}>
+              {renderView()}
+            </Suspense>
           </ErrorBoundary>
         </main>
       </div>
 
       <ErrorBoundary boundaryName="GlobalOverlays" compact>
-        <OperationModalBridge />
-        <ReceiptCenterBridge />
+        <Suspense fallback={null}>
+          <OperationModalBridge />
+          <ReceiptCenterBridge />
+        </Suspense>
       </ErrorBoundary>
     </div>
   )

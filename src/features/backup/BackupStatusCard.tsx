@@ -119,7 +119,9 @@ export default function BackupStatusCard() {
     }
 
     void load()
-    const timer = window.setInterval(load, 60_000)
+    const timer = window.setInterval(() => {
+      if (!document.hidden && active) void load()
+    }, 60_000)
     return () => {
       active = false
       window.clearInterval(timer)

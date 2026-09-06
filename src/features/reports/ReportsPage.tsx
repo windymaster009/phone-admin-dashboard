@@ -139,10 +139,12 @@ function CustomerReportModal({ onClose }: { onClose: () => void }) {
   const [reportToMonth, setReportToMonth] = useState(currentCambodiaMonth)
 
   useEffect(() => {
+    let active = true
     api<{ customers: Customer[] }>('/customers')
-      .then((result) => setCustomers(result.customers))
-      .catch((reason: Error) => setError(reason.message))
-      .finally(() => setLoading(false))
+      .then((result) => { if (active) setCustomers(result.customers) })
+      .catch((reason: Error) => { if (active) setError(reason.message) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
   }, [])
 
   useEffect(() => {
@@ -287,10 +289,12 @@ function SupplierReportModal({ onClose }: { onClose: () => void }) {
   const [reportToMonth, setReportToMonth] = useState(currentCambodiaMonth)
 
   useEffect(() => {
+    let active = true
     api<{ suppliers: Supplier[] }>('/suppliers')
-      .then((result) => setSuppliers(result.suppliers))
-      .catch((reason: Error) => setError(reason.message))
-      .finally(() => setLoading(false))
+      .then((result) => { if (active) setSuppliers(result.suppliers) })
+      .catch((reason: Error) => { if (active) setError(reason.message) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
   }, [])
 
   useEffect(() => {
