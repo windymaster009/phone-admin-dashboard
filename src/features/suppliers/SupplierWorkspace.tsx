@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { AlertTriangle, BadgeCheck, Building2, CheckCircle2, Pencil, Phone, Plus, Power, Search, Trash2, X } from 'lucide-react'
 import { api } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
+import SummaryStats from '../../components/SummaryStats'
 import './supplier-workspace.css'
 
 type Supplier = {
@@ -254,12 +255,15 @@ export default function SupplierWorkspace() {
       <button className="primary-button" onClick={openCreate}><Plus size={17} /> Add supplier</button>
     </div>
     {error && <div className="customer-error"><AlertTriangle size={17} /> {error}</div>}
-    <section className="mini-stats-grid supplier-stats-grid">
-      <article className="surface-card mini-stat"><Building2 /><p>Total suppliers<strong>{suppliers.length}</strong><small>saved in MongoDB</small></p></article>
-      <article className="surface-card mini-stat"><BadgeCheck /><p>Active suppliers<strong>{activeCount}</strong><small>available for purchases</small></p></article>
-      <article className="surface-card mini-stat"><Phone /><p>Phone contacts<strong>{suppliers.filter((supplier) => supplier.phone).length}</strong><small>contact numbers recorded</small></p></article>
-      <article className="surface-card mini-stat"><AlertTriangle /><p>Inactive suppliers<strong>{suppliers.length - activeCount}</strong><small>hidden from new purchases</small></p></article>
-    </section>
+    <SummaryStats
+      label="Supplier summary"
+      items={[
+        { label: 'Total suppliers', value: suppliers.length, detail: 'saved in MongoDB', icon: Building2, tone: 'violet' },
+        { label: 'Active suppliers', value: activeCount, detail: 'available for purchases', icon: BadgeCheck, tone: 'green' },
+        { label: 'Phone contacts', value: suppliers.filter((supplier) => supplier.phone).length, detail: 'contact numbers recorded', icon: Phone, tone: 'blue' },
+        { label: 'Inactive suppliers', value: suppliers.length - activeCount, detail: 'hidden from new purchases', icon: AlertTriangle, tone: 'rose' },
+      ]}
+    />
     <article className="surface-card table-card page-table supplier-table-card">
       <div className="filter-row supplier-filter-row"><div className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search supplier, phone, National ID, or notes" /></div><button className="ghost-button" onClick={() => void loadSuppliers()}>Refresh</button></div>
       <div className="table-scroll supplier-desktop-table"><table><thead><tr><th>Supplier</th><th>Phone</th><th>National ID</th><th>Added</th><th>Status</th><th /></tr></thead><tbody>

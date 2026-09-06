@@ -823,50 +823,6 @@
   font-weight: 500;
 }
 
-.mini-stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 15px;
-  margin-bottom: 16px;
-}
-
-.mini-stat {
-  min-height: 110px;
-  padding: 18px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  color: var(--primary);
-}
-
-.mini-stat > svg {
-  width: 39px;
-  height: 39px;
-  padding: 9px;
-  border-radius: var(--radius-lg);
-  background: var(--primary-soft);
-}
-
-.mini-stat p {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  color: var(--muted);
-  font-size: 10px;
-}
-
-.mini-stat strong {
-  margin: 5px 0 3px;
-  color: var(--text);
-  font-family: var(--font-display);
-  font-size: 21px;
-}
-
-.mini-stat small {
-  color: var(--muted-2);
-  font-size: 9px;
-}
-
 .page-table {
   min-height: 360px;
 }

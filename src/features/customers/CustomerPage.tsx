@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { api } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
+import SummaryStats from '../../components/SummaryStats'
 
 type Customer = {
   _id: string
@@ -291,12 +292,15 @@ export default function CustomerPage() {
 
       {error && <div className="customer-error"><AlertTriangle size={17} /> {error}</div>}
 
-      <section className="mini-stats-grid customer-stats-grid">
-        <article className="surface-card mini-stat"><Users /><p>Total customers<strong>{customers.length}</strong><small>saved in MongoDB</small></p></article>
-        <article className="surface-card mini-stat"><BadgeCheck /><p>ID recorded<strong>{verifiedCount}</strong><small>ready for pawn verification</small></p></article>
-        <article className="surface-card mini-stat"><AlertTriangle /><p>Missing ID<strong>{missingIdCount}</strong><small>can still be used for walk-in sales</small></p></article>
-        <article className="surface-card mini-stat"><Phone /><p>Contact records<strong>{customers.filter((customer) => customer.phone).length}</strong><small>phone numbers available</small></p></article>
-      </section>
+      <SummaryStats
+        label="Customer summary"
+        items={[
+          { label: 'Total customers', value: customers.length, detail: 'saved in MongoDB', icon: Users, tone: 'violet' },
+          { label: 'ID recorded', value: verifiedCount, detail: 'ready for pawn verification', icon: BadgeCheck, tone: 'green' },
+          { label: 'Missing ID', value: missingIdCount, detail: 'can still be used for walk-in sales', icon: AlertTriangle, tone: 'orange' },
+          { label: 'Contact records', value: customers.filter((customer) => customer.phone).length, detail: 'phone numbers available', icon: Phone, tone: 'blue' },
+        ]}
+      />
 
       <article className="surface-card table-card page-table customer-table-card">
         <div className="filter-row customer-filter-row">

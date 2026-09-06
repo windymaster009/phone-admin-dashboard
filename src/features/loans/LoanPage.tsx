@@ -23,6 +23,7 @@ import {
 import { api, type SessionUser } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
 import MoneyInput from '../../components/MoneyInput'
+import SummaryStats from '../../components/SummaryStats'
 
 type Currency = 'USD' | 'KHR'
 type LoanStatus = 'ACTIVE' | 'DUE_SOON' | 'OVERDUE' | 'PARTIALLY_PAID' | 'PAID' | 'CANCELLED'
@@ -135,10 +136,6 @@ function LoanStatusBadge({ status }: { status: LoanStatus }) {
             : X
 
   return <span className={`loan-status loan-status-${status.toLowerCase().replaceAll('_', '-')}`}><Icon size={15} strokeWidth={2} aria-hidden="true" />{statusLabel(status)}</span>
-}
-
-function DualAmount({ usd, khr }: { usd: number; khr: number }) {
-  return <><strong>{money(usd, 'USD')}</strong><small>{money(khr, 'KHR')}</small></>
 }
 
 function Modal({ title, eyebrow, description, onClose, compact = false, confirmation = false, scanner = false, children }: {
@@ -644,12 +641,15 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
     </div>
     {error && <div className="loan-error"><AlertTriangle size={17} /> {error}</div>}
 
-    <section className="loan-stats-grid">
-      <article className="surface-card loan-stat"><span className="loan-stat-icon violet"><Banknote /></span><p><span>Total lent</span><DualAmount usd={summary.byCurrency.USD.lent} khr={summary.byCurrency.KHR.lent} /><em>{summary.counts.total} loan{summary.counts.total === 1 ? '' : 's'}</em></p></article>
-      <article className="surface-card loan-stat"><span className="loan-stat-icon blue"><CircleDollarSign /></span><p><span>Outstanding</span><DualAmount usd={summary.byCurrency.USD.outstanding} khr={summary.byCurrency.KHR.outstanding} /><em>{summary.counts.open} still open</em></p></article>
-      <article className="surface-card loan-stat"><span className="loan-stat-icon orange"><Clock /></span><p><span>Due soon</span><DualAmount usd={summary.byCurrency.USD.dueSoon} khr={summary.byCurrency.KHR.dueSoon} /><em>{summary.counts.dueSoon} reminder{summary.counts.dueSoon === 1 ? '' : 's'}</em></p></article>
-      <article className="surface-card loan-stat"><span className="loan-stat-icon rose"><AlertTriangle /></span><p><span>Overdue</span><DualAmount usd={summary.byCurrency.USD.overdue} khr={summary.byCurrency.KHR.overdue} /><em>{summary.counts.overdue} need attention</em></p></article>
-    </section>
+    <SummaryStats
+      label="Loan summary"
+      items={[
+        { label: 'Total lent', value: money(summary.byCurrency.USD.lent, 'USD'), secondaryValue: money(summary.byCurrency.KHR.lent, 'KHR'), detail: `${summary.counts.total} loan${summary.counts.total === 1 ? '' : 's'}`, icon: Banknote, tone: 'violet' },
+        { label: 'Outstanding', value: money(summary.byCurrency.USD.outstanding, 'USD'), secondaryValue: money(summary.byCurrency.KHR.outstanding, 'KHR'), detail: `${summary.counts.open} still open`, icon: CircleDollarSign, tone: 'blue' },
+        { label: 'Due soon', value: money(summary.byCurrency.USD.dueSoon, 'USD'), secondaryValue: money(summary.byCurrency.KHR.dueSoon, 'KHR'), detail: `${summary.counts.dueSoon} reminder${summary.counts.dueSoon === 1 ? '' : 's'}`, icon: Clock, tone: 'orange' },
+        { label: 'Overdue', value: money(summary.byCurrency.USD.overdue, 'USD'), secondaryValue: money(summary.byCurrency.KHR.overdue, 'KHR'), detail: `${summary.counts.overdue} need attention`, icon: AlertTriangle, tone: 'rose' },
+      ]}
+    />
 
     <article className="surface-card table-card page-table loan-table-card">
       <div className="filter-row loan-filter-row">

@@ -6,6 +6,7 @@ import { comingNext, dateText, money, pawnEquivalentText, pawnMoney, pawnUsdValu
 import LoadingState from '../../components/LoadingState'
 import SectionHeader from '../../components/SectionHeader'
 import StatusBadge from '../../components/StatusBadge'
+import SummaryStats from '../../components/SummaryStats'
 import PawnDetailModal, { pawnOutstanding } from './PawnDetailModal'
 import './pawn-management.css'
 
@@ -87,12 +88,15 @@ export default function PawnView({ user }: { user: SessionUser }) {
           </div>}
         />
       </div>
-      <section className="mini-stats-grid pawn-stats-grid">
-        <div className="surface-card mini-stat"><HandCoins /><p>Open contracts<strong>{openPawns.length}</strong><small>{money.format(openPawnUsdTotal)} USD equivalent remaining</small></p></div>
-        <div className="surface-card mini-stat"><Clock3 /><p>Due soon<strong>{pawns.filter((pawn) => pawn.status === 'DUE_SOON').length}</strong><small>needs follow-up</small></p></div>
-        <div className="surface-card mini-stat"><AlertTriangle /><p>Overdue<strong>{pawns.filter((pawn) => pawn.status === 'OVERDUE').length}</strong><small>past due contracts</small></p></div>
-        <div className="surface-card mini-stat"><RefreshCcw /><p>Extended contracts<strong>{pawns.filter((pawn) => (pawn.renewals?.length || 0) > 0).length}</strong><small>contracts with extension history</small></p></div>
-      </section>
+      <SummaryStats
+        label="Pawn contract summary"
+        items={[
+          { label: 'Open contracts', value: openPawns.length, detail: `${money.format(openPawnUsdTotal)} USD equivalent remaining`, icon: HandCoins, tone: 'violet' },
+          { label: 'Due soon', value: pawns.filter((pawn) => pawn.status === 'DUE_SOON').length, detail: 'needs follow-up', icon: Clock3, tone: 'orange' },
+          { label: 'Overdue', value: pawns.filter((pawn) => pawn.status === 'OVERDUE').length, detail: 'past due contracts', icon: AlertTriangle, tone: 'rose' },
+          { label: 'Extended contracts', value: pawns.filter((pawn) => (pawn.renewals?.length || 0) > 0).length, detail: 'contracts with extension history', icon: RefreshCcw, tone: 'blue' },
+        ]}
+      />
       <article className="surface-card table-card page-table pawn-workspace-card">
         <div className="filter-row">
           <div className="search-field"><Search size={17} /><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search contract, customer, phone or IMEI" /></div>
