@@ -6,6 +6,7 @@ import { currency, money, tradePartyName, purchaseSourceLabel, tradeTransactionM
 import LoadingState from '../../components/LoadingState'
 import SectionHeader from '../../components/SectionHeader'
 import StatusBadge from '../../components/StatusBadge'
+import SummaryStats, { type SummaryStatTone } from '../../components/SummaryStats'
 import { BusinessPerformanceChart } from '../business/BusinessOverviewPage'
 import './reports-page.css'
 
@@ -466,9 +467,18 @@ function SalesReportView({ navigate }: { navigate: (path: string) => void }) {
       </section>
       {error && <p className="overview-error"><AlertTriangle size={16} />{error}</p>}
 
-      <section className="sales-report-kpis" aria-label="Sales report summary">
-        {salesKpis.map(({ label, value, icon: Icon, tone }) => <article className="surface-card sales-report-kpi" key={label}><span className={`metric-icon tone-${tone}`}><Icon size={20} /></span><div><p>{label}</p><h3>{value}</h3><small>{data?.period.label || 'This Month'} · {titleStatus(status)}</small></div></article>)}
-      </section>
+      <SummaryStats
+        label="Sales report summary"
+        variant="standard"
+        columns={6}
+        items={salesKpis.map(({ label, value, icon: Icon, tone }) => ({
+          label,
+          value,
+          icon: Icon,
+          tone: tone as SummaryStatTone,
+          detail: `${data?.period.label || 'This Month'} · ${titleStatus(status)}`,
+        }))}
+      />
 
       <section className="surface-card overview-performance-card sales-performance-card">
         <div className="card-heading"><div><span className="eyebrow">{data?.period.label || 'This Month'}</span><h3>Sales & Profit</h3><p>Revenue, cost of goods sold, and gross profit over time.</p></div></div>
@@ -570,9 +580,18 @@ function PurchasesReportView({ navigate }: { navigate: (path: string) => void })
       </section>
       {error && <p className="overview-error"><AlertTriangle size={16} />{error}</p>}
 
-      <section className="sales-report-kpis" aria-label="Purchases report summary">
-        {purchaseKpis.map(({ label, value, icon: Icon, tone, detail }) => <article className="surface-card sales-report-kpi" key={label}><span className={`metric-icon tone-${tone}`}><Icon size={20} /></span><div><p>{label}</p><h3>{value}</h3><small>{detail} · {data?.period.label || 'This Month'}</small></div></article>)}
-      </section>
+      <SummaryStats
+        label="Purchases report summary"
+        variant="standard"
+        columns={6}
+        items={purchaseKpis.map(({ label, value, icon: Icon, tone, detail }) => ({
+          label,
+          value,
+          icon: Icon,
+          tone: tone as SummaryStatTone,
+          detail: `${detail} · ${data?.period.label || 'This Month'}`,
+        }))}
+      />
 
       <section className="surface-card overview-performance-card sales-performance-card">
         <div className="card-heading"><div><span className="eyebrow">{data?.period.label || 'This Month'}</span><h3>Purchase Cost & Settlement</h3><p>Normalized USD cost, amount paid, and remaining seller balance over time.</p></div></div>
@@ -732,12 +751,21 @@ function OperationalReportView({ kind, navigate }: { kind: OperationalReportKind
       </section>
       {error && <p className="overview-error"><AlertTriangle size={16} />{error}</p>}
 
-      <section className="sales-report-kpis" aria-label={`${kind} report summary`}>
-        {(data?.summary || []).map((item, index) => {
+      <SummaryStats
+        label={`${kind} report summary`}
+        variant="standard"
+        columns={Math.min(6, (data?.summary || []).length || 4)}
+        items={(data?.summary || []).map((item, index) => {
           const Icon = operationalReportIcons[index % operationalReportIcons.length]
-          return <article className="surface-card sales-report-kpi" key={item.label}><span className={`metric-icon tone-${item.tone}`}><Icon size={20} /></span><div><p>{item.label}</p><h3>{valueText(item.value, item.format)}</h3><small>{item.detail}</small></div></article>
+          return {
+            label: item.label,
+            value: valueText(item.value, item.format),
+            icon: Icon,
+            tone: item.tone as SummaryStatTone,
+            detail: item.detail,
+          }
         })}
-      </section>
+      />
 
       <section className="operational-breakdown-grid">
         {(data?.breakdowns || []).map((section) => {

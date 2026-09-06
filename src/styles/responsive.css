@@ -88,10 +88,8 @@
   .metrics-grid { grid-template-columns: repeat(2, 1fr); }
   .report-hub-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .report-operations-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .sales-report-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .sales-report-lower-grid { grid-template-columns: minmax(0, 1fr); }
   .operational-breakdown-grid { grid-template-columns: minmax(0, 1fr); }
-  .overview-kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .overview-snapshot-grid,
   .overview-recent-grid { grid-template-columns: minmax(0, 1fr); }
   .dashboard-grid, .dashboard-lower-grid, .calculator-layout { grid-template-columns: minmax(0, 1fr); }
@@ -101,7 +99,6 @@
   .valuation-settings-card,
   .font-size-settings-card { grid-area: auto; }
   .inventory-mix-card { min-height: 350px; }
-  .stock-category-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
 @media (max-width: 1024px) {
@@ -112,7 +109,6 @@
   .business-overview-page > .section-header { align-items: stretch; flex-direction: column; }
   .overview-period-controls { justify-content: stretch; }
   .overview-period-controls label { min-width: 0; flex: 1; }
-  .overview-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .reports-hub-page > .section-header,
   .reports-placeholder-page > .section-header,
   .sales-report-page > .section-header { align-items: stretch; flex-direction: column; }
@@ -213,9 +209,6 @@
   .sales-report-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 11px; }
   .sales-report-filters label { min-width: 0; }
   .sales-report-filters > svg { margin: 0; }
-  .sales-report-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .sales-report-kpi { min-height: 68px; padding: 8px 9px; }
-  .sales-report-kpi .metric-icon { width: 31px; height: 31px; }
   .sales-performance-card .overview-chart { height: 170px; min-height: 0; }
   .sales-report-desktop-table { display: none; }
   .operational-report-desktop-table { display: none; }
@@ -244,15 +237,7 @@
   .overview-period-controls label > span { white-space: nowrap; }
   .overview-period-controls select,
   .overview-period-controls input { height: 32px; }
-  .overview-kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
-  .overview-kpi-card { min-height: 74px; padding: 9px; gap: 8px; align-items: center; }
-  .overview-kpi-card:nth-child(5) { grid-column: 1 / -1; }
-  .overview-kpi-card .metric-icon { width: 30px; height: 30px; border-radius: 9px; }
-  .overview-kpi-card .metric-icon svg { width: 16px; height: 16px; }
-  .overview-kpi-card p { margin-bottom: 3px; font-size: 8px; }
-  .overview-kpi-card h3,
   .overview-currency-value > strong { font-size: 17px; }
-  .overview-kpi-card > div > small,
   .overview-currency-value small { margin-top: 2px; font-size: 7px; }
   .overview-performance-card,
   .overview-snapshot-card { padding: 12px; }
@@ -262,14 +247,6 @@
   .overview-finance-snapshots { grid-template-columns: minmax(0, 1fr); }
   .overview-inventory-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .overview-recent-grid { gap: 10px; }
-  .app[data-font-size='comfortable'] .overview-kpi-grid { gap: 6px; }
-  .app[data-font-size='comfortable'] .overview-kpi-card { min-height: 70px; padding: 8px; gap: 7px; }
-  .app[data-font-size='comfortable'] .overview-kpi-card .metric-icon { width: 28px; height: 28px; }
-  .app[data-font-size='large'] .overview-kpi-grid { grid-template-columns: minmax(0, 1fr); gap: 7px; }
-  .app[data-font-size='large'] .overview-kpi-card { min-height: 66px; padding: 8px 9px; }
-  .app[data-font-size='large'] .overview-kpi-card:nth-child(5) { grid-column: auto; }
-  .app[data-font-size='large'] .overview-kpi-card .metric-icon { width: 27px; height: 27px; }
-  .app[data-font-size='large'] .overview-kpi-card h3,
   .app[data-font-size='large'] .overview-currency-value > strong { font-size: 16px; }
   .main-content { padding: 12px 14px 20px; }
   .topbar { height: 68px; }
@@ -309,7 +286,6 @@
   .stock-page-heading .section-header-actions .secondary-button { min-height: 36px; padding-inline: 8px; font-size: 9px; }
   .stock-page-heading .section-header-actions .primary-button svg,
   .stock-page-heading .section-header-actions .secondary-button svg { width: 15px; height: 15px; }
-  .stock-page-heading + .stock-category-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-bottom: 10px; }
   .stock-workspace-card .filter-row { padding: 11px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .stock-workspace-card .filter-row .search-field { grid-column: 1 / -1; width: 100%; }
   .stock-workspace-card .filter-row .filter-select { width: 100%; min-width: 0; padding-inline: 9px; font-size: 9px; }
@@ -368,18 +344,6 @@
   .trade-transactions-card .transaction-row p strong { font-size: 10px; }
   .trade-transactions-card .transaction-row p small { margin-top: 2px; font-size: 8px; }
   .trade-transactions-card .transaction-row .icon-button { width: 32px; height: 32px; }
-  .stock-category-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; }
-  .stock-category { min-width: 0; min-height: 74px; padding: 8px 4px; display: grid; grid-template-columns: minmax(0, 1fr); place-items: center; gap: 0; text-align: center; }
-  .stock-category > svg { display: none; }
-  .stock-category .stock-icon { width: 26px; height: 26px; flex: 0 0 auto; padding: 5px; border-radius: 8px; }
-  .stock-category .stock-icon svg { width: 16px; height: 16px; }
-  .stock-category p { width: 100%; min-width: 0; align-items: center; overflow: hidden; font-size: 8px; line-height: 1.1; white-space: nowrap; text-overflow: ellipsis; }
-  .stock-category strong { margin: 2px 0 0; font-size: 16px; }
-  .stock-category small { display: none; }
-  .app[data-font-size='comfortable'] .stock-category { min-height: 68px; }
-  .app[data-font-size='large'] .stock-category { min-height: 64px; padding: 7px 4px; }
-  .app[data-font-size='comfortable'] .stock-category .stock-icon,
-  .app[data-font-size='large'] .stock-category .stock-icon { width: 24px; height: 24px; padding: 5px; }
   .inventory-catalog-card { margin-bottom: 10px; }
   .inventory-catalog-card .table-heading { align-items: center; padding: 13px 14px 10px; }
   .inventory-catalog-card .table-heading .eyebrow { display: none; }

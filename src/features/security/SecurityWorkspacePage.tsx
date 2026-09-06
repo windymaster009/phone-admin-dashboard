@@ -26,6 +26,7 @@ import {
 } from 'lucide-react'
 import { api, getSessionUser } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
+import SummaryStats from '../../components/SummaryStats'
 
 type AuthSession = {
   id: string
@@ -444,13 +445,49 @@ export default function SecurityWorkspacePage() {
 
       {error && <div className="security-error"><AlertTriangle size={17} /><span>{error}</span></div>}
 
-      <section className="security-summary">
-        <article className="card security-users-summary"><Users size={21} /><div><span>Users</span><strong>{staffUsers?.length ?? 'â€”'}</strong><small>{staffUsers ? `${activeStaffUsers} active account${activeStaffUsers === 1 ? '' : 's'}` : 'Owner / Manager only'}</small></div></article>
-        <article className="card"><ShieldCheck size={21} /><div><span>Active sessions</span><strong>{activeSessions.length}</strong><small>{otherSessions.length} other device{otherSessions.length === 1 ? '' : 's'}</small></div></article>
-        <article className="card"><LockKeyhole size={21} /><div><span>Two-factor</span><strong>{twoFactorStatus?.enabled ? 'Enabled' : 'Not enabled'}</strong><small>{twoFactorStatus?.eligible ? `${twoFactorStatus.recoveryCodesRemaining} recovery codes` : 'Owner / Manager only'}</small></div></article>
-        <article className="card"><Smartphone size={21} /><div><span>Android pairing</span><strong>One-time code</strong><small>Expires automatically</small></div></article>
-        <article className="card"><Clock3 size={21} /><div><span>Session lifetime</span><strong>{activeSessions[0] ? dateTime(activeSessions[0].expiresAt) : '—'}</strong><small>Server-enforced expiry</small></div></article>
-      </section>
+      <SummaryStats
+        label="Security workspace summary"
+        variant="detailed"
+        columns={5}
+        items={[
+          {
+            label: 'Users',
+            value: staffUsers?.length ?? '—',
+            detail: staffUsers ? `${activeStaffUsers} active account${activeStaffUsers === 1 ? '' : 's'}` : 'Owner / Manager only',
+            icon: Users,
+            tone: 'violet',
+          },
+          {
+            label: 'Active sessions',
+            value: activeSessions.length,
+            detail: `${otherSessions.length} other device${otherSessions.length === 1 ? '' : 's'}`,
+            icon: ShieldCheck,
+            tone: 'blue',
+          },
+          {
+            label: 'Two-factor',
+            value: twoFactorStatus?.enabled ? 'Enabled' : 'Not enabled',
+            valueTone: twoFactorStatus?.enabled ? 'positive' : 'warning',
+            detail: twoFactorStatus?.eligible ? `${twoFactorStatus.recoveryCodesRemaining} recovery codes` : 'Owner / Manager only',
+            icon: LockKeyhole,
+            tone: 'orange',
+          },
+          {
+            label: 'Android pairing',
+            value: 'One-time code',
+            detail: 'Expires automatically',
+            icon: Smartphone,
+            tone: 'blue',
+          },
+          {
+            label: 'Session lifetime',
+            value: activeSessions[0] ? dateTime(activeSessions[0].expiresAt) : '—',
+            detail: 'Server-enforced expiry',
+            icon: Clock3,
+            tone: 'rose',
+          },
+        ]}
+      />
 
       {staffUsers && <section className="card security-panel security-users-panel" id="user-management">
         <div className="security-panel-title">

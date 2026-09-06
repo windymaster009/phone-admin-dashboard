@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { api } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
+import SummaryStats from '../../components/SummaryStats'
 import ReceiptDocument, { receiptPrintStyles } from './ReceiptDocument'
 import type {
   ReceiptDocumentType,
@@ -234,24 +235,16 @@ export default function ReceiptCenterPage() {
 
       {error && <div className="receipt-error"><AlertTriangle size={16} /> {error}</div>}
 
-      <section className="receipt-stat-grid">
-        <article className="surface-card">
-          <ReceiptText />
-          <p>Documents<strong>{stats.documents}</strong><small>saved snapshots</small></p>
-        </article>
-        <article className="surface-card">
-          <ShoppingCart />
-          <p>Sales receipts<strong>{stats.sales}</strong><small>customer invoices</small></p>
-        </article>
-        <article className="surface-card">
-          <Landmark />
-          <p>Agreements<strong>{stats.contract}</strong><small>pawn and loan contracts</small></p>
-        </article>
-        <article className="surface-card">
-          <Printer />
-          <p>Total prints<strong>{stats.prints}</strong><small>including reprints</small></p>
-        </article>
-      </section>
+      <SummaryStats
+        label="Receipt statistics"
+        variant="compact"
+        items={[
+          { label: 'Documents', value: stats.documents, detail: 'saved snapshots', icon: ReceiptText, tone: 'violet' },
+          { label: 'Sales receipts', value: stats.sales, detail: 'customer invoices', icon: ShoppingCart, tone: 'blue' },
+          { label: 'Agreements', value: stats.contract, detail: 'pawn and loan contracts', icon: Landmark, tone: 'orange' },
+          { label: 'Total prints', value: stats.prints, detail: 'including reprints', icon: Printer, tone: 'green' },
+        ]}
+      />
 
       <article className="surface-card table-card page-table receipt-table-card">
         <div className="filter-row receipt-filter-row">

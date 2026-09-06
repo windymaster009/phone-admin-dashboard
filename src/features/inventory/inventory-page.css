@@ -3,33 +3,7 @@
  * Stock categories, catalog view, product cards, dual-currency pricing editor, and detail modal.
  */
 
-/* Stock Category Grid */
-.stock-category-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-.stock-category {
-  min-width: 0;
-  min-height: 104px;
-  padding: 12px;
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  overflow: hidden;
-  border-color: var(--border);
-  color: var(--muted);
-  text-align: left;
-}
-
-.stock-category.active {
-  border-color: color-mix(in srgb, var(--primary) 42%, transparent);
-  background: linear-gradient(135deg, var(--primary-soft), var(--surface));
-}
-
+/* Inventory Stock Icon */
 .stock-icon {
   width: 40px;
   height: 40px;
@@ -41,37 +15,6 @@
 .stock-icon svg {
   width: 19px;
   height: 19px;
-}
-
-.stock-category p {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--text-2xs);
-  line-height: 1.25;
-}
-
-.stock-category strong {
-  margin: 3px 0 1px;
-  color: var(--text);
-  font: 800 clamp(18px, 1.45vw, 22px) var(--font-display);
-  line-height: 1.1;
-}
-
-.stock-category small {
-  overflow: hidden;
-  color: var(--muted-2);
-  font-size: 9px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.stock-category > svg {
-  width: 16px;
-  height: 16px;
-  flex: 0 0 auto;
 }
 
 /* Inventory Catalog */

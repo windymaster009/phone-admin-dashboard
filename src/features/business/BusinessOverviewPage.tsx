@@ -6,6 +6,7 @@ import { currency, money, tradePartyName, tradeTransactionMoney, riel, dateText,
 import LoadingState from '../../components/LoadingState'
 import SectionHeader from '../../components/SectionHeader'
 import StatusBadge from '../../components/StatusBadge'
+import SummaryStats from '../../components/SummaryStats'
 import './business-overview.css'
 
 function overviewKhr(amount: number) {
@@ -205,14 +206,50 @@ export default function BusinessOverviewView({ onReady }: { onReady: () => void 
         )}
       />
       {error && <p className="overview-error"><AlertTriangle size={16} />{error}</p>}
-
-      <section className="overview-kpi-grid" aria-label="Business summary">
-        <article className="surface-card overview-kpi-card"><span className="metric-icon tone-violet"><CircleDollarSign size={21} /></span><div><p>Sales Revenue</p><h3 className="overview-responsive-value" data-value-size={overviewValueSize(salesRevenueValue)} title={salesRevenueValue}>{salesRevenueValue}</h3><small>{periodLabel}</small></div></article>
-        <article className="surface-card overview-kpi-card"><span className="metric-icon tone-orange"><Banknote size={21} /></span><div><p>Purchases</p><h3 className="overview-responsive-value" data-value-size={overviewValueSize(purchasesValue)} title={purchasesValue}>{purchasesValue}</h3><small>{periodLabel}</small></div></article>
-        <article className="surface-card overview-kpi-card"><span className="metric-icon tone-blue"><TrendingDown size={21} /></span><div><p>Gross Profit</p><h3 className={`overview-responsive-value ${(data?.financial.grossProfit || 0) < 0 ? 'negative' : ''}`} data-value-size={overviewValueSize(grossProfitValue)} title={grossProfitValue}>{grossProfitValue}</h3><small>{periodLabel} · after COGS</small></div></article>
-        <article className="surface-card overview-kpi-card"><span className="metric-icon tone-blue"><HandCoins size={21} /></span><div><p>Pawn Outstanding</p><OverviewCurrencyValue totals={data?.pawn.outstandingPrincipal || { USD: 0, KHR: 0 }} /><small>Current snapshot</small></div></article>
-        <article className="surface-card overview-kpi-card"><span className="metric-icon tone-rose"><Boxes size={21} /></span><div><p>Stock Value</p><h3 className="overview-responsive-value" data-value-size={overviewValueSize(stockValue)} title={stockValue}>{stockValue}</h3><small>Current cost value</small></div></article>
-      </section>
+      <SummaryStats
+        label="Business summary"
+        variant="standard"
+        columns={5}
+        items={[
+          {
+            label: 'Sales Revenue',
+            value: salesRevenueValue,
+            icon: CircleDollarSign,
+            tone: 'violet',
+            detail: periodLabel,
+          },
+          {
+            label: 'Purchases',
+            value: purchasesValue,
+            icon: Banknote,
+            tone: 'orange',
+            detail: periodLabel,
+          },
+          {
+            label: 'Gross Profit',
+            value: grossProfitValue,
+            valueTone: (data?.financial.grossProfit || 0) < 0 ? 'negative' : 'default',
+            icon: TrendingDown,
+            tone: 'blue',
+            detail: `${periodLabel} · after COGS`,
+          },
+          {
+            label: 'Pawn Outstanding',
+            value: <OverviewCurrencyValue totals={data?.pawn.outstandingPrincipal || { USD: 0, KHR: 0 }} />,
+            valueText: `${money.format(data?.pawn.outstandingPrincipal?.USD || 0)} ${overviewKhr(data?.pawn.outstandingPrincipal?.KHR || 0)}`,
+            icon: HandCoins,
+            tone: 'blue',
+            detail: 'Current snapshot',
+          },
+          {
+            label: 'Stock Value',
+            value: stockValue,
+            icon: Boxes,
+            tone: 'rose',
+            detail: 'Current cost value',
+          },
+        ]}
+      />
 
       <section className="surface-card overview-performance-card">
         <div className="card-heading"><div><span className="eyebrow">{periodLabel}</span><h3>Business Performance</h3><p>Completed sales, purchases, and gross profit over time.</p></div>{loading && <RefreshCcw className="overview-refreshing" size={18} />}</div>

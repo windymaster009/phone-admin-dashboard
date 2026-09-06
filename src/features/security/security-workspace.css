@@ -65,77 +65,6 @@
   flex: 0 0 auto;
 }
 
-.security-summary {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.security-summary > article {
-  min-width: 0;
-  min-height: 96px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 15px;
-  border: 1px solid var(--border);
-  border-radius: 15px;
-  background: var(--surface);
-  box-shadow: 0 12px 30px rgba(2, 6, 23, 0.08);
-  backdrop-filter: blur(14px);
-}
-
-.security-summary > article > svg {
-  width: 40px;
-  height: 40px;
-  flex: 0 0 40px;
-  padding: 10px;
-  border-radius: 11px;
-  color: var(--primary);
-  background: var(--primary-soft);
-}
-
-.security-summary > article:nth-child(2) > svg {
-  color: var(--blue);
-  background: color-mix(in srgb, var(--blue) 15%, transparent);
-}
-
-.security-summary > article:nth-child(3) > svg {
-  color: var(--green);
-  background: color-mix(in srgb, var(--green) 15%, transparent);
-}
-
-.security-summary > article:nth-child(4) > svg {
-  color: var(--orange);
-  background: color-mix(in srgb, var(--orange) 15%, transparent);
-}
-
-.security-summary > article:nth-child(5) > svg {
-  color: var(--orange);
-  background: color-mix(in srgb, var(--orange) 15%, transparent);
-}
-
-.security-summary > article > div {
-  min-width: 0;
-  display: grid;
-  gap: 3px;
-}
-
-.security-summary span,
-.security-summary small {
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.35;
-}
-
-.security-summary strong {
-  overflow-wrap: anywhere;
-  color: var(--text);
-  font-size: 16px;
-  line-height: 1.2;
-}
-
 .security-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(340px, 0.75fr);
@@ -708,10 +637,6 @@
 }
 
 @media (max-width: 1200px) {
-  .security-summary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .security-grid {
     grid-template-columns: minmax(0, 1fr) minmax(310px, 0.8fr);
   }
@@ -740,14 +665,6 @@
 
   .security-heading .secondary-button {
     align-self: flex-start;
-  }
-
-  .security-summary {
-    grid-template-columns: 1fr;
-  }
-
-  .security-summary > article {
-    min-height: 86px;
   }
 
   .security-panel-title {
@@ -821,7 +738,6 @@
   background: #fff1f2;
 }
 
-:root[data-theme='light'] .security-summary > article,
 :root[data-theme='light'] .security-panel {
   box-shadow: 0 12px 28px rgba(31, 73, 48, 0.07);
 }

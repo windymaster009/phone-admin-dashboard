@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowUpRight, Barcode, Grid2X2, List, MoreHorizontal, Package, Plus, ScanLine, Search, Smartphone, Wrench, X, type LucideIcon } from 'lucide-react'
+import { Barcode, Grid2X2, List, MoreHorizontal, Package, Plus, ScanLine, Search, Smartphone, Wrench, X, type LucideIcon } from 'lucide-react'
 import { api } from '../../lib/api'
 import type { InventoryItem, Pawn } from '../../types/domain'
 import { currency, money, riel, inventoryPriceCurrency, inventoryPriceText, inventoryDualPriceText, useExchangeRate, dateText, titleStatus, comingNext } from '../../lib/presentation'
@@ -7,6 +7,7 @@ import LoadingState from '../../components/LoadingState'
 import MoneyInput from '../../components/MoneyInput'
 import SectionHeader from '../../components/SectionHeader'
 import StatusBadge from '../../components/StatusBadge'
+import SummaryStats from '../../components/SummaryStats'
 import { getStoredInventoryView, setStoredInventoryView } from '../../lib/storage'
 import { printInventoryLabel } from './barcode'
 import './inventory-page.css'
@@ -292,23 +293,25 @@ export default function InventoryView() {
           </div>}
         />
       </div>
-      <section className="stock-category-grid">
-        {(Object.keys(categoryMeta) as InventoryItem['category'][]).map((category) => {
+      <SummaryStats
+        label="Inventory categories"
+        variant="compact"
+        columns={5}
+        items={(Object.keys(categoryMeta) as InventoryItem['category'][]).map((category) => {
           const meta = categoryMeta[category]
-          const Icon = meta.Icon
-          return (
-            <button
-              className={`surface-card stock-category ${categoryFilter === category ? 'active' : ''}`}
-              key={category}
-              onClick={() => setCategoryFilter((current) => current === category ? 'ALL' : category)}
-            >
-              <span className={`stock-icon ${meta.tone}`}><Icon /></span>
-              <p>{meta.label}<strong>{categoryCounts[category]}</strong><small>live stock units</small></p>
-              <ArrowUpRight />
-            </button>
-          )
+          return {
+            key: category,
+            label: meta.label,
+            value: categoryCounts[category] ?? 0,
+            detail: 'live stock units',
+            icon: meta.Icon,
+            tone: meta.tone,
+            active: categoryFilter === category,
+            onClick: () => setCategoryFilter((current) => current === category ? 'ALL' : category),
+            ariaLabel: `Filter by ${meta.label}`,
+          }
         })}
-      </section>
+      />
       <section className="surface-card inventory-catalog-card stock-workspace-card">
         <div className="card-heading table-heading inventory-catalog-heading">
           <div><span className="eyebrow">Item list</span><h3>{categoryFilter === 'ALL' ? 'All shop products' : categoryMeta[categoryFilter as InventoryItem['category']]?.label}</h3></div>
