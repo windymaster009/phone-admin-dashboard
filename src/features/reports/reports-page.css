@@ -1038,3 +1038,559 @@
   font-size: 10px;
   text-align: center;
 }
+
+@media (max-width: 1180px) {
+  .report-hub-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .report-operations-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .sales-report-lower-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .operational-breakdown-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1024px) {
+  .reports-hub-page > .section-header,
+  .reports-placeholder-page > .section-header,
+  .sales-report-page > .section-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 640px) {
+  .reports-hub-page,
+  .reports-placeholder-page,
+  .sales-report-page {
+    gap: 12px;
+  }
+
+  .report-hub-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 9px;
+  }
+
+  .report-operations-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .report-hub-card {
+    min-height: 0;
+    padding: 11px 14px;
+  }
+
+  .modal-backdrop.customer-report-backdrop {
+    align-items: center;
+    padding: max(16px, env(safe-area-inset-top, 0px)) 12px max(72px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .customer-report-modal {
+    width: 100%;
+    height: min(76dvh, 600px);
+    max-height: calc(100dvh - 72px);
+    position: relative;
+  }
+
+  .customer-report-modal .detail-modal-header {
+    flex: 0 0 auto;
+    padding: 16px 14px;
+  }
+
+  .customer-report-modal .detail-modal-header h3 {
+    margin: 4px 0;
+    font-size: 19px;
+  }
+
+  .customer-report-modal .detail-modal-header p {
+    font-size: 9px;
+    line-height: 1.45;
+  }
+
+  .customer-report-workspace {
+    min-height: 0;
+    position: relative;
+    display: flex;
+    overflow: hidden;
+  }
+
+  .customer-report-browser {
+    height: auto;
+    min-height: 0;
+    flex: 1 1 auto;
+    padding: 12px;
+    border-right: 0;
+  }
+
+  .customer-report-list {
+    margin: 0 -4px;
+    padding: 0 4px 12px;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .customer-report-picker {
+    min-height: 48px;
+    padding: 7px;
+  }
+
+  .customer-report-profile {
+    display: none;
+  }
+
+  .customer-report-profile.has-selection {
+    min-height: 0;
+    max-height: min(480px, calc(100dvh - 170px));
+    position: absolute;
+    inset: auto 0 0;
+    z-index: 2;
+    display: flex;
+    overflow-y: auto;
+    padding: 12px;
+    border-top: 1px solid var(--border-strong);
+    border-radius: 16px 16px 0 0;
+    background: var(--surface-solid);
+    box-shadow: 0 -14px 30px color-mix(in srgb, var(--text) 18%, transparent);
+  }
+
+  .customer-report-dismiss {
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-end;
+    gap: 5px;
+    margin: -2px 0 7px;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 8px;
+    color: var(--muted);
+    background: transparent;
+    font: 800 9px var(--font-body);
+    white-space: nowrap;
+  }
+
+  .customer-report-dismiss:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+  }
+
+  .customer-report-dismiss:active {
+    transform: translateY(1px);
+  }
+
+  .customer-report-details {
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .customer-report-details > div {
+    min-height: 64px;
+    padding: 10px;
+  }
+
+  .customer-report-details > div:last-child {
+    display: none;
+  }
+
+  .customer-report-open {
+    width: 100%;
+    min-height: 40px;
+    justify-content: center;
+    margin-top: 16px;
+  }
+
+  .customer-report-activity-summary {
+    gap: 6px;
+    margin-top: 12px;
+  }
+
+  .customer-report-activity-summary > div {
+    padding: 8px;
+  }
+
+  .customer-report-activity-summary > div > strong {
+    font-size: 10px;
+  }
+
+  .customer-report-activity-list {
+    overflow: visible;
+    margin-top: 12px;
+  }
+
+  .customer-report-activity-row {
+    gap: 7px;
+    padding: 8px 0;
+  }
+
+  .customer-report-activity-row .transaction-icon {
+    width: 27px;
+    height: 27px;
+    border-radius: 8px;
+  }
+
+  .customer-report-activity-row aside strong {
+    font-size: 9px;
+  }
+
+  .app[data-font-size='comfortable'] .customer-report-modal {
+    height: min(69.0909dvh, 545px);
+    max-height: calc(90.9091dvh - 65px);
+  }
+
+  .app[data-font-size='large'] .customer-report-modal {
+    height: min(63.3333dvh, 500px);
+    max-height: calc(83.3333dvh - 60px);
+  }
+
+  .modal-backdrop.customer-report-backdrop.is-full-report-open {
+    align-items: stretch;
+    padding: max(8px, env(safe-area-inset-top, 0px)) 0 0;
+  }
+
+  .customer-report-modal.is-full-report {
+    width: 100%;
+    height: calc(100dvh - max(8px, env(safe-area-inset-top, 0px)));
+    max-height: none;
+    border-radius: 16px 16px 0 0;
+  }
+
+  .customer-report-modal.is-full-report > .detail-modal-header {
+    display: none;
+  }
+
+  .customer-report-modal.is-full-report .customer-report-workspace {
+    height: 100%;
+    flex: 1;
+  }
+
+  .customer-report-modal.is-full-report .customer-report-browser {
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .customer-report-profile.has-selection.is-activity-report {
+    position: absolute;
+    inset: 0;
+    max-height: none;
+    display: flex;
+    overflow-x: clip;
+    overflow-y: auto;
+    padding: 0 12px max(104px, calc(env(safe-area-inset-bottom, 0px) + 80px));
+    border: 0;
+    border-radius: 0;
+    background: var(--surface-solid);
+    box-shadow: none;
+    overscroll-behavior: contain;
+    scroll-padding-bottom: max(104px, calc(env(safe-area-inset-bottom, 0px) + 80px));
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .customer-report-sheet-actions {
+    position: sticky;
+    inset-block-start: 0;
+    z-index: 3;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 0 -12px 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-solid);
+  }
+
+  .customer-report-sheet-actions .customer-report-dismiss {
+    align-self: auto;
+    margin: 0;
+  }
+
+  .customer-report-sheet-close {
+    width: 40px;
+    height: 40px;
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    outline: 2px solid transparent;
+    outline-offset: 1px;
+    color: var(--muted);
+    background: var(--bg-soft);
+  }
+
+  .customer-report-sheet-close:hover {
+    color: var(--text);
+    background: var(--surface-hover);
+  }
+
+  .customer-report-sheet-close:focus-visible {
+    border-color: var(--primary);
+    outline-color: var(--primary);
+  }
+
+  .customer-report-sheet-close:active {
+    transform: translateY(1px);
+  }
+
+  .customer-report-sheet-close:disabled {
+    opacity: .55;
+    cursor: not-allowed;
+  }
+
+  .customer-report-activity-heading {
+    min-height: 0;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .customer-report-period,
+  .customer-report-period.is-custom {
+    width: 100%;
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr);
+    margin-top: 12px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: var(--bg-soft);
+  }
+
+  .customer-report-period-heading small {
+    display: block;
+  }
+
+  .customer-report-period > label > span {
+    position: static;
+    width: auto;
+    height: auto;
+    overflow: visible;
+    margin: 0;
+    clip: auto;
+    white-space: normal;
+  }
+
+  .customer-report-period select,
+  .customer-report-period input {
+    min-height: 44px;
+    font-size: 10px;
+  }
+
+  .customer-report-custom-months {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .customer-report-custom-months button {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .customer-report-profile.is-activity-report .customer-report-activity-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .customer-report-profile.is-activity-report .customer-report-activity-summary > div {
+    padding: 12px;
+  }
+
+  .customer-report-profile.is-activity-report .customer-report-activity-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .customer-report-profile.is-activity-report .customer-report-activity-row aside {
+    grid-column: 2;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-top: 3px;
+  }
+
+  .app[data-font-size='comfortable'] .customer-report-modal.is-full-report {
+    height: calc(90.9091dvh - 8px);
+    max-height: none;
+  }
+
+  .app[data-font-size='large'] .customer-report-modal.is-full-report {
+    height: calc(83.3333dvh - 8px);
+    max-height: none;
+  }
+
+  .sales-report-filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 11px;
+    gap: 8px;
+  }
+
+  .sales-report-filters label {
+    min-width: 0;
+  }
+
+  .sales-report-filters > svg {
+    margin: 0;
+  }
+
+  .sales-performance-card .overview-chart {
+    height: 170px;
+    min-height: 0;
+  }
+
+  .sales-report-desktop-table {
+    display: none;
+  }
+
+  .operational-report-desktop-table {
+    display: none;
+  }
+
+  .sales-report-mobile-list {
+    display: grid;
+  }
+
+  .operational-report-mobile-list {
+    display: grid;
+  }
+
+  .sales-report-mobile-list > article {
+    padding: 13px;
+    border-top: 1px solid var(--border);
+  }
+
+  .sales-report-mobile-list > article > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .sales-report-mobile-list > article > header > div {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sales-report-mobile-list > article > header strong {
+    color: var(--text);
+    font-size: 10px;
+  }
+
+  .sales-report-mobile-list > article > header small {
+    margin-top: 4px;
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sales-report-mobile-list > article > div {
+    margin-top: 10px;
+    padding: 10px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+    border-radius: 10px;
+    background: var(--bg-soft);
+  }
+
+  .sales-report-mobile-list > article > div span {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    color: var(--muted-2);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+
+  .sales-report-mobile-list > article > div strong {
+    margin-top: 4px;
+    overflow: hidden;
+    color: var(--text);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .operational-report-mobile-list > article {
+    padding: 13px;
+    border-top: 1px solid var(--border);
+  }
+
+  .operational-report-mobile-list > article > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--text);
+  }
+
+  .operational-report-mobile-list > article > div {
+    margin-top: 10px;
+    padding: 10px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+    border-radius: 10px;
+    background: var(--bg-soft);
+  }
+
+  .operational-report-mobile-list > article > div span {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    color: var(--muted-2);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+
+  .operational-report-mobile-list > article > div strong {
+    margin-top: 4px;
+    overflow: hidden;
+    color: var(--text);
+    font-size: 10px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sales-report-mobile-list > article > p {
+    margin: 9px 0 0;
+    overflow: hidden;
+    color: var(--muted);
+    font-size: 9px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .report-desktop-table {
+    display: none;
+  }
+
+  .report-record-details {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
+
+@media (max-width: 360px) {
+  .customer-report-custom-months {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .customer-report-custom-months button {
+    grid-column: auto;
+  }
+
+  .sales-report-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

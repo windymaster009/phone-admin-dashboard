@@ -367,3 +367,113 @@
 .app[data-theme='light'] .overview-activity-card .transaction-row:hover {
   background: rgba(47, 143, 91, 0.055);
 }
+
+@media (max-width: 1180px) {
+  .overview-snapshot-grid,
+  .overview-recent-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1024px) {
+  .business-overview-page > .section-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .overview-period-controls {
+    justify-content: stretch;
+  }
+
+  .overview-period-controls label {
+    min-width: 0;
+    flex: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .business-overview-page {
+    gap: 10px;
+  }
+
+  .business-overview-page > .section-header {
+    gap: 4px;
+  }
+
+  .business-overview-page > .section-header > div {
+    min-width: 0;
+  }
+
+  .business-overview-page > .section-header > div p {
+    margin-top: 3px;
+    font-size: 9px;
+    line-height: 1.4;
+  }
+
+  .overview-period-controls {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    padding: 5px;
+  }
+
+  .overview-period-controls label {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 8px;
+  }
+
+  .overview-period-controls label > span {
+    white-space: nowrap;
+  }
+
+  .overview-period-controls select,
+  .overview-period-controls input {
+    height: 38px;
+  }
+
+  .overview-currency-value > strong {
+    font-size: 17px;
+  }
+
+  .overview-currency-value small {
+    margin-top: 2px;
+    font-size: 7px;
+  }
+
+  .overview-performance-card,
+  .overview-snapshot-card {
+    padding: 12px;
+  }
+
+  .overview-chart-legend {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .overview-chart {
+    height: 190px;
+    min-height: 0;
+  }
+
+  .overview-chart-empty {
+    left: 52px;
+    padding-inline: 16px;
+    text-align: center;
+  }
+
+  .overview-finance-snapshots {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .overview-inventory-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .overview-recent-grid {
+    gap: 10px;
+  }
+
+  .app[data-font-size='large'] .overview-currency-value > strong {
+    font-size: 16px;
+  }
+}

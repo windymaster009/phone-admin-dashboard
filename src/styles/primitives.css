@@ -639,6 +639,28 @@ kbd {
 }
 
 @media (max-width: 480px) {
+  .summary-stats-compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .summary-stats-compact .summary-stat-card {
+    min-height: 68px;
+    padding: 8px 6px;
+  }
+
+  .summary-stats-compact .summary-stat-value {
+    font-size: 15px;
+  }
+
+  .summary-stats-compact .summary-stat-value[data-value-size='compact'] {
+    font-size: 12px;
+  }
+
+  .summary-stats-compact .summary-stat-value[data-value-size='tiny'] {
+    font-size: 10px;
+  }
+
   .summary-stats-detailed {
     grid-template-columns: 1fr;
   }
