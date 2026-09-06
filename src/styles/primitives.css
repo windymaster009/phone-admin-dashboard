@@ -401,11 +401,11 @@ kbd {
 
 .summary-stat-card {
   min-width: 0;
-  min-height: 104px;
-  padding: 16px 18px;
+  min-height: 88px;
+  padding: 12px 16px;
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
 }
 
 .summary-stat-card.summary-stat-interactive {
@@ -528,13 +528,14 @@ kbd {
 .summary-stats-detailed {
   grid-template-columns: repeat(var(--summary-columns, 5), minmax(0, 1fr));
   gap: 12px;
+  margin-bottom: 12px;
 }
 
 .summary-stats-detailed .summary-stat-card {
-  min-height: 104px;
-  padding: 14px 16px;
-  gap: 13px;
-  align-items: flex-start;
+  min-height: 88px;
+  padding: 12px 16px;
+  gap: 12px;
+  align-items: center;
 }
 
 .summary-stats-detailed .summary-stat-value {
@@ -545,6 +546,7 @@ kbd {
 }
 
 .summary-stats-detailed .summary-stat-detail {
+  margin-top: 2px;
   white-space: normal;
   word-break: break-word;
 }
