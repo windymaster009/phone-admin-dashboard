@@ -120,6 +120,7 @@ export default function SummaryStats({
               type="button"
               className={`surface-card summary-stat-card summary-stat-interactive ${active ? 'is-active' : ''}`}
               key={itemKey}
+              data-content-density={secondaryValue !== undefined ? 'extended' : 'brief'}
               onClick={onClick}
               aria-pressed={active}
               aria-label={ariaLabel}
@@ -130,7 +131,11 @@ export default function SummaryStats({
         }
 
         return (
-          <article className="surface-card summary-stat-card" key={itemKey}>
+          <article
+            className="surface-card summary-stat-card"
+            key={itemKey}
+            data-content-density={secondaryValue !== undefined ? 'extended' : 'brief'}
+          >
             {cardContent}
           </article>
         )

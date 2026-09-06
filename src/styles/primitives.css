@@ -647,12 +647,17 @@ kbd {
   }
 
   .summary-stats-compact .summary-stat-card {
-    min-height: 68px;
-    padding: 9px 11px;
+    min-height: 54px;
+    padding: 6px 10px;
     grid-template-columns: 25px minmax(0, 1fr);
     place-items: center stretch;
-    gap: 8px;
+    gap: 7px;
     text-align: left;
+  }
+
+  .summary-stats-compact .summary-stat-card[data-content-density='extended'] {
+    min-height: 62px;
+    padding-block: 8px;
   }
 
   .summary-stats-compact .summary-stat-copy {

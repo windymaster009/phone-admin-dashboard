@@ -31,7 +31,10 @@ describe('SummaryStats', () => {
 
     const group = screen.getByRole('region', { name: 'Loan summary' })
     expect(group).toBeInTheDocument()
-    expect(screen.getAllByRole('article')).toHaveLength(2)
+    const cards = screen.getAllByRole('article')
+    expect(cards).toHaveLength(2)
+    expect(cards[0]).toHaveAttribute('data-content-density', 'extended')
+    expect(cards[1]).toHaveAttribute('data-content-density', 'brief')
     expect(screen.getByText('Total lent')).toBeInTheDocument()
     expect(screen.getByText('$120.00')).toBeInTheDocument()
     expect(screen.getByText('៛480,000')).toBeInTheDocument()
