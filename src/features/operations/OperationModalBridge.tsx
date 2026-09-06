@@ -19,7 +19,6 @@ import {
   Printer,
   QrCode,
   RefreshCw,
-  ScanLine,
   Search,
   ShoppingCart,
   Smartphone,
@@ -34,6 +33,7 @@ import { BarcodeGraphic, printInventoryLabels } from '../inventory/barcode'
 import OperationModalShell from './OperationModalShell'
 import CameraBarcodeReader from '../../components/scanner/CameraBarcodeReader'
 import ScannerWorkflow from '../../components/scanner/ScannerWorkflow'
+import ScannerTriggerButton, { PRODUCT_SCANNER_EVENT } from '../../components/scanner/ScannerTriggerButton'
 import { ModalKind, StockCategory, Customer, InventoryItem, RelatedPawn, Supplier, SellerType, PurchaseCurrency, SaleCurrency, PawnCurrency, PurchaseInventoryMode, PawnCustomerMode, SalePaymentMethod, SalePaymentPhase, StockAdjustmentMode, StockAdjustmentStatus, PawnValuationSnapshot, CreatedPawn, CompletedStockAdjustment, SaleDraft, SaleKhqr, CreatedSaleTrade, CompletedSale, completedSaleFromTrade, paywayImageSource, PurchaseDevice, newPurchaseDevice, canRestockExisting, localDateValue, roundPawnAmount, pawnAmountText, pawnEquivalentAmountText, money, riel, saleAmountText, inventorySalePrice, inventoryNativeSalePriceText } from './operationDomain'
 import './operation-modals.css'
 import './pawn-guide.css'
@@ -364,8 +364,8 @@ export default function OperationModalBridge() {
       setScannedPawn(null)
       setKind('scan')
     }
-    window.addEventListener('phoneflow:open-scanner', openScanner)
-    return () => window.removeEventListener('phoneflow:open-scanner', openScanner)
+    window.addEventListener(PRODUCT_SCANNER_EVENT, openScanner)
+    return () => window.removeEventListener(PRODUCT_SCANNER_EVENT, openScanner)
   }, [])
 
   useEffect(() => {
@@ -1317,7 +1317,7 @@ export default function OperationModalBridge() {
                 </> : <>
                 <div className="device-group-label"><span>Product identity</span><small>Required identification information</small></div>
                 {device.category === 'PHONE' ? <>
-                  <label className={`device-imei-field ${purchaseAttempted && itemErrors.imei ? 'field-invalid' : ''}`}><span>IMEI</span><div><input ref={(node) => { if (node) imeiInputs.current.set(device.id, node); else imeiInputs.current.delete(device.id) }} required inputMode="numeric" pattern="[0-9]{15}" maxLength={15} value={device.imei} onChange={(event) => updatePurchaseDevice(device.id, { imei: event.target.value.replace(/\D/g, '').slice(0, 15) })} placeholder="15-digit IMEI" /><button type="button" className="secondary-button" onClick={() => openImeiScanner(device.id)}><ScanLine size={16} /> Scan IMEI</button></div><small>{purchaseAttempted && itemErrors.imei ? itemErrors.imei : 'Scan with a handheld scanner or this device camera.'}</small></label>
+                  <label className={`device-imei-field ${purchaseAttempted && itemErrors.imei ? 'field-invalid' : ''}`}><span>IMEI</span><div><input ref={(node) => { if (node) imeiInputs.current.set(device.id, node); else imeiInputs.current.delete(device.id) }} required inputMode="numeric" pattern="[0-9]{15}" maxLength={15} value={device.imei} onChange={(event) => updatePurchaseDevice(device.id, { imei: event.target.value.replace(/\D/g, '').slice(0, 15) })} placeholder="15-digit IMEI" /><ScannerTriggerButton label="Scan IMEI" iconSize={16} onClick={() => openImeiScanner(device.id)} /></div><small>{purchaseAttempted && itemErrors.imei ? itemErrors.imei : 'Scan with a handheld scanner or this device camera.'}</small></label>
                   <label className={purchaseAttempted && itemErrors.brand ? 'field-invalid' : ''}>Brand<input required value={device.brand} onChange={(event) => updatePurchaseDevice(device.id, { brand: event.target.value })} placeholder="Apple" />{purchaseAttempted && itemErrors.brand && <small>{itemErrors.brand}</small>}</label>
                   <label className={purchaseAttempted && itemErrors.model ? 'field-invalid' : ''}>Model<input required value={device.model} onChange={(event) => updatePurchaseDevice(device.id, { model: event.target.value })} placeholder="iPhone 13 Pro" />{purchaseAttempted && itemErrors.model && <small>{itemErrors.model}</small>}</label>
                   <label className={purchaseAttempted && itemErrors.storage ? 'field-invalid' : ''}>Storage<div className="device-unit-input"><input required type="number" min="1" step="1" value={device.storage} onChange={(event) => updatePurchaseDevice(device.id, { storage: event.target.value })} placeholder="128" /><span>GB</span></div>{purchaseAttempted && itemErrors.storage && <small>{itemErrors.storage}</small>}</label>
@@ -1398,7 +1398,7 @@ export default function OperationModalBridge() {
               <div className="price-group"><span>Shop price</span><strong>{scannedItem.sellPrice > 0 ? `$${scannedItem.sellPrice.toFixed(2)}` : 'Not set'}</strong><small>{scannedItem.sellPrice > 0 ? 'Current selling price' : 'Set a price in Stock Information first'}</small></div>
             </div>
             {scannedPawn && <div className="scanned-pawn-link" role="note"><span><HandCoins size={18} /></span><div><small>Linked pawn contract</small><strong>{scannedPawn.pawnNo}</strong><p>This product is collateral for {scannedPawn.customer?.name || 'a pawn customer'}.</p></div><b>{scannedPawn.status.replaceAll('_', ' ')}</b></div>}
-            <footer className="scanner-result-actions"><button type="button" className="secondary-button" onClick={() => { setScannedItem(null); setScannedPawn(null); setScanCode(''); setError('') }}><ScanLine size={17} /> Scan another</button><div><button type="button" className="ghost-button" onClick={close}>Close</button><button type="button" className="primary-button" onClick={sellScannedProduct} disabled={scannedItem.status !== 'IN_STOCK' || scannedItem.quantity < 1 || scannedItem.sellPrice <= 0}><ShoppingCart size={17} /> Sell product</button></div></footer>
+            <footer className="scanner-result-actions"><ScannerTriggerButton label="Scan another" onClick={() => { setScannedItem(null); setScannedPawn(null); setScanCode(''); setError('') }} /><div><button type="button" className="ghost-button" onClick={close}>Close</button><button type="button" className="primary-button" onClick={sellScannedProduct} disabled={scannedItem.status !== 'IN_STOCK' || scannedItem.quantity < 1 || scannedItem.sellPrice <= 0}><ShoppingCart size={17} /> Sell product</button></div></footer>
           </article>
       </div>)}
 
@@ -1472,7 +1472,7 @@ export default function OperationModalBridge() {
                 <header><div className="pawn-device-heading"><span><Smartphone size={17} /></span><p><strong>Serialized phone</strong><small>Quantity is always 1 and the IMEI must be unique.</small></p></div></header>
                 <div className="device-fields-grid">
                   <div className="device-group-label"><span>Product identity</span><small>Required identification information</small></div>
-                  <label className="device-imei-field"><span>IMEI</span><div><input required inputMode="numeric" pattern="[0-9]{15}" maxLength={15} value={pawnImei} onChange={(event) => setPawnImei(event.target.value.replace(/\D/g, '').slice(0, 15))} placeholder="15-digit IMEI" /><button type="button" className="secondary-button" onClick={() => setPawnScannerOpen(true)}><ScanLine size={16} /> Scan IMEI</button></div><small>Scan with a handheld scanner or this device camera.</small></label>
+                  <label className="device-imei-field"><span>IMEI</span><div><input required inputMode="numeric" pattern="[0-9]{15}" maxLength={15} value={pawnImei} onChange={(event) => setPawnImei(event.target.value.replace(/\D/g, '').slice(0, 15))} placeholder="15-digit IMEI" /><ScannerTriggerButton label="Scan IMEI" iconSize={16} onClick={() => setPawnScannerOpen(true)} /></div><small>Scan with a handheld scanner or this device camera.</small></label>
                   <label>Brand<input name="brand" required placeholder="Apple" /></label>
                   <label>Model<input name="model" required placeholder="iPhone 13 Pro" /></label>
                   <label>Storage<div className="device-unit-input"><input name="storage" required type="number" min="1" step="1" placeholder="128" /><span>GB</span></div></label>

@@ -14,7 +14,6 @@ import {
   Plus,
   RefreshCcw,
   Search,
-  ScanLine,
   Trash2,
   X,
 } from 'lucide-react'
@@ -23,6 +22,7 @@ import LoadingState from '../../components/LoadingState'
 import MoneyInput from '../../components/MoneyInput'
 import SummaryStats from '../../components/SummaryStats'
 import ScannerWorkflow from '../../components/scanner/ScannerWorkflow'
+import ScannerTriggerButton from '../../components/scanner/ScannerTriggerButton'
 
 type Currency = 'USD' | 'KHR'
 type LoanStatus = 'ACTIVE' | 'DUE_SOON' | 'OVERDUE' | 'PARTIALLY_PAID' | 'PAID' | 'CANCELLED'
@@ -593,7 +593,7 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
     <div className="section-header">
       <div><span className="eyebrow">Finance & control</span><h2>Loans</h2><p>Track money lent to people, upcoming due dates, overdue balances, and every repayment.</p></div>
       <div className="loan-section-actions">
-        <button className="secondary-button" onClick={() => { setScannerError(''); setShowScanner(true) }}><ScanLine size={17} /> Scan loan</button>
+        <ScannerTriggerButton label="Scan loan" onClick={() => { setScannerError(''); setShowScanner(true) }} />
         {canCreate && <button className="primary-button" onClick={() => { setModalError(''); setCreatedLoan(null); setShowCreate(true) }}><Plus size={17} /> New loan</button>}
       </div>
     </div>

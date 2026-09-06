@@ -6,6 +6,7 @@ import { currency, money, tradePartyName, tradePartyPhone, tradeTransactionMoney
 import LoadingState from '../../components/LoadingState'
 import SectionHeader from '../../components/SectionHeader'
 import ScannerWorkflow from '../../components/scanner/ScannerWorkflow'
+import ScannerTriggerButton from '../../components/scanner/ScannerTriggerButton'
 import './refund-page.css'
 
 type RefundQueueFilter = 'ALL' | 'COMPLETED' | 'RETURNED'
@@ -234,7 +235,7 @@ export default function RefundsView({ user }: { user: SessionUser }) {
           if (event.key !== 'Enter') return
           event.preventDefault()
           openTradeFromCode(event.currentTarget.value)
-        }} placeholder="Search receipt, customer, phone, or item" autoComplete="off" /></label><button type="button" className="secondary-button refund-scan-trigger" onClick={() => setScannerOpen(true)}><ScanLine size={17} aria-hidden="true" /><span>Scan receipt</span></button></div>
+        }} placeholder="Search receipt, customer, phone, or item" autoComplete="off" /></label><ScannerTriggerButton label="Scan receipt" className="refund-scan-trigger" onClick={() => setScannerOpen(true)} /></div>
         <div className="refund-filters" aria-label="Filter refund queue">
           {([
             ['COMPLETED', 'Not refunded', openCount],

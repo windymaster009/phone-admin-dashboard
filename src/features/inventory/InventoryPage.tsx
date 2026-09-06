@@ -8,6 +8,7 @@ import MoneyInput from '../../components/MoneyInput'
 import SectionHeader from '../../components/SectionHeader'
 import StatusBadge from '../../components/StatusBadge'
 import SummaryStats from '../../components/SummaryStats'
+import ScannerTriggerButton, { openProductScanner } from '../../components/scanner/ScannerTriggerButton'
 import { getStoredInventoryView, setStoredInventoryView } from '../../lib/storage'
 import { printInventoryLabel } from './barcode'
 import './inventory-page.css'
@@ -288,7 +289,7 @@ export default function InventoryView() {
           title="Stock information"
           description={error || 'Manage serialized phones and quantity-based tablets, accessories, spare parts, and other stock.'}
           action={<div className="section-header-actions">
-            <button className="secondary-button" onClick={() => window.dispatchEvent(new Event('phoneflow:open-scanner'))}><ScanLine size={17} /> Scan product</button>
+            <ScannerTriggerButton label="Scan product" onClick={openProductScanner} />
             <button className="primary-button" onClick={() => comingNext('Adjust stock')}><Plus size={17} /> Adjust stock</button>
           </div>}
         />
@@ -492,4 +493,3 @@ export default function InventoryView() {
     </>
   )
 }
-

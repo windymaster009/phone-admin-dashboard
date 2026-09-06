@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, ArrowUpRight, BadgeCheck, Clock3, HandCoins, MoreHorizontal, Plus, RefreshCcw, ScanLine, Search } from 'lucide-react'
+import { AlertTriangle, ArrowUpRight, BadgeCheck, Clock3, HandCoins, MoreHorizontal, Plus, RefreshCcw, Search } from 'lucide-react'
 import { api, type SessionUser } from '../../lib/api'
 import type { Pawn, PawnAction } from '../../types/domain'
 import { comingNext, dateText, money, pawnEquivalentText, pawnMoney, pawnUsdValue, useExchangeRate } from '../../lib/presentation'
@@ -7,6 +7,7 @@ import LoadingState from '../../components/LoadingState'
 import SectionHeader from '../../components/SectionHeader'
 import StatusBadge from '../../components/StatusBadge'
 import SummaryStats from '../../components/SummaryStats'
+import ScannerTriggerButton, { openProductScanner } from '../../components/scanner/ScannerTriggerButton'
 import PawnDetailModal, { pawnOutstanding } from './PawnDetailModal'
 import './pawn-management.css'
 
@@ -83,7 +84,7 @@ export default function PawnView({ user }: { user: SessionUser }) {
           title="Pawn management"
           description={error || 'Track collateral, optional customer identification, due payments, extensions, and overdue contracts.'}
           action={<div className="section-header-actions pawn-header-actions">
-            <button className="secondary-button pawn-scan-trigger" type="button" onClick={() => window.dispatchEvent(new Event('phoneflow:open-scanner'))} aria-label="Scan product"><ScanLine size={17} aria-hidden="true" /><span>Scan product</span></button>
+            <ScannerTriggerButton label="Scan product" className="pawn-scan-trigger" onClick={openProductScanner} />
             <button className="primary-button" onClick={() => comingNext('New pawn')}><Plus size={17} /> New pawn</button>
           </div>}
         />

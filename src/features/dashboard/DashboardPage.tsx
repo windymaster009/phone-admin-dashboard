@@ -1,9 +1,10 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, Calculator, CircleDollarSign, HandCoins, MoreHorizontal, Package, Plus, ScanLine, ShoppingCart, Smartphone, Users } from 'lucide-react'
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, Calculator, CircleDollarSign, HandCoins, MoreHorizontal, Package, Plus, ShoppingCart, Smartphone, Users } from 'lucide-react'
 import { api, type SessionUser } from '../../lib/api'
 import type { Customer, Pawn, DashboardData } from '../../types/domain'
 import { currency, money, pawnMoney, pawnEquivalentText, useExchangeRate, khrText, dateText, comingNext } from '../../lib/presentation'
 import LoadingState from '../../components/LoadingState'
+import ScannerTriggerButton, { openProductScanner } from '../../components/scanner/ScannerTriggerButton'
 import SectionHeader from '../../components/SectionHeader'
 import StatusBadge from '../../components/StatusBadge'
 import type { RouteKey } from '../../app/routing'
@@ -295,7 +296,7 @@ export default function DashboardView({ goTo, user, onReady }: { goTo: (key: Nav
             </div>
           </div>
           <div className="quick-actions-list">
-            <button onClick={() => window.dispatchEvent(new Event('phoneflow:open-scanner'))}><span className="quick-icon blue"><ScanLine size={19} /></span><p>Scan product<small>Find stock and start a sale</small></p><ArrowUpRight size={17} /></button>
+            <ScannerTriggerButton label="Scan product" description="Find stock and start a sale" variant="quick-action" onClick={openProductScanner} trailing={<ArrowUpRight size={17} />} />
             <button onClick={() => comingNext('New pawn')}><span className="quick-icon violet"><HandCoins size={19} /></span><p>New pawn contract<small>Register ID and collateral</small></p><ArrowUpRight size={17} /></button>
             <button onClick={() => comingNext('New sale')}><span className="quick-icon blue"><ShoppingCart size={19} /></span><p>New sale<small>Phone or accessories</small></p><ArrowUpRight size={17} /></button>
             <button onClick={() => comingNext('Adjust stock')}><span className="quick-icon orange"><Package size={19} /></span><p>Adjust stock<small>Correct count or status</small></p><ArrowUpRight size={17} /></button>
