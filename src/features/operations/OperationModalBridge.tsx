@@ -5,7 +5,6 @@ import khqrLogo from '../../../server/integrations/payway/img/khqr.svg'
 import {
   AlertTriangle,
   Banknote,
-  Barcode,
   Camera,
   CalendarRange,
   CheckCircle2,
@@ -33,7 +32,8 @@ import MoneyInput from '../../components/MoneyInput'
 import { getPawnAutoCalculatePreference, PAWN_AUTO_CALCULATE_EVENT, savePawnAutoCalculatePreference } from '../../lib/pawnPreferences'
 import { BarcodeGraphic, printInventoryLabels } from '../inventory/barcode'
 import OperationModalShell from './OperationModalShell'
-import CameraBarcodeReader from './CameraBarcodeReader'
+import CameraBarcodeReader from '../../components/scanner/CameraBarcodeReader'
+import ScannerWorkflow from '../../components/scanner/ScannerWorkflow'
 import { ModalKind, StockCategory, Customer, InventoryItem, RelatedPawn, Supplier, SellerType, PurchaseCurrency, SaleCurrency, PawnCurrency, PurchaseInventoryMode, PawnCustomerMode, SalePaymentMethod, SalePaymentPhase, StockAdjustmentMode, StockAdjustmentStatus, PawnValuationSnapshot, CreatedPawn, CompletedStockAdjustment, SaleDraft, SaleKhqr, CreatedSaleTrade, CompletedSale, completedSaleFromTrade, paywayImageSource, PurchaseDevice, newPurchaseDevice, canRestockExisting, localDateValue, roundPawnAmount, pawnAmountText, pawnEquivalentAmountText, money, riel, saleAmountText, inventorySalePrice, inventoryNativeSalePriceText } from './operationDomain'
 import './operation-modals.css'
 import './pawn-guide.css'
@@ -1374,17 +1374,21 @@ export default function OperationModalBridge() {
         </section>
       </div>}
 
-      {kind === 'scan' && <div className={`scanner-workflow ${scannedItem ? 'has-result' : ''}`}>
-        {!scannedItem ? <>
-          <div className="scanner-intro"><h3>How would you like to scan?</h3><p>Use a barcode scanner for the fastest checkout, or open the camera on this device.</p></div>
-          <form className="scanner-code-form" onSubmit={(event) => { event.preventDefault(); void findScannedProduct(scanCode) }}>
-            <div className="scanner-method-heading"><span><Barcode size={18} /></span><div><strong>Barcode scanner</strong><small>Keep this field selected, then scan the label.</small></div></div>
-            <div className="scanner-input-row"><input id="barcode-code" aria-label="Barcode, SKU, IMEI, or serial number" autoFocus value={scanCode} onChange={(event) => setScanCode(event.target.value)} placeholder="Scan or enter product code" autoComplete="off" /><button className="primary-button" disabled={busy}>{busy ? 'Finding...' : 'Find product'}</button></div>
-            <small>Works with barcode, SKU, IMEI, and serial number. Most scanners press Enter automatically.</small>
-          </form>
-          <div className="scanner-divider"><span>or use this device</span></div>
-          <CameraBarcodeReader onScan={findScannedProduct} onError={handleCameraError} />
-        </> : <>
+      {kind === 'scan' && (!scannedItem ? <ScannerWorkflow
+        code={scanCode}
+        onCodeChange={(value) => { setScanCode(value); if (error) setError('') }}
+        onSubmit={findScannedProduct}
+        onCameraError={handleCameraError}
+        busy={busy}
+        introDescription="Use a barcode scanner for the fastest checkout, or open the camera on this device."
+        methodTitle="Barcode scanner"
+        methodDescription="Keep this field selected, then scan the label."
+        inputId="barcode-code"
+        inputLabel="Barcode, SKU, IMEI, or serial number"
+        placeholder="Scan or enter product code"
+        submitLabel="Find product"
+        helpText="Works with barcode, SKU, IMEI, and serial number. Most scanners press Enter automatically."
+      /> : <div className="scanner-workflow has-result">
           <div className="scan-success-banner"><span><CheckCircle2 size={22} /></span><div><strong>Product found</strong><small>Code {scannedItem.barcode || scannedItem.sku} matched an inventory record.</small></div></div>
           <article className="scanned-product-card">
             <div className="scanned-product-heading"><span className="operation-modal-icon"><Package size={20} /></span><div><span className="eyebrow">Ready to continue</span><h3>{scannedItem.name}</h3><p>{[scannedItem.brand, scannedItem.model].filter(Boolean).join(' ') || scannedItem.sku}</p></div><span className={`status-badge status-${scannedItem.status.toLowerCase().replaceAll('_', '-')}`}>{scannedItem.status.replaceAll('_', ' ')}</span></div>
@@ -1396,8 +1400,7 @@ export default function OperationModalBridge() {
             {scannedPawn && <div className="scanned-pawn-link" role="note"><span><HandCoins size={18} /></span><div><small>Linked pawn contract</small><strong>{scannedPawn.pawnNo}</strong><p>This product is collateral for {scannedPawn.customer?.name || 'a pawn customer'}.</p></div><b>{scannedPawn.status.replaceAll('_', ' ')}</b></div>}
             <footer className="scanner-result-actions"><button type="button" className="secondary-button" onClick={() => { setScannedItem(null); setScannedPawn(null); setScanCode(''); setError('') }}><ScanLine size={17} /> Scan another</button><div><button type="button" className="ghost-button" onClick={close}>Close</button><button type="button" className="primary-button" onClick={sellScannedProduct} disabled={scannedItem.status !== 'IN_STOCK' || scannedItem.quantity < 1 || scannedItem.sellPrice <= 0}><ShoppingCart size={17} /> Sell product</button></div></footer>
           </article>
-        </>}
-      </div>}
+      </div>)}
 
       {kind === 'label' && labelItems.length > 0 && <div className="label-prompt">
         <div className="label-success"><span><Printer size={21} /></span><div><h3>Print barcode labels now?</h3><p>{labelItems.length} inventory item{labelItems.length === 1 ? ' was' : 's were'} added. You can also print later from Stock Information.</p></div></div>

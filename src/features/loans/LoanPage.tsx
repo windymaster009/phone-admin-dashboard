@@ -3,10 +3,8 @@ import { createPortal } from 'react-dom'
 import './loan-workspace.css'
 import {
   AlertTriangle,
-  Barcode,
   BadgeCheck,
   Banknote,
-  Camera,
   CheckCircle2,
   CircleDollarSign,
   Clock,
@@ -24,6 +22,7 @@ import { api, type SessionUser } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
 import MoneyInput from '../../components/MoneyInput'
 import SummaryStats from '../../components/SummaryStats'
+import ScannerWorkflow from '../../components/scanner/ScannerWorkflow'
 
 type Currency = 'USD' | 'KHR'
 type LoanStatus = 'ACTIVE' | 'DUE_SOON' | 'OVERDUE' | 'PARTIALLY_PAID' | 'PAID' | 'CANCELLED'
@@ -173,71 +172,30 @@ function Modal({ title, eyebrow, description, onClose, compact = false, confirma
   )
 }
 
-function LoanBarcodeScanner({ onFound, onError }: { onFound: (value: string) => void; onError: (message: string) => void }) {
-  const [cameraActive, setCameraActive] = useState(false)
-
-  useEffect(() => {
-    if (!cameraActive) return
-    let scanner: import('html5-qrcode').Html5Qrcode | null = null
-    let disposed = false
-
-    async function startCamera() {
-      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode')
-      if (disposed) return
-      scanner = new Html5Qrcode('phoneflow-loan-barcode-reader', {
-        formatsToSupport: [Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.QR_CODE],
-        verbose: false,
-      })
-      await scanner.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 280, height: 130 } },
-        (decodedText) => {
-          if (disposed) return
-          setCameraActive(false)
-          onFound(decodedText)
-        },
-        () => undefined,
-      )
-    }
-
-    void startCamera().catch((reason: Error) => {
-      setCameraActive(false)
-      onError(reason.message || 'Unable to start the camera. Check camera permission and try again.')
-    })
-
-    return () => {
-      disposed = true
-      if (scanner?.isScanning) void scanner.stop().finally(() => scanner?.clear())
-      else scanner?.clear()
-    }
-  }, [cameraActive, onError, onFound])
-
-  return <div className="camera-scanner loan-barcode-camera">
-    <div id="phoneflow-loan-barcode-reader" className={cameraActive ? 'active' : ''} />
-    <button type="button" className="secondary-button" onClick={() => setCameraActive((active) => !active)}><Camera size={16} /> {cameraActive ? 'Stop camera' : 'Scan with camera'}</button>
-    <small>Allow camera access on localhost or HTTPS. A handheld scanner can type into the field above.</small>
-  </div>
-}
-
 function ScanLoanModal({ busy, error, onClose, onScan }: { busy: boolean; error: string; onClose: () => void; onScan: (value: string) => void }) {
   const [code, setCode] = useState('')
   const [cameraError, setCameraError] = useState('')
-  const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); onScan(code) }
-  const useScannedCode = (value: string) => { setCode(value); onScan(value) }
 
   return <Modal title="Scan loan" eyebrow="Loan lookup" description="Scan the loan barcode or enter the loan number to open its record." compact scanner onClose={onClose}>
-    <div className="loan-scan-workflow">
-      {error && <div className="loan-error"><AlertTriangle size={16} /> {error}</div>}
-      {cameraError && <div className="loan-error"><AlertTriangle size={16} /> {cameraError}</div>}
-      <div className="scanner-intro"><h3>How would you like to scan?</h3><p>Use the receipt barcode for the fastest loan lookup, or open this device camera.</p></div>
-      <form className="scanner-code-form" onSubmit={submit}>
-        <div className="scanner-method-heading"><span><Barcode size={18} /></span><div><strong>Loan barcode</strong><small>Keep this field selected, then scan the receipt.</small></div></div>
-        <div className="scanner-input-row"><input aria-label="Loan barcode or number" autoFocus value={code} onChange={(event) => setCode(event.target.value)} placeholder="Scan or enter loan number" autoComplete="off" /><button className="primary-button" disabled={busy || !code.trim()}>{busy ? 'Finding...' : 'Find loan'}</button></div>
-        <small>Works with the loan receipt barcode. Most handheld scanners press Enter automatically.</small>
-      </form>
-      <div className="scanner-divider"><span>or use this device</span></div>
-      <LoanBarcodeScanner onFound={useScannedCode} onError={setCameraError} />
-    </div>
+    {error && <div className="loan-error"><AlertTriangle size={16} /> {error}</div>}
+    {cameraError && <div className="loan-error"><AlertTriangle size={16} /> {cameraError}</div>}
+    <ScannerWorkflow
+      code={code}
+      onCodeChange={(value) => { setCode(value); if (cameraError) setCameraError('') }}
+      onSubmit={onScan}
+      onCameraError={setCameraError}
+      busy={busy}
+      introDescription="Use the receipt barcode for the fastest loan lookup, or open this device camera."
+      methodTitle="Loan barcode"
+      methodDescription="Keep this field selected, then scan the receipt."
+      inputLabel="Loan barcode or number"
+      placeholder="Scan or enter loan number"
+      submitLabel="Find loan"
+      helpText="Works with the loan receipt barcode. Most handheld scanners press Enter automatically."
+      cameraHelpText="Allow camera access on localhost or HTTPS. A handheld scanner can type into the field above."
+      readerId="phoneflow-loan-barcode-reader"
+      className="loan-scan-workflow"
+    />
   </Modal>
 }
 

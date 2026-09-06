@@ -1435,14 +1435,11 @@ body.operation-modal-open {
 .barcode-label-preview-list .barcode-label-preview { width: 100%; margin: 0; padding: 12px; }
 .barcode-label-preview-list > p { grid-column: 1 / -1; margin: 0; color: var(--muted, #8f9bb4); font-size: 9px; text-align: center; }
 
-.scanner-workflow,
 .label-prompt {
   min-height: 0;
   overflow-y: auto;
   padding: 26px 26px 0;
 }
-.scanner-workflow { padding-bottom: 26px; }
-
 .scanner-code-form {
   padding: 18px;
   border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
@@ -1976,13 +1973,10 @@ body.operation-modal-open {
 
   .operation-modal-scan {
     width: 100%;
-    height: min(80dvh, 640px);
+    height: auto;
     max-height: calc(100dvh - 32px);
     border-radius: 20px;
   }
-
-  .app[data-font-size='comfortable'] .operation-modal-scan { height: min(72.7273dvh, 582px); max-height: calc(90.9091dvh - 29px); }
-  .app[data-font-size='large'] .operation-modal-scan { height: min(66.6667dvh, 533px); max-height: calc(83.3333dvh - 27px); }
 
   .operation-modal-scan .operation-modal-header {
     gap: 11px;
@@ -2013,7 +2007,7 @@ body.operation-modal-open {
 
   .operation-modal-scan .scanner-workflow {
     min-height: 0;
-    flex: 1;
+    flex: none;
     padding: 14px 17px 17px;
     overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;

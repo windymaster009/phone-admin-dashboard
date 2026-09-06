@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { AlertTriangle, ArrowLeft, BadgeCheck, Barcode, Camera, Package, Printer, RefreshCcw, ScanLine, Search, Smartphone, ShieldCheck, ShieldX, Type, Wrench, X, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, BadgeCheck, Package, Printer, RefreshCcw, ScanLine, Search, Smartphone, ShieldCheck, ShieldX, Type, Wrench, X, type LucideIcon } from 'lucide-react'
 import { api, type SessionUser } from '../../lib/api'
 import type { InventoryItem, Trade } from '../../types/domain'
 import { currency, money, tradePartyName, tradePartyPhone, tradeTransactionMoney, dateText, titleStatus } from '../../lib/presentation'
 import LoadingState from '../../components/LoadingState'
 import SectionHeader from '../../components/SectionHeader'
+import ScannerWorkflow from '../../components/scanner/ScannerWorkflow'
 import './refund-page.css'
 
 type RefundQueueFilter = 'ALL' | 'COMPLETED' | 'RETURNED'
@@ -45,14 +46,8 @@ function RefundStatusBadge({ status }: { status: Trade['status'] }) {
 
 function RefundScannerModal({ onClose, onLookup }: { onClose: () => void; onLookup: (value: string) => boolean }) {
   const dialogRef = useRef<HTMLDialogElement>(null)
-  const onLookupRef = useRef(onLookup)
   const [code, setCode] = useState('')
-  const [cameraActive, setCameraActive] = useState(false)
   const [error, setError] = useState('')
-
-  useEffect(() => {
-    onLookupRef.current = onLookup
-  }, [onLookup])
 
   useEffect(() => {
     const dialog = dialogRef.current
@@ -65,53 +60,9 @@ function RefundScannerModal({ onClose, onLookup }: { onClose: () => void; onLook
     }
   }, [])
 
-  useEffect(() => {
-    if (!cameraActive) return
-    let scanner: import('html5-qrcode').Html5Qrcode | null = null
-    let disposed = false
-
-    async function startCamera() {
-      const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode')
-      if (disposed) return
-      scanner = new Html5Qrcode('phoneflow-refund-barcode-reader', {
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.CODE_39,
-          Html5QrcodeSupportedFormats.QR_CODE,
-          Html5QrcodeSupportedFormats.DATA_MATRIX,
-        ],
-        verbose: false,
-      })
-      const scanBoxWidth = Math.min(280, Math.max(180, window.innerWidth - 96))
-      await scanner.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: scanBoxWidth, height: Math.round(scanBoxWidth * 0.46) } },
-        (decodedText) => {
-          if (disposed) return
-          setCameraActive(false)
-          setCode(decodedText)
-          if (!onLookupRef.current(decodedText)) setError('No sale matched that code. Scan the sale receipt barcode or enter its sale number.')
-        },
-        () => undefined,
-      )
-    }
-
-    void startCamera().catch((reason: Error) => {
-      setCameraActive(false)
-      setError(reason.message || 'The camera did not start. Allow camera access and try again.')
-    })
-
-    return () => {
-      disposed = true
-      if (scanner?.isScanning) void scanner.stop().finally(() => scanner?.clear())
-      else scanner?.clear()
-    }
-  }, [cameraActive])
-
-  function findSale(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+  function findSale(value: string) {
     setError('')
-    if (!onLookupRef.current(code)) setError('No sale matched that code. Scan the sale receipt barcode or enter its sale number.')
+    if (!onLookup(value)) setError('No sale matched that code. Scan the sale receipt barcode or enter its sale number.')
   }
 
   return <dialog ref={dialogRef} className="refund-scanner-modal" aria-labelledby="refund-scanner-title" onCancel={(event) => { event.preventDefault(); onClose() }}>
@@ -120,21 +71,23 @@ function RefundScannerModal({ onClose, onLookup }: { onClose: () => void; onLook
       <div><span>Refund lookup</span><h2 id="refund-scanner-title">Scan receipt</h2><p>Scan the sale barcode or enter the sale number to open its refund record.</p></div>
       <button type="button" className="refund-scanner-close" onClick={onClose} aria-label="Close receipt scanner"><X size={18} /></button>
     </header>
-    <div className="refund-scanner-workflow">
-      {error && <p className="refund-scanner-error" role="alert"><AlertTriangle size={16} aria-hidden="true" />{error}</p>}
-      <div className="refund-scanner-intro"><h3>Choose how to scan</h3><p>Use a handheld scanner for the fastest lookup, or open this device camera.</p></div>
-      <form className="refund-scanner-code" onSubmit={findSale}>
-        <div className="refund-scanner-method"><span><Barcode size={18} aria-hidden="true" /></span><div><strong>Sale receipt barcode</strong><small>Keep this field selected, then scan the receipt.</small></div></div>
-        <div className="refund-scanner-input-row"><input autoFocus aria-label="Sale receipt barcode or number" value={code} onChange={(event) => { setCode(event.target.value); if (error) setError('') }} placeholder="Scan or enter sale number" autoComplete="off" /><button type="submit" className="primary-button" disabled={!code.trim()}>Find sale</button></div>
-        <small>Works with the barcode printed on sale receipts. Most handheld scanners press Enter automatically.</small>
-      </form>
-      <div className="refund-scanner-divider"><span>or use this device</span></div>
-      <div className="refund-camera-scanner">
-        <div id="phoneflow-refund-barcode-reader" className={cameraActive ? 'active' : ''} />
-        <button type="button" className="secondary-button" aria-pressed={cameraActive} onClick={() => { setError(''); setCameraActive((active) => !active) }}><Camera size={17} aria-hidden="true" />{cameraActive ? 'Stop camera' : 'Scan with camera'}</button>
-        <small>Camera scanning requires permission and works on localhost or HTTPS.</small>
-      </div>
-    </div>
+    {error && <p className="refund-scanner-error" role="alert"><AlertTriangle size={16} aria-hidden="true" />{error}</p>}
+    <ScannerWorkflow
+      code={code}
+      onCodeChange={(value) => { setCode(value); if (error) setError('') }}
+      onSubmit={findSale}
+      onCameraError={setError}
+      introTitle="Choose how to scan"
+      introDescription="Use a handheld scanner for the fastest lookup, or open this device camera."
+      methodTitle="Sale receipt barcode"
+      methodDescription="Keep this field selected, then scan the receipt."
+      inputLabel="Sale receipt barcode or number"
+      placeholder="Scan or enter sale number"
+      submitLabel="Find sale"
+      helpText="Works with the barcode printed on sale receipts. Most handheld scanners press Enter automatically."
+      readerId="phoneflow-refund-barcode-reader"
+      className="refund-scanner-workflow"
+    />
   </dialog>
 }
 
@@ -417,4 +370,3 @@ const categoryMeta: Record<InventoryItem['category'], { label: string; tone: 'vi
   SPARE_PART: { label: 'Spare parts', tone: 'orange', Icon: Wrench, fallback: 'Part' },
   OTHER: { label: 'Other', tone: 'blue', Icon: Package, fallback: 'Item' },
 }
-
