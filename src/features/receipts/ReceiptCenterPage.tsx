@@ -190,7 +190,7 @@ export default function ReceiptCenterPage() {
       if (search.trim()) query.set('search', search.trim())
       if (type !== 'ALL') query.set('documentType', type)
       const result = await api<{ receipts: ReceiptRecord[] }>(`/receipts?${query}`)
-      setReceipts(result.receipts)
+      setReceipts(Array.isArray(result?.receipts) ? result.receipts : [])
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to load receipts')
     } finally {

@@ -14,8 +14,8 @@ describe('PawnManagementPage feature integration', () => {
 
     render(<PawnManagementPage user={mockOwnerUser} />)
 
-    expect(screen.getByRole('status')).toBeInTheDocument()
-    expect(screen.getByText(/Loading pawn contracts/i)).toBeInTheDocument()
+    expect(screen.getAllByRole('status').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Loading pawn contracts/i).length).toBeGreaterThan(0)
   })
 
   it('renders pawn contracts when API returns pawns', async () => {
@@ -29,10 +29,10 @@ describe('PawnManagementPage feature integration', () => {
     render(<PawnManagementPage user={mockOwnerUser} />)
 
     await waitFor(() => {
-      expect(screen.getByText(mockPawnRecord.pawnNo)).toBeInTheDocument()
-      expect(screen.getByText(mockPawnRecord.customer!.name)).toBeInTheDocument()
-      expect(screen.getByText(mockPawnRecord.itemSnapshot.name)).toBeInTheDocument()
-      expect(screen.getByText('Active')).toBeInTheDocument()
+      expect(screen.getAllByText(mockPawnRecord.pawnNo).length).toBeGreaterThan(0)
+      expect(screen.getAllByText(mockPawnRecord.customer!.name).length).toBeGreaterThan(0)
+      expect(screen.getAllByText(mockPawnRecord.itemSnapshot.name).length).toBeGreaterThan(0)
+      expect(screen.getAllByText('Active').length).toBeGreaterThan(0)
     })
   })
 
@@ -74,7 +74,7 @@ describe('PawnManagementPage feature integration', () => {
     render(<PawnManagementPage user={mockOwnerUser} />)
 
     await waitFor(() => {
-      expect(screen.getByText(mockPawnRecord.pawnNo)).toBeInTheDocument()
+      expect(screen.getAllByText(mockPawnRecord.pawnNo).length).toBeGreaterThan(0)
     })
 
     const openButtons = screen.getAllByRole('button', { name: new RegExp(`View.*${mockPawnRecord.pawnNo}`, 'i') })

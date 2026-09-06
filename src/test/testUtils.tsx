@@ -56,6 +56,7 @@ export const mockInventoryItem: InventoryItem = {
   model: 'iPhone 15 Pro Max',
   condition: 'EXCELLENT',
   quantity: 5,
+  reorderLevel: 2,
   buyPrice: 950,
   sellPrice: 1150,
   minimumSellPrice: 1100,
@@ -92,6 +93,7 @@ export const mockPawnRecord: Pawn = {
   dueDate: '2026-09-01',
   createdAt: '2026-08-01T00:00:00.000Z',
   status: 'ACTIVE',
+  identificationVerified: true,
   notes: 'Minor scratch on edge',
 }
 
@@ -108,17 +110,18 @@ export const mockTradeRecord: Trade = {
     {
       name: 'iPhone 15 Pro Max',
       quantity: 1,
-      price: 1150,
-      inventoryItem: 'inv-item-1',
+      unitPrice: 1150,
     },
   ],
+  subtotal: 1150,
+  discount: 0,
   total: 1150,
   amountPaid: 1150,
   balance: 0,
   currency: 'USD',
   paymentMethod: 'CASH',
   status: 'COMPLETED',
-  createdAt: '2026-09-01T10:00:00.000Z',
+  createdAt: '2026-08-15T00:00:00.000Z',
 }
 
 export function renderWithProviders(

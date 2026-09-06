@@ -94,7 +94,7 @@ export default function SecureDocumentsPage() {
     setDocumentsLoading(true); setError('')
     try {
       const result = await api<{ documents: CustomerDocument[] }>(`/customer-documents/customers/${customerId}`)
-      if (requestId === documentRequestRef.current) setDocuments(result.documents)
+      if (requestId === documentRequestRef.current) setDocuments(Array.isArray(result?.documents) ? result.documents : [])
     } catch (reason) {
       if (requestId === documentRequestRef.current) setError(reason instanceof Error ? reason.message : 'Unable to load secure documents')
     } finally { if (requestId === documentRequestRef.current) setDocumentsLoading(false) }
@@ -105,8 +105,8 @@ export default function SecureDocumentsPage() {
       const [customerResult, securityResult, summaryResult] = await Promise.all([
         api<{ customers: Customer[] }>('/customers?includeInactive=true'), api<SecurityStatus>('/customer-documents/status'), api<DocumentSummary>('/customer-documents/summary'),
       ])
-      setCustomers(customerResult.customers); setStatus(securityResult); setSummary(summaryResult)
-      setSelectedCustomerId((current) => current || customerResult.customers[0]?._id || '')
+      setCustomers(Array.isArray(customerResult?.customers) ? customerResult.customers : []); setStatus(securityResult || null); setSummary(summaryResult || { documentCount: 0, encryptedBytes: 0, customersWithDocuments: 0 })
+      setSelectedCustomerId((current) => current || customerResult?.customers?.[0]?._id || '')
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to load the secure document vault') }
     finally { setLoading(false) }
   }, [])

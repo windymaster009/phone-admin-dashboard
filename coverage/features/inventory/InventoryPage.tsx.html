@@ -1,0 +1,1561 @@
+
+<!doctype html>
+<html lang="en">
+
+<head>
+    <title>Code coverage report for features/inventory/InventoryPage.tsx</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../../prettify.css" />
+    <link rel="stylesheet" href="../../base.css" />
+    <link rel="shortcut icon" type="image/x-icon" href="../../favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style type='text/css'>
+        .coverage-summary .sorter {
+            background-image: url(../../sort-arrow-sprite.png);
+        }
+    </style>
+</head>
+    
+<body>
+<div class='wrapper'>
+    <div class='pad1'>
+        <h1><a href="../../index.html">All files</a> / <a href="index.html">features/inventory</a> InventoryPage.tsx</h1>
+        <div class='clearfix'>
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">27.63% </span>
+                <span class="quiet">Statements</span>
+                <span class='fraction'>55/199</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">14.46% </span>
+                <span class="quiet">Branches</span>
+                <span class='fraction'>35/242</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">27.77% </span>
+                <span class="quiet">Functions</span>
+                <span class='fraction'>20/72</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">28.91% </span>
+                <span class="quiet">Lines</span>
+                <span class='fraction'>48/166</span>
+            </div>
+        
+            
+        </div>
+        <p class="quiet">
+            Press <em>n</em> or <em>j</em> to go to the next uncovered block, <em>b</em>, <em>p</em> or <em>k</em> for the previous block.
+        </p>
+        <template id="filterTemplate">
+            <div class="quiet">
+                Filter:
+                <input type="search" id="fileSearch">
+            </div>
+        </template>
+    </div>
+    <div class='status-line low'></div>
+    <pre><table class="coverage">
+<tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
+<a name='L2'></a><a href='#L2'>2</a>
+<a name='L3'></a><a href='#L3'>3</a>
+<a name='L4'></a><a href='#L4'>4</a>
+<a name='L5'></a><a href='#L5'>5</a>
+<a name='L6'></a><a href='#L6'>6</a>
+<a name='L7'></a><a href='#L7'>7</a>
+<a name='L8'></a><a href='#L8'>8</a>
+<a name='L9'></a><a href='#L9'>9</a>
+<a name='L10'></a><a href='#L10'>10</a>
+<a name='L11'></a><a href='#L11'>11</a>
+<a name='L12'></a><a href='#L12'>12</a>
+<a name='L13'></a><a href='#L13'>13</a>
+<a name='L14'></a><a href='#L14'>14</a>
+<a name='L15'></a><a href='#L15'>15</a>
+<a name='L16'></a><a href='#L16'>16</a>
+<a name='L17'></a><a href='#L17'>17</a>
+<a name='L18'></a><a href='#L18'>18</a>
+<a name='L19'></a><a href='#L19'>19</a>
+<a name='L20'></a><a href='#L20'>20</a>
+<a name='L21'></a><a href='#L21'>21</a>
+<a name='L22'></a><a href='#L22'>22</a>
+<a name='L23'></a><a href='#L23'>23</a>
+<a name='L24'></a><a href='#L24'>24</a>
+<a name='L25'></a><a href='#L25'>25</a>
+<a name='L26'></a><a href='#L26'>26</a>
+<a name='L27'></a><a href='#L27'>27</a>
+<a name='L28'></a><a href='#L28'>28</a>
+<a name='L29'></a><a href='#L29'>29</a>
+<a name='L30'></a><a href='#L30'>30</a>
+<a name='L31'></a><a href='#L31'>31</a>
+<a name='L32'></a><a href='#L32'>32</a>
+<a name='L33'></a><a href='#L33'>33</a>
+<a name='L34'></a><a href='#L34'>34</a>
+<a name='L35'></a><a href='#L35'>35</a>
+<a name='L36'></a><a href='#L36'>36</a>
+<a name='L37'></a><a href='#L37'>37</a>
+<a name='L38'></a><a href='#L38'>38</a>
+<a name='L39'></a><a href='#L39'>39</a>
+<a name='L40'></a><a href='#L40'>40</a>
+<a name='L41'></a><a href='#L41'>41</a>
+<a name='L42'></a><a href='#L42'>42</a>
+<a name='L43'></a><a href='#L43'>43</a>
+<a name='L44'></a><a href='#L44'>44</a>
+<a name='L45'></a><a href='#L45'>45</a>
+<a name='L46'></a><a href='#L46'>46</a>
+<a name='L47'></a><a href='#L47'>47</a>
+<a name='L48'></a><a href='#L48'>48</a>
+<a name='L49'></a><a href='#L49'>49</a>
+<a name='L50'></a><a href='#L50'>50</a>
+<a name='L51'></a><a href='#L51'>51</a>
+<a name='L52'></a><a href='#L52'>52</a>
+<a name='L53'></a><a href='#L53'>53</a>
+<a name='L54'></a><a href='#L54'>54</a>
+<a name='L55'></a><a href='#L55'>55</a>
+<a name='L56'></a><a href='#L56'>56</a>
+<a name='L57'></a><a href='#L57'>57</a>
+<a name='L58'></a><a href='#L58'>58</a>
+<a name='L59'></a><a href='#L59'>59</a>
+<a name='L60'></a><a href='#L60'>60</a>
+<a name='L61'></a><a href='#L61'>61</a>
+<a name='L62'></a><a href='#L62'>62</a>
+<a name='L63'></a><a href='#L63'>63</a>
+<a name='L64'></a><a href='#L64'>64</a>
+<a name='L65'></a><a href='#L65'>65</a>
+<a name='L66'></a><a href='#L66'>66</a>
+<a name='L67'></a><a href='#L67'>67</a>
+<a name='L68'></a><a href='#L68'>68</a>
+<a name='L69'></a><a href='#L69'>69</a>
+<a name='L70'></a><a href='#L70'>70</a>
+<a name='L71'></a><a href='#L71'>71</a>
+<a name='L72'></a><a href='#L72'>72</a>
+<a name='L73'></a><a href='#L73'>73</a>
+<a name='L74'></a><a href='#L74'>74</a>
+<a name='L75'></a><a href='#L75'>75</a>
+<a name='L76'></a><a href='#L76'>76</a>
+<a name='L77'></a><a href='#L77'>77</a>
+<a name='L78'></a><a href='#L78'>78</a>
+<a name='L79'></a><a href='#L79'>79</a>
+<a name='L80'></a><a href='#L80'>80</a>
+<a name='L81'></a><a href='#L81'>81</a>
+<a name='L82'></a><a href='#L82'>82</a>
+<a name='L83'></a><a href='#L83'>83</a>
+<a name='L84'></a><a href='#L84'>84</a>
+<a name='L85'></a><a href='#L85'>85</a>
+<a name='L86'></a><a href='#L86'>86</a>
+<a name='L87'></a><a href='#L87'>87</a>
+<a name='L88'></a><a href='#L88'>88</a>
+<a name='L89'></a><a href='#L89'>89</a>
+<a name='L90'></a><a href='#L90'>90</a>
+<a name='L91'></a><a href='#L91'>91</a>
+<a name='L92'></a><a href='#L92'>92</a>
+<a name='L93'></a><a href='#L93'>93</a>
+<a name='L94'></a><a href='#L94'>94</a>
+<a name='L95'></a><a href='#L95'>95</a>
+<a name='L96'></a><a href='#L96'>96</a>
+<a name='L97'></a><a href='#L97'>97</a>
+<a name='L98'></a><a href='#L98'>98</a>
+<a name='L99'></a><a href='#L99'>99</a>
+<a name='L100'></a><a href='#L100'>100</a>
+<a name='L101'></a><a href='#L101'>101</a>
+<a name='L102'></a><a href='#L102'>102</a>
+<a name='L103'></a><a href='#L103'>103</a>
+<a name='L104'></a><a href='#L104'>104</a>
+<a name='L105'></a><a href='#L105'>105</a>
+<a name='L106'></a><a href='#L106'>106</a>
+<a name='L107'></a><a href='#L107'>107</a>
+<a name='L108'></a><a href='#L108'>108</a>
+<a name='L109'></a><a href='#L109'>109</a>
+<a name='L110'></a><a href='#L110'>110</a>
+<a name='L111'></a><a href='#L111'>111</a>
+<a name='L112'></a><a href='#L112'>112</a>
+<a name='L113'></a><a href='#L113'>113</a>
+<a name='L114'></a><a href='#L114'>114</a>
+<a name='L115'></a><a href='#L115'>115</a>
+<a name='L116'></a><a href='#L116'>116</a>
+<a name='L117'></a><a href='#L117'>117</a>
+<a name='L118'></a><a href='#L118'>118</a>
+<a name='L119'></a><a href='#L119'>119</a>
+<a name='L120'></a><a href='#L120'>120</a>
+<a name='L121'></a><a href='#L121'>121</a>
+<a name='L122'></a><a href='#L122'>122</a>
+<a name='L123'></a><a href='#L123'>123</a>
+<a name='L124'></a><a href='#L124'>124</a>
+<a name='L125'></a><a href='#L125'>125</a>
+<a name='L126'></a><a href='#L126'>126</a>
+<a name='L127'></a><a href='#L127'>127</a>
+<a name='L128'></a><a href='#L128'>128</a>
+<a name='L129'></a><a href='#L129'>129</a>
+<a name='L130'></a><a href='#L130'>130</a>
+<a name='L131'></a><a href='#L131'>131</a>
+<a name='L132'></a><a href='#L132'>132</a>
+<a name='L133'></a><a href='#L133'>133</a>
+<a name='L134'></a><a href='#L134'>134</a>
+<a name='L135'></a><a href='#L135'>135</a>
+<a name='L136'></a><a href='#L136'>136</a>
+<a name='L137'></a><a href='#L137'>137</a>
+<a name='L138'></a><a href='#L138'>138</a>
+<a name='L139'></a><a href='#L139'>139</a>
+<a name='L140'></a><a href='#L140'>140</a>
+<a name='L141'></a><a href='#L141'>141</a>
+<a name='L142'></a><a href='#L142'>142</a>
+<a name='L143'></a><a href='#L143'>143</a>
+<a name='L144'></a><a href='#L144'>144</a>
+<a name='L145'></a><a href='#L145'>145</a>
+<a name='L146'></a><a href='#L146'>146</a>
+<a name='L147'></a><a href='#L147'>147</a>
+<a name='L148'></a><a href='#L148'>148</a>
+<a name='L149'></a><a href='#L149'>149</a>
+<a name='L150'></a><a href='#L150'>150</a>
+<a name='L151'></a><a href='#L151'>151</a>
+<a name='L152'></a><a href='#L152'>152</a>
+<a name='L153'></a><a href='#L153'>153</a>
+<a name='L154'></a><a href='#L154'>154</a>
+<a name='L155'></a><a href='#L155'>155</a>
+<a name='L156'></a><a href='#L156'>156</a>
+<a name='L157'></a><a href='#L157'>157</a>
+<a name='L158'></a><a href='#L158'>158</a>
+<a name='L159'></a><a href='#L159'>159</a>
+<a name='L160'></a><a href='#L160'>160</a>
+<a name='L161'></a><a href='#L161'>161</a>
+<a name='L162'></a><a href='#L162'>162</a>
+<a name='L163'></a><a href='#L163'>163</a>
+<a name='L164'></a><a href='#L164'>164</a>
+<a name='L165'></a><a href='#L165'>165</a>
+<a name='L166'></a><a href='#L166'>166</a>
+<a name='L167'></a><a href='#L167'>167</a>
+<a name='L168'></a><a href='#L168'>168</a>
+<a name='L169'></a><a href='#L169'>169</a>
+<a name='L170'></a><a href='#L170'>170</a>
+<a name='L171'></a><a href='#L171'>171</a>
+<a name='L172'></a><a href='#L172'>172</a>
+<a name='L173'></a><a href='#L173'>173</a>
+<a name='L174'></a><a href='#L174'>174</a>
+<a name='L175'></a><a href='#L175'>175</a>
+<a name='L176'></a><a href='#L176'>176</a>
+<a name='L177'></a><a href='#L177'>177</a>
+<a name='L178'></a><a href='#L178'>178</a>
+<a name='L179'></a><a href='#L179'>179</a>
+<a name='L180'></a><a href='#L180'>180</a>
+<a name='L181'></a><a href='#L181'>181</a>
+<a name='L182'></a><a href='#L182'>182</a>
+<a name='L183'></a><a href='#L183'>183</a>
+<a name='L184'></a><a href='#L184'>184</a>
+<a name='L185'></a><a href='#L185'>185</a>
+<a name='L186'></a><a href='#L186'>186</a>
+<a name='L187'></a><a href='#L187'>187</a>
+<a name='L188'></a><a href='#L188'>188</a>
+<a name='L189'></a><a href='#L189'>189</a>
+<a name='L190'></a><a href='#L190'>190</a>
+<a name='L191'></a><a href='#L191'>191</a>
+<a name='L192'></a><a href='#L192'>192</a>
+<a name='L193'></a><a href='#L193'>193</a>
+<a name='L194'></a><a href='#L194'>194</a>
+<a name='L195'></a><a href='#L195'>195</a>
+<a name='L196'></a><a href='#L196'>196</a>
+<a name='L197'></a><a href='#L197'>197</a>
+<a name='L198'></a><a href='#L198'>198</a>
+<a name='L199'></a><a href='#L199'>199</a>
+<a name='L200'></a><a href='#L200'>200</a>
+<a name='L201'></a><a href='#L201'>201</a>
+<a name='L202'></a><a href='#L202'>202</a>
+<a name='L203'></a><a href='#L203'>203</a>
+<a name='L204'></a><a href='#L204'>204</a>
+<a name='L205'></a><a href='#L205'>205</a>
+<a name='L206'></a><a href='#L206'>206</a>
+<a name='L207'></a><a href='#L207'>207</a>
+<a name='L208'></a><a href='#L208'>208</a>
+<a name='L209'></a><a href='#L209'>209</a>
+<a name='L210'></a><a href='#L210'>210</a>
+<a name='L211'></a><a href='#L211'>211</a>
+<a name='L212'></a><a href='#L212'>212</a>
+<a name='L213'></a><a href='#L213'>213</a>
+<a name='L214'></a><a href='#L214'>214</a>
+<a name='L215'></a><a href='#L215'>215</a>
+<a name='L216'></a><a href='#L216'>216</a>
+<a name='L217'></a><a href='#L217'>217</a>
+<a name='L218'></a><a href='#L218'>218</a>
+<a name='L219'></a><a href='#L219'>219</a>
+<a name='L220'></a><a href='#L220'>220</a>
+<a name='L221'></a><a href='#L221'>221</a>
+<a name='L222'></a><a href='#L222'>222</a>
+<a name='L223'></a><a href='#L223'>223</a>
+<a name='L224'></a><a href='#L224'>224</a>
+<a name='L225'></a><a href='#L225'>225</a>
+<a name='L226'></a><a href='#L226'>226</a>
+<a name='L227'></a><a href='#L227'>227</a>
+<a name='L228'></a><a href='#L228'>228</a>
+<a name='L229'></a><a href='#L229'>229</a>
+<a name='L230'></a><a href='#L230'>230</a>
+<a name='L231'></a><a href='#L231'>231</a>
+<a name='L232'></a><a href='#L232'>232</a>
+<a name='L233'></a><a href='#L233'>233</a>
+<a name='L234'></a><a href='#L234'>234</a>
+<a name='L235'></a><a href='#L235'>235</a>
+<a name='L236'></a><a href='#L236'>236</a>
+<a name='L237'></a><a href='#L237'>237</a>
+<a name='L238'></a><a href='#L238'>238</a>
+<a name='L239'></a><a href='#L239'>239</a>
+<a name='L240'></a><a href='#L240'>240</a>
+<a name='L241'></a><a href='#L241'>241</a>
+<a name='L242'></a><a href='#L242'>242</a>
+<a name='L243'></a><a href='#L243'>243</a>
+<a name='L244'></a><a href='#L244'>244</a>
+<a name='L245'></a><a href='#L245'>245</a>
+<a name='L246'></a><a href='#L246'>246</a>
+<a name='L247'></a><a href='#L247'>247</a>
+<a name='L248'></a><a href='#L248'>248</a>
+<a name='L249'></a><a href='#L249'>249</a>
+<a name='L250'></a><a href='#L250'>250</a>
+<a name='L251'></a><a href='#L251'>251</a>
+<a name='L252'></a><a href='#L252'>252</a>
+<a name='L253'></a><a href='#L253'>253</a>
+<a name='L254'></a><a href='#L254'>254</a>
+<a name='L255'></a><a href='#L255'>255</a>
+<a name='L256'></a><a href='#L256'>256</a>
+<a name='L257'></a><a href='#L257'>257</a>
+<a name='L258'></a><a href='#L258'>258</a>
+<a name='L259'></a><a href='#L259'>259</a>
+<a name='L260'></a><a href='#L260'>260</a>
+<a name='L261'></a><a href='#L261'>261</a>
+<a name='L262'></a><a href='#L262'>262</a>
+<a name='L263'></a><a href='#L263'>263</a>
+<a name='L264'></a><a href='#L264'>264</a>
+<a name='L265'></a><a href='#L265'>265</a>
+<a name='L266'></a><a href='#L266'>266</a>
+<a name='L267'></a><a href='#L267'>267</a>
+<a name='L268'></a><a href='#L268'>268</a>
+<a name='L269'></a><a href='#L269'>269</a>
+<a name='L270'></a><a href='#L270'>270</a>
+<a name='L271'></a><a href='#L271'>271</a>
+<a name='L272'></a><a href='#L272'>272</a>
+<a name='L273'></a><a href='#L273'>273</a>
+<a name='L274'></a><a href='#L274'>274</a>
+<a name='L275'></a><a href='#L275'>275</a>
+<a name='L276'></a><a href='#L276'>276</a>
+<a name='L277'></a><a href='#L277'>277</a>
+<a name='L278'></a><a href='#L278'>278</a>
+<a name='L279'></a><a href='#L279'>279</a>
+<a name='L280'></a><a href='#L280'>280</a>
+<a name='L281'></a><a href='#L281'>281</a>
+<a name='L282'></a><a href='#L282'>282</a>
+<a name='L283'></a><a href='#L283'>283</a>
+<a name='L284'></a><a href='#L284'>284</a>
+<a name='L285'></a><a href='#L285'>285</a>
+<a name='L286'></a><a href='#L286'>286</a>
+<a name='L287'></a><a href='#L287'>287</a>
+<a name='L288'></a><a href='#L288'>288</a>
+<a name='L289'></a><a href='#L289'>289</a>
+<a name='L290'></a><a href='#L290'>290</a>
+<a name='L291'></a><a href='#L291'>291</a>
+<a name='L292'></a><a href='#L292'>292</a>
+<a name='L293'></a><a href='#L293'>293</a>
+<a name='L294'></a><a href='#L294'>294</a>
+<a name='L295'></a><a href='#L295'>295</a>
+<a name='L296'></a><a href='#L296'>296</a>
+<a name='L297'></a><a href='#L297'>297</a>
+<a name='L298'></a><a href='#L298'>298</a>
+<a name='L299'></a><a href='#L299'>299</a>
+<a name='L300'></a><a href='#L300'>300</a>
+<a name='L301'></a><a href='#L301'>301</a>
+<a name='L302'></a><a href='#L302'>302</a>
+<a name='L303'></a><a href='#L303'>303</a>
+<a name='L304'></a><a href='#L304'>304</a>
+<a name='L305'></a><a href='#L305'>305</a>
+<a name='L306'></a><a href='#L306'>306</a>
+<a name='L307'></a><a href='#L307'>307</a>
+<a name='L308'></a><a href='#L308'>308</a>
+<a name='L309'></a><a href='#L309'>309</a>
+<a name='L310'></a><a href='#L310'>310</a>
+<a name='L311'></a><a href='#L311'>311</a>
+<a name='L312'></a><a href='#L312'>312</a>
+<a name='L313'></a><a href='#L313'>313</a>
+<a name='L314'></a><a href='#L314'>314</a>
+<a name='L315'></a><a href='#L315'>315</a>
+<a name='L316'></a><a href='#L316'>316</a>
+<a name='L317'></a><a href='#L317'>317</a>
+<a name='L318'></a><a href='#L318'>318</a>
+<a name='L319'></a><a href='#L319'>319</a>
+<a name='L320'></a><a href='#L320'>320</a>
+<a name='L321'></a><a href='#L321'>321</a>
+<a name='L322'></a><a href='#L322'>322</a>
+<a name='L323'></a><a href='#L323'>323</a>
+<a name='L324'></a><a href='#L324'>324</a>
+<a name='L325'></a><a href='#L325'>325</a>
+<a name='L326'></a><a href='#L326'>326</a>
+<a name='L327'></a><a href='#L327'>327</a>
+<a name='L328'></a><a href='#L328'>328</a>
+<a name='L329'></a><a href='#L329'>329</a>
+<a name='L330'></a><a href='#L330'>330</a>
+<a name='L331'></a><a href='#L331'>331</a>
+<a name='L332'></a><a href='#L332'>332</a>
+<a name='L333'></a><a href='#L333'>333</a>
+<a name='L334'></a><a href='#L334'>334</a>
+<a name='L335'></a><a href='#L335'>335</a>
+<a name='L336'></a><a href='#L336'>336</a>
+<a name='L337'></a><a href='#L337'>337</a>
+<a name='L338'></a><a href='#L338'>338</a>
+<a name='L339'></a><a href='#L339'>339</a>
+<a name='L340'></a><a href='#L340'>340</a>
+<a name='L341'></a><a href='#L341'>341</a>
+<a name='L342'></a><a href='#L342'>342</a>
+<a name='L343'></a><a href='#L343'>343</a>
+<a name='L344'></a><a href='#L344'>344</a>
+<a name='L345'></a><a href='#L345'>345</a>
+<a name='L346'></a><a href='#L346'>346</a>
+<a name='L347'></a><a href='#L347'>347</a>
+<a name='L348'></a><a href='#L348'>348</a>
+<a name='L349'></a><a href='#L349'>349</a>
+<a name='L350'></a><a href='#L350'>350</a>
+<a name='L351'></a><a href='#L351'>351</a>
+<a name='L352'></a><a href='#L352'>352</a>
+<a name='L353'></a><a href='#L353'>353</a>
+<a name='L354'></a><a href='#L354'>354</a>
+<a name='L355'></a><a href='#L355'>355</a>
+<a name='L356'></a><a href='#L356'>356</a>
+<a name='L357'></a><a href='#L357'>357</a>
+<a name='L358'></a><a href='#L358'>358</a>
+<a name='L359'></a><a href='#L359'>359</a>
+<a name='L360'></a><a href='#L360'>360</a>
+<a name='L361'></a><a href='#L361'>361</a>
+<a name='L362'></a><a href='#L362'>362</a>
+<a name='L363'></a><a href='#L363'>363</a>
+<a name='L364'></a><a href='#L364'>364</a>
+<a name='L365'></a><a href='#L365'>365</a>
+<a name='L366'></a><a href='#L366'>366</a>
+<a name='L367'></a><a href='#L367'>367</a>
+<a name='L368'></a><a href='#L368'>368</a>
+<a name='L369'></a><a href='#L369'>369</a>
+<a name='L370'></a><a href='#L370'>370</a>
+<a name='L371'></a><a href='#L371'>371</a>
+<a name='L372'></a><a href='#L372'>372</a>
+<a name='L373'></a><a href='#L373'>373</a>
+<a name='L374'></a><a href='#L374'>374</a>
+<a name='L375'></a><a href='#L375'>375</a>
+<a name='L376'></a><a href='#L376'>376</a>
+<a name='L377'></a><a href='#L377'>377</a>
+<a name='L378'></a><a href='#L378'>378</a>
+<a name='L379'></a><a href='#L379'>379</a>
+<a name='L380'></a><a href='#L380'>380</a>
+<a name='L381'></a><a href='#L381'>381</a>
+<a name='L382'></a><a href='#L382'>382</a>
+<a name='L383'></a><a href='#L383'>383</a>
+<a name='L384'></a><a href='#L384'>384</a>
+<a name='L385'></a><a href='#L385'>385</a>
+<a name='L386'></a><a href='#L386'>386</a>
+<a name='L387'></a><a href='#L387'>387</a>
+<a name='L388'></a><a href='#L388'>388</a>
+<a name='L389'></a><a href='#L389'>389</a>
+<a name='L390'></a><a href='#L390'>390</a>
+<a name='L391'></a><a href='#L391'>391</a>
+<a name='L392'></a><a href='#L392'>392</a>
+<a name='L393'></a><a href='#L393'>393</a>
+<a name='L394'></a><a href='#L394'>394</a>
+<a name='L395'></a><a href='#L395'>395</a>
+<a name='L396'></a><a href='#L396'>396</a>
+<a name='L397'></a><a href='#L397'>397</a>
+<a name='L398'></a><a href='#L398'>398</a>
+<a name='L399'></a><a href='#L399'>399</a>
+<a name='L400'></a><a href='#L400'>400</a>
+<a name='L401'></a><a href='#L401'>401</a>
+<a name='L402'></a><a href='#L402'>402</a>
+<a name='L403'></a><a href='#L403'>403</a>
+<a name='L404'></a><a href='#L404'>404</a>
+<a name='L405'></a><a href='#L405'>405</a>
+<a name='L406'></a><a href='#L406'>406</a>
+<a name='L407'></a><a href='#L407'>407</a>
+<a name='L408'></a><a href='#L408'>408</a>
+<a name='L409'></a><a href='#L409'>409</a>
+<a name='L410'></a><a href='#L410'>410</a>
+<a name='L411'></a><a href='#L411'>411</a>
+<a name='L412'></a><a href='#L412'>412</a>
+<a name='L413'></a><a href='#L413'>413</a>
+<a name='L414'></a><a href='#L414'>414</a>
+<a name='L415'></a><a href='#L415'>415</a>
+<a name='L416'></a><a href='#L416'>416</a>
+<a name='L417'></a><a href='#L417'>417</a>
+<a name='L418'></a><a href='#L418'>418</a>
+<a name='L419'></a><a href='#L419'>419</a>
+<a name='L420'></a><a href='#L420'>420</a>
+<a name='L421'></a><a href='#L421'>421</a>
+<a name='L422'></a><a href='#L422'>422</a>
+<a name='L423'></a><a href='#L423'>423</a>
+<a name='L424'></a><a href='#L424'>424</a>
+<a name='L425'></a><a href='#L425'>425</a>
+<a name='L426'></a><a href='#L426'>426</a>
+<a name='L427'></a><a href='#L427'>427</a>
+<a name='L428'></a><a href='#L428'>428</a>
+<a name='L429'></a><a href='#L429'>429</a>
+<a name='L430'></a><a href='#L430'>430</a>
+<a name='L431'></a><a href='#L431'>431</a>
+<a name='L432'></a><a href='#L432'>432</a>
+<a name='L433'></a><a href='#L433'>433</a>
+<a name='L434'></a><a href='#L434'>434</a>
+<a name='L435'></a><a href='#L435'>435</a>
+<a name='L436'></a><a href='#L436'>436</a>
+<a name='L437'></a><a href='#L437'>437</a>
+<a name='L438'></a><a href='#L438'>438</a>
+<a name='L439'></a><a href='#L439'>439</a>
+<a name='L440'></a><a href='#L440'>440</a>
+<a name='L441'></a><a href='#L441'>441</a>
+<a name='L442'></a><a href='#L442'>442</a>
+<a name='L443'></a><a href='#L443'>443</a>
+<a name='L444'></a><a href='#L444'>444</a>
+<a name='L445'></a><a href='#L445'>445</a>
+<a name='L446'></a><a href='#L446'>446</a>
+<a name='L447'></a><a href='#L447'>447</a>
+<a name='L448'></a><a href='#L448'>448</a>
+<a name='L449'></a><a href='#L449'>449</a>
+<a name='L450'></a><a href='#L450'>450</a>
+<a name='L451'></a><a href='#L451'>451</a>
+<a name='L452'></a><a href='#L452'>452</a>
+<a name='L453'></a><a href='#L453'>453</a>
+<a name='L454'></a><a href='#L454'>454</a>
+<a name='L455'></a><a href='#L455'>455</a>
+<a name='L456'></a><a href='#L456'>456</a>
+<a name='L457'></a><a href='#L457'>457</a>
+<a name='L458'></a><a href='#L458'>458</a>
+<a name='L459'></a><a href='#L459'>459</a>
+<a name='L460'></a><a href='#L460'>460</a>
+<a name='L461'></a><a href='#L461'>461</a>
+<a name='L462'></a><a href='#L462'>462</a>
+<a name='L463'></a><a href='#L463'>463</a>
+<a name='L464'></a><a href='#L464'>464</a>
+<a name='L465'></a><a href='#L465'>465</a>
+<a name='L466'></a><a href='#L466'>466</a>
+<a name='L467'></a><a href='#L467'>467</a>
+<a name='L468'></a><a href='#L468'>468</a>
+<a name='L469'></a><a href='#L469'>469</a>
+<a name='L470'></a><a href='#L470'>470</a>
+<a name='L471'></a><a href='#L471'>471</a>
+<a name='L472'></a><a href='#L472'>472</a>
+<a name='L473'></a><a href='#L473'>473</a>
+<a name='L474'></a><a href='#L474'>474</a>
+<a name='L475'></a><a href='#L475'>475</a>
+<a name='L476'></a><a href='#L476'>476</a>
+<a name='L477'></a><a href='#L477'>477</a>
+<a name='L478'></a><a href='#L478'>478</a>
+<a name='L479'></a><a href='#L479'>479</a>
+<a name='L480'></a><a href='#L480'>480</a>
+<a name='L481'></a><a href='#L481'>481</a>
+<a name='L482'></a><a href='#L482'>482</a>
+<a name='L483'></a><a href='#L483'>483</a>
+<a name='L484'></a><a href='#L484'>484</a>
+<a name='L485'></a><a href='#L485'>485</a>
+<a name='L486'></a><a href='#L486'>486</a>
+<a name='L487'></a><a href='#L487'>487</a>
+<a name='L488'></a><a href='#L488'>488</a>
+<a name='L489'></a><a href='#L489'>489</a>
+<a name='L490'></a><a href='#L490'>490</a>
+<a name='L491'></a><a href='#L491'>491</a>
+<a name='L492'></a><a href='#L492'>492</a>
+<a name='L493'></a><a href='#L493'>493</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">10x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">10x</span>
+<span class="cline-any cline-yes">10x</span>
+<span class="cline-any cline-yes">10x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">4x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-yes">6x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-yes">17x</span>
+<span class="cline-any cline-yes">17x</span>
+<span class="cline-any cline-yes">62x</span>
+<span class="cline-any cline-yes">17x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">18x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">90x</span>
+<span class="cline-any cline-yes">90x</span>
+<span class="cline-any cline-yes">90x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">10x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { useEffect, useState } from 'react'
+import { ArrowUpRight, Barcode, Grid2X2, List, MoreHorizontal, Package, Plus, ScanLine, Search, Smartphone, Wrench, X, type LucideIcon } from 'lucide-react'
+import { api } from '../../lib/api'
+import type { InventoryItem, Pawn } from '../../types/domain'
+import { currency, money, riel, inventoryPriceCurrency, inventoryPriceText, inventoryDualPriceText, useExchangeRate, dateText, titleStatus, comingNext } from '../../lib/presentation'
+import LoadingState from '../../components/LoadingState'
+import MoneyInput from '../../components/MoneyInput'
+import SectionHeader from '../../components/SectionHeader'
+import StatusBadge from '../../components/StatusBadge'
+import { getStoredInventoryView, setStoredInventoryView } from '../../lib/storage'
+import { printInventoryLabel } from './barcode'
+import './inventory-page.css'
+&nbsp;
+const categoryMeta: Record&lt;InventoryItem['category'], { label: string; tone: 'violet' | 'blue' | 'orange'; Icon: LucideIcon; fallback: string }&gt; = {
+  PHONE: { label: 'Phones', tone: 'violet', Icon: Smartphone, fallback: 'Phone' },
+  TABLET: { label: 'Tablets', tone: 'violet', Icon: Smartphone, fallback: 'Tab' },
+  ACCESSORY: { label: 'Accessories', tone: 'blue', Icon: Package, fallback: 'Acc' },
+  SPARE_PART: { label: 'Spare parts', tone: 'orange', Icon: Wrench, fallback: 'Part' },
+  OTHER: { label: 'Other', tone: 'blue', Icon: Package, fallback: 'Item' },
+}
+&nbsp;
+function inventorySubtitle(item: InventoryItem) {
+  return [item.brand, item.model, item.storage, item.ram &amp;&amp; <span class="branch-1 cbranch-no" title="branch not covered" >`${item.ram} RAM`, i</span>tem.color].filter(Boolean).join(' · ') || <span class="branch-1 cbranch-no" title="branch not covered" >item.sku</span>
+}
+&nbsp;
+function <span class="fstat-no" title="function not covered" >inventoryDetails(i</span>tem: InventoryItem) {
+  const accessoryDetails = <span class="cstat-no" title="statement not covered" >item.category === 'ACCESSORY' || item.category === 'SPARE_PART'</span>
+    ? [item.compatibleModels?.join(', '), item.oemQuality].filter(Boolean).join(' · ')
+    : ''
+<span class="cstat-no" title="statement not covered" >  return accessoryDetails || [item.condition &amp;&amp; titleStatus(item.condition), item.batteryHealth !== undefined &amp;&amp; `Battery ${item.batteryHealth}%`, item.imei1 || item.serialNumber].filter(Boolean).join(' · ')</span>
+}
+&nbsp;
+function InventoryPhoto({ item, size = 'normal' }: { item: InventoryItem; size?: 'small' | 'normal' | 'large' }) {
+  const meta = categoryMeta[item.category] || <span class="branch-1 cbranch-no" title="branch not covered" >categoryMeta.OTHER</span>
+  const Icon = meta.Icon
+  return (
+    &lt;span className={`inventory-photo inventory-photo-${size} ${item.imageUrl ? <span class="branch-0 cbranch-no" title="branch not covered" >'has-image' : `</span>fallback-${meta.tone}`}`}&gt;
+      {item.imageUrl
+        ? <span class="branch-0 cbranch-no" title="branch not covered" >&lt;img src={item.imageUrl} alt={item.name} loading="lazy" /&gt;</span>
+        : &lt;&gt;&lt;Icon size={size === 'small' ? <span class="branch-0 cbranch-no" title="branch not covered" >16 : s</span>ize === 'large' ? 28 : <span class="branch-1 cbranch-no" title="branch not covered" >20} /</span>&gt;&lt;small&gt;{meta.fallback}&lt;/small&gt;&lt;/&gt;}
+    &lt;/span&gt;
+  )
+}
+&nbsp;
+export default function InventoryView() {
+  const [items, setItems] = useState&lt;InventoryItem[]&gt;([])
+  const [loading, setLoading] = useState(true)
+  const [selectedItem, setSelectedItem] = useState&lt;InventoryItem | null&gt;(null)
+  const [editingPrice, setEditingPrice] = useState(false)
+  const [usdSellingPriceDraft, setUsdSellingPriceDraft] = useState('')
+  const [usdMinimumPriceDraft, setUsdMinimumPriceDraft] = useState('')
+  const [khrSellingPriceDraft, setKhrSellingPriceDraft] = useState('')
+  const [khrMinimumPriceDraft, setKhrMinimumPriceDraft] = useState('')
+  const [priceCurrency, setPriceCurrency] = useState&lt;'USD' | 'KHR'&gt;('USD')
+  const [savingPrice, setSavingPrice] = useState(false)
+  const [savingPhoto, setSavingPhoto] = useState(false)
+  const [search, setSearch] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('ALL')
+  const [statusFilter, setStatusFilter] = useState('ALL')
+  const [inventoryView, setInventoryView] = useState&lt;'large' | 'details'&gt;(getStoredInventoryView)
+  const [error, setError] = useState('')
+  const exchangeRate = useExchangeRate()
+  const usdKhrRate = Number(exchangeRate?.usdKhr) &gt; 0 ? <span class="branch-0 cbranch-no" title="branch not covered" >Number(exchangeRate?.usdKhr) : 4</span>100
+&nbsp;
+  useEffect(() =&gt; {
+    api&lt;{ items: InventoryItem[] }&gt;('/inventory')
+      .then((result) =&gt; setItems(Array.isArray(result?.items) ? result.items : []))
+      .catch((reason: Error) =&gt; setError(reason.message))
+      .finally(() =&gt; setLoading(false))
+  }, [])
+&nbsp;
+  useEffect(() =&gt; {
+    function <span class="fstat-no" title="function not covered" >openScannedStock(e</span>vent: Event) {
+      const detail = (<span class="cstat-no" title="statement not covered" >event as CustomEvent&lt;{ item?: InventoryItem }&gt;).detail</span>
+      const item = <span class="cstat-no" title="statement not covered" >detail?.item</span>
+<span class="cstat-no" title="statement not covered" >      if (!item?._id) <span class="cstat-no" title="statement not covered" >return</span></span>
+<span class="cstat-no" title="statement not covered" >      setItems(<span class="fstat-no" title="function not covered" >(c</span>urrent) =&gt; <span class="cstat-no" title="statement not covered" >current.some(<span class="fstat-no" title="function not covered" >(r</span>ow) =&gt; <span class="cstat-no" title="statement not covered" >row._id === item._id)</span></span></span>
+        ? current.map(<span class="fstat-no" title="function not covered" >(r</span>ow) =&gt; <span class="cstat-no" title="statement not covered" >row._id === item._id ? item : row)</span>
+        : [item, ...current])
+<span class="cstat-no" title="statement not covered" >      setSearch('')</span>
+<span class="cstat-no" title="statement not covered" >      setCategoryFilter('ALL')</span>
+<span class="cstat-no" title="statement not covered" >      setStatusFilter('ALL')</span>
+<span class="cstat-no" title="statement not covered" >      setEditingPrice(false)</span>
+<span class="cstat-no" title="statement not covered" >      setSelectedItem(item)</span>
+    }
+&nbsp;
+    window.addEventListener('phoneflow:open-stock-item', openScannedStock)
+    return () =&gt; window.removeEventListener('phoneflow:open-stock-item', openScannedStock)
+  }, [])
+&nbsp;
+  const phoneCount = items.filter((item) =&gt; item.category === 'PHONE').reduce((sum, item) =&gt; sum + item.quantity, 0)
+  const tabletCount = items.filter((item) =&gt; item.category === 'TABLET').reduce(<span class="fstat-no" title="function not covered" >(s</span>um, item) =&gt; <span class="cstat-no" title="statement not covered" >sum + item.quantity, 0</span>)
+  const accessoryCount = items.filter((item) =&gt; item.category === 'ACCESSORY').reduce(<span class="fstat-no" title="function not covered" >(s</span>um, item) =&gt; <span class="cstat-no" title="statement not covered" >sum + item.quantity, 0</span>)
+  const sparePartCount = items.filter((item) =&gt; item.category === 'SPARE_PART').reduce(<span class="fstat-no" title="function not covered" >(s</span>um, item) =&gt; <span class="cstat-no" title="statement not covered" >sum + item.quantity, 0</span>)
+  const otherCount = items.filter((item) =&gt; item.category === 'OTHER').reduce(<span class="fstat-no" title="function not covered" >(s</span>um, item) =&gt; <span class="cstat-no" title="statement not covered" >sum + item.quantity, 0</span>)
+  const categoryCounts: Record&lt;InventoryItem['category'], number&gt; = {
+    PHONE: phoneCount,
+    TABLET: tabletCount,
+    ACCESSORY: accessoryCount,
+    SPARE_PART: sparePartCount,
+    OTHER: otherCount,
+  }
+  const filteredItems = items.filter((item) =&gt; {
+    const term = search.trim().toLowerCase()
+    const matchesSearch = !term || [item.sku, item.barcode, item.name, item.brand, item.model, item.imei1, item.serialNumber]
+      .some((value) =&gt; String(value || '').toLowerCase().includes(term))
+    return matchesSearch
+      &amp;&amp; (categoryFilter === 'ALL' || <span class="branch-2 cbranch-no" title="branch not covered" >item.category === categoryFilter)</span>
+      &amp;&amp; (statusFilter === 'ALL' || <span class="branch-4 cbranch-no" title="branch not covered" >item.status === statusFilter)</span>
+  })
+&nbsp;
+  function <span class="fstat-no" title="function not covered" >changeInventoryView(v</span>iew: 'large' | 'details') {
+<span class="cstat-no" title="statement not covered" >    setInventoryView(view)</span>
+<span class="cstat-no" title="statement not covered" >    setStoredInventoryView(view)</span>
+  }
+&nbsp;
+  function <span class="fstat-no" title="function not covered" >openPriceEditor() {</span>
+<span class="cstat-no" title="statement not covered" >    if (!selectedItem) <span class="cstat-no" title="statement not covered" >return</span></span>
+    const <span class="cstat-no" title="statement not covered" >currency = inventoryPriceCurrency(selectedItem)</span>
+    const usdSellPrice = <span class="cstat-no" title="statement not covered" >Number(selectedItem.sellPrice) || 0</span>
+    const usdMinimumPrice = <span class="cstat-no" title="statement not covered" >Number(selectedItem.minimumSellPrice) || 0</span>
+    const savedKhrSellPrice = <span class="cstat-no" title="statement not covered" >Number(selectedItem.khrSellPrice)</span>
+    const savedKhrMinimumPrice = <span class="cstat-no" title="statement not covered" >Number(selectedItem.khrMinimumSellPrice)</span>
+    const legacyKhrSellPrice = <span class="cstat-no" title="statement not covered" >currency === 'KHR' ? Number(selectedItem.listedSellPrice) : Number.NaN</span>
+    const legacyKhrMinimumPrice = <span class="cstat-no" title="statement not covered" >currency === 'KHR' ? Number(selectedItem.listedMinimumSellPrice) : Number.NaN</span>
+    const khrSellPrice = <span class="cstat-no" title="statement not covered" >Number.isFinite(savedKhrSellPrice)</span>
+      ? savedKhrSellPrice
+      : Number.isFinite(legacyKhrSellPrice)
+        ? legacyKhrSellPrice
+        : Math.round((usdSellPrice * usdKhrRate) / 100) * 100
+    const khrMinimumPrice = <span class="cstat-no" title="statement not covered" >Number.isFinite(savedKhrMinimumPrice)</span>
+      ? savedKhrMinimumPrice
+      : Number.isFinite(legacyKhrMinimumPrice)
+        ? legacyKhrMinimumPrice
+        : Math.round((usdMinimumPrice * usdKhrRate) / 100) * 100
+    const displayedUsdSellPrice = <span class="cstat-no" title="statement not covered" >usdSellPrice &gt; 0</span>
+      ? usdSellPrice
+      : khrSellPrice &gt; 0
+        ? Math.round((khrSellPrice / usdKhrRate) * 100) / 100
+        : 0
+    const displayedUsdMinimumPrice = <span class="cstat-no" title="statement not covered" >usdMinimumPrice &gt; 0</span>
+      ? usdMinimumPrice
+      : khrMinimumPrice &gt; 0
+        ? Math.round((khrMinimumPrice / usdKhrRate) * 100) / 100
+        : 0
+<span class="cstat-no" title="statement not covered" >    setPriceCurrency(currency)</span>
+<span class="cstat-no" title="statement not covered" >    setUsdSellingPriceDraft(displayedUsdSellPrice &gt; 0 ? String(displayedUsdSellPrice) : '')</span>
+<span class="cstat-no" title="statement not covered" >    setUsdMinimumPriceDraft(displayedUsdMinimumPrice &gt; 0 ? String(displayedUsdMinimumPrice) : '')</span>
+<span class="cstat-no" title="statement not covered" >    setKhrSellingPriceDraft(khrSellPrice &gt; 0 ? String(khrSellPrice) : '')</span>
+<span class="cstat-no" title="statement not covered" >    setKhrMinimumPriceDraft(khrMinimumPrice &gt; 0 ? String(khrMinimumPrice) : '')</span>
+<span class="cstat-no" title="statement not covered" >    setError('')</span>
+<span class="cstat-no" title="statement not covered" >    setEditingPrice(true)</span>
+  }
+&nbsp;
+  function <span class="fstat-no" title="function not covered" >usdPriceToKhr(v</span>alue: string) {
+<span class="cstat-no" title="statement not covered" >    if (value === '') <span class="cstat-no" title="statement not covered" >return ''</span></span>
+<span class="cstat-no" title="statement not covered" >    return String(Math.round((Number(value || 0) * usdKhrRate) / 100) * 100)</span>
+  }
+&nbsp;
+  function <span class="fstat-no" title="function not covered" >khrPriceToUsd(v</span>alue: string) {
+<span class="cstat-no" title="statement not covered" >    if (value === '') <span class="cstat-no" title="statement not covered" >return ''</span></span>
+<span class="cstat-no" title="statement not covered" >    return String(Math.round((Number(value || 0) / usdKhrRate) * 100) / 100)</span>
+  }
+&nbsp;
+  function <span class="fstat-no" title="function not covered" >changeUsdSellingPrice(v</span>alue: string) {
+<span class="cstat-no" title="statement not covered" >    setUsdSellingPriceDraft(value)</span>
+<span class="cstat-no" title="statement not covered" >    setKhrSellingPriceDraft(usdPriceToKhr(value))</span>
+  }
+&nbsp;
+  function <span class="fstat-no" title="function not covered" >changeUsdMinimumPrice(v</span>alue: string) {
+<span class="cstat-no" title="statement not covered" >    setUsdMinimumPriceDraft(value)</span>
+<span class="cstat-no" title="statement not covered" >    setKhrMinimumPriceDraft(usdPriceToKhr(value))</span>
+  }
+&nbsp;
+  function <span class="fstat-no" title="function not covered" >changeKhrSellingPrice(v</span>alue: string) {
+<span class="cstat-no" title="statement not covered" >    setKhrSellingPriceDraft(value)</span>
+<span class="cstat-no" title="statement not covered" >    setUsdSellingPriceDraft(khrPriceToUsd(value))</span>
+  }
+&nbsp;
+  function <span class="fstat-no" title="function not covered" >changeKhrMinimumPrice(v</span>alue: string) {
+<span class="cstat-no" title="statement not covered" >    setKhrMinimumPriceDraft(value)</span>
+<span class="cstat-no" title="statement not covered" >    setUsdMinimumPriceDraft(khrPriceToUsd(value))</span>
+  }
+&nbsp;
+  function <span class="fstat-no" title="function not covered" >changePriceCurrency(c</span>urrency: 'USD' | 'KHR') {
+<span class="cstat-no" title="statement not covered" >    setPriceCurrency(currency)</span>
+<span class="cstat-no" title="statement not covered" >    setError('')</span>
+  }
+&nbsp;
+  async function <span class="fstat-no" title="function not covered" >saveSellingPrice() {</span>
+<span class="cstat-no" title="statement not covered" >    if (!selectedItem) <span class="cstat-no" title="statement not covered" >return</span></span>
+    const usdSellingPrice = <span class="cstat-no" title="statement not covered" >Number(usdSellingPriceDraft || 0)</span>
+    const usdMinimumPrice = <span class="cstat-no" title="statement not covered" >Number(usdMinimumPriceDraft || 0)</span>
+    const khrSellingPrice = <span class="cstat-no" title="statement not covered" >Number(khrSellingPriceDraft || 0)</span>
+    const khrMinimumPrice = <span class="cstat-no" title="statement not covered" >Number(khrMinimumPriceDraft || 0)</span>
+<span class="cstat-no" title="statement not covered" >    if ([usdSellingPrice, usdMinimumPrice, khrSellingPrice, khrMinimumPrice].some(<span class="fstat-no" title="function not covered" >(p</span>rice) =&gt; <span class="cstat-no" title="statement not covered" >!Number.isFinite(price) || price &lt; 0)</span>) {</span>
+<span class="cstat-no" title="statement not covered" >      setError('Selling prices must be valid positive amounts or zero')</span>
+<span class="cstat-no" title="statement not covered" >      return</span>
+    }
+<span class="cstat-no" title="statement not covered" >    if (usdMinimumPrice &gt; usdSellingPrice || khrMinimumPrice &gt; khrSellingPrice) {</span>
+<span class="cstat-no" title="statement not covered" >      setError('The minimum price cannot exceed the regular price in either currency')</span>
+<span class="cstat-no" title="statement not covered" >      return</span>
+    }
+<span class="cstat-no" title="statement not covered" >    if (!Number.isInteger(khrSellingPrice) || khrSellingPrice % 100 !== 0 || !Number.isInteger(khrMinimumPrice) || khrMinimumPrice % 100 !== 0) {</span>
+<span class="cstat-no" title="statement not covered" >      setError('KHR prices must use whole 100 KHR increments')</span>
+<span class="cstat-no" title="statement not covered" >      return</span>
+    }
+<span class="cstat-no" title="statement not covered" >    setSavingPrice(true)</span>
+<span class="cstat-no" title="statement not covered" >    setError('')</span>
+<span class="cstat-no" title="statement not covered" >    try {</span>
+      const result = <span class="cstat-no" title="statement not covered" >await api&lt;{ item: InventoryItem }&gt;(`/inventory/${selectedItem._id}`, {</span>
+        method: 'PATCH',
+        body: JSON.stringify({
+          sellPriceUsd: usdSellingPrice,
+          minimumSellPriceUsd: usdMinimumPrice,
+          sellPriceKhr: khrSellingPrice,
+          minimumSellPriceKhr: khrMinimumPrice,
+          currency: priceCurrency,
+          exchangeRate: usdKhrRate,
+        }),
+      })
+<span class="cstat-no" title="statement not covered" >      setSelectedItem(result.item)</span>
+<span class="cstat-no" title="statement not covered" >      setItems(<span class="fstat-no" title="function not covered" >(c</span>urrent) =&gt; <span class="cstat-no" title="statement not covered" >current.map(<span class="fstat-no" title="function not covered" >(i</span>tem) =&gt; <span class="cstat-no" title="statement not covered" >item._id === result.item._id ? result.item : item)</span>)</span></span>
+<span class="cstat-no" title="statement not covered" >      setEditingPrice(false)</span>
+    } catch (reason) {
+<span class="cstat-no" title="statement not covered" >      setError(reason instanceof Error ? reason.message : 'Unable to update selling price')</span>
+    } finally {
+<span class="cstat-no" title="statement not covered" >      setSavingPrice(false)</span>
+    }
+  }
+&nbsp;
+  function <span class="fstat-no" title="function not covered" >updateInventoryItem(i</span>tem: InventoryItem) {
+<span class="cstat-no" title="statement not covered" >    setSelectedItem(item)</span>
+<span class="cstat-no" title="statement not covered" >    setItems(<span class="fstat-no" title="function not covered" >(c</span>urrent) =&gt; <span class="cstat-no" title="statement not covered" >current.map(<span class="fstat-no" title="function not covered" >(r</span>ow) =&gt; <span class="cstat-no" title="statement not covered" >row._id === item._id ? item : row)</span>)</span></span>
+  }
+&nbsp;
+  async function <span class="fstat-no" title="function not covered" >uploadPhoto(f</span>ile: File | undefined) {
+<span class="cstat-no" title="statement not covered" >    if (!selectedItem || !file) <span class="cstat-no" title="statement not covered" >return</span></span>
+<span class="cstat-no" title="statement not covered" >    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {</span>
+<span class="cstat-no" title="statement not covered" >      setError('Upload a JPEG, PNG, or WebP image')</span>
+<span class="cstat-no" title="statement not covered" >      return</span>
+    }
+<span class="cstat-no" title="statement not covered" >    if (file.size &gt; 4 * 1024 * 1024) {</span>
+<span class="cstat-no" title="statement not covered" >      setError('Image must be 4MB or smaller')</span>
+<span class="cstat-no" title="statement not covered" >      return</span>
+    }
+<span class="cstat-no" title="statement not covered" >    setSavingPhoto(true)</span>
+<span class="cstat-no" title="statement not covered" >    setError('')</span>
+<span class="cstat-no" title="statement not covered" >    try {</span>
+      const imageData = <span class="cstat-no" title="statement not covered" >await new Promise&lt;string&gt;(<span class="fstat-no" title="function not covered" >(r</span>esolve, reject) =&gt; {</span>
+        const reader = <span class="cstat-no" title="statement not covered" >new FileReader()</span>
+<span class="cstat-no" title="statement not covered" >        reader.onload = <span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >r</span>esolve(String(reader.result || ''))</span></span>
+<span class="cstat-no" title="statement not covered" >        reader.onerror = <span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >r</span>eject(new Error('Unable to read image file'))</span></span>
+<span class="cstat-no" title="statement not covered" >        reader.readAsDataURL(file)</span>
+      })
+      const result = <span class="cstat-no" title="statement not covered" >await api&lt;{ item: InventoryItem }&gt;(`/inventory/${selectedItem._id}/photo`, {</span>
+        method: 'POST',
+        body: JSON.stringify({ imageData }),
+      })
+<span class="cstat-no" title="statement not covered" >      updateInventoryItem(result.item)</span>
+    } catch (reason) {
+<span class="cstat-no" title="statement not covered" >      setError(reason instanceof Error ? reason.message : 'Unable to upload product photo')</span>
+    } finally {
+<span class="cstat-no" title="statement not covered" >      setSavingPhoto(false)</span>
+    }
+  }
+&nbsp;
+  async function <span class="fstat-no" title="function not covered" >removePhoto() {</span>
+<span class="cstat-no" title="statement not covered" >    if (!selectedItem) <span class="cstat-no" title="statement not covered" >return</span></span>
+<span class="cstat-no" title="statement not covered" >    setSavingPhoto(true)</span>
+<span class="cstat-no" title="statement not covered" >    setError('')</span>
+<span class="cstat-no" title="statement not covered" >    try {</span>
+      const result = <span class="cstat-no" title="statement not covered" >await api&lt;{ item: InventoryItem }&gt;(`/inventory/${selectedItem._id}/photo`, { method: 'DELETE' })</span>
+<span class="cstat-no" title="statement not covered" >      updateInventoryItem(result.item)</span>
+    } catch (reason) {
+<span class="cstat-no" title="statement not covered" >      setError(reason instanceof Error ? reason.message : 'Unable to remove product photo')</span>
+    } finally {
+<span class="cstat-no" title="statement not covered" >      setSavingPhoto(false)</span>
+    }
+  }
+&nbsp;
+  return (
+    &lt;&gt;
+      &lt;div className="stock-page-heading"&gt;
+        &lt;SectionHeader
+          eyebrow="Stock control"
+          title="Stock information"
+          description={error || 'Manage serialized phones and quantity-based tablets, accessories, spare parts, and other stock.'}
+          action={&lt;div className="section-header-actions"&gt;
+            &lt;button className="secondary-button" onClick={<span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >w</span>indow.dispatchEvent(new Event('phoneflow:open-scanner'))}&gt;&lt;</span>ScanLine size={17} /&gt; Scan product&lt;/button&gt;
+            &lt;button className="primary-button" onClick={<span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >() =&gt; c</span>omingNext('Adjust stock')}&gt;&lt;</span>Plus size={17} /&gt; Adjust stock&lt;/button&gt;
+          &lt;/div&gt;}
+        /&gt;
+      &lt;/div&gt;
+      &lt;section className="stock-category-grid"&gt;
+        {(Object.keys(categoryMeta) as InventoryItem['category'][]).map((category) =&gt; {
+          const meta = categoryMeta[category]
+          const Icon = meta.Icon
+          return (
+            &lt;button
+              className={`surface-card stock-category ${categoryFilter === category ? <span class="branch-0 cbranch-no" title="branch not covered" >'active' : '</span>'}`}
+              key={category}
+              onClick={<span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >s</span>etCategoryFilter(<span class="fstat-no" title="function not covered" >(c</span>urrent) =&gt; <span class="cstat-no" title="statement not covered" >current === category ? 'ALL' : category)</span>}</span>
+            &gt;
+              &lt;span className={`stock-icon ${meta.tone}`}&gt;&lt;Icon /&gt;&lt;/span&gt;
+              &lt;p&gt;{meta.label}&lt;strong&gt;{categoryCounts[category]}&lt;/strong&gt;&lt;small&gt;live stock units&lt;/small&gt;&lt;/p&gt;
+              &lt;ArrowUpRight /&gt;
+            &lt;/button&gt;
+          )
+        })}
+      &lt;/section&gt;
+      &lt;section className="surface-card inventory-catalog-card stock-workspace-card"&gt;
+        &lt;div className="card-heading table-heading inventory-catalog-heading"&gt;
+          &lt;div&gt;&lt;span className="eyebrow"&gt;Item list&lt;/span&gt;&lt;h3&gt;{categoryFilter === 'ALL' ? 'All shop products' : <span class="branch-1 cbranch-no" title="branch not covered" >categoryMeta[categoryFilter as InventoryItem['category']]?.label}&lt;</span>/h3&gt;&lt;/div&gt;
+          &lt;div className="inventory-heading-actions"&gt;
+            &lt;span className="catalog-count"&gt;{filteredItems.length} item{filteredItems.length === 1 ? '' : 's'}&lt;/span&gt;
+            &lt;div className="inventory-view-switcher" role="group" aria-label="Inventory view"&gt;
+              &lt;button type="button" className={inventoryView === 'large' ? 'active' : <span class="branch-1 cbranch-no" title="branch not covered" >''} o</span>nClick={<span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >c</span>hangeInventoryView('large')} a</span>ria-pressed={inventoryView === 'large'} title="Large icons view"&gt;&lt;Grid2X2 size={15} /&gt;&lt;span&gt;Large&lt;/span&gt;&lt;/button&gt;
+              &lt;button type="button" className={inventoryView === 'details' ? <span class="branch-0 cbranch-no" title="branch not covered" >'active' : '</span>'} onClick={<span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >c</span>hangeInventoryView('details')} a</span>ria-pressed={inventoryView === 'details'} title="Details view"&gt;&lt;List size={16} /&gt;&lt;span&gt;Details&lt;/span&gt;&lt;/button&gt;
+            &lt;/div&gt;
+          &lt;/div&gt;
+        &lt;/div&gt;
+&nbsp;
+        &lt;div className="filter-row inventory-filter-row"&gt;
+          &lt;div className="search-field"&gt;&lt;Search size={17} /&gt;&lt;input value={search} onChange={(event) =&gt; setSearch(event.target.value)} placeholder="Search SKU, product, IMEI or serial number" /&gt;&lt;/div&gt;
+          &lt;select className="ghost-button filter-select" value={categoryFilter} onChange={<span class="fstat-no" title="function not covered" >(e</span>vent) =&gt; <span class="cstat-no" title="statement not covered" >setCategoryFilter(event.target.value)} a</span>ria-label="Filter inventory category"&gt;
+            &lt;option value="ALL"&gt;All categories&lt;/option&gt;&lt;option value="PHONE"&gt;Phones&lt;/option&gt;&lt;option value="TABLET"&gt;Tablets&lt;/option&gt;&lt;option value="ACCESSORY"&gt;Accessories&lt;/option&gt;&lt;option value="SPARE_PART"&gt;Spare parts&lt;/option&gt;&lt;option value="OTHER"&gt;Other&lt;/option&gt;
+          &lt;/select&gt;
+          &lt;select className="ghost-button filter-select" value={statusFilter} onChange={<span class="fstat-no" title="function not covered" >(e</span>vent) =&gt; <span class="cstat-no" title="statement not covered" >setStatusFilter(event.target.value)} a</span>ria-label="Filter stock status"&gt;
+            &lt;option value="ALL"&gt;All stock statuses&lt;/option&gt;&lt;option value="IN_STOCK"&gt;In stock&lt;/option&gt;&lt;option value="RESERVED"&gt;Reserved&lt;/option&gt;&lt;option value="SOLD"&gt;Sold&lt;/option&gt;&lt;option value="PAWNED"&gt;Pawned&lt;/option&gt;&lt;option value="REPAIR"&gt;Repair&lt;/option&gt;&lt;option value="ARCHIVED"&gt;Archived&lt;/option&gt;
+          &lt;/select&gt;
+        &lt;/div&gt;
+&nbsp;
+        {inventoryView === 'large' ? (
+          &lt;div className="inventory-card-grid"&gt;
+            {filteredItems.map((item) =&gt; (
+              &lt;button className="inventory-product-card" key={item._id} onClick={<span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >s</span>etSelectedItem(item)}&gt;</span>
+                &lt;InventoryPhoto item={item} size="large" /&gt;
+                &lt;div&gt;
+                  &lt;strong&gt;{item.name}&lt;/strong&gt;
+                  &lt;small&gt;{inventorySubtitle(item)}&lt;/small&gt;
+                &lt;/div&gt;
+                &lt;footer&gt;&lt;strong&gt;{item.sellPrice &gt; 0 ? inventoryPriceText(item) : <span class="branch-1 cbranch-no" title="branch not covered" >money.format(item.buyPrice)}&lt;</span>/strong&gt;&lt;small&gt;{item.quantity} in stock&lt;/small&gt;&lt;/footer&gt;
+              &lt;/button&gt;
+            ))}
+            {loading &amp;&amp; &lt;LoadingState label="Loading inventory" detail="Reading stock counts and product records…" /&gt;}
+            {!loading &amp;&amp; filteredItems.length === 0 &amp;&amp; &lt;p className="mobile-record-empty"&gt;{items.length === 0 ? 'No inventory in the database yet.' : <span class="branch-1 cbranch-no" title="branch not covered" >'No matching inventory.'}&lt;</span>/p&gt;}
+          &lt;/div&gt;
+        ) : (
+<span class="branch-1 cbranch-no" title="branch not covered" >          &lt;&gt;</span>
+            &lt;div className="table-scroll stock-desktop-table"&gt;
+              &lt;table&gt;
+                &lt;thead&gt;&lt;tr&gt;&lt;th&gt;SKU&lt;/th&gt;&lt;th&gt;Item&lt;/th&gt;&lt;th&gt;Category&lt;/th&gt;&lt;th&gt;Stock&lt;/th&gt;&lt;th&gt;Buy price&lt;/th&gt;&lt;th&gt;Sell price&lt;/th&gt;&lt;th&gt;Status&lt;/th&gt;&lt;th /&gt;&lt;/tr&gt;&lt;/thead&gt;
+                &lt;tbody&gt;
+                  {filteredItems.map(<span class="fstat-no" title="function not covered" >(r</span>ow) =&gt; (
+<span class="cstat-no" title="statement not covered" >                    &lt;tr key={row._id}&gt;</span>
+                      &lt;td&gt;&lt;strong className="mono"&gt;{row.sku}&lt;/strong&gt;&lt;/td&gt;
+                      &lt;td&gt;&lt;div className="inventory-table-item"&gt;&lt;InventoryPhoto item={row} size="small" /&gt;&lt;p&gt;&lt;strong&gt;{row.name}&lt;/strong&gt;&lt;small&gt;{inventorySubtitle(row)}&lt;/small&gt;&lt;/p&gt;&lt;/div&gt;&lt;/td&gt;
+                      &lt;td&gt;{titleStatus(row.category)}&lt;/td&gt;
+                      &lt;td&gt;&lt;strong&gt;{row.quantity}&lt;/strong&gt;&lt;/td&gt;
+                      &lt;td&gt;{money.format(row.buyPrice)}&lt;/td&gt;
+                      &lt;td&gt;{inventoryPriceText(row)}&lt;/td&gt;
+                      &lt;td&gt;&lt;StatusBadge status={row.status} /&gt;&lt;/td&gt;
+                      &lt;td&gt;&lt;button className="icon-button" onClick={<span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >s</span>etSelectedItem(row)} a</span>ria-label={`View ${row.sku}`}&gt;&lt;MoreHorizontal size={18} /&gt;&lt;/button&gt;&lt;/td&gt;
+                    &lt;/tr&gt;
+                  ))}
+                  {loading &amp;&amp; &lt;tr&gt;&lt;td colSpan={8}&gt;&lt;LoadingState compact label="Loading inventory" detail="Reading stock counts and product records…" /&gt;&lt;/td&gt;&lt;/tr&gt;}
+                  {!loading &amp;&amp; filteredItems.length === 0 &amp;&amp; &lt;tr&gt;&lt;td colSpan={8}&gt;{items.length === 0 ? 'No inventory in the database yet.' : 'No matching inventory.'}&lt;/td&gt;&lt;/tr&gt;}
+                &lt;/tbody&gt;
+              &lt;/table&gt;
+            &lt;/div&gt;
+            &lt;div className="mobile-record-list stock-mobile-list"&gt;
+              {filteredItems.map(<span class="fstat-no" title="function not covered" >(r</span>ow) =&gt; (
+<span class="cstat-no" title="statement not covered" >                &lt;article className="mobile-record-card" key={row._id}&gt;</span>
+                  &lt;div className="mobile-record-heading"&gt;&lt;InventoryPhoto item={row} size="small" /&gt;&lt;p&gt;&lt;strong&gt;{row.name}&lt;/strong&gt;&lt;small&gt;{row.sku} · {inventorySubtitle(row)}&lt;/small&gt;&lt;/p&gt;&lt;StatusBadge status={row.status} /&gt;&lt;/div&gt;
+                  &lt;div className="mobile-record-details"&gt;
+                    &lt;div&gt;&lt;span&gt;Category&lt;/span&gt;&lt;strong&gt;{titleStatus(row.category)}&lt;/strong&gt;&lt;/div&gt;&lt;div&gt;&lt;span&gt;In stock&lt;/span&gt;&lt;strong&gt;{row.quantity}&lt;/strong&gt;&lt;/div&gt;&lt;div&gt;&lt;span&gt;Sell price&lt;/span&gt;&lt;strong&gt;{inventoryPriceText(row)}&lt;/strong&gt;&lt;/div&gt;
+                    &lt;button className="icon-button" onClick={<span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >s</span>etSelectedItem(row)} a</span>ria-label={`View ${row.sku}`}&gt;&lt;MoreHorizontal size={18} /&gt;&lt;/button&gt;
+                  &lt;/div&gt;
+                &lt;/article&gt;
+              ))}
+              {loading &amp;&amp; &lt;LoadingState compact label="Loading inventory" /&gt;}
+              {!loading &amp;&amp; filteredItems.length === 0 &amp;&amp; &lt;p className="mobile-record-empty"&gt;{items.length === 0 ? 'No inventory in the database yet.' : 'No matching inventory.'}&lt;/p&gt;}
+            &lt;/div&gt;
+          &lt;/&gt;
+        )}
+      &lt;/section&gt;
+      {selectedItem &amp;&amp; (
+<span class="branch-1 cbranch-no" title="branch not covered" >        &lt;div className="modal-backdrop inventory-detail-backdrop" role="presentation"&gt;</span>
+          &lt;section className="detail-modal inventory-detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="stock-detail-title" aria-describedby="stock-detail-description"&gt;
+            &lt;header className="detail-modal-header"&gt;
+              &lt;InventoryPhoto item={selectedItem} size="large" /&gt;
+              &lt;div&gt;
+                &lt;span className="eyebrow"&gt;Stock record&lt;/span&gt;
+                &lt;h3 id="stock-detail-title"&gt;{selectedItem.name}&lt;/h3&gt;
+                &lt;p id="stock-detail-description"&gt;{selectedItem.sku} · {titleStatus(selectedItem.category)}&lt;/p&gt;
+              &lt;/div&gt;
+              &lt;button className="icon-button" onClick={<span class="fstat-no" title="function not covered" >() =&gt; {</span> <span class="cstat-no" title="statement not covered" >setSelectedItem(null); <span class="cstat-no" title="statement not covered" >s</span>etEditingPrice(false) }</span>} aria-label="Close details"&gt;&lt;X size={18} /&gt;&lt;/button&gt;
+            &lt;/header&gt;
+&nbsp;
+            &lt;div className="inventory-detail-body"&gt;
+              &lt;section className="inventory-detail-group inventory-summary-group" aria-labelledby="inventory-summary-title"&gt;
+                &lt;div className="inventory-detail-section-heading"&gt;
+                  &lt;div&gt;&lt;span className="eyebrow"&gt;Overview&lt;/span&gt;&lt;h4 id="inventory-summary-title"&gt;Stock and pricing&lt;/h4&gt;&lt;/div&gt;
+                &lt;/div&gt;
+                &lt;div className="detail-grid"&gt;
+                  &lt;div className="inventory-status-summary"&gt;&lt;span&gt;Status&lt;/span&gt;&lt;strong&gt;&lt;StatusBadge status={selectedItem.status} /&gt;&lt;/strong&gt;{selectedItem.relatedPawn &amp;&amp; &lt;small className="inventory-linked-pawn"&gt;&lt;span&gt;Pawn ID&lt;/span&gt;&lt;b className="mono"&gt;{selectedItem.relatedPawn.pawnNo}&lt;/b&gt;&lt;/small&gt;}&lt;/div&gt;
+                  &lt;div&gt;&lt;span&gt;Quantity&lt;/span&gt;&lt;strong&gt;{selectedItem.quantity}&lt;/strong&gt;&lt;/div&gt;
+                  &lt;div&gt;&lt;span&gt;Low stock level&lt;/span&gt;&lt;strong&gt;{selectedItem.reorderLevel}&lt;/strong&gt;&lt;/div&gt;
+                  &lt;div&gt;&lt;span&gt;Buy price&lt;/span&gt;&lt;strong&gt;{money.format(selectedItem.buyPrice)}&lt;/strong&gt;&lt;/div&gt;
+                  &lt;div&gt;&lt;span&gt;Sell price&lt;/span&gt;&lt;strong&gt;{inventoryDualPriceText(selectedItem)}&lt;/strong&gt;&lt;/div&gt;
+                  &lt;div&gt;&lt;span&gt;Minimum sell&lt;/span&gt;&lt;strong&gt;{inventoryDualPriceText(selectedItem, true)}&lt;/strong&gt;&lt;/div&gt;
+                  &lt;div&gt;&lt;span&gt;Barcode&lt;/span&gt;&lt;strong className="mono"&gt;{selectedItem.barcode || selectedItem.sku}&lt;/strong&gt;&lt;/div&gt;
+                  &lt;div&gt;&lt;span&gt;Source&lt;/span&gt;&lt;strong&gt;{selectedItem.source ? titleStatus(selectedItem.source) : 'Not recorded'}&lt;/strong&gt;&lt;/div&gt;
+                  &lt;div&gt;&lt;span&gt;Created&lt;/span&gt;&lt;strong&gt;{selectedItem.createdAt ? dateText(selectedItem.createdAt) : 'Not recorded'}&lt;/strong&gt;&lt;/div&gt;
+                &lt;/div&gt;
+              &lt;/section&gt;
+&nbsp;
+              &lt;section className="inventory-detail-group inventory-information-group" aria-labelledby="inventory-information-title"&gt;
+                &lt;div className="inventory-detail-section-heading"&gt;
+                  &lt;div&gt;&lt;span className="eyebrow"&gt;Information&lt;/span&gt;&lt;h4 id="inventory-information-title"&gt;Product details&lt;/h4&gt;&lt;/div&gt;
+                &lt;/div&gt;
+                &lt;div className="detail-sections"&gt;
+                &lt;article&gt;
+                  &lt;span className="eyebrow"&gt;Product&lt;/span&gt;
+                  &lt;p&gt;&lt;strong&gt;{[selectedItem.brand, selectedItem.model].filter(Boolean).join(' ') || selectedItem.name}&lt;/strong&gt;&lt;/p&gt;
+                  &lt;p&gt;{[selectedItem.storage, selectedItem.ram &amp;&amp; `${selectedItem.ram} RAM`, selectedItem.color, selectedItem.condition &amp;&amp; titleStatus(selectedItem.condition)].filter(Boolean).join(' ') || 'No extra product details'}&lt;/p&gt;
+                  &lt;p&gt;{selectedItem.batteryHealth !== undefined ? `Battery ${selectedItem.batteryHealth}%` : 'Battery not recorded'}&lt;/p&gt;
+                &lt;/article&gt;
+                &lt;article&gt;
+                  &lt;span className="eyebrow"&gt;Identifiers&lt;/span&gt;
+                  &lt;p&gt;&lt;strong&gt;{selectedItem.imei1 || 'No IMEI 1'}&lt;/strong&gt;&lt;/p&gt;
+                  &lt;p&gt;{selectedItem.imei2 || 'No IMEI 2'}&lt;/p&gt;
+                  &lt;p&gt;{selectedItem.serialNumber || 'No serial number'}&lt;/p&gt;
+                &lt;/article&gt;
+                &lt;article&gt;
+                  &lt;span className="eyebrow"&gt;Accessory info&lt;/span&gt;
+                  &lt;p&gt;&lt;strong&gt;{selectedItem.compatibleModels?.length ? selectedItem.compatibleModels.join(', ') : 'No compatible models recorded'}&lt;/strong&gt;&lt;/p&gt;
+                  &lt;p&gt;{selectedItem.oemQuality || 'Quality not recorded'}&lt;/p&gt;
+                  &lt;p&gt;{selectedItem.accessoriesIncluded?.length ? selectedItem.accessoriesIncluded.map(titleStatus).join(', ') : 'Included accessories not recorded'}&lt;/p&gt;
+                &lt;/article&gt;
+                &lt;article&gt;
+                  &lt;span className="eyebrow"&gt;Photo&lt;/span&gt;
+                  &lt;p&gt;&lt;strong&gt;{selectedItem.imageUrl ? 'Product photo added' : 'No product photo'}&lt;/strong&gt;&lt;/p&gt;
+                  &lt;p&gt;{selectedItem.imageUrl ? 'Use Change photo below to replace it.' : 'Use Add photo below to upload one.'}&lt;/p&gt;
+                &lt;/article&gt;
+                &lt;/div&gt;
+              &lt;/section&gt;
+&nbsp;
+              {editingPrice &amp;&amp; &lt;div className="inventory-price-editor"&gt;
+                &lt;div className="inventory-price-heading"&gt;&lt;span className="eyebrow"&gt;Inventory pricing&lt;/span&gt;&lt;h4&gt;Set selling prices&lt;/h4&gt;&lt;p&gt;Enter either currency and the other price updates automatically. Choose which currency opens first in New Sale.&lt;/p&gt;&lt;small&gt;Reference rate: 1 USD = {riel.format(usdKhrRate)} KHR&lt;/small&gt;&lt;/div&gt;
+                &lt;div className="inventory-price-columns"&gt;
+                  &lt;section className={`inventory-currency-column ${priceCurrency === 'USD' ? 'is-default' : ''}`} aria-labelledby="inventory-usd-price-title"&gt;
+                    &lt;header&gt;&lt;span className="inventory-currency-mark"&gt;$&lt;/span&gt;&lt;div&gt;&lt;strong id="inventory-usd-price-title"&gt;US Dollar&lt;/strong&gt;&lt;small&gt;USD&lt;/small&gt;&lt;/div&gt;&lt;label className="inventory-default-currency"&gt;&lt;input type="radio" name="default-price-currency" checked={priceCurrency === 'USD'} onChange={<span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >c</span>hangePriceCurrency('USD')} /</span>&gt;&lt;span&gt;Open first&lt;/span&gt;&lt;/label&gt;&lt;/header&gt;
+                    &lt;label&gt;Regular selling price&lt;div className="input-prefix"&gt;&lt;span&gt;$&lt;/span&gt;&lt;MoneyInput autoFocus currency="USD" minimum={0} value={usdSellingPriceDraft} onValueChange={changeUsdSellingPrice} placeholder="0.00" aria-label="Regular selling price in US dollars" /&gt;&lt;/div&gt;&lt;/label&gt;
+                    &lt;label&gt;Minimum selling price&lt;div className="input-prefix"&gt;&lt;span&gt;$&lt;/span&gt;&lt;MoneyInput currency="USD" minimum={0} maximum={Number(usdSellingPriceDraft || 0)} value={usdMinimumPriceDraft} onValueChange={changeUsdMinimumPrice} placeholder="0.00" aria-label="Minimum selling price in US dollars" /&gt;&lt;/div&gt;&lt;/label&gt;
+                  &lt;/section&gt;
+                  &lt;section className={`inventory-currency-column ${priceCurrency === 'KHR' ? 'is-default' : ''}`} aria-labelledby="inventory-khr-price-title"&gt;
+                    &lt;header&gt;&lt;span className="inventory-currency-mark"&gt;៛&lt;/span&gt;&lt;div&gt;&lt;strong id="inventory-khr-price-title"&gt;Cambodian Riel&lt;/strong&gt;&lt;small&gt;KHR&lt;/small&gt;&lt;/div&gt;&lt;label className="inventory-default-currency"&gt;&lt;input type="radio" name="default-price-currency" checked={priceCurrency === 'KHR'} onChange={<span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >c</span>hangePriceCurrency('KHR')} /</span>&gt;&lt;span&gt;Open first&lt;/span&gt;&lt;/label&gt;&lt;/header&gt;
+                    &lt;label&gt;Regular selling price&lt;div className="input-prefix"&gt;&lt;span&gt;៛&lt;/span&gt;&lt;MoneyInput currency="KHR" minimum={0} value={khrSellingPriceDraft} onValueChange={changeKhrSellingPrice} placeholder="0" aria-label="Regular selling price in Cambodian riel" /&gt;&lt;/div&gt;&lt;/label&gt;
+                    &lt;label&gt;Minimum selling price&lt;div className="input-prefix"&gt;&lt;span&gt;៛&lt;/span&gt;&lt;MoneyInput currency="KHR" minimum={0} maximum={Number(khrSellingPriceDraft || 0)} value={khrMinimumPriceDraft} onValueChange={changeKhrMinimumPrice} placeholder="0" aria-label="Minimum selling price in Cambodian riel" /&gt;&lt;/div&gt;&lt;/label&gt;
+                  &lt;/section&gt;
+                &lt;/div&gt;
+                &lt;p className="inventory-price-help"&gt;Minimum prices control the largest discount allowed in each currency.&lt;/p&gt;
+                &lt;div className="inventory-price-actions"&gt;&lt;button className="ghost-button" onClick={<span class="fstat-no" title="function not covered" >() =&gt; {</span> <span class="cstat-no" title="statement not covered" >setEditingPrice(false); <span class="cstat-no" title="statement not covered" >s</span>etError('') }</span>}&gt;Cancel&lt;/button&gt;&lt;button className="primary-button" onClick={<span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >v</span>oid saveSellingPrice()} d</span>isabled={savingPrice || Number(usdMinimumPriceDraft || 0) &gt; Number(usdSellingPriceDraft || 0) || Number(khrMinimumPriceDraft || 0) &gt; Number(khrSellingPriceDraft || 0)}&gt;{savingPrice ? 'Saving…' : 'Save prices'}&lt;/button&gt;&lt;/div&gt;
+              &lt;/div&gt;}
+&nbsp;
+              {selectedItem.notes &amp;&amp; (
+                &lt;div className="detail-note"&gt;
+                  &lt;span className="eyebrow"&gt;Notes&lt;/span&gt;
+                  &lt;p&gt;{selectedItem.notes}&lt;/p&gt;
+                &lt;/div&gt;
+              )}
+            &lt;/div&gt;
+&nbsp;
+            &lt;footer className="detail-modal-footer"&gt;
+              &lt;label className={`secondary-button upload-photo-button ${savingPhoto ? 'disabled' : ''}`}&gt;
+                &lt;Package size={16} /&gt; {savingPhoto ? 'Saving photo...' : selectedItem.imageUrl ? 'Change photo' : 'Add photo'}
+                &lt;input type="file" accept="image/png,image/jpeg,image/webp" disabled={savingPhoto} onChange={<span class="fstat-no" title="function not covered" >(e</span>vent) =&gt; <span class="cstat-no" title="statement not covered" >void uploadPhoto(event.target.files?.[0])} /</span>&gt;
+              &lt;/label&gt;
+              {selectedItem.imageUrl &amp;&amp; &lt;button className="ghost-button" onClick={<span class="fstat-no" title="function not covered" >() =&gt; <span class="cstat-no" title="statement not covered" >v</span>oid removePhoto()} d</span>isabled={savingPhoto}&gt;Remove photo&lt;/button&gt;}
+              {!editingPrice &amp;&amp; &lt;button className="primary-button" onClick={openPriceEditor}&gt;{selectedItem.sellPrice &gt; 0 ? 'Change price' : 'Set selling price'}&lt;/button&gt;}
+              &lt;button className="secondary-button" onClick={<span class="cstat-no" title="statement not covered" ><span class="fstat-no" title="function not covered" >() =&gt; p</span>rintInventoryLabel(selectedItem)}&gt;&lt;</span>ScanLine size={16} /&gt; Print label&lt;/button&gt;
+              &lt;button className="ghost-button" onClick={<span class="fstat-no" title="function not covered" >() =&gt; {</span> <span class="cstat-no" title="statement not covered" >setSelectedItem(null); <span class="cstat-no" title="statement not covered" >s</span>etEditingPrice(false) }</span>}&gt;Close&lt;/button&gt;
+            &lt;/footer&gt;
+          &lt;/section&gt;
+        &lt;/div&gt;
+      )}
+    &lt;/&gt;
+  )
+}
+&nbsp;
+&nbsp;</pre></td></tr></table></pre>
+
+                <div class='push'></div><!-- for sticky footer -->
+            </div><!-- /wrapper -->
+            <div class='footer quiet pad2 space-top1 center small'>
+                Code coverage generated by
+                <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
+                at 2026-09-06T07:33:14.326Z
+            </div>
+        <script src="../../prettify.js"></script>
+        <script>
+            window.onload = function () {
+                prettyPrint();
+            };
+        </script>
+        <script src="../../sorter.js"></script>
+        <script src="../../block-navigation.js"></script>
+    </body>
+</html>
+    

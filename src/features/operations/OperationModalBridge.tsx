@@ -385,19 +385,22 @@ export default function OperationModalBridge() {
     if (kind === 'stock') {
       setStockInventoryLoading(true)
       api<{ items: InventoryItem[] }>('/inventory')
-        .then((result) => setInventory(result.items))
+        .then((result) => setInventory(Array.isArray(result?.items) ? result.items : []))
         .catch((reason: Error) => setError(reason.message))
         .finally(() => setStockInventoryLoading(false))
     }
     if (kind === 'sale' || kind === 'pawn' || kind === 'purchase') {
       api<{ customers: Customer[] }>('/customers')
-        .then((result) => setCustomers(result.customers))
+        .then((result) => setCustomers(Array.isArray(result?.customers) ? result.customers : []))
         .catch((reason: Error) => setError(reason.message))
     }
     if (kind === 'sale') {
       setSaleInventoryLoading(true)
       api<{ items: InventoryItem[] }>('/inventory?status=IN_STOCK')
-        .then((result) => setInventory(result.items.filter((item) => item.quantity > 0)))
+        .then((result) => {
+          const items = Array.isArray(result?.items) ? result.items : []
+          setInventory(items.filter((item) => item.quantity > 0))
+        })
         .catch((reason: Error) => setError(reason.message))
         .finally(() => setSaleInventoryLoading(false))
       api<{ usdKhr: number }>('/exchange-rates')
@@ -405,7 +408,7 @@ export default function OperationModalBridge() {
         .catch(() => setUsdKhrRate(4100))
       api<{ enabled: boolean; configured: boolean }>('/payway/config')
         .then((result) => {
-          const available = result.enabled && result.configured
+          const available = Boolean(result?.enabled && result?.configured)
           setPaywayAvailable(available)
           if (!available) {
             setSalePaymentMethod('CASH')
@@ -417,14 +420,14 @@ export default function OperationModalBridge() {
     }
     if (kind === 'purchase') {
       api<{ suppliers: Supplier[] }>('/suppliers')
-        .then((result) => setSuppliers(result.suppliers))
+        .then((result) => setSuppliers(Array.isArray(result?.suppliers) ? result.suppliers : []))
         .catch((reason: Error) => setError(reason.message))
       api<{ usdKhr: number }>('/exchange-rates')
         .then((result) => setUsdKhrRate(result.usdKhr))
         .catch(() => setUsdKhrRate(4100))
       setPurchaseInventoryLoading(true)
       api<{ items: InventoryItem[] }>('/inventory')
-        .then((result) => setInventory(result.items))
+        .then((result) => setInventory(Array.isArray(result?.items) ? result.items : []))
         .catch((reason: Error) => setError(reason.message))
         .finally(() => setPurchaseInventoryLoading(false))
     }

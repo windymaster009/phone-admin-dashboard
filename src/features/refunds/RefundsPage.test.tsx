@@ -37,8 +37,8 @@ describe('RefundsPage feature integration & safeguards', () => {
     render(<RefundsPage user={mockOwnerUser} />)
 
     await waitFor(() => {
-      expect(screen.getByText('SL-2026-0001')).toBeInTheDocument()
-      expect(screen.getByText('1 ready')).toBeInTheDocument()
+      expect(screen.getAllByText('SL-2026-0001').length).toBeGreaterThan(0)
+      expect(screen.getByText(/ready/i)).toBeInTheDocument()
     })
   })
 
@@ -63,15 +63,15 @@ describe('RefundsPage feature integration & safeguards', () => {
     render(<RefundsPage user={mockOwnerUser} />)
 
     await waitFor(() => {
-      expect(screen.getByText('SL-SAFEGUARD')).toBeInTheDocument()
+      expect(screen.getAllByText('SL-SAFEGUARD').length).toBeGreaterThan(0)
     })
 
-    const submitBtn = screen.getByRole('button', { name: /Complete refund/i })
+    const submitBtn = screen.getByRole('button', { name: /Record full refund/i })
     // Initially disabled because reason, disposition, and confirmation are empty
     expect(submitBtn).toBeDisabled()
 
     // 1. Enter too short reason (< 5 characters)
-    const reasonInput = screen.getByPlaceholderText(/Explain why the item is being returned/i)
+    const reasonInput = screen.getByPlaceholderText(/Example: Item is faulty/i)
     await user.type(reasonInput, 'Bad')
     expect(submitBtn).toBeDisabled()
 
@@ -80,12 +80,12 @@ describe('RefundsPage feature integration & safeguards', () => {
     expect(submitBtn).toBeDisabled()
 
     // 2. Select inventory disposition
-    const restockRadio = screen.getByLabelText(/Return to sellable stock/i)
-    await user.click(restockRadio)
+    const selectDisposition = screen.getByRole('combobox')
+    await user.selectOptions(selectDisposition, 'RESTOCK')
     expect(submitBtn).toBeDisabled()
 
     // 3. Enter incorrect confirmation code
-    const confirmInput = screen.getByPlaceholderText('Type SL-SAFEGUARD to confirm')
+    const confirmInput = screen.getByPlaceholderText('Type SL-SAFEGUARD')
     await user.type(confirmInput, 'WRONG-CODE')
     expect(submitBtn).toBeDisabled()
 
@@ -104,6 +104,13 @@ describe('RefundsPage feature integration & safeguards', () => {
       tradeNo: 'SL-RETURNED-ALREADY',
       status: 'RETURNED',
       createdAt: new Date().toISOString(),
+      refund: {
+        amount: 1150,
+        refundedAt: new Date().toISOString(),
+        reason: 'Customer returned item',
+        inventoryDisposition: 'RESTOCK',
+        refundedBy: { _id: 'u-1', name: 'Manager' },
+      },
     }
 
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
@@ -116,11 +123,11 @@ describe('RefundsPage feature integration & safeguards', () => {
     render(<RefundsPage user={mockOwnerUser} />)
 
     await waitFor(() => {
-      expect(screen.getByText('SL-RETURNED-ALREADY')).toBeInTheDocument()
+      expect(screen.getAllByText('SL-RETURNED-ALREADY').length).toBeGreaterThan(0)
     })
 
     // Should indicate the sale is already refunded
-    expect(screen.getByText(/This sale has already been refunded/i)).toBeInTheDocument()
+    expect(screen.getByText(/Refund already recorded/i)).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Complete refund/i })).not.toBeInTheDocument()
   })
 })

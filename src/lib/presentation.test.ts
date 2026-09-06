@@ -39,9 +39,25 @@ describe('presentation helpers', () => {
     })
   })
 
+  const createTrade = (overrides: Partial<Trade>): Trade => ({
+    _id: 't-default',
+    tradeNo: 'TR-DEF',
+    type: 'SELL',
+    items: [],
+    subtotal: 0,
+    discount: 0,
+    total: 0,
+    amountPaid: 0,
+    balance: 0,
+    paymentMethod: 'CASH',
+    status: 'COMPLETED',
+    createdAt: '2026-09-01',
+    ...overrides,
+  })
+
   describe('trade party helpers', () => {
     it('returns supplier name for BUY trade if available', () => {
-      const trade: Trade = {
+      const trade = createTrade({
         _id: 't-1',
         tradeNo: 'TR-1',
         type: 'BUY',
@@ -50,15 +66,13 @@ describe('presentation helpers', () => {
         amountPaid: 100,
         balance: 0,
         currency: 'USD',
-        status: 'COMPLETED',
-        createdAt: '2026-09-01',
-      }
+      })
       expect(tradePartyName(trade)).toBe('Global Supply')
       expect(tradePartyPhone(trade)).toBe('011-111')
     })
 
     it('returns sellerSnapshot or customer name as fallback for BUY trade', () => {
-      const tradeSnapshot: Trade = {
+      const tradeSnapshot = createTrade({
         _id: 't-2',
         tradeNo: 'TR-2',
         type: 'BUY',
@@ -67,13 +81,11 @@ describe('presentation helpers', () => {
         amountPaid: 50,
         balance: 0,
         currency: 'USD',
-        status: 'COMPLETED',
-        createdAt: '2026-09-01',
-      }
+      })
       expect(tradePartyName(tradeSnapshot)).toBe('Direct Seller')
       expect(tradePartyPhone(tradeSnapshot)).toBe('022-222')
 
-      const tradeCustomer: Trade = {
+      const tradeCustomer = createTrade({
         _id: 't-3',
         tradeNo: 'TR-3',
         type: 'BUY',
@@ -82,15 +94,13 @@ describe('presentation helpers', () => {
         amountPaid: 50,
         balance: 0,
         currency: 'USD',
-        status: 'COMPLETED',
-        createdAt: '2026-09-01',
-      }
+      })
       expect(tradePartyName(tradeCustomer)).toBe('Customer Seller')
       expect(tradePartyPhone(tradeCustomer)).toBe('033-333')
     })
 
     it('returns "Walk-in seller" when no party details exist for BUY trade', () => {
-      const trade: Trade = {
+      const trade = createTrade({
         _id: 't-4',
         tradeNo: 'TR-4',
         type: 'BUY',
@@ -98,15 +108,13 @@ describe('presentation helpers', () => {
         amountPaid: 50,
         balance: 0,
         currency: 'USD',
-        status: 'COMPLETED',
-        createdAt: '2026-09-01',
-      }
+      })
       expect(tradePartyName(trade)).toBe('Walk-in seller')
       expect(tradePartyPhone(trade)).toBeUndefined()
     })
 
     it('returns customer name or "Walk-in customer" for SELL trade', () => {
-      const tradeWithCustomer: Trade = {
+      const tradeWithCustomer = createTrade({
         _id: 't-5',
         tradeNo: 'TR-5',
         type: 'SELL',
@@ -115,13 +123,11 @@ describe('presentation helpers', () => {
         amountPaid: 200,
         balance: 0,
         currency: 'USD',
-        status: 'COMPLETED',
-        createdAt: '2026-09-01',
-      }
+      })
       expect(tradePartyName(tradeWithCustomer)).toBe('Alice Client')
       expect(tradePartyPhone(tradeWithCustomer)).toBe('044-444')
 
-      const tradeWalkIn: Trade = {
+      const tradeWalkIn = createTrade({
         _id: 't-6',
         tradeNo: 'TR-6',
         type: 'SELL',
@@ -129,9 +135,7 @@ describe('presentation helpers', () => {
         amountPaid: 200,
         balance: 0,
         currency: 'USD',
-        status: 'COMPLETED',
-        createdAt: '2026-09-01',
-      }
+      })
       expect(tradePartyName(tradeWalkIn)).toBe('Walk-in customer')
       expect(tradePartyPhone(tradeWalkIn)).toBeUndefined()
     })
@@ -147,7 +151,7 @@ describe('presentation helpers', () => {
     })
 
     it('formats tradeTransactionMoney for USD and KHR', () => {
-      const usdTrade: Trade = {
+      const usdTrade = createTrade({
         _id: 't-7',
         tradeNo: 'TR-7',
         type: 'SELL',
@@ -155,13 +159,11 @@ describe('presentation helpers', () => {
         total: 150,
         amountPaid: 150,
         balance: 0,
-        status: 'COMPLETED',
-        createdAt: '2026-09-01',
-      }
+      })
       expect(tradeTransactionMoney(usdTrade, 150, 0)).toBe('$150')
       expect(tradeTransactionMoney(usdTrade, undefined, 200)).toBe('$200')
 
-      const khrTrade: Trade = {
+      const khrTrade = createTrade({
         _id: 't-8',
         tradeNo: 'TR-8',
         type: 'SELL',
@@ -169,9 +171,7 @@ describe('presentation helpers', () => {
         total: 615000,
         amountPaid: 615000,
         balance: 0,
-        status: 'COMPLETED',
-        createdAt: '2026-09-01',
-      }
+      })
       expect(tradeTransactionMoney(khrTrade, 615000, 0)).toBe('615,000 KHR')
     })
   })
@@ -183,6 +183,8 @@ describe('presentation helpers', () => {
       sku: 'SKU-PX',
       category: 'PHONE',
       quantity: 1,
+      reorderLevel: 2,
+      buyPrice: 400,
       sellPrice: 500,
       minimumSellPrice: 480,
       pricingCurrency: 'USD',
@@ -239,8 +241,9 @@ describe('presentation helpers', () => {
     it('formats pawnEquivalentText', () => {
       const rateData: ExchangeRateData = {
         usdKhr: 4100,
-        khrUsd: 1 / 4100,
-        source: 'MANUAL',
+        source: 'ABA PayWay',
+        rateType: 'bank',
+        configured: true,
         updatedAt: '2026-09-01',
       }
       expect(pawnEquivalentText(100, 'USD', null)).toBe('')
@@ -252,15 +255,18 @@ describe('presentation helpers', () => {
       const usdPawn: Pawn = {
         _id: 'p-1',
         pawnNo: 'PW-1',
-        customer: { _id: 'c-1', name: 'Dara' },
-        itemName: 'Phone',
-        category: 'PHONE',
+        customer: { _id: 'c-1', name: 'Dara', phone: '012-345-678' },
+        itemSnapshot: { name: 'Phone' },
+        estimatedValue: 300,
+        pawnPercentage: 66,
         principal: 200,
         currency: 'USD',
         interestRate: 3,
         startDate: '2026-09-01',
         dueDate: '2026-10-01',
         status: 'ACTIVE',
+        identificationVerified: true,
+        createdAt: '2026-09-01',
       }
       expect(pawnUsdValue(usdPawn, 200)).toBe(200)
 
@@ -275,8 +281,9 @@ describe('presentation helpers', () => {
     it('calculates convertedKhr and khrText', () => {
       const rate: ExchangeRateData = {
         usdKhr: 4100,
-        khrUsd: 1 / 4100,
-        source: 'MANUAL',
+        source: 'ABA PayWay',
+        rateType: 'bank',
+        configured: true,
         updatedAt: '2026-09-01',
       }
       expect(convertedKhr(10, rate)).toBe(41000)
