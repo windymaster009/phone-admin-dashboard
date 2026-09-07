@@ -140,4 +140,88 @@ describe('OperationModalBridge component', () => {
       expect(screen.getByText(/New purchase/i)).toBeInTheDocument()
     })
   })
+
+  it('handles pawn modal workflow, customer modes, validation error, step navigation and reset on reopen', async () => {
+    const mockCustomers = [
+      { _id: 'cust-pawn-1', name: 'Chanthy Sok', phone: '098765432', nationalIdNumber: '012345678', active: true },
+    ]
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: mockCustomers }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [], suppliers: [], items: [], usdKhr: 4100 }) } as Response
+    })
+
+    renderModalBridge()
+
+    // 1. Open pawn modal
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'pawn' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByText(/New pawn contract/i)).toBeInTheDocument()
+    })
+
+    // Check Step 1 stepper and structure
+    expect(screen.getByLabelText(/Step 1 of 2: Customer verification/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Existing customer/i })).toHaveClass('active')
+    expect(screen.getByRole('button', { name: /Continue to collateral/i })).toBeInTheDocument()
+
+    // 2. Validation error test: click continue without selecting customer/ownership
+    fireEvent.click(screen.getByRole('button', { name: /Continue to collateral/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Select a customer and confirm identity and collateral ownership first/i)).toBeInTheDocument()
+      expect(screen.getByText('Select a customer', { selector: 'small' })).toBeInTheDocument()
+    })
+
+    // 3. Switch to "New customer" mode
+    fireEvent.click(screen.getByRole('button', { name: /New customer/i }))
+    expect(screen.getByPlaceholderText(/Full name/i)).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/Leave blank to protect privacy/i)).toBeInTheDocument()
+
+    // Switch back to "Existing customer" mode
+    fireEvent.click(screen.getByRole('button', { name: /Existing customer/i }))
+
+    // Select the customer
+    const customerSelect = screen.getByRole('combobox')
+    fireEvent.change(customerSelect, { target: { value: 'cust-pawn-1' } })
+
+    // Check ownership confirmation checkbox
+    const ownershipCheckbox = screen.getByRole('checkbox')
+    fireEvent.click(ownershipCheckbox)
+
+    // 4. Advance to Step 2
+    fireEvent.click(screen.getByRole('button', { name: /Continue to collateral/i }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Step 2 of 2: Collateral and contract terms/i)).toBeInTheDocument()
+      expect(screen.getByText(/Phone collateral/i)).toBeInTheDocument()
+      expect(screen.getByText(/Phone valuation and contract terms/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Enter valuation details/i })).toBeInTheDocument()
+    })
+
+    // 5. Back button returns to Step 1
+    fireEvent.click(screen.getByRole('button', { name: /Back/i }))
+    expect(screen.getByLabelText(/Step 1 of 2: Customer verification/i)).toBeInTheDocument()
+
+    // 6. Close and reopen resets to Step 1
+    fireEvent.click(screen.getByRole('button', { name: /Cancel/i }))
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'pawn' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByLabelText(/Step 1 of 2: Customer verification/i)).toBeInTheDocument()
+    })
+  })
 })

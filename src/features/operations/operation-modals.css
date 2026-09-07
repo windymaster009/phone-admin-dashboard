@@ -2089,17 +2089,18 @@ body.operation-modal-open {
 
   .operation-modal-pawn {
     width: 100%;
-    height: min(80dvh, 640px);
+    height: auto;
     max-height: calc(100dvh - 32px);
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
     border-radius: 20px;
   }
 
-  .app[data-font-size='comfortable'] .operation-modal-pawn { height: min(72.7273dvh, 582px); max-height: calc(90.9091dvh - 29px); }
-  .app[data-font-size='large'] .operation-modal-pawn { height: min(66.6667dvh, 533px); max-height: calc(83.3333dvh - 27px); }
+  .app[data-font-size='comfortable'] .operation-modal-pawn { height: auto; max-height: calc(90.9091dvh - 29px); }
+  .app[data-font-size='large'] .operation-modal-pawn { height: auto; max-height: calc(83.3333dvh - 27px); }
 
   .operation-modal-pawn .operation-modal-header {
+    flex: 0 0 auto;
     gap: 11px;
     padding: 14px 17px;
   }
@@ -2126,12 +2127,21 @@ body.operation-modal-open {
     height: 40px;
   }
 
+  .operation-modal-pawn .operation-modal-error {
+    flex: 0 0 auto;
+    margin: 10px 17px 0;
+  }
+
   .operation-modal-pawn .pawn-workflow-form {
     min-height: 0;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
   }
 
   .operation-modal-pawn .purchase-stepper {
+    flex: 0 0 auto;
     grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr);
     padding: 10px 17px;
   }
@@ -2158,8 +2168,11 @@ body.operation-modal-open {
   }
 
   .operation-modal-pawn .purchase-step-content {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
     gap: 12px;
-    padding: 0 17px 12px;
+    padding: 0 17px 16px;
     overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
@@ -2212,6 +2225,7 @@ body.operation-modal-open {
   }
 
   .operation-modal-pawn .pawn-workflow-form > .operation-modal-actions {
+    flex: 0 0 auto;
     display: grid;
     grid-template-columns: minmax(0, .78fr) minmax(0, 1.22fr);
     gap: 8px;
