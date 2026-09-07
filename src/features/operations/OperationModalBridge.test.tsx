@@ -371,4 +371,235 @@ describe('OperationModalBridge component', () => {
     expect(screen.getByText(/Total to redeem at due/i)).toBeInTheDocument()
     expect(screen.getByText('Daily pawn fee', { selector: 'span' })).toBeInTheDocument()
   })
+
+  it('preserves Pawn device state across back/forward navigation and submits payload correctly', async () => {
+    let capturedPayload: Record<string, unknown> | null = null
+    const mockCustomers = [
+      { _id: 'cust-pawn-save', name: 'John Doe', phone: '012999888', nationalIdNumber: 'ID-12345', active: true },
+    ]
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: mockCustomers }) } as Response
+      }
+      if (url.includes('/pawns') && init?.method === 'POST') {
+        capturedPayload = JSON.parse(String(init.body))
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            pawn: { pawnNo: 'PWN-2026-001', principal: 100, currency: 'USD' },
+          }),
+        } as Response
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ customers: [], suppliers: [], items: [], usdKhr: 4100 }),
+      } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'pawn' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /New pawn contract/i })).toBeInTheDocument()
+    })
+
+    // Stepper starts on step 1
+    expect(screen.getByLabelText(/Step 1 of 2: Customer verification/i)).toBeInTheDocument()
+
+    // Test SegmentedControl keyboard navigation
+    const existingCustomerTab = screen.getByRole('tab', { name: /Existing customer/i })
+    const newCustomerTab = screen.getByRole('tab', { name: /New customer/i })
+    expect(existingCustomerTab).toHaveAttribute('aria-selected', 'true')
+
+    fireEvent.keyDown(existingCustomerTab, { key: 'ArrowRight' })
+    expect(newCustomerTab).toHaveAttribute('aria-selected', 'true')
+
+    // Navigate back to Existing customer
+    fireEvent.keyDown(newCustomerTab, { key: 'ArrowLeft' })
+    expect(existingCustomerTab).toHaveAttribute('aria-selected', 'true')
+
+    // Select customer
+    const customerSelect = screen.getByRole('combobox')
+    fireEvent.change(customerSelect, { target: { value: 'cust-pawn-save' } })
+
+    // KeyValueSummary displays customer info
+    await waitFor(() => {
+      expect(screen.getByText('John Doe')).toBeInTheDocument()
+      expect(screen.getByText('ID-12345')).toBeInTheDocument()
+    })
+
+    // Check ownership confirmation
+    const checkbox = screen.getByRole('checkbox')
+    fireEvent.click(checkbox)
+
+    // Advance to Step 2
+    fireEvent.click(screen.getByRole('button', { name: /Continue to collateral/i }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Step 2 of 2: Collateral and contract terms/i)).toBeInTheDocument()
+    })
+
+    // Fill SerializedDeviceFields
+    const imeiInput = screen.getByPlaceholderText(/15-digit IMEI/i)
+    const brandInput = screen.getByPlaceholderText(/Apple/i)
+    const modelInput = screen.getByPlaceholderText(/iPhone 13 Pro/i)
+    const storageInput = screen.getByPlaceholderText(/128/i)
+    const colorInput = screen.getByPlaceholderText(/Blue/i)
+
+    fireEvent.change(imeiInput, { target: { value: '354123456789012' } })
+    fireEvent.change(brandInput, { target: { value: 'Samsung' } })
+    fireEvent.change(modelInput, { target: { value: 'Galaxy S23 Ultra' } })
+    fireEvent.change(storageInput, { target: { value: '256' } })
+    fireEvent.change(colorInput, { target: { value: 'Phantom Black' } })
+
+    // Verify Scanner trigger button exists and can be clicked
+    const scanButton = screen.getByRole('button', { name: /Scan IMEI/i })
+    expect(scanButton).toBeInTheDocument()
+    fireEvent.click(scanButton)
+    // Scanner overlay or trigger state is triggered without crash
+    expect(scanButton).not.toBeDisabled()
+
+    // Test Back button returns to Step 1
+    const backButton = screen.getByRole('button', { name: /Back/i })
+    fireEvent.click(backButton)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Step 1 of 2: Customer verification/i)).toBeInTheDocument()
+    })
+
+    // Advance back to Step 2: verify state was preserved!
+    fireEvent.click(screen.getByRole('button', { name: /Continue to collateral/i }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Step 2 of 2: Collateral and contract terms/i)).toBeInTheDocument()
+    })
+
+    expect(screen.getByPlaceholderText(/15-digit IMEI/i)).toHaveValue('354123456789012')
+    expect(screen.getByPlaceholderText(/Apple/i)).toHaveValue('Samsung')
+    expect(screen.getByPlaceholderText(/iPhone 13 Pro/i)).toHaveValue('Galaxy S23 Ultra')
+    expect(screen.getByPlaceholderText(/128/i)).toHaveValue(256)
+    expect(screen.getByPlaceholderText(/Blue/i)).toHaveValue('Phantom Black')
+
+    // Provide resale value for calculation
+    const resaleInput = screen.getByRole('textbox', { name: /Resale value \(USD\)/i })
+    fireEvent.change(resaleInput, { target: { value: '600' } })
+
+    // Enter principal
+    const principalInput = screen.getByRole('textbox', { name: /Principal \(USD\)/i })
+    fireEvent.change(principalInput, { target: { value: '100' } })
+
+    // Submit the contract
+    const submitButton = screen.getByRole('button', { name: /Create pawn contract/i })
+    expect(submitButton).not.toBeDisabled()
+    fireEvent.click(submitButton)
+
+    await waitFor(() => {
+      expect(capturedPayload).not.toBeNull()
+      expect(capturedPayload?.customer).toBe('cust-pawn-save')
+      const itemSnapshot = capturedPayload?.itemSnapshot as Record<string, unknown>
+      expect(itemSnapshot?.imei).toBe('354123456789012')
+      expect(itemSnapshot?.brand).toBe('Samsung')
+      expect(itemSnapshot?.model).toBe('Galaxy S23 Ultra')
+      expect(itemSnapshot?.color).toBe('Phantom Black')
+      expect(capturedPayload?.principal).toBe(100)
+    })
+  })
+
+  it('supports Purchase workflow with OperationWorkflowStepper, SegmentedControl, and SerializedDeviceFields', async () => {
+    const mockSuppliers = [
+      { _id: 'sup-1', name: 'Global Tech Wholesale', phone: '011223344', active: true },
+    ]
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/suppliers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ suppliers: mockSuppliers }) } as Response
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ customers: [], suppliers: [], items: [], usdKhr: 4100 }),
+      } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'purchase' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /^New purchase$/i })).toBeInTheDocument()
+    })
+
+    // Workflow stepper is rendered
+    expect(screen.getByRole('group', { name: /Purchase progress/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/Step 1 of 2: Seller & purchase/i)).toBeInTheDocument()
+
+    // SegmentedControl for seller type
+    const supplierTab = screen.getByRole('tab', { name: /Existing supplier/i })
+    fireEvent.click(supplierTab)
+    expect(supplierTab).toHaveAttribute('aria-selected', 'true')
+
+    // Select the supplier
+    const supplierSelect = screen.getByRole('combobox', { name: /Supplier/i })
+    fireEvent.change(supplierSelect, { target: { value: 'sup-1' } })
+
+    // Advance to Step 2: Items & payment
+    const continueButton = screen.getByRole('button', { name: /Continue to items/i })
+    fireEvent.click(continueButton)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Step 2 of 2: Items & payment/i)).toBeInTheDocument()
+      expect(screen.getByText(/Inventory items/i)).toBeInTheDocument()
+      expect(screen.getByText(/Payment settlement/i)).toBeInTheDocument()
+    })
+
+    // In Step 2, the phone device form has SerializedDeviceFields
+    const imeiInput = screen.getByPlaceholderText(/15-digit IMEI/i)
+    const brandInput = screen.getByPlaceholderText(/Apple/i)
+    const modelInput = screen.getByPlaceholderText(/iPhone 13 Pro/i)
+
+    fireEvent.change(imeiInput, { target: { value: '861234567890123' } })
+    fireEvent.change(brandInput, { target: { value: 'Google' } })
+    fireEvent.change(modelInput, { target: { value: 'Pixel 8' } })
+
+    expect(imeiInput).toHaveValue('861234567890123')
+    expect(brandInput).toHaveValue('Google')
+    expect(modelInput).toHaveValue('Pixel 8')
+
+    // KeyValueSummary renders settlement items
+    expect(screen.getByText(/Total amount/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/Amount paid/i).length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText(/Balance due/i)).toBeInTheDocument()
+    expect(screen.getByText(/Payment status/i)).toBeInTheDocument()
+
+    // Test Back button
+    const backButton = screen.getByRole('button', { name: /Back/i })
+    fireEvent.click(backButton)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Step 1 of 2: Seller & purchase/i)).toBeInTheDocument()
+    })
+
+    // Test Cancel closes the modal
+    const cancelButton = screen.getByRole('button', { name: /Cancel/i })
+    fireEvent.click(cancelButton)
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+  })
 })

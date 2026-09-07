@@ -28,6 +28,12 @@ import {
 import { api, getSessionUser } from '../../lib/api'
 import { safeStorage } from '../../lib/storage'
 import MoneyInput from '../../components/MoneyInput'
+import OperationWorkflowStepper, { type WorkflowStep } from '../../components/OperationWorkflowStepper'
+import OperationWorkflowFooter from '../../components/OperationWorkflowFooter'
+import OperationSectionCard from '../../components/OperationSectionCard'
+import SegmentedControl, { type SegmentedControlOption } from '../../components/SegmentedControl'
+import KeyValueSummary from '../../components/KeyValueSummary'
+import SerializedDeviceFields from '../../components/SerializedDeviceFields'
 import { getPawnAutoCalculatePreference, PAWN_AUTO_CALCULATE_EVENT, savePawnAutoCalculatePreference } from '../../lib/pawnPreferences'
 import { BarcodeGraphic, printInventoryLabels } from '../inventory/barcode'
 import OperationModalShell from './OperationModalShell'
@@ -88,6 +94,11 @@ export default function OperationModalBridge() {
   const [pawnStep, setPawnStep] = useState<1 | 2>(1)
   const [pawnAttempted, setPawnAttempted] = useState(false)
   const [pawnImei, setPawnImei] = useState('')
+  const [pawnBrand, setPawnBrand] = useState('')
+  const [pawnModel, setPawnModel] = useState('')
+  const [pawnStorage, setPawnStorage] = useState('')
+  const [pawnRam, setPawnRam] = useState('')
+  const [pawnColor, setPawnColor] = useState('')
   const [pawnCondition, setPawnCondition] = useState('GOOD')
   const [pawnBatteryHealth, setPawnBatteryHealth] = useState('85')
   const [pawnCarrierLock, setPawnCarrierLock] = useState('UNLOCKED')
@@ -348,6 +359,12 @@ export default function OperationModalBridge() {
           setPawnCreated(null)
           setPawnAttempted(false)
           setPawnStep(1)
+          setPawnImei('')
+          setPawnBrand('')
+          setPawnModel('')
+          setPawnStorage('')
+          setPawnRam('')
+          setPawnColor('')
         }
         setKind(detail.kind)
       }
@@ -374,6 +391,12 @@ export default function OperationModalBridge() {
       setPawnCreated(null)
       setPawnAttempted(false)
       setPawnStep(1)
+      setPawnImei('')
+      setPawnBrand('')
+      setPawnModel('')
+      setPawnStorage('')
+      setPawnRam('')
+      setPawnColor('')
       setKind('pawn')
     }
     window.addEventListener('phoneflow:open-pawn', openPawn)
@@ -517,6 +540,11 @@ export default function OperationModalBridge() {
     setPawnStep(1)
     setPawnAttempted(false)
     setPawnImei('')
+    setPawnBrand('')
+    setPawnModel('')
+    setPawnStorage('')
+    setPawnRam('')
+    setPawnColor('')
     setPawnCondition('GOOD')
     setPawnBatteryHealth('85')
     setPawnCarrierLock('UNLOCKED')
@@ -796,6 +824,51 @@ export default function OperationModalBridge() {
   const purchaseItemsValid = purchaseDevices.length > 0
     && new Set(existingPurchaseIds).size === existingPurchaseIds.length
     && purchaseDevices.every((item) => Object.keys(purchaseItemErrors(item)).length === 0)
+
+  const purchaseSteps: WorkflowStep[] = useMemo(() => [
+    {
+      id: 'seller',
+      title: 'Seller & purchase',
+      description: 'Step 1 · Seller and payment details',
+      status: purchaseStep === 1 ? 'active' : purchaseSellerValid ? 'complete' : 'pending',
+    },
+    {
+      id: 'items',
+      title: 'Items & payment',
+      description: 'Step 2 · Products and settlement',
+      status: purchaseStep === 2 ? 'active' : purchaseItemsValid ? 'complete' : 'pending',
+    },
+  ], [purchaseStep, purchaseSellerValid, purchaseItemsValid])
+
+  const sellerTypeOptions: SegmentedControlOption<SellerType>[] = useMemo(() => [
+    { value: 'EXISTING_CUSTOMER', label: 'Existing customer' },
+    { value: 'EXISTING_SUPPLIER', label: 'Existing supplier' },
+    { value: 'WALK_IN', label: 'Walk-in customer' },
+    { value: 'NEW_CUSTOMER', label: 'New customer' },
+    { value: 'NEW_SUPPLIER', label: 'New supplier' },
+  ], [])
+
+  const pawnSteps: WorkflowStep[] = useMemo(() => [
+    {
+      id: 'customer',
+      title: 'Customer verification',
+      description: 'Step 1 · Identity and ownership',
+      status: pawnStep === 1 ? 'active' : pawnCustomerValid ? 'complete' : 'pending',
+      ariaLabel: 'Step 1 of 2: Customer verification',
+    },
+    {
+      id: 'collateral',
+      title: 'Collateral & terms',
+      description: 'Step 2 · Device, valuation, and loan',
+      status: pawnStep === 2 ? 'active' : 'pending',
+      ariaLabel: 'Step 2 of 2: Collateral and contract terms',
+    },
+  ], [pawnStep, pawnCustomerValid])
+
+  const pawnCustomerOptions: SegmentedControlOption<PawnCustomerMode>[] = useMemo(() => [
+    { value: 'EXISTING', label: 'Existing customer', id: 'pawn-customer-tab-existing' },
+    { value: 'NEW', label: 'New customer', id: 'pawn-customer-tab-new' },
+  ], [])
 
   function openPurchaseItem(id: string) {
     setPurchaseDevices((current) => current.map((item) => ({ ...item, collapsed: item.id !== id })))
@@ -1096,9 +1169,9 @@ export default function OperationModalBridge() {
       return
     }
     setBusy(true)
-    const brand = String(form.get('brand') || '').trim()
-    const model = String(form.get('model') || '').trim()
-    const storage = String(form.get('storage') || '').trim()
+    const brand = String(form.get('brand') || pawnBrand || '').trim()
+    const model = String(form.get('model') || pawnModel || '').trim()
+    const storage = String(form.get('storage') || pawnStorage || '').trim()
     const conditionMap: Record<string, string> = { LIKE_NEW: 'excellent', GOOD: 'good', FAIR: 'fair', DAMAGED: 'damaged' }
     const lockStatus = pawnCarrierLock === 'ACTIVATION_LOCKED'
       ? 'activation_locked'
@@ -1142,8 +1215,8 @@ export default function OperationModalBridge() {
         imei: pawnImei,
         condition: pawnCondition,
         storage,
-        ram: String(form.get('ram') || ''),
-        color: String(form.get('color') || ''),
+        ram: String(form.get('ram') || pawnRam || ''),
+        color: String(form.get('color') || pawnColor || ''),
         batteryHealth: pawnBatteryHealth ? Number(pawnBatteryHealth) : undefined,
         carrierLock: pawnCarrierLock === 'ACTIVATION_LOCKED' ? 'UNKNOWN' : pawnCarrierLock,
         accessoriesIncluded: pawnAccessories,
@@ -1253,23 +1326,20 @@ export default function OperationModalBridge() {
       </form>}
 
       {kind === 'purchase' && <form className="operation-form purchase-workflow-form" noValidate onSubmit={submitPurchase}>
-        <div className="purchase-stepper" role="group" aria-label="Purchase progress">
-          <div aria-current={purchaseStep === 1 ? 'step' : undefined} aria-label="Step 1 of 2: Seller and purchase details" className={`purchase-step ${purchaseStep === 1 ? 'active' : purchaseSellerValid ? 'complete' : ''}`}><span>{purchaseSellerValid ? <CheckCircle2 size={17} /> : '1'}</span><p><strong>Seller & purchase</strong><small>Step 1 · Seller and payment details</small></p></div>
-          <i />
-          <div aria-current={purchaseStep === 2 ? 'step' : undefined} aria-label="Step 2 of 2: Items and settlement" className={`purchase-step ${purchaseStep === 2 ? 'active' : purchaseItemsValid ? 'complete' : ''}`}><span>{purchaseItemsValid ? <CheckCircle2 size={17} /> : '2'}</span><p><strong>Items & payment</strong><small>Step 2 · Products and settlement</small></p></div>
-        </div>
+        <OperationWorkflowStepper steps={purchaseSteps} ariaLabel="Purchase progress" />
 
         {purchaseStep === 1 && <>
         <div className="purchase-step-content">
-        <section className="purchase-section-card">
-          <div className="purchase-section-heading purchase-section-heading-plain"><div><h3>Seller and purchase details</h3><p>Choose who is selling, then record the date, payment method, and currency.</p></div></div>
-          <div className="purchase-seller-tabs">
-            <button type="button" className={sellerType === 'EXISTING_CUSTOMER' ? 'active' : ''} onClick={() => setSellerType('EXISTING_CUSTOMER')}>Existing customer</button>
-            <button type="button" className={sellerType === 'EXISTING_SUPPLIER' ? 'active' : ''} onClick={() => setSellerType('EXISTING_SUPPLIER')}>Existing supplier</button>
-            <button type="button" className={sellerType === 'WALK_IN' ? 'active' : ''} onClick={() => setSellerType('WALK_IN')}>Walk-in customer</button>
-            <button type="button" className={sellerType === 'NEW_CUSTOMER' ? 'active' : ''} onClick={() => setSellerType('NEW_CUSTOMER')}>New customer</button>
-            <button type="button" className={sellerType === 'NEW_SUPPLIER' ? 'active' : ''} onClick={() => setSellerType('NEW_SUPPLIER')}>New supplier</button>
-          </div>
+        <OperationSectionCard
+          title="Seller and purchase details"
+          description="Choose who is selling, then record the date, payment method, and currency."
+        >
+          <SegmentedControl
+            label="Seller type"
+            value={sellerType}
+            options={sellerTypeOptions}
+            onChange={setSellerType}
+          />
           <div className="operation-form-grid purchase-fields-grid">
             {sellerType === 'EXISTING_SUPPLIER' ? <label className={`operation-wide ${purchaseAttempted && !supplierId ? 'field-invalid' : ''}`}>Supplier<select required value={supplierId} onChange={(event) => setSupplierId(event.target.value)}><option value="" disabled>Select supplier</option>{suppliers.map((supplier) => <option key={supplier._id} value={supplier._id}>{supplier.name}{supplier.phone ? ` — ${supplier.phone}` : ''}</option>)}</select>{purchaseAttempted && !supplierId && <small>Select a supplier</small>}</label> : sellerType === 'EXISTING_CUSTOMER' ? <label className={`operation-wide ${purchaseAttempted && !sellerCustomerId ? 'field-invalid' : ''}`}>Customer<select required value={sellerCustomerId} onChange={(event) => setSellerCustomerId(event.target.value)}><option value="" disabled>Select customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name}{customer.phone ? ` — ${customer.phone}` : ' — No phone recorded'}</option>)}</select>{purchaseAttempted && !sellerCustomerId && <small>Select a customer</small>}</label> : <>
               <label className={purchaseAttempted && !sellerName.trim() ? 'field-invalid' : ''}>Seller name<input required value={sellerName} onChange={(event) => setSellerName(event.target.value)} placeholder={sellerType === 'NEW_SUPPLIER' ? 'Supplier or business name' : 'Customer name'} />{purchaseAttempted && !sellerName.trim() && <small>Seller name is required</small>}</label>
@@ -1281,16 +1351,47 @@ export default function OperationModalBridge() {
             <label>Currency<select value={purchaseCurrency} onChange={(event) => setPurchaseCurrency(event.target.value as PurchaseCurrency)}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Khmer Riel</option></select></label>
             <label className="operation-wide">Purchase notes <small className="optional-marker">Optional</small><textarea rows={2} value={purchaseNotes} onChange={(event) => setPurchaseNotes(event.target.value)} /></label>
           </div>
-        </section>
+        </OperationSectionCard>
         </div>
 
-        <footer className="operation-modal-actions"><div className="purchase-submit-summary"><span>Step 1 of 2</span><strong>Seller & purchase</strong></div><button type="button" className="ghost-button" onClick={close}>Cancel</button><button type="button" className="primary-button" onClick={() => { setPurchaseAttempted(true); if (purchaseSellerValid) { setError(''); setPurchaseAttempted(false); setPurchaseStep(2) } else setError('Complete the required seller information') }}>Continue to items</button></footer>
+        <OperationWorkflowFooter
+          summary={{
+            stepText: 'Step 1 of 2',
+            detailText: 'Seller & purchase',
+          }}
+          secondaryAction={
+            <button type="button" className="ghost-button" onClick={close}>Cancel</button>
+          }
+          primaryAction={
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => {
+                setPurchaseAttempted(true)
+                if (purchaseSellerValid) {
+                  setError('')
+                  setPurchaseAttempted(false)
+                  setPurchaseStep(2)
+                } else {
+                  setError('Complete the required seller information')
+                }
+              }}
+            >
+              Continue to items
+            </button>
+          }
+        />
         </>}
 
         {purchaseStep === 2 && <>
         <div className="purchase-step-content">
-        <section className="purchase-section-card devices-section">
-          <div className="purchase-section-heading"><span>2</span><div><h3>Inventory items</h3><p>Choose a category for each item. The required fields adjust automatically.</p></div><b>{purchaseDevices.length} item{purchaseDevices.length === 1 ? '' : 's'}</b></div>
+        <OperationSectionCard
+          marker="2"
+          title="Inventory items"
+          description="Choose a category for each item. The required fields adjust automatically."
+          badge={`${purchaseDevices.length} item${purchaseDevices.length === 1 ? '' : 's'}`}
+          className="devices-section"
+        >
           <div className="purchase-device-list">
             {purchaseDevices.map((device, index) => {
               const itemErrors = { ...purchaseItemErrors(device) }
@@ -1316,17 +1417,31 @@ export default function OperationModalBridge() {
                   <label className={purchaseAttempted && itemErrors.quantity ? 'field-invalid' : ''}>Quantity purchased<input required type="number" min="1" step="1" value={device.quantity} onChange={(event) => updatePurchaseDevice(device.id, { quantity: event.target.value })} />{purchaseAttempted && itemErrors.quantity && <small>{itemErrors.quantity}</small>}</label>
                 </> : <>
                 <div className="device-group-label"><span>Product identity</span><small>Required identification information</small></div>
-                {device.category === 'PHONE' ? <>
-                  <label className={`device-imei-field ${purchaseAttempted && itemErrors.imei ? 'field-invalid' : ''}`}><span>IMEI</span><div><input ref={(node) => { if (node) imeiInputs.current.set(device.id, node); else imeiInputs.current.delete(device.id) }} required inputMode="numeric" pattern="[0-9]{15}" maxLength={15} value={device.imei} onChange={(event) => updatePurchaseDevice(device.id, { imei: event.target.value.replace(/\D/g, '').slice(0, 15) })} placeholder="15-digit IMEI" /><ScannerTriggerButton label="Scan IMEI" iconSize={16} onClick={() => openImeiScanner(device.id)} /></div><small>{purchaseAttempted && itemErrors.imei ? itemErrors.imei : 'Scan with a handheld scanner or this device camera.'}</small></label>
-                  <label className={purchaseAttempted && itemErrors.brand ? 'field-invalid' : ''}>Brand<input required value={device.brand} onChange={(event) => updatePurchaseDevice(device.id, { brand: event.target.value })} placeholder="Apple" />{purchaseAttempted && itemErrors.brand && <small>{itemErrors.brand}</small>}</label>
-                  <label className={purchaseAttempted && itemErrors.model ? 'field-invalid' : ''}>Model<input required value={device.model} onChange={(event) => updatePurchaseDevice(device.id, { model: event.target.value })} placeholder="iPhone 13 Pro" />{purchaseAttempted && itemErrors.model && <small>{itemErrors.model}</small>}</label>
-                  <label className={purchaseAttempted && itemErrors.storage ? 'field-invalid' : ''}>Storage<div className="device-unit-input"><input required type="number" min="1" step="1" value={device.storage} onChange={(event) => updatePurchaseDevice(device.id, { storage: event.target.value })} placeholder="128" /><span>GB</span></div>{purchaseAttempted && itemErrors.storage && <small>{itemErrors.storage}</small>}</label>
-                  <label className={purchaseAttempted && itemErrors.ram ? 'field-invalid' : ''}>RAM <small className="optional-marker">Optional</small><div className="device-unit-input"><input type="number" min="1" step="1" value={device.ram} onChange={(event) => updatePurchaseDevice(device.id, { ram: event.target.value })} placeholder="6" /><span>GB</span></div>{purchaseAttempted && itemErrors.ram && <small>{itemErrors.ram}</small>}</label>
-                  <label className={purchaseAttempted && itemErrors.color ? 'field-invalid' : ''}>Color<input required value={device.color} onChange={(event) => updatePurchaseDevice(device.id, { color: event.target.value })} placeholder="Blue" />{purchaseAttempted && itemErrors.color && <small>{itemErrors.color}</small>}</label>
-                  <label>Battery health <small className="optional-marker">Optional</small><div className="device-unit-input"><input type="number" min="0" max="100" step="1" value={device.batteryHealth} onChange={(event) => updatePurchaseDevice(device.id, { batteryHealth: event.target.value })} placeholder="88" /><span>%</span></div></label>
-                  <label>Carrier lock<select value={device.carrierLock} onChange={(event) => updatePurchaseDevice(device.id, { carrierLock: event.target.value })}><option value="UNKNOWN">Unknown</option><option value="UNLOCKED">Unlocked</option><option value="LOCKED">Carrier locked</option></select></label>
-                  <fieldset className="device-accessories"><legend>Accessories included</legend>{['BOX', 'CHARGER', 'CABLE', 'CASE', 'EARPHONES'].map((accessory) => <label key={accessory}><input type="checkbox" checked={device.accessoriesIncluded.includes(accessory)} onChange={(event) => updatePurchaseDevice(device.id, { accessoriesIncluded: event.target.checked ? [...device.accessoriesIncluded, accessory] : device.accessoriesIncluded.filter((item) => item !== accessory) })} /> {accessory.charAt(0) + accessory.slice(1).toLowerCase()}</label>)}</fieldset>
-                </> : <>
+                {device.category === 'PHONE' ? (
+                  <SerializedDeviceFields
+                    asContainer={false}
+                    showGroupHeading={false}
+                    values={{
+                      imei: device.imei,
+                      brand: device.brand,
+                      model: device.model,
+                      storage: device.storage,
+                      ram: device.ram,
+                      color: device.color,
+                    }}
+                    errors={purchaseAttempted ? itemErrors : undefined}
+                    onChange={(field, value) => updatePurchaseDevice(device.id, { [field]: value })}
+                    onScan={() => openImeiScanner(device.id)}
+                    imeiRef={(node) => {
+                      if (node) imeiInputs.current.set(device.id, node)
+                      else imeiInputs.current.delete(device.id)
+                    }}
+                  >
+                    <label>Battery health <small className="optional-marker">Optional</small><div className="device-unit-input"><input type="number" min="0" max="100" step="1" value={device.batteryHealth} onChange={(event) => updatePurchaseDevice(device.id, { batteryHealth: event.target.value })} placeholder="88" /><span>%</span></div></label>
+                    <label>Carrier lock<select value={device.carrierLock} onChange={(event) => updatePurchaseDevice(device.id, { carrierLock: event.target.value })}><option value="UNKNOWN">Unknown</option><option value="UNLOCKED">Unlocked</option><option value="LOCKED">Carrier locked</option></select></label>
+                    <fieldset className="device-accessories"><legend>Accessories included</legend>{['BOX', 'CHARGER', 'CABLE', 'CASE', 'EARPHONES'].map((accessory) => <label key={accessory}><input type="checkbox" checked={device.accessoriesIncluded.includes(accessory)} onChange={(event) => updatePurchaseDevice(device.id, { accessoriesIncluded: event.target.checked ? [...device.accessoriesIncluded, accessory] : device.accessoriesIncluded.filter((item) => item !== accessory) })} /> {accessory.charAt(0) + accessory.slice(1).toLowerCase()}</label>)}</fieldset>
+                  </SerializedDeviceFields>
+                ) : <>
                   {device.category === 'TABLET' ? <>
                     <label className={purchaseAttempted && itemErrors.brand ? 'field-invalid' : ''}>Brand<input required value={device.brand} onChange={(event) => updatePurchaseDevice(device.id, { brand: event.target.value })} placeholder="Apple" />{purchaseAttempted && itemErrors.brand && <small>{itemErrors.brand}</small>}</label>
                     <label className={purchaseAttempted && itemErrors.model ? 'field-invalid' : ''}>Model<input required value={device.model} onChange={(event) => updatePurchaseDevice(device.id, { model: event.target.value })} placeholder="iPad Air" />{purchaseAttempted && itemErrors.model && <small>{itemErrors.model}</small>}</label>
@@ -1350,19 +1465,70 @@ export default function OperationModalBridge() {
             </article>})}
           </div>
           <button type="button" className="add-device-button" onClick={addPurchaseDevice}><Plus size={17} /> Add another item</button>
-        </section>
-        <section className="purchase-section-card purchase-settlement-card">
-          <div className="purchase-section-heading"><span><CheckCircle2 size={17} /></span><div><h3>Payment settlement</h3><p>Confirm what was paid after reviewing the complete purchase total.</p></div></div>
+        </OperationSectionCard>
+        <OperationSectionCard
+          marker={<CheckCircle2 size={17} />}
+          title="Payment settlement"
+          description="Confirm what was paid after reviewing the complete purchase total."
+          className="purchase-settlement-card"
+        >
           <div className="operation-form-grid purchase-fields-grid"><label className={purchasePaidInvalid ? 'field-invalid' : ''}>Amount paid ({purchaseCurrency})<MoneyInput currency={purchaseCurrency} minimum={0} maximum={purchaseTotal || undefined} value={purchaseAmountPaid} onValueChange={setPurchaseAmountPaid} placeholder={purchaseCurrency === 'KHR' ? '0' : '0.00'} />{purchasePaid > purchaseTotal ? <small>Amount paid cannot exceed the total</small> : purchaseCurrency === 'KHR' && purchasePaidInvalid ? <small>Use a whole KHR amount in increments of 100</small> : null}</label></div>
-          <div className="purchase-payment-summary">
-            <div><span>Total amount</span><strong>{purchaseCurrency === 'KHR' ? `${purchaseTotal.toLocaleString()} ៛` : `$${purchaseTotal.toFixed(2)}`}</strong></div>
-            <div><span>Amount paid</span><strong>{purchaseCurrency === 'KHR' ? `${purchasePaid.toLocaleString()} ៛` : `$${purchasePaid.toFixed(2)}`}</strong></div>
-            <div><span>Balance due</span><strong>{purchaseCurrency === 'KHR' ? `${purchaseBalance.toLocaleString()} ៛` : `$${purchaseBalance.toFixed(2)}`}</strong></div>
-            <div><span>Payment status</span><strong className={`payment-state ${purchasePaymentStatus.toLowerCase()}`}>{purchasePaymentStatus}</strong></div>
-          </div>
-        </section>
+          <KeyValueSummary
+            className="purchase-payment-summary"
+            columns={4}
+            items={[
+              {
+                id: 'purchase-summary-total',
+                label: 'Total amount',
+                value: purchaseCurrency === 'KHR' ? `${purchaseTotal.toLocaleString()} ៛` : `$${purchaseTotal.toFixed(2)}`,
+              },
+              {
+                id: 'purchase-summary-paid',
+                label: 'Amount paid',
+                value: purchaseCurrency === 'KHR' ? `${purchasePaid.toLocaleString()} ៛` : `$${purchasePaid.toFixed(2)}`,
+              },
+              {
+                id: 'purchase-summary-balance',
+                label: 'Balance due',
+                value: purchaseCurrency === 'KHR' ? `${purchaseBalance.toLocaleString()} ៛` : `$${purchaseBalance.toFixed(2)}`,
+              },
+              {
+                id: 'purchase-summary-status',
+                label: 'Payment status',
+                value: <span className={`payment-state ${purchasePaymentStatus.toLowerCase()}`}>{purchasePaymentStatus}</span>,
+              },
+            ]}
+          />
+        </OperationSectionCard>
         </div>
-        <footer className="operation-modal-actions"><div className="purchase-submit-summary"><span>Step 2 of 2 · {purchaseDevices.length} item{purchaseDevices.length === 1 ? '' : 's'}</span><strong>{purchaseCurrency === 'KHR' ? `${purchaseTotal.toLocaleString()} ៛` : `$${purchaseTotal.toFixed(2)}`}</strong></div><button type="button" className="ghost-button" onClick={() => { setError(''); setPurchaseAttempted(false); setPurchaseStep(1) }}>Back</button><button className="primary-button" disabled={busy} aria-disabled={!purchaseItemsValid || purchasePaidInvalid}>{busy ? 'Saving purchase...' : purchaseItemsValid && !purchasePaidInvalid ? 'Complete purchase' : 'Complete required fields'}</button></footer>
+        <OperationWorkflowFooter
+          summary={{
+            stepText: `Step 2 of 2 · ${purchaseDevices.length} item${purchaseDevices.length === 1 ? '' : 's'}`,
+            detailText: purchaseCurrency === 'KHR' ? `${purchaseTotal.toLocaleString()} ៛` : `$${purchaseTotal.toFixed(2)}`,
+          }}
+          secondaryAction={
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => {
+                setError('')
+                setPurchaseAttempted(false)
+                setPurchaseStep(1)
+              }}
+            >
+              Back
+            </button>
+          }
+          primaryAction={
+            <button
+              className="primary-button"
+              disabled={busy}
+              aria-disabled={!purchaseItemsValid || purchasePaidInvalid}
+            >
+              {busy ? 'Saving purchase...' : purchaseItemsValid && !purchasePaidInvalid ? 'Complete purchase' : 'Complete required fields'}
+            </button>
+          }
+        />
         </>}
       </form>}
 
@@ -1428,58 +1594,23 @@ export default function OperationModalBridge() {
       </section>}
 
       {kind === 'pawn' && !pawnCreated && <form className="operation-form purchase-workflow-form pawn-workflow-form" onSubmit={submitPawn}>
-        <div className="purchase-stepper" role="group" aria-label="Pawn contract progress">
-          <div aria-current={pawnStep === 1 ? 'step' : undefined} aria-label="Step 1 of 2: Customer verification" className={`purchase-step ${pawnStep === 1 ? 'active' : pawnCustomerValid ? 'complete' : ''}`}><span>{pawnCustomerValid ? <CheckCircle2 size={17} /> : '1'}</span><p><strong>Customer verification</strong><small>Step 1 · Identity and ownership</small></p></div>
-          <i />
-          <div aria-current={pawnStep === 2 ? 'step' : undefined} aria-label="Step 2 of 2: Collateral and contract terms" className={`purchase-step ${pawnStep === 2 ? 'active' : ''}`}><span>2</span><p><strong>Collateral & terms</strong><small>Step 2 · Device, valuation, and loan</small></p></div>
-        </div>
+        <OperationWorkflowStepper steps={pawnSteps} ariaLabel="Pawn contract progress" />
 
         {pawnStep === 1 && <>
           <div className="purchase-step-content">
-            <section className="purchase-section-card">
-              <div className="purchase-section-heading"><span>1</span><div><h3>Customer verification</h3><p>Choose the collateral owner and confirm ownership. Recording a National ID is optional.</p></div></div>
-              <div className="purchase-seller-tabs pawn-customer-tabs" role="tablist" aria-label="Customer type">
-                <button
-                  type="button"
-                  role="tab"
-                  id="pawn-customer-tab-existing"
-                  aria-selected={pawnCustomerMode === 'EXISTING'}
-                  aria-controls="pawn-customer-panel"
-                  className={pawnCustomerMode === 'EXISTING' ? 'active' : ''}
-                  onClick={() => { setPawnCustomerMode('EXISTING'); setPawnOwnershipConfirmed(false); setError('') }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
-                      event.preventDefault()
-                      setPawnCustomerMode('NEW')
-                      setPawnOwnershipConfirmed(false)
-                      setError('')
-                      document.getElementById('pawn-customer-tab-new')?.focus()
-                    }
-                  }}
-                >
-                  Existing customer
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  id="pawn-customer-tab-new"
-                  aria-selected={pawnCustomerMode === 'NEW'}
-                  aria-controls="pawn-customer-panel"
-                  className={pawnCustomerMode === 'NEW' ? 'active' : ''}
-                  onClick={() => { setPawnCustomerMode('NEW'); setPawnOwnershipConfirmed(false); setError('') }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
-                      event.preventDefault()
-                      setPawnCustomerMode('EXISTING')
-                      setPawnOwnershipConfirmed(false)
-                      setError('')
-                      document.getElementById('pawn-customer-tab-existing')?.focus()
-                    }
-                  }}
-                >
-                  New customer
-                </button>
-              </div>
+            <OperationSectionCard
+              marker="1"
+              title="Customer verification"
+              description="Choose the collateral owner and confirm ownership. Recording a National ID is optional."
+            >
+              <SegmentedControl
+                label="Customer type"
+                value={pawnCustomerMode}
+                options={pawnCustomerOptions}
+                ariaControls="pawn-customer-panel"
+                className="pawn-customer-tabs"
+                onChange={(mode) => { setPawnCustomerMode(mode); setPawnOwnershipConfirmed(false); setError('') }}
+              />
               <div id="pawn-customer-panel" role="tabpanel" aria-labelledby={pawnCustomerMode === 'EXISTING' ? 'pawn-customer-tab-existing' : 'pawn-customer-tab-new'} className="operation-form-grid purchase-fields-grid">
                 {pawnCustomerMode === 'EXISTING' ? <label className={`operation-wide ${pawnAttempted && !pawnCustomerId ? 'field-invalid' : ''}`}>Customer<select required value={pawnCustomerId} onChange={(event) => { setPawnCustomerId(event.target.value); setPawnOwnershipConfirmed(false); setError('') }}><option value="" disabled>Select customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name}{customer.phone ? ` — ${customer.phone}` : ' — No phone recorded'}{customer.nationalIdNumber ? ' — ID recorded' : ' — ID not provided'}</option>)}</select>{pawnAttempted && !pawnCustomerId && <small>Select a customer</small>}</label> : <>
                   <label className={pawnAttempted && !pawnWalkInName.trim() ? 'field-invalid' : ''}>Customer name<input required value={pawnWalkInName} onChange={(event) => setPawnWalkInName(event.target.value)} placeholder="Full name" />{pawnAttempted && !pawnWalkInName.trim() && <small>Name is required</small>}</label>
@@ -1488,40 +1619,80 @@ export default function OperationModalBridge() {
                   <label>Address <small className="optional-marker">Optional</small><input value={pawnWalkInAddress} onChange={(event) => setPawnWalkInAddress(event.target.value)} placeholder="Current address" /></label>
                 </>}
               </div>
-              {pawnCustomerMode === 'EXISTING' && selectedPawnCustomer && <div className="pawn-customer-summary">
-                <div><span>Customer</span><strong>{selectedPawnCustomer.name}</strong></div>
-                <div><span>Phone</span><strong>{selectedPawnCustomer.phone || 'Not recorded'}</strong></div>
-                <div><span>National ID</span><strong className={selectedPawnCustomer.nationalIdNumber ? 'verified' : 'optional'}>{selectedPawnCustomer.nationalIdNumber || 'Not provided (optional)'}</strong></div>
-              </div>}
+              {pawnCustomerMode === 'EXISTING' && selectedPawnCustomer && (
+                <KeyValueSummary
+                  className="pawn-customer-summary"
+                  columns={3}
+                  items={[
+                    { id: 'customer', label: 'Customer', value: selectedPawnCustomer.name },
+                    { id: 'phone', label: 'Phone', value: selectedPawnCustomer.phone || 'Not recorded' },
+                    {
+                      id: 'national-id',
+                      label: 'National ID',
+                      value: selectedPawnCustomer.nationalIdNumber || 'Not provided (optional)',
+                      tone: selectedPawnCustomer.nationalIdNumber ? 'success' : 'muted',
+                    },
+                  ]}
+                />
+              )}
               <label className={`pawn-verification-check ${pawnAttempted && !pawnCustomerValid ? 'field-invalid' : ''}`}>
                 <input type="checkbox" checked={pawnOwnershipConfirmed} onChange={(event) => setPawnOwnershipConfirmed(event.target.checked)} />
                 <span><strong>Customer identity and collateral ownership confirmed</strong><small>{pawnCustomerHasId ? 'I checked the recorded National ID and confirmed this customer owns the phone.' : 'No National ID will be stored. I confirmed ownership using the information and evidence available to the shop.'}</small></span>
               </label>
-            </section>
+            </OperationSectionCard>
           </div>
-          <footer className="operation-modal-actions"><div className="purchase-submit-summary"><span>Step 1 of 2</span><strong>Customer verification</strong></div><button type="button" className="ghost-button" onClick={close}>Cancel</button><button type="button" className="primary-button" onClick={() => { setPawnAttempted(true); if (pawnCustomerValid) { setError(''); setPawnStep(2) } else setError('Select a customer and confirm identity and collateral ownership first') }}>Continue to collateral</button></footer>
+          <OperationWorkflowFooter
+            summary={{
+              stepText: 'Step 1 of 2',
+              detailText: 'Customer verification',
+            }}
+            secondaryAction={<button type="button" className="ghost-button" onClick={close}>Cancel</button>}
+            primaryAction={<button type="button" className="primary-button" onClick={() => { setPawnAttempted(true); if (pawnCustomerValid) { setError(''); setPawnStep(2) } else setError('Select a customer and confirm identity and collateral ownership first') }}>Continue to collateral</button>}
+          />
         </>}
 
         {pawnStep === 2 && <>
           <div className="purchase-step-content">
-            <section className="purchase-section-card devices-section">
-              <div className="purchase-section-heading"><span>2</span><div><h3>Phone collateral</h3><p>The phone is saved as a serialized inventory item with PAWNED status.</p></div><b>1 phone</b></div>
+            <OperationSectionCard
+              marker="2"
+              title="Phone collateral"
+              description="The phone is saved as a serialized inventory item with PAWNED status."
+              badge="1 phone"
+              className="devices-section"
+            >
               <article className="purchase-device-card">
                 <header><div className="pawn-device-heading"><span><Smartphone size={17} /></span><p><strong>Serialized phone</strong><small>Quantity is always 1 and the IMEI must be unique.</small></p></div></header>
-                <div className="device-fields-grid">
-                  <div className="device-group-label"><span>Product identity</span><small>Required identification information</small></div>
-                  <label className="device-imei-field"><span>IMEI</span><div><input required inputMode="numeric" pattern="[0-9]{15}" maxLength={15} value={pawnImei} onChange={(event) => setPawnImei(event.target.value.replace(/\D/g, '').slice(0, 15))} placeholder="15-digit IMEI" /><ScannerTriggerButton label="Scan IMEI" iconSize={16} onClick={() => setPawnScannerOpen(true)} /></div><small>Scan with a handheld scanner or this device camera.</small></label>
-                  <label>Brand<input name="brand" required placeholder="Apple" /></label>
-                  <label>Model<input name="model" required placeholder="iPhone 13 Pro" /></label>
-                  <label>Storage<div className="device-unit-input"><input name="storage" required type="number" min="1" step="1" placeholder="128" /><span>GB</span></div></label>
-                  <label>RAM <small className="optional-marker">Optional</small><div className="device-unit-input"><input name="ram" type="number" min="1" step="1" placeholder="6" /><span>GB</span></div></label>
-                  <label>Color<input name="color" required placeholder="Blue" /></label>
-                </div>
+                <SerializedDeviceFields
+                  asContainer
+                  includeNames
+                  showGroupHeading
+                  values={{
+                    imei: pawnImei,
+                    brand: pawnBrand,
+                    model: pawnModel,
+                    storage: pawnStorage,
+                    ram: pawnRam,
+                    color: pawnColor,
+                  }}
+                  onChange={(field, value) => {
+                    if (field === 'imei') setPawnImei(value)
+                    else if (field === 'brand') setPawnBrand(value)
+                    else if (field === 'model') setPawnModel(value)
+                    else if (field === 'storage') setPawnStorage(value)
+                    else if (field === 'ram') setPawnRam(value)
+                    else if (field === 'color') setPawnColor(value)
+                  }}
+                  onScan={() => setPawnScannerOpen(true)}
+                />
               </article>
-            </section>
+            </OperationSectionCard>
 
-            <section className="purchase-section-card pawn-terms-card">
-              <div className="purchase-section-heading"><span><HandCoins size={17} /></span><div><h3>Phone valuation and contract terms</h3><p>Assess the device, calculate a safe offer, and finish the contract without leaving this workflow.</p></div></div>
+            <OperationSectionCard
+              marker={<HandCoins size={17} />}
+              title="Phone valuation and contract terms"
+              description="Assess the device, calculate a safe offer, and finish the contract without leaving this workflow."
+              className="pawn-terms-card"
+            >
               {pawnValuation && <div className="pawn-imported-valuation"><CheckCircle2 size={18} /><div><strong>Standalone calculator offer imported</strong><small>Valuation {pawnValuation.id || 'draft'} · Values are locked to the verified assessment.</small></div><span>Maximum {pawnAmountText(maximumPawn, pawnCurrency)}</span></div>}
 
               <div className="pawn-inline-assessment">
@@ -1593,15 +1764,26 @@ export default function OperationModalBridge() {
                 </fieldset>
                 <label className="operation-wide">Contract notes <small className="optional-marker">Optional</small><textarea name="notes" rows={2} /></label>
               </div>
-              <div className="pawn-contract-summary">
-                <div><span>Principal</span><strong>{pawnAmountText(Number(pawnPrincipal) || 0, pawnCurrency)}</strong></div>
-                <div><span>Calculated due date</span><strong>{pawnCalculatedDueDate}</strong></div>
-                <div className="daily-fee-summary"><span>Daily pawn fee</span><strong>{pawnEffectiveDailyFeeRate.toLocaleString(undefined, { maximumFractionDigits: 2 })}% / day · {pawnAmountText(pawnDailyFeeAmount, pawnCurrency)} / day</strong></div>
-                <div><span>Total to redeem at due</span><strong>{pawnAmountText(pawnTotalAtDue, pawnCurrency)}</strong></div>
-              </div>
-            </section>
+              <KeyValueSummary
+                className="pawn-contract-summary"
+                columns={4}
+                items={[
+                  { id: 'principal', label: 'Principal', value: pawnAmountText(Number(pawnPrincipal) || 0, pawnCurrency) },
+                  { id: 'due-date', label: 'Calculated due date', value: pawnCalculatedDueDate },
+                  { id: 'daily-fee', className: 'daily-fee-summary', label: 'Daily pawn fee', value: `${pawnEffectiveDailyFeeRate.toLocaleString(undefined, { maximumFractionDigits: 2 })}% / day · ${pawnAmountText(pawnDailyFeeAmount, pawnCurrency)} / day` },
+                  { id: 'total-due', label: 'Total to redeem at due', value: pawnAmountText(pawnTotalAtDue, pawnCurrency) },
+                ]}
+              />
+            </OperationSectionCard>
           </div>
-          <footer className="operation-modal-actions"><div className="purchase-submit-summary"><span>Step 2 of 2</span><strong>{pawnAmountText(Number(pawnPrincipal || 0), pawnCurrency)} principal</strong></div><button type="button" className="ghost-button" onClick={() => { setError(''); setPawnStep(1) }}>Back</button><button className="primary-button" disabled={busy || !pawnAssessment.eligible || maximumPawn <= 0 || pawnPrincipalAmount <= 0 || pawnPrincipalAmount > maximumPawn}>{busy ? 'Saving contract...' : !pawnAssessment.eligible ? 'Activation lock must be removed' : maximumPawn <= 0 ? 'Enter valuation details' : pawnPrincipalAmount <= 0 ? 'Enter principal' : pawnPrincipalAmount > maximumPawn ? 'Principal exceeds maximum' : 'Create pawn contract'}</button></footer>
+          <OperationWorkflowFooter
+            summary={{
+              stepText: 'Step 2 of 2',
+              detailText: `${pawnAmountText(Number(pawnPrincipal || 0), pawnCurrency)} principal`,
+            }}
+            secondaryAction={<button type="button" className="ghost-button" onClick={() => { setError(''); setPawnStep(1) }}>Back</button>}
+            primaryAction={<button className="primary-button" disabled={busy || !pawnAssessment.eligible || maximumPawn <= 0 || pawnPrincipalAmount <= 0 || pawnPrincipalAmount > maximumPawn}>{busy ? 'Saving contract...' : !pawnAssessment.eligible ? 'Activation lock must be removed' : maximumPawn <= 0 ? 'Enter valuation details' : pawnPrincipalAmount <= 0 ? 'Enter principal' : pawnPrincipalAmount > maximumPawn ? 'Principal exceeds maximum' : 'Create pawn contract'}</button>}
+          />
         </>}
       </form>}
 
