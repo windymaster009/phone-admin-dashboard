@@ -1001,15 +1001,77 @@ body.operation-modal-open {
 
 .operation-modal-purchase,
 .operation-modal-pawn { width: min(1080px, 100%); }
-.operation-modal-sale { width: min(920px, 100%); }
-.sale-form { padding-top: 18px; }
-.sale-form .operation-form-grid { gap: 16px; }
-.sale-form label { font-size: 12px; }
-.sale-form label > small { font-size: 10px; line-height: 1.45; }
-.sale-form input,
-.sale-form select { min-height: 46px; font-size: 13px; }
+.operation-modal-sale {
+  width: min(920px, 100%);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sale-form {
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  padding: 0;
+}
+.sale-form-scroll {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  padding: 20px 24px 14px;
+  flex: 1 1 auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(143, 155, 180, 0.38) transparent;
+}
+.sale-form-scroll::-webkit-scrollbar { width: 8px; }
+.sale-form-scroll::-webkit-scrollbar-track { background: transparent; }
+.sale-form-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(143, 155, 180, 0.38);
+  background-clip: padding-box;
+}
+.sale-form-scroll .operation-form-grid { gap: 16px; }
+.sale-form-scroll label { font-size: 12px; }
+.sale-form-scroll label > small { font-size: 10px; line-height: 1.45; }
+.sale-form-scroll input,
+.sale-form-scroll select { min-height: 46px; font-size: 13px; }
+.sale-inventory-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.sale-inventory-heading label {
+  margin: 0;
+  color: var(--muted, #8f9bb4);
+  font-size: 12px;
+  font-weight: 700;
+}
+.sale-inventory-heading .secondary-button {
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 11px;
+}
 .sale-inventory-field { order: -2; }
 .sale-customer-field { order: -1; }
+.sale-scanner-modal {
+  width: min(560px, calc(100vw - 28px));
+}
+.sale-form > .operation-modal-actions {
+  position: static;
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 15px 24px;
+  border-top: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  background: color-mix(in srgb, var(--surface-solid, #151e34) 94%, transparent);
+  backdrop-filter: blur(14px);
+}
 .sale-price-display { min-width: 0; display: flex; flex-direction: column; gap: 7px; color: var(--muted, #8f9bb4); font-size: 12px; font-weight: 700; }
 .sale-price-heading { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .sale-price-mode-button {
@@ -2121,22 +2183,27 @@ body.operation-modal-open {
 
   .operation-modal-sale .sale-form {
     min-height: 0;
-    flex: 1;
-    display: grid;
-    grid-template-rows: minmax(0, 1fr) auto;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
     padding: 0;
   }
 
-  .operation-modal-sale .sale-form > .operation-form-grid {
+  .operation-modal-sale .sale-form-scroll {
     min-height: 0;
-    align-content: start;
-    gap: 11px;
+    flex: 1 1 auto;
     overflow-y: auto;
     padding: 13px 17px 12px;
     overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
+  }
+
+  .operation-modal-sale .sale-form-scroll > .operation-form-grid {
+    min-height: 0;
+    align-content: start;
+    gap: 11px;
   }
 
   .operation-modal-sale .sale-form label,
@@ -2150,6 +2217,24 @@ body.operation-modal-open {
   .operation-modal-sale .sale-price-display strong {
     min-height: 44px;
     font-size: 12px;
+  }
+
+  .operation-modal-sale .sale-inventory-heading .secondary-button {
+    min-height: 44px;
+    padding: 8px 12px;
+    font-size: 11px;
+  }
+
+  .operation-modal-sale .sale-price-mode-button {
+    min-height: 44px;
+    padding: 8px 12px;
+    font-size: 10px;
+  }
+
+  .operation-modal-sale .sale-price-configure {
+    min-height: 44px;
+    padding: 8px 12px;
+    font-size: 11px;
   }
 
   .operation-modal-sale .sale-warranty-input {
@@ -2200,6 +2285,14 @@ body.operation-modal-open {
     padding: 10px 11px;
   }
 
+  .operation-modal-sale .sale-summary-calculation {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .operation-modal-sale .sale-summary-calculation .total {
+    grid-column: 1 / -1;
+  }
+
   .operation-modal-sale .sale-summary-calculation > span {
     gap: 5px;
     padding: 9px 10px;
@@ -2207,11 +2300,12 @@ body.operation-modal-open {
 
   .operation-modal-sale .sale-form .operation-modal-actions {
     position: static;
+    flex: 0 0 auto;
     display: grid;
     grid-template-columns: minmax(0, .78fr) minmax(0, 1.22fr);
     gap: 8px;
     margin: 0;
-    padding: 10px 17px max(12px, env(safe-area-inset-bottom));
+    padding: 10px 17px max(12px, env(safe-area-inset-bottom, 0px));
     border-top: 1px solid var(--border, rgba(255, 255, 255, 0.08));
     background: var(--surface-solid, #151e34);
     box-shadow: 0 -10px 24px color-mix(in srgb, var(--text, #f4f6fb) 12%, transparent);

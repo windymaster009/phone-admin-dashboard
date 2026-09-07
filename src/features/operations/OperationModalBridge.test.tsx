@@ -11,6 +11,8 @@ vi.mock('../../components/scanner/CameraBarcodeReader', () => ({
     <div data-testid="mock-camera-barcode-reader">
       <button type="button" onClick={() => onScan('12345')}>Simulate Short Scan</button>
       <button type="button" onClick={() => onScan('860123456789012')}>Simulate 15-digit Scan</button>
+      <button type="button" onClick={() => onScan('8806091234567')}>Simulate Product Barcode</button>
+      <button type="button" onClick={() => onScan('9999999999999')}>Simulate Unknown Scan</button>
       <button type="button" onClick={() => onError('Camera permission denied')}>Simulate Error</button>
     </div>
   ),
@@ -1237,5 +1239,406 @@ describe('OperationModalBridge component', () => {
     expect(screen.getAllByText('40,000,000 ៛').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('PARTIAL')).toBeInTheDocument()
   })
-})
 
+  it('renders complete New Sale workflow with independent scroll container, non-scrolling action footer, and product validation', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [mockInventoryItem] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      if (url.includes('/payway/config')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ enabled: false, configured: false }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByText(/New sale/i)).toBeInTheDocument()
+    })
+
+    // Header close button exists
+    expect(screen.getByRole('button', { name: /Close/i })).toBeInTheDocument()
+
+    // Independent scroll container exists
+    const scrollContainer = document.querySelector('.sale-form-scroll')
+    expect(scrollContainer).toBeInTheDocument()
+
+    // Non-scrolling footer with OperationWorkflowFooter exists
+    const footer = document.querySelector('.sale-actions.operation-modal-actions')
+    expect(footer).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Cancel/i })).toBeInTheDocument()
+
+    // Submit button is disabled before selecting an inventory item
+    const submitBtn = screen.getByRole('button', { name: /Select a product first/i })
+    expect(submitBtn).toBeDisabled()
+    expect(submitBtn).toHaveAttribute('title', 'Choose an inventory product before continuing')
+
+    // Scanner trigger button is present in inventory heading
+    expect(screen.getByRole('button', { name: /Scan item/i })).toBeInTheDocument()
+  })
+
+  it('supports customer selection, calculates totals & discounts, and validates maximum discount and minimum sell price', async () => {
+    const mockCustomers = [
+      { _id: 'cust-1', name: 'Bob Smith', phone: '012345678', active: true },
+    ]
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: mockCustomers }) } as Response
+      }
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [mockInventoryItem] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      if (url.includes('/payway/config')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ enabled: false, configured: false }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // Select customer
+    const customerSelect = screen.getByLabelText(/Customer/i)
+    fireEvent.change(customerSelect, { target: { value: 'cust-1' } })
+
+    // Wait for inventory options to load and select inventory item
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: /iPhone 15 Pro Max/i })).toBeInTheDocument()
+    })
+    const itemSelect = screen.getByLabelText(/Inventory item/i)
+    fireEvent.change(itemSelect, { target: { value: 'inv-item-1' } })
+
+    // Selling price displays $1,150.00
+    await waitFor(() => {
+      expect(screen.getAllByText('$1,150.00').length).toBeGreaterThanOrEqual(1)
+    })
+
+    // Provide warranty days
+    const warrantyInput = screen.getByPlaceholderText(/Enter days/i)
+    fireEvent.change(warrantyInput, { target: { value: '30' } })
+
+    // Maximum discount allowed is unitPrice ($1150) - minUnitPrice ($1100) = $50
+    // Try setting discount to $100 -> validation error
+    const discountInput = screen.getByPlaceholderText('0.00')
+    fireEvent.change(discountInput, { target: { value: '100' } })
+
+    // Submit button should show "Reduce discount" and be disabled
+    const discountBtn = screen.getByRole('button', { name: /Reduce discount/i })
+    expect(discountBtn).toBeDisabled()
+
+    // Lower discount to $50 -> validation succeeds, submit button becomes "Complete sale"
+    fireEvent.change(discountInput, { target: { value: '50' } })
+    const submitBtn = screen.getByRole('button', { name: /Complete sale/i })
+    expect(submitBtn).toBeEnabled()
+
+    // Total in footer summary should be $1,100.00
+    const totalEl = document.querySelector('.sale-total strong')
+    expect(totalEl).toHaveTextContent('$1,100.00')
+  })
+
+  it('supports barcode camera scanner trigger, barcode detection, auto-item selection, and unknown item error feedback', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [mockInventoryItem] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      if (url.includes('/payway/config')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ enabled: false, configured: false }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // Click "Scan item"
+    fireEvent.click(screen.getByRole('button', { name: /Scan item/i }))
+
+    // Scanner modal opens
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Scan product barcode, SKU, or IMEI/i)).toBeInTheDocument()
+    })
+
+    // 1. Scan unknown barcode -> shows error feedback
+    fireEvent.click(screen.getByRole('button', { name: /Simulate Unknown Scan/i }))
+    await waitFor(() => {
+      expect(screen.getByText(/No available stock item matched code "9999999999999"/i)).toBeInTheDocument()
+    })
+
+    // 2. Scan valid barcode matching mockInventoryItem.barcode ('8806091234567')
+    fireEvent.click(screen.getByRole('button', { name: /Simulate Product Barcode/i }))
+
+    // Scanner dialog auto-closes upon matching product
+    await waitFor(() => {
+      expect(screen.queryByLabelText(/Scan product barcode, SKU, or IMEI/i)).not.toBeInTheDocument()
+    })
+
+    // Inventory item has been automatically selected
+    const itemSelect = screen.getByLabelText(/Inventory item/i) as HTMLSelectElement
+    expect(itemSelect.value).toBe('inv-item-1')
+    expect(screen.getAllByText('$1,150.00').length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('completes cash sale, updates inventory, displays completed sale details, and allows receipt printing', async () => {
+    let postTradesPayload: unknown = null
+    const receiptHandler = vi.fn()
+    window.addEventListener('phoneflow:open-trade-receipt', receiptHandler)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [mockInventoryItem] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      if (url.includes('/payway/config')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ enabled: false, configured: false }) } as Response
+      }
+      if (url.includes('/trades') && init?.method === 'POST') {
+        postTradesPayload = JSON.parse(String(init.body))
+        return {
+          ok: true,
+          status: 201,
+          headers: new Headers(),
+          json: async () => ({
+            trade: {
+              _id: 'trade-123',
+              tradeNo: 'SL-2026-0088',
+              type: 'SELL',
+              status: 'COMPLETED',
+              total: 1150,
+              amountPaid: 1150,
+              balance: 0,
+              currency: 'USD',
+              items: [{ name: 'iPhone 15 Pro Max', quantity: 1, unitPrice: 1150 }],
+              paymentMethod: 'CASH',
+            },
+          }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: /iPhone 15 Pro Max/i })).toBeInTheDocument()
+    })
+
+    // Select inventory item
+    fireEvent.change(screen.getByLabelText(/Inventory item/i), { target: { value: 'inv-item-1' } })
+
+    // Provide warranty days
+    fireEvent.change(screen.getByPlaceholderText(/Enter days/i), { target: { value: '0' } })
+
+    const submitBtn = screen.getByRole('button', { name: /Complete sale/i })
+    expect(submitBtn).toBeEnabled()
+    fireEvent.click(submitBtn)
+
+    // Verify trade POST payload
+    await waitFor(() => {
+      expect(postTradesPayload).toEqual(
+        expect.objectContaining({
+          type: 'SELL',
+          paymentMethod: 'CASH',
+          currency: 'USD',
+          amountPaid: 1150,
+          amountReceived: 1150,
+        }),
+      )
+    })
+
+    // Verify completion screen
+    await waitFor(() => {
+      expect(screen.getByText(/Sale saved/i)).toBeInTheDocument()
+      expect(screen.getByText(/Payment successful/i)).toBeInTheDocument()
+      expect(screen.getByText('SL-2026-0088')).toBeInTheDocument()
+    })
+
+    // Print receipt triggers receipt event and closes modal
+    const printBtn = screen.getByRole('button', { name: /Print receipt/i })
+    fireEvent.click(printBtn)
+
+    await waitFor(() => {
+      expect(receiptHandler).toHaveBeenCalledWith(
+        expect.objectContaining({
+          detail: expect.objectContaining({ reference: 'SL-2026-0088' }),
+        }),
+      )
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+    window.removeEventListener('phoneflow:open-trade-receipt', receiptHandler)
+  })
+
+  it('handles KHQR payment flow, deeplink display, manual verification check, and completion', async () => {
+    let khqrCreated = false
+    let checkCount = 0
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [mockInventoryItem] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      if (url.includes('/payway/config')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ enabled: true, configured: true }) } as Response
+      }
+      if (url.includes('/payway/khqr') && init?.method === 'POST') {
+        khqrCreated = true
+        return {
+          ok: true,
+          status: 201,
+          headers: new Headers(),
+          json: async () => ({
+            transactionId: 'payway-tran-101',
+            qrString: '00020101021229370016A0000007270399990106123456520459995303840540411505802KH5911PhoneFlow6010Phnom Penh6304ABCD',
+            deeplink: 'abamobilebank://khqr?tran=payway-tran-101',
+            amount: 1150,
+            currency: 'USD',
+          }),
+        } as Response
+      }
+      if (url.includes('/payway/khqr/payway-tran-101/status')) {
+        checkCount++
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            approved: checkCount >= 2,
+            paymentStatus: checkCount >= 2 ? 'COMPLETED' : 'WAITING',
+            paymentStatusCode: checkCount >= 2 ? 0 : 1,
+            amount: 1150,
+            currency: 'USD',
+          }),
+        } as Response
+      }
+      if (url.includes('/trades') && init?.method === 'POST') {
+        return {
+          ok: true,
+          status: 201,
+          headers: new Headers(),
+          json: async () => ({
+            trade: {
+              _id: 'trade-khqr-99',
+              tradeNo: 'SL-2026-0099',
+              type: 'SELL',
+              status: 'COMPLETED',
+              total: 1150,
+              amountPaid: 1150,
+              balance: 0,
+              currency: 'USD',
+              items: [{ name: 'iPhone 15 Pro Max', quantity: 1, unitPrice: 1150 }],
+              paymentMethod: 'KHQR',
+            },
+          }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: /iPhone 15 Pro Max/i })).toBeInTheDocument()
+    })
+
+    // Select inventory item
+    fireEvent.change(screen.getByLabelText(/Inventory item/i), { target: { value: 'inv-item-1' } })
+
+    // Provide warranty days
+    fireEvent.change(screen.getByPlaceholderText(/Enter days/i), { target: { value: '0' } })
+
+    // Switch payment method to KHQR
+    const khqrBtn = screen.getByRole('button', { name: /Pay with KHQR/i })
+    fireEvent.click(khqrBtn)
+
+    // Submit button changes to "Generate KHQR"
+    const createKhqrBtn = screen.getByRole('button', { name: /Generate KHQR/i })
+    expect(createKhqrBtn).toBeEnabled()
+    fireEvent.click(createKhqrBtn)
+
+    // Transitions to KHQR workflow screen
+    await waitFor(() => {
+      expect(khqrCreated).toBe(true)
+      expect(screen.getByText(/Scan to pay/i)).toBeInTheDocument()
+    })
+
+    // Check deeplink is displayed
+    const mobileLink = screen.getByRole('link', { name: /Open ABA Mobile/i })
+    expect(mobileLink).toHaveAttribute('href', 'abamobilebank://khqr?tran=payway-tran-101')
+
+    // Click "Check now" to trigger status check
+    const checkBtn = screen.getByRole('button', { name: /Check now/i })
+    fireEvent.click(checkBtn)
+
+    // Second check approves payment and transitions to completed state
+    await waitFor(() => {
+      expect(screen.getByText(/Payment successful/i)).toBeInTheDocument()
+      expect(screen.getByText(/ABA KHQR payment/i)).toBeInTheDocument()
+    })
+
+    // Click "Done"
+    fireEvent.click(screen.getByRole('button', { name: /Done/i }))
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+  })
+})

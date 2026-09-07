@@ -19,6 +19,7 @@ import {
   Printer,
   QrCode,
   RefreshCw,
+  ScanLine,
   Search,
   ShoppingCart,
   Smartphone,
@@ -129,6 +130,8 @@ export default function OperationModalBridge() {
   const [saleCompleted, setSaleCompleted] = useState<CompletedSale | null>(null)
   const [paywayAvailable, setPaywayAvailable] = useState(false)
   const [saleInventoryLoading, setSaleInventoryLoading] = useState(false)
+  const [saleScannerOpen, setSaleScannerOpen] = useState(false)
+  const [saleScannerError, setSaleScannerError] = useState('')
   const khqrFinalizing = useRef(false)
   const khqrChecking = useRef(false)
   const khqrCancellationRequested = useRef(false)
@@ -586,6 +589,8 @@ export default function OperationModalBridge() {
     setSaleCompleted(null)
     setPaywayAvailable(false)
     setSaleInventoryLoading(false)
+    setSaleScannerOpen(false)
+    setSaleScannerError('')
     khqrFinalizing.current = false
     khqrChecking.current = false
     setSellerType('WALK_IN')
@@ -726,6 +731,36 @@ export default function OperationModalBridge() {
     setSaleAmountPaid('')
     setError('')
     setKind('sale')
+  }
+
+  function applyScannedSaleItem(code: string) {
+    const cleaned = code.trim()
+    const digitsOnly = cleaned.replace(/\D/g, '')
+    const found = inventory.find((item) =>
+      (item.barcode && item.barcode.toLowerCase() === cleaned.toLowerCase()) ||
+      (item.sku && item.sku.toLowerCase() === cleaned.toLowerCase()) ||
+      (item.imei1 && (item.imei1 === cleaned || (digitsOnly.length === 15 && item.imei1 === digitsOnly)))
+    )
+    if (!found) {
+      setSaleScannerError(`No available stock item matched code "${cleaned}".`)
+      return
+    }
+    if (found.status !== 'IN_STOCK' || found.quantity < 1) {
+      setSaleScannerError(`"${found.name}" is not available to sell (${found.quantity} in stock).`)
+      return
+    }
+    setSaleItemId(found._id)
+    setSaleCurrency(found.pricingCurrency === 'KHR' ? 'KHR' : 'USD')
+    setSalePaymentMethod('CASH')
+    setSaleQuantity('1')
+    setSaleDiscount('0')
+    setSaleManualPriceEnabled(false)
+    setSaleManualPrice('')
+    setSaleWarrantyDays('')
+    setSaleAmountPaid('')
+    setSaleScannerOpen(false)
+    setSaleScannerError('')
+    setError('')
   }
 
   async function submitStock(event: FormEvent<HTMLFormElement>) {
@@ -2041,74 +2076,144 @@ export default function OperationModalBridge() {
           </dl>
           <div className="sale-complete-item"><strong>{saleCompleted.itemName} × {saleCompleted.quantity}</strong><small>{saleCompleted.paymentMethod === 'KHQR' ? 'ABA KHQR payment' : 'Cash payment'}</small></div>
         </div>
-        <footer className="operation-modal-actions record-created-actions">
-          <button type="button" className="secondary-button" onClick={printCompletedSaleReceipt} data-modal-initial-focus><Printer size={16} /> Print receipt</button>
-          <button type="button" className="primary-button record-created-done" onClick={() => resetAndClose()}><CheckCircle2 size={16} /> Done</button>
-        </footer>
+        <OperationWorkflowFooter
+          className="record-created-actions"
+          secondaryAction={
+            <button type="button" className="secondary-button" onClick={printCompletedSaleReceipt} data-modal-initial-focus>
+              <Printer size={16} /> Print receipt
+            </button>
+          }
+          primaryAction={
+            <button type="button" className="primary-button record-created-done" onClick={() => resetAndClose()}>
+              <CheckCircle2 size={16} /> Done
+            </button>
+          }
+        />
       </section>}
 
       {kind === 'sale' && !saleKhqr && !saleCompleted && <form className="operation-form sale-form" onSubmit={submitSale}>
-        <div className="operation-form-grid">
-          <label className="sale-customer-field">Customer<select value={saleCustomerId} onChange={(event) => setSaleCustomerId(event.target.value)}><option value="">Walk-in customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name}{customer.phone ? ` — ${customer.phone}` : ' — No phone recorded'}</option>)}</select></label>
-          <label className="operation-wide sale-inventory-field">Inventory item<select data-modal-initial-focus required value={saleItemId} disabled={saleInventoryLoading || (!saleInventoryLoading && inventory.length === 0)} onChange={(event) => {
-            const nextId = event.target.value
-            const nextItem = inventory.find((item) => item._id === nextId)
-            setSaleItemId(nextId)
-            setSaleCurrency(nextItem?.pricingCurrency === 'KHR' ? 'KHR' : 'USD')
-            setSalePaymentMethod('CASH')
-            setSaleQuantity('1')
-            setSaleDiscount('0')
-            setSaleManualPriceEnabled(false)
-            setSaleManualPrice('')
-            setSaleWarrantyDays('')
-            setSaleAmountPaid('')
-          }}><option value="" disabled>{saleInventoryLoading ? 'Loading available stock...' : inventory.length === 0 ? 'No stock available to sell' : 'Select available stock'}</option>{inventory.map((item) => <option key={item._id} value={item._id}>{item.name}{item.imei1 ? ` — ${item.imei1}` : ''} — Qty {item.quantity} — {inventoryNativeSalePriceText(item)}</option>)}</select>{!saleInventoryLoading && inventory.length === 0 && <small>Add an in-stock product before creating a sale.</small>}</label>
-          <label>Currency<select value={saleCurrency} onChange={(event) => {
-            setSaleCurrency(event.target.value as SaleCurrency)
-            setSalePaymentMethod('CASH')
-            setSaleDiscount('0')
-            setSaleManualPriceEnabled(false)
-            setSaleManualPrice('')
-            setSaleAmountPaid('')
-          }}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Cambodian Riel</option></select><small>1 USD = {riel.format(usdKhrRate)} KHR</small></label>
-          <label>Quantity<input type="number" min="1" max={selectedSaleItem?.quantity} value={effectiveSaleQuantity} disabled={!saleItemId || selectedSaleItem?.category === 'PHONE'} onChange={(event) => { setSaleQuantity(event.target.value); setSaleDiscount('0'); setSaleAmountPaid('') }} /></label>
-          <div className={`sale-price-display${salePriceInvalid || saleStockPricingInvalid ? ' needs-price' : ''}${saleManualPriceEnabled ? ' manual-price' : ''}`} role="group" aria-label={`Selling price in ${saleCurrency}`}>
-            <div className="sale-price-heading"><span>Selling price ({saleCurrency})</span>{canManuallyPriceSale && selectedSaleItem && <button type="button" className="sale-price-mode-button" aria-pressed={saleManualPriceEnabled} onClick={() => { const next = !saleManualPriceEnabled; setSaleManualPriceEnabled(next); setSaleManualPrice(next ? String(savedSaleUnitPrice) : ''); setSaleDiscount('0'); setSaleAmountPaid('') }}>{saleManualPriceEnabled ? 'Use saved price' : 'Enter manually'}</button>}</div>
-            {saleManualPriceEnabled ? <MoneyInput required currency={saleCurrency} minimum={configuredMinimumSalePrice > 0 ? configuredMinimumSalePrice : 0} value={saleManualPrice} onValueChange={(value) => { setSaleManualPrice(value); setSaleDiscount('0'); setSaleAmountPaid('') }} placeholder={saleCurrency === 'KHR' ? '0' : '0.00'} /> : <strong>{selectedSaleItem ? saleAmountText(saleUnitPrice, saleCurrency) : 'Select a product'}</strong>}
-            {selectedSaleItem
-              ? salePriceInvalid || saleStockPricingInvalid
-                ? <button type="button" className="sale-price-configure" onClick={openSelectedSaleItemPricing}><Banknote size={13} aria-hidden="true" />{saleStockPricingInvalid ? 'Fix price' : 'Set price'}</button>
-                : <small>{saleManualPriceEnabled ? `Manual price for this sale only${configuredMinimumSalePrice > 0 ? ` · Minimum ${saleAmountText(configuredMinimumSalePrice, saleCurrency)}` : ''}` : 'Configured in Stock Information'}</small>
-              : <small>Choose inventory first</small>}
-          </div>
-          <label className={saleDiscountInvalid ? 'field-invalid' : ''}>Discount ({saleCurrency})<MoneyInput currency={saleCurrency} minimum={0} maximum={saleMaximumDiscount} value={saleDiscount} disabled={!saleItemId} onValueChange={setSaleDiscount} placeholder={saleCurrency === 'KHR' ? '0' : '0.00'} />{selectedSaleItem && <small>{saleCurrency === 'KHR' && saleDiscountAmount % 100 !== 0 ? 'Use a whole KHR amount in increments of 100' : `${saleDiscountInvalid ? 'Maximum discount is' : 'Maximum allowed:'} ${saleAmountText(saleMaximumDiscount, saleCurrency)}`}</small>}</label>
-          <label className={`sale-warranty-field${saleWarrantyInvalid && saleWarrantyDays !== '' ? ' field-invalid' : ''}`}>Warranty period<div className="sale-warranty-input"><CalendarRange size={16} aria-hidden="true" /><input required type="number" inputMode="numeric" min="0" max="3650" step="1" value={saleWarrantyDays} onChange={(event) => setSaleWarrantyDays(event.target.value)} placeholder="Enter days" /><span>days</span></div><small>{saleWarrantyDays === '' ? 'Enter 0 when this sale has no refund warranty.' : saleWarrantyInvalid ? 'Use a whole number from 0 to 3650.' : saleWarrantyDayCount === 0 ? 'No refund warranty for this sale.' : `Refundable for ${saleWarrantyDayCount} day${saleWarrantyDayCount === 1 ? '' : 's'} after the sale.`}</small></label>
-          {paywayAvailable && saleCurrency === 'USD' && <fieldset className="sale-payment-method operation-wide">
-            <legend>How will the customer pay?</legend>
-            <button type="button" className={salePaymentMethod === 'CASH' ? 'active cash' : 'cash'} onClick={() => setSalePaymentMethod('CASH')}>
-              <span><Banknote size={20} /></span><p><strong>Pay with cash</strong><small>Record payment immediately</small></p>{salePaymentMethod === 'CASH' && <CheckCircle2 size={18} />}
-            </button>
-            <button type="button" className={salePaymentMethod === 'KHQR' ? 'active khqr' : 'khqr'} onClick={() => setSalePaymentMethod('KHQR')}>
-              <span className="khqr-payment-option-logo"><img src={khqrLogo} alt="" /></span><p><strong>Pay with KHQR</strong><small>{paywayAvailable ? 'ABA PayWay sandbox' : 'PayWay unavailable'}</small></p>{salePaymentMethod === 'KHQR' && <CheckCircle2 size={18} />}
-            </button>
-          </fieldset>}
-          {salePaymentMethod === 'CASH' && <label className={`sale-amount-received operation-wide${salePaidInvalid ? ' field-invalid' : ''}`}>Amount received ({saleCurrency}) <small className="optional-marker">Change is calculated automatically</small><MoneyInput currency={saleCurrency} minimum={0} value={saleAmountPaid} onValueChange={setSaleAmountPaid} placeholder={saleCurrency === 'KHR' ? riel.format(Math.round(saleTotal)) : saleTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} />{salePaidInvalid ? <small>Use a valid {saleCurrency === 'KHR' ? 'whole KHR amount in increments of 100' : 'cash amount'}.</small> : saleChangeDue > 0 ? <small>Change due: {saleAmountText(saleChangeDue, saleCurrency)}</small> : null}</label>}
-          <section className="sale-summary operation-wide" aria-labelledby="sale-summary-title">
-            <header><div><span>Sale summary</span><strong id="sale-summary-title">{selectedSaleItem ? `${selectedSaleItem.name} × ${effectiveSaleQuantity}` : 'No item selected'}</strong></div><b>{salePaymentMethod === 'KHQR' ? 'KHQR' : 'Cash'}</b></header>
-            <div className="sale-summary-calculation">
-              <span><small>Subtotal</small><strong>{saleAmountText(saleSubtotal, saleCurrency)}</strong></span>
-              <span><small>Discount</small><strong>− {saleAmountText(saleDiscountAmount, saleCurrency)}</strong></span>
-              <span className="total"><small>Total</small><strong>{saleAmountText(saleTotal, saleCurrency)}</strong></span>
-              <span><small>Received</small><strong>{saleAmountText(salePaymentMethod === 'KHQR' ? saleTotal : saleReceivedAmount, saleCurrency)}</strong></span>
-              <span className={salePaymentMethod === 'KHQR' || saleBalance <= 0 ? 'settled' : 'due'}><small>{saleChangeDue > 0 ? 'Change' : 'Balance'}</small><strong>{saleAmountText(salePaymentMethod === 'KHQR' ? 0 : saleChangeDue > 0 ? saleChangeDue : saleBalance, saleCurrency)}</strong></span>
+        <div className="sale-form-scroll">
+          <div className="operation-form-grid">
+            <label className="sale-customer-field">Customer<select value={saleCustomerId} onChange={(event) => setSaleCustomerId(event.target.value)}><option value="">Walk-in customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name}{customer.phone ? ` — ${customer.phone}` : ' — No phone recorded'}</option>)}</select></label>
+            <div className="operation-wide sale-inventory-field">
+              <div className="sale-inventory-heading">
+                <label htmlFor="sale-inventory-select">Inventory item</label>
+                <ScannerTriggerButton
+                  label="Scan item"
+                  onClick={() => {
+                    setSaleScannerError('')
+                    setSaleScannerOpen(true)
+                  }}
+                />
+              </div>
+              <select
+                id="sale-inventory-select"
+                data-modal-initial-focus
+                required
+                value={saleItemId}
+                disabled={saleInventoryLoading || (!saleInventoryLoading && inventory.length === 0)}
+                onChange={(event) => {
+                  const nextId = event.target.value
+                  const nextItem = inventory.find((item) => item._id === nextId)
+                  setSaleItemId(nextId)
+                  setSaleCurrency(nextItem?.pricingCurrency === 'KHR' ? 'KHR' : 'USD')
+                  setSalePaymentMethod('CASH')
+                  setSaleQuantity('1')
+                  setSaleDiscount('0')
+                  setSaleManualPriceEnabled(false)
+                  setSaleManualPrice('')
+                  setSaleWarrantyDays('')
+                  setSaleAmountPaid('')
+                }}
+              >
+                <option value="" disabled>
+                  {saleInventoryLoading ? 'Loading available stock...' : inventory.length === 0 ? 'No stock available to sell' : 'Select available stock'}
+                </option>
+                {inventory.map((item) => (
+                  <option key={item._id} value={item._id}>
+                    {item.name}{item.imei1 ? ` — ${item.imei1}` : ''} — Qty {item.quantity} — {inventoryNativeSalePriceText(item)}
+                  </option>
+                ))}
+              </select>
+              {!saleInventoryLoading && inventory.length === 0 && <small>Add an in-stock product before creating a sale.</small>}
             </div>
-          </section>
-          <div className="sale-notes operation-wide">
-            <button type="button" className="sale-note-toggle" aria-expanded={saleNotesOpen} onClick={() => setSaleNotesOpen((open) => !open)}><span><strong>{saleNotesOpen ? 'Sale note' : 'Add sale note'}</strong><small>Optional details for this transaction</small></span>{saleNotesOpen ? <ChevronUp size={17} /> : <ChevronDown size={17} />}</button>
-            {saleNotesOpen && <label>Notes<textarea rows={3} value={saleNotes} onChange={(event) => setSaleNotes(event.target.value)} /></label>}
+            <label>Currency<select value={saleCurrency} onChange={(event) => {
+              setSaleCurrency(event.target.value as SaleCurrency)
+              setSalePaymentMethod('CASH')
+              setSaleDiscount('0')
+              setSaleManualPriceEnabled(false)
+              setSaleManualPrice('')
+              setSaleAmountPaid('')
+            }}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Cambodian Riel</option></select><small>1 USD = {riel.format(usdKhrRate)} KHR</small></label>
+            <label>Quantity<input type="number" min="1" max={selectedSaleItem?.quantity} value={effectiveSaleQuantity} disabled={!saleItemId || selectedSaleItem?.category === 'PHONE'} onChange={(event) => { setSaleQuantity(event.target.value); setSaleDiscount('0'); setSaleAmountPaid('') }} /></label>
+            <div className={`sale-price-display${salePriceInvalid || saleStockPricingInvalid ? ' needs-price' : ''}${saleManualPriceEnabled ? ' manual-price' : ''}`} role="group" aria-label={`Selling price in ${saleCurrency}`}>
+              <div className="sale-price-heading"><span>Selling price ({saleCurrency})</span>{canManuallyPriceSale && selectedSaleItem && <button type="button" className="sale-price-mode-button" aria-pressed={saleManualPriceEnabled} onClick={() => { const next = !saleManualPriceEnabled; setSaleManualPriceEnabled(next); setSaleManualPrice(next ? String(savedSaleUnitPrice) : ''); setSaleDiscount('0'); setSaleAmountPaid('') }}>{saleManualPriceEnabled ? 'Use saved price' : 'Enter manually'}</button>}</div>
+              {saleManualPriceEnabled ? <MoneyInput required currency={saleCurrency} minimum={configuredMinimumSalePrice > 0 ? configuredMinimumSalePrice : 0} value={saleManualPrice} onValueChange={(value) => { setSaleManualPrice(value); setSaleDiscount('0'); setSaleAmountPaid('') }} placeholder={saleCurrency === 'KHR' ? '0' : '0.00'} /> : <strong>{selectedSaleItem ? saleAmountText(saleUnitPrice, saleCurrency) : 'Select a product'}</strong>}
+              {selectedSaleItem
+                ? salePriceInvalid || saleStockPricingInvalid
+                  ? <button type="button" className="sale-price-configure" onClick={openSelectedSaleItemPricing}><Banknote size={13} aria-hidden="true" />{saleStockPricingInvalid ? 'Fix price' : 'Set price'}</button>
+                  : <small>{saleManualPriceEnabled ? `Manual price for this sale only${configuredMinimumSalePrice > 0 ? ` · Minimum ${saleAmountText(configuredMinimumSalePrice, saleCurrency)}` : ''}` : 'Configured in Stock Information'}</small>
+                : <small>Choose inventory first</small>}
+            </div>
+            <label className={saleDiscountInvalid ? 'field-invalid' : ''}>Discount ({saleCurrency})<MoneyInput currency={saleCurrency} minimum={0} maximum={saleMaximumDiscount} value={saleDiscount} disabled={!saleItemId} onValueChange={setSaleDiscount} placeholder={saleCurrency === 'KHR' ? '0' : '0.00'} />{selectedSaleItem && <small>{saleCurrency === 'KHR' && saleDiscountAmount % 100 !== 0 ? 'Use a whole KHR amount in increments of 100' : `${saleDiscountInvalid ? 'Maximum discount is' : 'Maximum allowed:'} ${saleAmountText(saleMaximumDiscount, saleCurrency)}`}</small>}</label>
+            <label className={`sale-warranty-field${saleWarrantyInvalid && saleWarrantyDays !== '' ? ' field-invalid' : ''}`}>Warranty period<div className="sale-warranty-input"><CalendarRange size={16} aria-hidden="true" /><input required type="number" inputMode="numeric" min="0" max="3650" step="1" value={saleWarrantyDays} onChange={(event) => setSaleWarrantyDays(event.target.value)} placeholder="Enter days" /><span>days</span></div><small>{saleWarrantyDays === '' ? 'Enter 0 when this sale has no refund warranty.' : saleWarrantyInvalid ? 'Use a whole number from 0 to 3650.' : saleWarrantyDayCount === 0 ? 'No refund warranty for this sale.' : `Refundable for ${saleWarrantyDayCount} day${saleWarrantyDayCount === 1 ? '' : 's'} after the sale.`}</small></label>
+            {paywayAvailable && saleCurrency === 'USD' && <fieldset className="sale-payment-method operation-wide">
+              <legend>How will the customer pay?</legend>
+              <button type="button" className={salePaymentMethod === 'CASH' ? 'active cash' : 'cash'} onClick={() => setSalePaymentMethod('CASH')}>
+                <span><Banknote size={20} /></span><p><strong>Pay with cash</strong><small>Record payment immediately</small></p>{salePaymentMethod === 'CASH' && <CheckCircle2 size={18} />}
+              </button>
+              <button type="button" className={salePaymentMethod === 'KHQR' ? 'active khqr' : 'khqr'} onClick={() => setSalePaymentMethod('KHQR')}>
+                <span className="khqr-payment-option-logo"><img src={khqrLogo} alt="" /></span><p><strong>Pay with KHQR</strong><small>{paywayAvailable ? 'ABA PayWay sandbox' : 'PayWay unavailable'}</small></p>{salePaymentMethod === 'KHQR' && <CheckCircle2 size={18} />}
+              </button>
+            </fieldset>}
+            {salePaymentMethod === 'CASH' && <label className={`sale-amount-received operation-wide${salePaidInvalid ? ' field-invalid' : ''}`}>Amount received ({saleCurrency}) <small className="optional-marker">Change is calculated automatically</small><MoneyInput currency={saleCurrency} minimum={0} value={saleAmountPaid} onValueChange={setSaleAmountPaid} placeholder={saleCurrency === 'KHR' ? riel.format(Math.round(saleTotal)) : saleTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} />{salePaidInvalid ? <small>Use a valid {saleCurrency === 'KHR' ? 'whole KHR amount in increments of 100' : 'cash amount'}.</small> : saleChangeDue > 0 ? <small>Change due: {saleAmountText(saleChangeDue, saleCurrency)}</small> : null}</label>}
+            <section className="sale-summary operation-wide" aria-labelledby="sale-summary-title">
+              <header><div><span>Sale summary</span><strong id="sale-summary-title">{selectedSaleItem ? `${selectedSaleItem.name} × ${effectiveSaleQuantity}` : 'No item selected'}</strong></div><b>{salePaymentMethod === 'KHQR' ? 'KHQR' : 'Cash'}</b></header>
+              <div className="sale-summary-calculation">
+                <span><small>Subtotal</small><strong>{saleAmountText(saleSubtotal, saleCurrency)}</strong></span>
+                <span><small>Discount</small><strong>− {saleAmountText(saleDiscountAmount, saleCurrency)}</strong></span>
+                <span className="total"><small>Total</small><strong>{saleAmountText(saleTotal, saleCurrency)}</strong></span>
+                <span><small>Received</small><strong>{saleAmountText(salePaymentMethod === 'KHQR' ? saleTotal : saleReceivedAmount, saleCurrency)}</strong></span>
+                <span className={salePaymentMethod === 'KHQR' || saleBalance <= 0 ? 'settled' : 'due'}><small>{saleChangeDue > 0 ? 'Change' : 'Balance'}</small><strong>{saleAmountText(salePaymentMethod === 'KHQR' ? 0 : saleChangeDue > 0 ? saleChangeDue : saleBalance, saleCurrency)}</strong></span>
+              </div>
+            </section>
+            <div className="sale-notes operation-wide">
+              <button type="button" className="sale-note-toggle" aria-expanded={saleNotesOpen} onClick={() => setSaleNotesOpen((open) => !open)}><span><strong>{saleNotesOpen ? 'Sale note' : 'Add sale note'}</strong><small>Optional details for this transaction</small></span>{saleNotesOpen ? <ChevronUp size={17} /> : <ChevronDown size={17} />}</button>
+              {saleNotesOpen && <label>Notes<textarea rows={3} value={saleNotes} onChange={(event) => setSaleNotes(event.target.value)} /></label>}
+            </div>
           </div>
         </div>
-        <footer className="operation-modal-actions"><div className="sale-total"><span>Total</span><strong>{saleAmountText(saleTotal, saleCurrency)}</strong></div><button type="button" className="ghost-button" onClick={close}>Cancel</button><button className="primary-button" disabled={saleActionDisabled} title={!saleItemId ? 'Choose an inventory product before continuing' : undefined}>{busy || saleInventoryLoading ? <LoaderCircle className="spinning" size={17} /> : salePaymentMethod === 'KHQR' ? <img className="khqr-action-logo" src={khqrLogo} alt="" /> : <Banknote size={17} />}{saleActionLabel}</button></footer>
+        <OperationWorkflowFooter
+          className="sale-actions"
+          summary={
+            <div className="sale-total">
+              <span>Total</span>
+              <strong>{saleAmountText(saleTotal, saleCurrency)}</strong>
+            </div>
+          }
+          secondaryAction={
+            <button type="button" className="ghost-button" onClick={close}>
+              Cancel
+            </button>
+          }
+          primaryAction={
+            <button
+              type="submit"
+              className="primary-button"
+              disabled={saleActionDisabled}
+              title={!saleItemId ? 'Choose an inventory product before continuing' : undefined}
+            >
+              {busy || saleInventoryLoading ? (
+                <LoaderCircle className="spinning" size={17} />
+              ) : salePaymentMethod === 'KHQR' ? (
+                <img className="khqr-action-logo" src={khqrLogo} alt="" />
+              ) : (
+                <Banknote size={17} />
+              )}
+              {saleActionLabel}
+            </button>
+          }
+        />
       </form>}
 
       {kind === 'sale' && saleKhqr && !saleCompleted && <section className={`sale-khqr-workflow payment-${salePaymentPhase.toLowerCase()}`}>
@@ -2141,7 +2246,28 @@ export default function OperationModalBridge() {
         </div>}
         {salePaymentPhase !== 'COMPLETED' && <div className={`khqr-inline-status status-${salePaymentPhase.toLowerCase()}`}>{salePaymentPhase === 'SCANNED' || salePaymentPhase === 'APPROVED' ? <CheckCircle2 size={15} /> : salePaymentPhase === 'CANCELLED' ? <X size={15} /> : <RefreshCw size={15} className={busy || salePaymentPhase === 'ERROR' ? '' : 'spinning'} />}<p><strong>{salePaymentStatus}</strong><small>{salePaymentPhase === 'CANCELLED' ? 'The cashier cancelled this payment request' : salePaymentPhase === 'SCANNED' ? 'Waiting for PayWay to approve the payment' : salePaymentPhase === 'ERROR' ? 'Use Check now to retry verification' : 'Checking securely with ABA PayWay every 3 seconds'}</small></p></div>}
         {salePaymentPhase !== 'COMPLETED' && <p className="khqr-security-note">{salePaymentPhase === 'CANCELLED' ? 'No sale was created and inventory was not deducted.' : 'Inventory will not be deducted until PayWay confirms payment.'}</p>}
-        <footer className="operation-modal-actions">{salePaymentPhase === 'COMPLETED' ? <button type="button" className="primary-button khqr-done-button" onClick={resetAndClose}><CheckCircle2 size={16} /> Done</button> : salePaymentPhase === 'CANCELLED' ? <><button type="button" className="ghost-button" onClick={resetAndClose}>Close</button><button type="button" className="primary-button" onClick={restartKhqrPayment}>Start another payment</button></> : <><button type="button" className="ghost-button" onClick={cancelKhqrPayment} disabled={busy}>Cancel payment</button>{saleKhqr.deeplink && <a className="primary-button khqr-mobile-link" href={saleKhqr.deeplink}>Open ABA Mobile</a>}<button type="button" className="secondary-button" onClick={() => void checkKhqrPayment()} disabled={busy}><RefreshCw size={16} /> Check now</button></>}</footer>
+        <OperationWorkflowFooter
+          className="sale-khqr-actions"
+        >
+          {salePaymentPhase === 'COMPLETED' ? (
+            <button type="button" className="primary-button khqr-done-button" onClick={resetAndClose}>
+              <CheckCircle2 size={16} /> Done
+            </button>
+          ) : salePaymentPhase === 'CANCELLED' ? (
+            <>
+              <button type="button" className="ghost-button" onClick={resetAndClose}>Close</button>
+              <button type="button" className="primary-button" onClick={restartKhqrPayment}>Start another payment</button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="ghost-button" onClick={cancelKhqrPayment} disabled={busy}>Cancel payment</button>
+              {saleKhqr.deeplink && <a className="primary-button khqr-mobile-link" href={saleKhqr.deeplink}>Open ABA Mobile</a>}
+              <button type="button" className="secondary-button" onClick={() => void checkKhqrPayment()} disabled={busy}>
+                <RefreshCw size={16} /> Check now
+              </button>
+            </>
+          )}
+        </OperationWorkflowFooter>
         {saleQrZoomed && <div className="khqr-zoom-backdrop" role="presentation">
           <section className="khqr-zoom-dialog" role="dialog" aria-modal="true" aria-label={`Enlarged KHQR payment for $${saleKhqr.amount.toFixed(2)}`}>
             <button type="button" className="khqr-zoom-close" onClick={() => setSaleQrZoomed(false)} aria-label="Close enlarged KHQR"><X size={20} /></button>
@@ -2158,6 +2284,32 @@ export default function OperationModalBridge() {
           </section>
         </div>}
       </section>}
+
+      {kind === 'sale' && saleScannerOpen && (
+        <OperationModalShell
+          scanner
+          compact
+          icon={<ScanLine size={20} />}
+          eyebrow="Barcode scanner"
+          title="Scan product barcode, SKU, or IMEI"
+          description="Point camera at the product label or device barcode."
+          error={saleScannerError}
+          onClose={() => {
+            setSaleScannerOpen(false)
+            setSaleScannerError('')
+            window.setTimeout(() => document.getElementById('sale-inventory-select')?.focus(), 0)
+          }}
+          className="sale-scanner-modal"
+          ariaLabel="Scan product barcode, SKU, or IMEI"
+        >
+          <CameraBarcodeReader
+            autoStart
+            readerId="phoneflow-sale-item-reader"
+            onScan={applyScannedSaleItem}
+            onError={setSaleScannerError}
+          />
+        </OperationModalShell>
+      )}
 
       {kind === 'pawn' && pawnScannerOpen && <div className="imei-scanner-backdrop" role="presentation">
         <section className="imei-scanner-dialog" role="dialog" aria-modal="true" aria-labelledby="pawn-imei-scanner-title">
