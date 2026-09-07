@@ -3,6 +3,7 @@ import { AlertTriangle, Calculator, FileText, HandCoins, ScanLine } from 'lucide
 import type { PawnCurrency, Pawn } from '../../types/domain'
 import { currency, money, riel, pawnMoney, pawnEquivalentText, useExchangeRate } from '../../lib/presentation'
 import MoneyInput from '../../components/MoneyInput'
+import AutoCalculateToggle from '../../components/AutoCalculateToggle'
 import SectionHeader from '../../components/SectionHeader'
 import { getStoredValuations, setStoredValuations, safeStorage } from '../../lib/storage'
 import { getPawnAutoCalculatePreference, PAWN_AUTO_CALCULATE_EVENT, savePawnAutoCalculatePreference } from '../../lib/pawnPreferences'
@@ -94,10 +95,6 @@ export default function DepreciationView({ goTo }: { goTo: (key: NavKey) => void
     }
   }, [ageMonths, autoCalculate, batteryHealth, condition, includedAccessories, lockStatus, marketPrice, pawnRate, repairCost, valuationCurrency])
 
-  function toggleAutoCalculate() {
-    savePawnAutoCalculatePreference(!autoCalculate)
-  }
-
   function saveValuation() {
     const record = {
       id: `VAL-${Date.now()}`,
@@ -171,7 +168,7 @@ export default function DepreciationView({ goTo }: { goTo: (key: NavKey) => void
       </div>
       <section className="calculator-layout">
         <article className="surface-card calculator-card">
-          <div className="card-heading"><div><span className="eyebrow">Collateral assessment</span><h3>Assess the phone</h3></div><div className="calculation-heading-actions"><button type="button" className={`calculation-mode-toggle ${autoCalculate ? 'active' : ''}`} role="switch" aria-checked={autoCalculate} onClick={toggleAutoCalculate}><span aria-hidden="true" /><strong>Auto calculate</strong><small>{autoCalculate ? 'On' : 'Off'}</small></button><span className="calculator-mark"><Calculator size={20} /></span></div></div>
+          <div className="card-heading"><div><span className="eyebrow">Collateral assessment</span><h3>Assess the phone</h3></div><div className="calculation-heading-actions"><AutoCalculateToggle checked={autoCalculate} onChange={savePawnAutoCalculatePreference} /><span className="calculator-mark"><Calculator size={20} /></span></div></div>
 
           <div className="calculator-section">
             <div className="calculator-section-heading"><strong>1. Resale value</strong><small>Use a recent second-hand selling price, not the original retail price.</small></div>
@@ -239,5 +236,4 @@ export default function DepreciationView({ goTo }: { goTo: (key: NavKey) => void
     </>
   )
 }
-
 

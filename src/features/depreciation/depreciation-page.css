@@ -32,85 +32,6 @@
   gap: 9px;
 }
 
-.calculation-mode-toggle {
-  min-height: 36px;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  color: var(--muted);
-  background: var(--bg-soft);
-  transition: border-color var(--transition-normal), color var(--transition-normal), background var(--transition-normal), box-shadow var(--transition-normal);
-}
-
-.calculation-mode-toggle:hover {
-  color: var(--text);
-  border-color: color-mix(in srgb, var(--primary) 48%, var(--border));
-}
-
-.calculation-mode-toggle:focus-visible {
-  outline: 0;
-  box-shadow: 0 0 0 3px var(--primary-soft);
-}
-
-.calculation-mode-toggle > span {
-  width: 28px;
-  height: 16px;
-  position: relative;
-  flex: 0 0 auto;
-  border-radius: var(--radius-full);
-  background: var(--border-strong);
-  transition: background var(--transition-normal);
-}
-
-.calculation-mode-toggle > span::after {
-  content: '';
-  width: 10px;
-  height: 10px;
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  border-radius: 50%;
-  background: var(--surface);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.28);
-  transition: transform var(--transition-normal), background var(--transition-normal);
-}
-
-.calculation-mode-toggle strong {
-  color: currentColor;
-  font-size: 9px;
-  white-space: nowrap;
-}
-
-.calculation-mode-toggle small {
-  min-width: 17px;
-  color: var(--muted-2);
-  font-size: 8px;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
-.calculation-mode-toggle.active {
-  color: var(--primary);
-  border-color: color-mix(in srgb, var(--primary) 45%, transparent);
-  background: var(--primary-soft);
-}
-
-.calculation-mode-toggle.active > span {
-  background: var(--primary);
-}
-
-.calculation-mode-toggle.active > span::after {
-  transform: translateX(12px);
-  background: #fff;
-}
-
-.calculation-mode-toggle.active small {
-  color: var(--primary);
-}
-
 .calculator-section {
   margin-top: 20px;
   padding-top: 18px;
@@ -532,11 +453,11 @@
     margin-left: auto;
   }
 
-  .calculation-mode-toggle {
+  .calculator-card .calculation-mode-toggle {
     padding-inline: 8px;
   }
 
-  .calculation-mode-toggle strong {
+  .calculator-card .calculation-mode-toggle strong {
     display: none;
   }
 

@@ -375,6 +375,7 @@ function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
                 <SegmentedControl<Currency>
                   label="Currency"
                   value={currency}
+                  className="loan-currency-options"
                   onChange={(nextCurrency) => {
                     setCurrency(nextCurrency)
                     if (nextCurrency === 'KHR') {
@@ -394,6 +395,7 @@ function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
                 <SegmentedControl<'NONE' | 'FIXED' | 'PERCENT'>
                   label="Interest calculation"
                   value={interestType}
+                  className="loan-interest-options"
                   onChange={(nextInterestType) => {
                     setInterestType(nextInterestType)
                     if (nextInterestType === 'NONE') setInterestValue(0)

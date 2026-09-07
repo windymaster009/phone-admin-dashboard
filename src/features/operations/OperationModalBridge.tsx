@@ -28,6 +28,7 @@ import {
 import { api, getSessionUser } from '../../lib/api'
 import { safeStorage } from '../../lib/storage'
 import MoneyInput from '../../components/MoneyInput'
+import AutoCalculateToggle from '../../components/AutoCalculateToggle'
 import OperationWorkflowStepper, { type WorkflowStep } from '../../components/OperationWorkflowStepper'
 import OperationWorkflowFooter from '../../components/OperationWorkflowFooter'
 import OperationSectionCard from '../../components/OperationSectionCard'
@@ -231,8 +232,7 @@ export default function OperationModalBridge() {
     setPawnPrincipalLimitMessage('')
   }, [kind, maximumPawn, pawnAutoCalculate, pawnStep, pawnValuation])
 
-  function togglePawnAutoCalculate() {
-    const nextValue = !pawnAutoCalculate
+  function changePawnAutoCalculate(nextValue: boolean) {
     if (nextValue) {
       if (pawnEffectiveDailyFeeRate > 0) setPawnDailyFeeRate(String(pawnEffectiveDailyFeeRate))
     } else {
@@ -1696,7 +1696,7 @@ export default function OperationModalBridge() {
               {pawnValuation && <div className="pawn-imported-valuation"><CheckCircle2 size={18} /><div><strong>Standalone calculator offer imported</strong><small>Valuation {pawnValuation.id || 'draft'} · Values are locked to the verified assessment.</small></div><span>Maximum {pawnAmountText(maximumPawn, pawnCurrency)}</span></div>}
 
               <div className="pawn-inline-assessment">
-                <div className="pawn-assessment-heading"><div><span>1. Resale value and condition</span><small>Use a recent second-hand selling price and inspect the actual phone.</small></div>{pawnValuation ? <b>Imported</b> : <button type="button" className={`calculation-mode-toggle ${pawnAutoCalculate ? 'active' : ''}`} role="switch" aria-checked={pawnAutoCalculate} onClick={togglePawnAutoCalculate}><span aria-hidden="true" /><strong>Auto calculate</strong><small>{pawnAutoCalculate ? 'On' : 'Off'}</small></button>}</div>
+                <div className="pawn-assessment-heading"><div><span>1. Resale value and condition</span><small>Use a recent second-hand selling price and inspect the actual phone.</small></div>{pawnValuation ? <b>Imported</b> : <AutoCalculateToggle checked={pawnAutoCalculate} onChange={changePawnAutoCalculate} />}</div>
                 <div className="operation-form-grid pawn-assessment-grid">
                   <label>Valuation currency<select disabled={Boolean(pawnValuation)} value={pawnCurrency} onChange={(event) => changePawnCurrency(event.target.value as PawnCurrency)}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Cambodian Riel</option></select></label>
                   <label>Resale value ({pawnCurrency})<MoneyInput currency={pawnCurrency} minimum={pawnCurrency === 'KHR' ? 100 : 0.01} required readOnly={Boolean(pawnValuation)} value={pawnMarketPrice || ''} onValueChange={(value) => setPawnMarketPrice(Math.max(0, Number(value)))} /></label>

@@ -227,8 +227,8 @@ describe('LoanPage component and shared component adoption', () => {
 
     // Now on Step 2: Terms & schedule
     expect(within(createDialog).getByText('Loan amount')).toBeInTheDocument()
-    expect(within(createDialog).getByRole('tablist', { name: 'Currency' })).toBeInTheDocument()
-    expect(within(createDialog).getByRole('tablist', { name: 'Interest calculation' })).toBeInTheDocument()
+    expect(within(createDialog).getByRole('tablist', { name: 'Currency' })).toHaveClass('loan-currency-options')
+    expect(within(createDialog).getByRole('tablist', { name: 'Interest calculation' })).toHaveClass('loan-interest-options')
 
     // Enter loan amount via MoneyInput
     const amountInput = within(createDialog).getByLabelText(/Loan amount/i)
