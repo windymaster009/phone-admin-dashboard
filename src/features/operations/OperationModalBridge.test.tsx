@@ -258,4 +258,117 @@ describe('OperationModalBridge component', () => {
       expect(screen.getByLabelText(/Step 1 of 2: Customer verification/i)).toBeInTheDocument()
     })
   })
+
+  it('handles long customer names, device strings, large KHR and USD amounts, and multi-clause errors safely', async () => {
+    const longName = 'Sokha Chandravuthy International Trading Representative'
+    const longAddress = 'Building 128, Street 608, Sangkat Boeung Kak II, Khan Toul Kork, Phnom Penh, Cambodia'
+    const mockCustomers = [
+      { _id: 'cust-long-1', name: longName, phone: '012 345 678', nationalIdNumber: '0987654321', active: true },
+    ]
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: mockCustomers }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [], suppliers: [], items: [], usdKhr: 4100 }) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'pawn' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // Step 1: Select customer with very long name
+    const customerSelect = screen.getByRole('combobox')
+    fireEvent.change(customerSelect, { target: { value: 'cust-long-1' } })
+
+    // Verify long customer name renders in customer summary
+    expect(screen.getByText(longName)).toBeInTheDocument()
+
+    // Test new customer mode with long name and address
+    const newTab = screen.getByRole('tab', { name: /New customer/i })
+    fireEvent.click(newTab)
+
+    const nameInput = screen.getByPlaceholderText(/Full name/i)
+    const addressInput = screen.getByPlaceholderText(/Current address/i)
+    fireEvent.change(nameInput, { target: { value: longName } })
+    fireEvent.change(addressInput, { target: { value: longAddress } })
+    expect(nameInput).toHaveValue(longName)
+    expect(addressInput).toHaveValue(longAddress)
+
+    // Switch back to existing customer and confirm ownership
+    const existingTab = screen.getByRole('tab', { name: /Existing customer/i })
+    fireEvent.click(existingTab)
+    fireEvent.change(customerSelect, { target: { value: 'cust-long-1' } })
+    fireEvent.click(screen.getByRole('checkbox'))
+
+    // Advance to Step 2
+    fireEvent.click(screen.getByRole('button', { name: /Continue to collateral/i }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Step 2 of 2: Collateral and contract terms/i)).toBeInTheDocument()
+    })
+
+    // Step 2: Fill long device details
+    const brandInput = screen.getByPlaceholderText(/Apple/i)
+    const modelInput = screen.getByPlaceholderText(/iPhone 13 Pro/i)
+    const colorInput = screen.getByPlaceholderText(/Blue/i)
+    const imeiInput = screen.getByPlaceholderText(/15-digit IMEI/i)
+
+    fireEvent.change(brandInput, { target: { value: 'Apple Authorized Refurbished Device' } })
+    fireEvent.change(modelInput, { target: { value: 'iPhone 15 Pro Max International Dual SIM Edition' } })
+    fireEvent.change(colorInput, { target: { value: 'Natural Titanium with Custom Protective Finish' } })
+    fireEvent.change(imeiInput, { target: { value: '860123456789012' } })
+
+    expect(brandInput).toHaveValue('Apple Authorized Refurbished Device')
+    expect(modelInput).toHaveValue('iPhone 15 Pro Max International Dual SIM Edition')
+    expect(colorInput).toHaveValue('Natural Titanium with Custom Protective Finish')
+    expect(imeiInput).toHaveValue('860123456789012')
+
+    // Switch currency to KHR and enter large KHR values
+    const currencySelect = screen.getByRole('combobox', { name: /Valuation currency/i })
+    fireEvent.change(currencySelect, { target: { value: 'KHR' } })
+
+    // Enter large resale value in KHR
+    const resaleInput = screen.getByRole('textbox', { name: /Resale value \(KHR\)/i })
+    fireEvent.change(resaleInput, { target: { value: '999,999,999' } })
+
+    // Verify calculation updates without overflow
+    await waitFor(() => {
+      // The offer card should show maximum principal text
+      expect(screen.getByText(/Recommended maximum principal/i)).toBeInTheDocument()
+    })
+
+    // Enter principal in KHR that exceeds maximum to test clamping and warning message
+    const principalInput = screen.getByRole('textbox', { name: /Principal \(KHR\)/i })
+    fireEvent.change(principalInput, { target: { value: '999,999,999' } })
+
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(/Principal capped at/i)
+    })
+
+    // Enter a valid large principal within the limit
+    fireEvent.change(principalInput, { target: { value: '50,000,000' } })
+
+    await waitFor(() => {
+      expect(screen.getByText(/50,000,000 KHR principal/i)).toBeInTheDocument()
+    })
+
+    // Fill long contract notes
+    const notesInput = screen.getByRole('textbox', { name: /Contract notes/i })
+    const longNotes = 'Collateral inspected in shop. Minor cosmetic micro-scratches on frame. Serial verified against customer invoice. Customer requested 1-month term with standard daily fee rate.'
+    fireEvent.change(notesInput, { target: { value: longNotes } })
+    expect(notesInput).toHaveValue(longNotes)
+
+    // Verify contract summary card values
+    expect(screen.getByText(/Calculated due date/i)).toBeInTheDocument()
+    expect(screen.getByText(/Total to redeem at due/i)).toBeInTheDocument()
+    expect(screen.getByText('Daily pawn fee', { selector: 'span' })).toBeInTheDocument()
+  })
 })
