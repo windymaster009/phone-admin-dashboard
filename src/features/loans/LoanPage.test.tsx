@@ -174,6 +174,15 @@ describe('LoanPage component and shared component adoption', () => {
         } as Response
       }
 
+      if (url.includes('/customers')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ customers: [] }),
+        } as Response
+      }
+
       return {
         ok: true,
         status: 200,
@@ -196,6 +205,8 @@ describe('LoanPage component and shared component adoption', () => {
     // Dialog opens with OperationModalShell
     const createDialog = screen.getByRole('dialog', { name: /Create loan/i })
     expect(createDialog).toBeInTheDocument()
+
+    await user.click(within(createDialog).getByRole('tab', { name: 'New customer' }))
 
     // OperationWorkflowStepper is rendered inside the dialog
     const stepper = within(createDialog).getByRole('group', { name: /Loan creation steps/i })
@@ -285,6 +296,92 @@ describe('LoanPage component and shared component adoption', () => {
 
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: /Loan saved/i })).not.toBeInTheDocument()
+    })
+  })
+
+  it('selects an existing customer and preserves the borrower snapshot in the loan payload', async () => {
+    let capturedBody: Record<string, unknown> | null = null
+    const existingCustomer = {
+      _id: 'customer-loan-1',
+      name: 'Dara Sok',
+      phone: '096 111 222',
+      nationalIdNumber: 'KH-998877',
+      address: 'Kandal, Cambodia',
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+
+      if (url.includes('/auth/me')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ user: mockOwnerUser }),
+        } as Response
+      }
+
+      if (url.includes('/customers')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ customers: [existingCustomer] }),
+        } as Response
+      }
+
+      if (url.includes('/loans') && init?.method === 'POST') {
+        capturedBody = JSON.parse(String(init.body))
+        return {
+          ok: true,
+          status: 201,
+          headers: new Headers(),
+          json: async () => ({
+            loan: {
+              ...mockLoanRecord,
+              _id: 'loan-existing-customer',
+              loanNo: 'LN-2026-EXISTING',
+              principal: 750,
+              borrower: existingCustomer,
+            },
+          }),
+        } as Response
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ loans: [mockLoanRecord], summary: mockSummary }),
+      } as Response
+    })
+
+    const user = userEvent.setup()
+    render(<LoanPage summary={mockSummary} />)
+
+    await user.click(await screen.findByRole('button', { name: /New loan/i }))
+    const dialog = screen.getByRole('dialog', { name: /Create loan/i })
+    const customerSelect = await within(dialog).findByRole('combobox', { name: 'Existing customer' })
+    await user.selectOptions(customerSelect, existingCustomer._id)
+
+    expect(within(dialog).getByText(existingCustomer.name)).toBeInTheDocument()
+    expect(within(dialog).getByText(existingCustomer.phone)).toBeInTheDocument()
+    expect(within(dialog).getByText(existingCustomer.nationalIdNumber)).toBeInTheDocument()
+    expect(within(dialog).getByText(existingCustomer.address)).toBeInTheDocument()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Continue' }))
+    await user.type(within(dialog).getByLabelText(/Loan amount/i), '750')
+    await user.click(within(dialog).getByRole('button', { name: 'Create loan' }))
+
+    await waitFor(() => {
+      expect(capturedBody).toEqual(expect.objectContaining({
+        borrower: {
+          name: existingCustomer.name,
+          phone: existingCustomer.phone,
+          nationalIdNumber: existingCustomer.nationalIdNumber,
+          address: existingCustomer.address,
+        },
+      }))
     })
   })
 

@@ -283,6 +283,28 @@
   opacity: 0.55;
 }
 
+.loan-borrower-panel,
+.loan-borrower-fields {
+  min-width: 0;
+}
+
+.loan-borrower-fields {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.loan-borrower-summary {
+  margin-top: 0;
+}
+
+.loan-borrower-summary .key-value-value {
+  white-space: normal;
+  overflow-wrap: break-word;
+}
+
+.loan-customer-error {
+  color: var(--rose, #fb7185) !important;
+}
+
 
 .loan-preview {
   display: grid;
@@ -475,6 +497,7 @@
 }
 
 @media (max-width: 640px) {
+  .loan-borrower-fields,
   .loan-control-field .segmented-control.loan-interest-options {
     grid-template-columns: 1fr;
   }

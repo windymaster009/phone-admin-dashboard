@@ -31,6 +31,15 @@ import KeyValueSummary from '../../components/KeyValueSummary'
 
 type Currency = 'USD' | 'KHR'
 type LoanStatus = 'ACTIVE' | 'DUE_SOON' | 'OVERDUE' | 'PARTIALLY_PAID' | 'PAID' | 'CANCELLED'
+type LoanBorrowerMode = 'EXISTING' | 'NEW'
+
+type LoanCustomer = {
+  _id: string
+  name: string
+  phone?: string
+  nationalIdNumber?: string
+  address?: string
+}
 
 type Loan = {
   _id: string
@@ -188,6 +197,11 @@ function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }) {
   const [step, setStep] = useState<1 | 2>(1)
+  const [borrowerMode, setBorrowerMode] = useState<LoanBorrowerMode>('EXISTING')
+  const [customers, setCustomers] = useState<LoanCustomer[]>([])
+  const [customersLoading, setCustomersLoading] = useState(true)
+  const [customersError, setCustomersError] = useState('')
+  const [selectedCustomerId, setSelectedCustomerId] = useState('')
   const [borrowerName, setBorrowerName] = useState('')
   const [borrowerPhone, setBorrowerPhone] = useState('')
   const [nationalIdNumber, setNationalIdNumber] = useState('')
@@ -205,6 +219,54 @@ function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
   const [reminderDays, setReminderDays] = useState(3)
   const [reason, setReason] = useState('')
   const [notes, setNotes] = useState('')
+
+  useEffect(() => {
+    let active = true
+    setCustomersLoading(true)
+    setCustomersError('')
+
+    void api<{ customers: LoanCustomer[] }>('/customers')
+      .then((result) => {
+        if (active) setCustomers(Array.isArray(result.customers) ? result.customers : [])
+      })
+      .catch((reason: unknown) => {
+        if (active) setCustomersError(reason instanceof Error ? reason.message : 'Unable to load customers')
+      })
+      .finally(() => {
+        if (active) setCustomersLoading(false)
+      })
+
+    return () => { active = false }
+  }, [])
+
+  const selectedCustomer = customers.find((customer) => customer._id === selectedCustomerId)
+  const borrowerValid = borrowerMode === 'EXISTING'
+    ? Boolean(selectedCustomer)
+    : Boolean(borrowerName.trim())
+
+  const clearBorrower = () => {
+    setBorrowerName('')
+    setBorrowerPhone('')
+    setNationalIdNumber('')
+    setAddress('')
+  }
+
+  const changeBorrowerMode = (nextMode: LoanBorrowerMode) => {
+    setBorrowerMode(nextMode)
+    setSelectedCustomerId('')
+    clearBorrower()
+    setStep1Error('')
+  }
+
+  const selectCustomer = (customerId: string) => {
+    const customer = customers.find((candidate) => candidate._id === customerId)
+    setSelectedCustomerId(customerId)
+    setBorrowerName(customer?.name || '')
+    setBorrowerPhone(customer?.phone || '')
+    setNationalIdNumber(customer?.nationalIdNumber || '')
+    setAddress(customer?.address || '')
+    setStep1Error('')
+  }
 
   const interestAmount = interestType === 'FIXED' ? interestValue : interestType === 'PERCENT' ? principal * interestValue / 100 : 0
 
@@ -224,8 +286,8 @@ function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
   ]
 
   const handleContinue = () => {
-    if (!borrowerName.trim()) {
-      setStep1Error('Borrower name is required')
+    if (!borrowerValid) {
+      setStep1Error(borrowerMode === 'EXISTING' ? 'Select an existing customer' : 'Borrower name is required')
       return
     }
     setStep1Error('')
@@ -294,54 +356,115 @@ function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
         ariaLabel="Loan creation steps"
         onStepClick={(_stepObj, index) => {
           if (index === 0) setStep(1)
-          else if (index === 1 && borrowerName.trim()) setStep(2)
+          else if (index === 1 && borrowerValid) setStep(2)
         }}
       />
 
       <form className="operation-form loan-create-form" onSubmit={handleFormSubmit}>
         {step === 1 && (
           <div className="operation-form-grid">
-            <label>
-              Borrower name
-              <input
-                name="borrowerName"
-                autoFocus
-                required
-                placeholder="Full name"
-                value={borrowerName}
-                onChange={(e) => {
-                  setBorrowerName(e.target.value)
-                  if (step1Error) setStep1Error('')
-                }}
+            <div className="loan-control-field operation-wide">
+              <span className="field-label">Borrower source</span>
+              <SegmentedControl<LoanBorrowerMode>
+                label="Borrower source"
+                value={borrowerMode}
+                className="loan-borrower-options"
+                ariaControls="loan-borrower-panel"
+                onChange={changeBorrowerMode}
+                options={[
+                  { value: 'EXISTING', label: 'Existing customer', id: 'loan-borrower-tab-existing' },
+                  { value: 'NEW', label: 'New customer', id: 'loan-borrower-tab-new' },
+                ]}
               />
-            </label>
-            <label>
-              Phone number <small className="optional-marker">Optional</small>
-              <input
-                name="borrowerPhone"
-                placeholder="012 345 678"
-                value={borrowerPhone}
-                onChange={(e) => setBorrowerPhone(e.target.value)}
-              />
-            </label>
-            <label>
-              National ID <small className="optional-marker">Optional</small>
-              <input
-                name="nationalIdNumber"
-                placeholder="ID number"
-                value={nationalIdNumber}
-                onChange={(e) => setNationalIdNumber(e.target.value)}
-              />
-            </label>
-            <label className="operation-wide">
-              Address <small className="optional-marker">Optional</small>
-              <input
-                name="address"
-                placeholder="Village, district, province"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-              />
-            </label>
+            </div>
+
+            <div
+              id="loan-borrower-panel"
+              className="loan-borrower-panel operation-wide"
+              role="tabpanel"
+              aria-labelledby={borrowerMode === 'EXISTING' ? 'loan-borrower-tab-existing' : 'loan-borrower-tab-new'}
+            >
+              {borrowerMode === 'EXISTING' ? (
+                <div className="operation-form-grid loan-borrower-fields">
+                  <label className="operation-wide">
+                    Existing customer
+                    <select
+                      autoFocus
+                      required
+                      value={selectedCustomerId}
+                      disabled={customersLoading}
+                      aria-describedby={customersError ? 'loan-customers-error' : undefined}
+                      onChange={(event) => selectCustomer(event.target.value)}
+                    >
+                      <option value="" disabled>
+                        {customersLoading ? 'Loading customers...' : customers.length ? 'Select customer' : 'No customers available'}
+                      </option>
+                      {customers.map((customer) => (
+                        <option key={customer._id} value={customer._id}>
+                          {customer.name}{customer.phone ? ` — ${customer.phone}` : ' — No phone recorded'}
+                        </option>
+                      ))}
+                    </select>
+                    {customersError && <small id="loan-customers-error" className="loan-customer-error" role="alert">{customersError}. Choose New customer to continue.</small>}
+                    {!customersLoading && !customersError && customers.length === 0 && <small>No saved customers yet. Choose New customer to enter borrower information.</small>}
+                  </label>
+
+                  {selectedCustomer && (
+                    <KeyValueSummary
+                      columns={2}
+                      className="loan-borrower-summary operation-wide"
+                      items={[
+                        { id: 'customer-name', label: 'Customer', value: selectedCustomer.name },
+                        { id: 'customer-phone', label: 'Phone', value: selectedCustomer.phone || 'Not recorded', tone: selectedCustomer.phone ? 'default' : 'muted' },
+                        { id: 'customer-id', label: 'National ID', value: selectedCustomer.nationalIdNumber || 'Not recorded', tone: selectedCustomer.nationalIdNumber ? 'default' : 'muted' },
+                        { id: 'customer-address', label: 'Address', value: selectedCustomer.address || 'Not recorded', tone: selectedCustomer.address ? 'default' : 'muted' },
+                      ]}
+                    />
+                  )}
+                </div>
+              ) : (
+                <div className="operation-form-grid loan-borrower-fields">
+                  <label>
+                    Borrower name
+                    <input
+                      autoFocus
+                      required
+                      placeholder="Full name"
+                      value={borrowerName}
+                      onChange={(e) => {
+                        setBorrowerName(e.target.value)
+                        if (step1Error) setStep1Error('')
+                      }}
+                    />
+                  </label>
+                  <label>
+                    Phone number <small className="optional-marker">Optional</small>
+                    <input
+                      placeholder="012 345 678"
+                      value={borrowerPhone}
+                      onChange={(e) => setBorrowerPhone(e.target.value)}
+                    />
+                  </label>
+                  <label>
+                    National ID <small className="optional-marker">Optional</small>
+                    <input
+                      placeholder="ID number"
+                      value={nationalIdNumber}
+                      onChange={(e) => setNationalIdNumber(e.target.value)}
+                    />
+                  </label>
+                  <label className="operation-wide">
+                    Address <small className="optional-marker">Optional</small>
+                    <input
+                      placeholder="Village, district, province"
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                    />
+                  </label>
+                </div>
+              )}
+            </div>
+
           </div>
         )}
 
@@ -536,7 +659,7 @@ function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
                 type="button"
                 className="primary-button"
                 onClick={handleContinue}
-                disabled={busy || !borrowerName.trim()}
+                disabled={busy || !borrowerValid}
               >
                 Continue
               </button>
