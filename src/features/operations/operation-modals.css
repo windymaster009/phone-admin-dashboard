@@ -2918,8 +2918,9 @@ body.operation-modal-open {
       max(16px, env(safe-area-inset-left, 0px));
   }
 
-  /* Pawn step one is shorter, so balance it inside the safe viewport. */
-  .operation-modal-backdrop:has(.operation-modal-pawn) {
+  /* Pawn step one and sale workflows balance inside the safe viewport. */
+  .operation-modal-backdrop:has(.operation-modal-pawn),
+  .operation-modal-backdrop:has(.operation-modal-sale) {
     align-items: center;
   }
 
