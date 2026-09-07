@@ -5,6 +5,7 @@ import { api } from '../../lib/api'
 import { dateText, money, pawnEquivalentText, pawnMoney, pawnUsdValue, useExchangeRate } from '../../lib/presentation'
 import MoneyInput from '../../components/MoneyInput'
 import StatusBadge from '../../components/StatusBadge'
+import KeyValueSummary from '../../components/KeyValueSummary'
 import { printInventoryLabel } from '../inventory/barcode'
 import './pawn-management.css'
 
@@ -171,12 +172,16 @@ export default function PawnDetailModal({ pawn, onClose, onOpenAll, onAction, on
           </div>
           <strong className="pawn-balance-total">{pawnMoney(outstanding, pawnCurrency)}</strong>
           <p>Return this amount to collect the pawned item today.</p>
-          <div className="pawn-balance-breakdown">
-            <div><span>Principal still owed</span><strong>{pawnMoney(remainingPrincipal, pawnCurrency)}</strong></div>
-            <div><span>Fee accumulated today</span><strong>{pawnMoney(currentFee, pawnCurrency)}</strong></div>
-            <div><span>Payments received</span><strong>{pawnMoney(pawn.amountPaid || 0, pawnCurrency)}</strong></div>
-            <div><span>Payment due</span><strong>{dateText(pawn.dueDate)}</strong></div>
-          </div>
+          <KeyValueSummary
+            columns={4}
+            className="pawn-balance-breakdown"
+            items={[
+              { id: 'principal', label: 'Principal still owed', value: pawnMoney(remainingPrincipal, pawnCurrency) },
+              { id: 'fee', label: 'Fee accumulated today', value: pawnMoney(currentFee, pawnCurrency) },
+              { id: 'payments', label: 'Payments received', value: pawnMoney(pawn.amountPaid || 0, pawnCurrency) },
+              { id: 'due', label: 'Payment due', value: dateText(pawn.dueDate) },
+            ]}
+          />
         </section>
 
         <div className="pawn-detail-groups">
@@ -205,10 +210,15 @@ export default function PawnDetailModal({ pawn, onClose, onOpenAll, onAction, on
           </section>
         </div>
 
-        <section className="pawn-verification-summary" aria-label="Contract verification">
-          <div><span>Item ownership</span><strong>{pawn.ownershipConfirmed || pawn.identificationVerified ? 'Confirmed by staff' : 'Legacy record'}</strong></div>
-          <div><span>National ID</span><strong>{pawn.identificationVerified ? 'Recorded and verified' : 'Not recorded — optional'}</strong></div>
-        </section>
+        <KeyValueSummary
+          columns={2}
+          className="pawn-verification-summary"
+          aria-label="Contract verification"
+          items={[
+            { id: 'ownership', label: 'Item ownership', value: pawn.ownershipConfirmed || pawn.identificationVerified ? 'Confirmed by staff' : 'Legacy record' },
+            { id: 'id', label: 'National ID', value: pawn.identificationVerified ? 'Recorded and verified' : 'Not recorded — optional' },
+          ]}
+        />
         {pawn.renewals && pawn.renewals.length > 0 && <div className="detail-note pawn-renewal-history"><span className="eyebrow">Extension history</span>{pawn.renewals.map((renewal, index) => { const recordedPayment = renewal.feePaid ?? renewal.paymentAmount; const ticketPart = renewal.ticketPart || index + 2; return <div className="pawn-renewal-history-row" key={`${renewal.renewedAt}-${index}`}><p><strong>Part {ticketPart} · {dateText(renewal.renewedAt)}</strong> · {renewal.termDays ? `${renewal.termDays} days added` : 'Legacy extension'} · Total contract length {renewal.contractLengthDays ?? '—'} days · {recordedPayment ? `Payment recorded ${pawnMoney(recordedPayment, pawnCurrency)}` : 'No extension payment'} · {pawnMoney(renewal.dailyFeeAmount ?? dailyFeeAmount, pawnCurrency)} per day · New due {dateText(renewal.newDueDate)}{renewal.renewedBy?.name ? ` · ${renewal.renewedBy.name}` : ''}</p>{renewal._id && <button type="button" className="ghost-button pawn-renewal-print" onClick={() => printPawnTicket(`renewal:${renewal._id}`)}>Print Part {ticketPart}</button>}</div> })}</div>}
         <div className="detail-sections">
           <article>

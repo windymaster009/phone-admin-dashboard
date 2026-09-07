@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 export type OperationSectionCardProps = {
   marker?: ReactNode
   title: ReactNode
+  eyebrow?: ReactNode
   description?: ReactNode
   badge?: ReactNode
   headerAction?: ReactNode
@@ -14,6 +15,7 @@ export type OperationSectionCardProps = {
 export default function OperationSectionCard({
   marker,
   title,
+  eyebrow,
   description,
   badge,
   headerAction,
@@ -33,6 +35,7 @@ export default function OperationSectionCard({
       >
         {marker && <span>{marker}</span>}
         <div>
+          {eyebrow && <span className="eyebrow">{eyebrow}</span>}
           <h3>{title}</h3>
           {description && <p>{description}</p>}
         </div>

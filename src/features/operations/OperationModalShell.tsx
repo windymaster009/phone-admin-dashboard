@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { AlertTriangle, HandCoins, Package, Printer, ScanLine, ShoppingCart, X } from 'lucide-react'
 import type { ModalKind } from './operationDomain'
 
@@ -35,35 +36,53 @@ const modalMeta: Record<ModalKind, { title: string; description: string; icon: R
   },
 }
 
-function parsePlaceholderAlert(message?: string): ModalKind | null {
-  const value = String(message || '').toLowerCase()
-  if (value.startsWith('add stock') || value.startsWith('adjust stock')) return 'stock'
-  if (value.startsWith('new purchase')) return 'purchase'
-  if (value.startsWith('new sale')) return 'sale'
-  if (value.startsWith('new pawn')) return 'pawn'
-  return null
+export type OperationModalShellProps = {
+  kind?: ModalKind
+  title?: string
+  eyebrow?: string
+  description?: string
+  icon?: ReactNode
+  error?: string
+  busy?: boolean
+  onClose: () => void
+  compact?: boolean
+  confirmation?: boolean
+  scanner?: boolean
+  dismissible?: boolean
+  dismissOnEscape?: boolean
+  className?: string
+  ariaLabel?: string
+  children: ReactNode
 }
 
 export default function OperationModalShell({
   kind,
+  title,
+  eyebrow,
+  description,
+  icon,
   error,
-  busy,
+  busy = false,
   onClose,
   compact = false,
+  confirmation = false,
+  scanner = false,
   dismissible = true,
   dismissOnEscape = true,
+  className = '',
+  ariaLabel,
   children,
-}: {
-  kind: ModalKind
-  error: string
-  busy: boolean
-  onClose: () => void
-  compact?: boolean
-  dismissible?: boolean
-  dismissOnEscape?: boolean
-  children: ReactNode
-}) {
-  const meta = modalMeta[kind]
+}: OperationModalShellProps) {
+  const meta = kind ? modalMeta[kind] : undefined
+  const resolvedTitle = title || meta?.title || 'Operation'
+  const resolvedEyebrow = eyebrow !== undefined ? eyebrow : (meta ? 'PhoneFlow operation' : '')
+  const resolvedDescription = description !== undefined ? description : meta?.description || ''
+  const resolvedIcon = icon !== undefined ? icon : meta?.icon || null
+  const kindClass = kind ? `operation-modal-${kind}` : ''
+  const compactClass = compact ? 'operation-modal-compact' : ''
+  const confirmationClass = confirmation ? 'loan-modal-confirmation' : ''
+  const scannerClass = scanner ? 'loan-modal-scanner' : ''
+  const sectionClass = `operation-modal ${kindClass} ${compactClass} ${confirmationClass} ${scannerClass} ${className}`.trim()
   const dialogRef = useRef<HTMLElement>(null)
 
   useEffect(() => {
@@ -109,24 +128,40 @@ export default function OperationModalShell({
     }
   }, [kind, compact])
 
-  return (
-    <div className="operation-modal-backdrop" role="presentation">
-      <section ref={dialogRef} className={`operation-modal operation-modal-${kind}${compact ? ' operation-modal-compact' : ''}`} role="dialog" aria-modal="true" aria-label={meta.title}>
+  const content = (
+    <div className={`operation-modal-backdrop ${className ? `${className}-backdrop` : ''}`.trim()} role="presentation">
+      <section
+        ref={dialogRef}
+        className={sectionClass}
+        role="dialog"
+        aria-modal="true"
+        aria-label={ariaLabel || resolvedTitle}
+      >
         <header className="operation-modal-header">
-          <span className="operation-modal-icon">{meta.icon}</span>
+          {resolvedIcon && <span className="operation-modal-icon">{resolvedIcon}</span>}
           <div>
-            <span className="eyebrow">PhoneFlow operation</span>
-            <h2>{meta.title}</h2>
-            <p>{meta.description}</p>
+            {resolvedEyebrow && <span className="eyebrow">{resolvedEyebrow}</span>}
+            <h2>{resolvedTitle}</h2>
+            {resolvedDescription && <p>{resolvedDescription}</p>}
           </div>
-          {dismissible && <button type="button" className="operation-modal-close" onClick={onClose} disabled={busy} aria-label="Close">
-            <X size={19} />
-          </button>}
+          {dismissible && (
+            <button
+              type="button"
+              className="operation-modal-close"
+              onClick={onClose}
+              disabled={busy}
+              aria-label="Close"
+            >
+              <X size={19} />
+            </button>
+          )}
         </header>
         {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
         {children}
       </section>
     </div>
   )
+
+  return typeof document !== 'undefined' ? createPortal(content, document.body) : content
 }
 

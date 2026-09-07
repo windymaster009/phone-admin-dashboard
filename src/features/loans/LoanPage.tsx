@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react'
-import { createPortal } from 'react-dom'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import './loan-workspace.css'
 import {
   AlertTriangle,
@@ -23,6 +22,12 @@ import MoneyInput from '../../components/MoneyInput'
 import SummaryStats from '../../components/SummaryStats'
 import ScannerWorkflow from '../../components/scanner/ScannerWorkflow'
 import ScannerTriggerButton from '../../components/scanner/ScannerTriggerButton'
+import OperationModalShell from '../../components/OperationModalShell'
+import OperationWorkflowStepper, { type WorkflowStep } from '../../components/OperationWorkflowStepper'
+import OperationWorkflowFooter from '../../components/OperationWorkflowFooter'
+import OperationSectionCard from '../../components/OperationSectionCard'
+import SegmentedControl from '../../components/SegmentedControl'
+import KeyValueSummary from '../../components/KeyValueSummary'
 
 type Currency = 'USD' | 'KHR'
 type LoanStatus = 'ACTIVE' | 'DUE_SOON' | 'OVERDUE' | 'PARTIALLY_PAID' | 'PAID' | 'CANCELLED'
@@ -137,66 +142,42 @@ function LoanStatusBadge({ status }: { status: LoanStatus }) {
   return <span className={`loan-status loan-status-${status.toLowerCase().replaceAll('_', '-')}`}><Icon size={15} strokeWidth={2} aria-hidden="true" />{statusLabel(status)}</span>
 }
 
-function Modal({ title, eyebrow, description, onClose, compact = false, confirmation = false, scanner = false, children }: {
-  title: string
-  eyebrow: string
-  description: string
-  onClose: () => void
-  compact?: boolean
-  confirmation?: boolean
-  scanner?: boolean
-  children: ReactNode
-}) {
-  useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose() }
-    document.addEventListener('keydown', closeOnEscape)
-    document.body.classList.add('operation-modal-open')
-    return () => {
-      document.removeEventListener('keydown', closeOnEscape)
-      document.body.classList.remove('operation-modal-open')
-    }
-  }, [onClose])
-
-  return createPortal(
-    <div className="operation-modal-backdrop loan-modal-backdrop" role="presentation">
-      <section className={`operation-modal loan-modal${compact ? ' operation-modal-compact' : ''}${confirmation ? ' loan-modal-confirmation' : ''}${scanner ? ' loan-modal-scanner' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
-        <header className="operation-modal-header">
-          <span className="operation-modal-icon"><Banknote size={21} /></span>
-          <div><span className="eyebrow">{eyebrow}</span><h2>{title}</h2><p>{description}</p></div>
-          <button type="button" className="operation-modal-close" onClick={onClose} aria-label="Close"><X size={19} /></button>
-        </header>
-        {children}
-      </section>
-    </div>,
-    document.body,
-  )
-}
-
 function ScanLoanModal({ busy, error, onClose, onScan }: { busy: boolean; error: string; onClose: () => void; onScan: (value: string) => void }) {
   const [code, setCode] = useState('')
   const [cameraError, setCameraError] = useState('')
 
-  return <Modal title="Scan loan" eyebrow="Loan lookup" description="Scan the loan barcode or enter the loan number to open its record." compact scanner onClose={onClose}>
-    {error && <div className="loan-error"><AlertTriangle size={16} /> {error}</div>}
-    {cameraError && <div className="loan-error"><AlertTriangle size={16} /> {cameraError}</div>}
-    <ScannerWorkflow
-      code={code}
-      onCodeChange={(value) => { setCode(value); if (cameraError) setCameraError('') }}
-      onSubmit={onScan}
-      onCameraError={setCameraError}
+  return (
+    <OperationModalShell
+      title="Scan loan"
+      eyebrow="Loan lookup"
+      description="Scan the loan barcode or enter the loan number to open its record."
+      icon={<Banknote size={21} />}
+      compact
+      scanner
+      className="loan-modal"
+      error={error || cameraError}
       busy={busy}
-      introDescription="Use the receipt barcode for the fastest loan lookup, or open this device camera."
-      methodTitle="Loan barcode"
-      methodDescription="Keep this field selected, then scan the receipt."
-      inputLabel="Loan barcode or number"
-      placeholder="Scan or enter loan number"
-      submitLabel="Find loan"
-      helpText="Works with the loan receipt barcode. Most handheld scanners press Enter automatically."
-      cameraHelpText="Allow camera access on localhost or HTTPS. A handheld scanner can type into the field above."
-      readerId="phoneflow-loan-barcode-reader"
-      className="loan-scan-workflow"
-    />
-  </Modal>
+      onClose={onClose}
+    >
+      <ScannerWorkflow
+        code={code}
+        onCodeChange={(value) => { setCode(value); if (cameraError) setCameraError('') }}
+        onSubmit={onScan}
+        onCameraError={setCameraError}
+        busy={busy}
+        introDescription="Use the receipt barcode for the fastest loan lookup, or open this device camera."
+        methodTitle="Loan barcode"
+        methodDescription="Keep this field selected, then scan the receipt."
+        inputLabel="Loan barcode or number"
+        placeholder="Scan or enter loan number"
+        submitLabel="Find loan"
+        helpText="Works with the loan receipt barcode. Most handheld scanners press Enter automatically."
+        cameraHelpText="Allow camera access on localhost or HTTPS. A handheld scanner can type into the field above."
+        readerId="phoneflow-loan-barcode-reader"
+        className="loan-scan-workflow"
+      />
+    </OperationModalShell>
+  )
 }
 
 function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
@@ -206,71 +187,371 @@ function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
   onClose: () => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }) {
+  const [step, setStep] = useState<1 | 2>(1)
+  const [borrowerName, setBorrowerName] = useState('')
+  const [borrowerPhone, setBorrowerPhone] = useState('')
+  const [nationalIdNumber, setNationalIdNumber] = useState('')
+  const [address, setAddress] = useState('')
+  const [step1Error, setStep1Error] = useState('')
+
   const [principal, setPrincipal] = useState(0)
   const [currency, setCurrency] = useState<Currency>('USD')
   const [interestType, setInterestType] = useState<'NONE' | 'FIXED' | 'PERCENT'>('NONE')
   const [interestValue, setInterestValue] = useState(0)
+  const [loanDate, setLoanDate] = useState(() => dateInput(new Date()))
   const due = new Date()
   due.setDate(due.getDate() + 30)
+  const [dueDate, setDueDate] = useState(() => dateInput(due))
+  const [reminderDays, setReminderDays] = useState(3)
+  const [reason, setReason] = useState('')
+  const [notes, setNotes] = useState('')
+
   const interestAmount = interestType === 'FIXED' ? interestValue : interestType === 'PERCENT' ? principal * interestValue / 100 : 0
 
-  return <Modal title={createdLoan ? 'Loan saved' : 'Create loan'} eyebrow="Money lending" description={createdLoan ? 'The borrower and repayment schedule are ready to review.' : 'Record who borrowed money and when it must be repaid.'} compact={Boolean(createdLoan)} confirmation={Boolean(createdLoan)} onClose={onClose}>
-    {createdLoan && <section className="record-created-workflow" role="status" aria-live="polite">
-      <div className="record-created-card">
-        <span className="record-created-check"><CheckCircle2 size={38} /></span>
-        <div><span className="eyebrow">Record saved</span><h3>Loan record created</h3></div>
-        <dl>
-          <div><dt>Loan number</dt><dd>{createdLoan.loanNo}</dd></div>
-          <div><dt>Principal</dt><dd>{money(createdLoan.principal, createdLoan.currency)}</dd></div>
-          <div><dt>Status</dt><dd><LoanStatusBadge status={createdLoan.status} /></dd></div>
-        </dl>
-      </div>
-      <footer className="operation-modal-actions"><button type="button" className="primary-button record-created-done" onClick={onClose}><CheckCircle2 size={16} /> Done</button></footer>
-    </section>}
-    {!createdLoan && <>
-    {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
-    <form className="operation-form loan-create-form" onSubmit={onSubmit}>
-      <div className="operation-form-grid">
-        <label>Borrower name<input name="borrowerName" autoFocus required placeholder="Full name" /></label>
-        <label>Phone number <small className="optional-marker">Optional</small><input name="borrowerPhone" placeholder="012 345 678" /></label>
-        <label>National ID <small className="optional-marker">Optional</small><input name="nationalIdNumber" placeholder="ID number" /></label>
-        <label>Address <small className="optional-marker">Optional</small><input name="address" placeholder="Village, district, province" /></label>
-        <label>Loan amount<MoneyInput name="principal" currency={currency} value={principal || ''} minimum={currency === 'KHR' ? 100 : 0.01} required onValueChange={(value) => setPrincipal(Number(value) || 0)} /></label>
-        <label>Currency<select name="currency" value={currency} onChange={(event) => {
-          const nextCurrency = event.target.value as Currency
-          setCurrency(nextCurrency)
-          if (nextCurrency === 'KHR') {
-            setPrincipal((value) => Math.max(100, Math.round(value / 100) * 100))
-            if (interestType === 'FIXED') setInterestValue((value) => Math.round(value / 100) * 100)
-          }
-        }}><option value="USD">USD</option><option value="KHR">KHR</option></select></label>
-        <label>Interest type<select name="interestType" value={interestType} onChange={(event) => {
-          const nextInterestType = event.target.value as 'NONE' | 'FIXED' | 'PERCENT'
-          setInterestType(nextInterestType)
-          if (nextInterestType === 'NONE') setInterestValue(0)
-        }}><option value="NONE">No interest</option><option value="PERCENT">Rate (%)</option><option value="FIXED">Fixed money amount</option></select></label>
-        {interestType === 'NONE' ? (
-          <div className="loan-interest-field"><span className="loan-interest-label">Interest details</span><div className="loan-interest-note" role="status"><strong>No interest</strong><span>The borrower repays only the loan amount.</span></div></div>
-        ) : interestType === 'PERCENT' ? (
-          <label>Interest rate (%)<span className="device-unit-input"><input name="interestValue" type="number" min="0" step="0.01" inputMode="decimal" value={interestValue || ''} onChange={(event) => setInterestValue(Number(event.target.value) || 0)} /><span>%</span></span><small>Applied once to the loan amount.</small></label>
-        ) : (
-          <label>Interest amount ({currency})<MoneyInput name="interestValue" currency={currency} value={interestValue || ''} minimum={0} onValueChange={(value) => setInterestValue(Number(value) || 0)} /><small>Added as a fixed money amount.</small></label>
+  const steps: WorkflowStep[] = [
+    {
+      id: 'borrower',
+      title: 'Borrower',
+      description: 'Contact & identity',
+      status: step === 1 ? 'active' : 'complete',
+    },
+    {
+      id: 'terms',
+      title: 'Terms & schedule',
+      description: 'Amount & interest',
+      status: step === 2 ? 'active' : 'pending',
+    },
+  ]
+
+  const handleContinue = () => {
+    if (!borrowerName.trim()) {
+      setStep1Error('Borrower name is required')
+      return
+    }
+    setStep1Error('')
+    setStep(2)
+  }
+
+  const handleFormSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (step === 1) {
+      handleContinue()
+      return
+    }
+    onSubmit(event)
+  }
+
+  if (createdLoan) {
+    return (
+      <OperationModalShell
+        title="Loan saved"
+        eyebrow="Money lending"
+        description="The borrower and repayment schedule are ready to review."
+        icon={<CheckCircle2 size={21} />}
+        compact
+        confirmation
+        className="loan-modal"
+        onClose={onClose}
+      >
+        <section className="record-created-workflow" role="status" aria-live="polite">
+          <div className="record-created-card">
+            <span className="record-created-check"><CheckCircle2 size={38} /></span>
+            <div><span className="eyebrow">Record saved</span><h3>Loan record created</h3></div>
+            <KeyValueSummary
+              columns={3}
+              items={[
+                { id: 'loanNo', label: 'Loan number', value: createdLoan.loanNo },
+                { id: 'principal', label: 'Principal', value: money(createdLoan.principal, createdLoan.currency) },
+                { id: 'status', label: 'Status', value: <LoanStatusBadge status={createdLoan.status} /> },
+              ]}
+            />
+          </div>
+          <OperationWorkflowFooter
+            primaryAction={
+              <button type="button" className="primary-button record-created-done" onClick={onClose}>
+                <CheckCircle2 size={16} /> Done
+              </button>
+            }
+          />
+        </section>
+      </OperationModalShell>
+    )
+  }
+
+  return (
+    <OperationModalShell
+      title="Create loan"
+      eyebrow="Money lending"
+      description="Record who borrowed money and when it must be repaid."
+      icon={<Banknote size={21} />}
+      className="loan-modal"
+      error={error || step1Error}
+      busy={busy}
+      onClose={onClose}
+    >
+      <OperationWorkflowStepper
+        steps={steps}
+        ariaLabel="Loan creation steps"
+        onStepClick={(_stepObj, index) => {
+          if (index === 0) setStep(1)
+          else if (index === 1 && borrowerName.trim()) setStep(2)
+        }}
+      />
+
+      <form className="operation-form loan-create-form" onSubmit={handleFormSubmit}>
+        {step === 1 && (
+          <div className="operation-form-grid">
+            <label>
+              Borrower name
+              <input
+                name="borrowerName"
+                autoFocus
+                required
+                placeholder="Full name"
+                value={borrowerName}
+                onChange={(e) => {
+                  setBorrowerName(e.target.value)
+                  if (step1Error) setStep1Error('')
+                }}
+              />
+            </label>
+            <label>
+              Phone number <small className="optional-marker">Optional</small>
+              <input
+                name="borrowerPhone"
+                placeholder="012 345 678"
+                value={borrowerPhone}
+                onChange={(e) => setBorrowerPhone(e.target.value)}
+              />
+            </label>
+            <label>
+              National ID <small className="optional-marker">Optional</small>
+              <input
+                name="nationalIdNumber"
+                placeholder="ID number"
+                value={nationalIdNumber}
+                onChange={(e) => setNationalIdNumber(e.target.value)}
+              />
+            </label>
+            <label className="operation-wide">
+              Address <small className="optional-marker">Optional</small>
+              <input
+                name="address"
+                placeholder="Village, district, province"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+              />
+            </label>
+          </div>
         )}
-        <label>Loan date<input name="loanDate" type="date" required defaultValue={dateInput(new Date())} /></label>
-        <label>Due date<input name="dueDate" type="date" required defaultValue={dateInput(due)} /></label>
-        <label>Remind before due<select name="reminderDays" defaultValue="3"><option value="0">On due date</option><option value="1">1 day before</option><option value="3">3 days before</option><option value="7">7 days before</option><option value="14">14 days before</option></select></label>
-        <label>Reason <small className="optional-marker">Optional</small><input name="reason" placeholder="Emergency, business, personal..." /></label>
-        <label className="operation-wide">Notes <small className="optional-marker">Optional</small><textarea name="notes" rows={3} placeholder="Agreement details or anything the owner should remember" /></label>
-      </div>
-      <div className="loan-preview">
-        <div><span>Principal</span><strong>{money(principal, currency)}</strong></div>
-        <div><span>Interest</span><strong>{money(interestAmount, currency)}</strong></div>
-        <div><span>Total expected</span><strong>{money(principal + interestAmount, currency)}</strong></div>
-      </div>
-      <footer className="operation-modal-actions"><button type="button" className="ghost-button" onClick={onClose} disabled={busy}>Cancel</button><button className="primary-button" disabled={busy || principal <= 0}>{busy ? 'Creating...' : 'Create loan'}</button></footer>
-    </form>
-    </>}
-  </Modal>
+
+        {step === 2 && (
+          <>
+            <input type="hidden" name="borrowerName" value={borrowerName} />
+            <input type="hidden" name="borrowerPhone" value={borrowerPhone} />
+            <input type="hidden" name="nationalIdNumber" value={nationalIdNumber} />
+            <input type="hidden" name="address" value={address} />
+
+            <input type="hidden" name="currency" value={currency} />
+            <input type="hidden" name="interestType" value={interestType} />
+            {interestType === 'NONE' && <input type="hidden" name="interestValue" value="0" />}
+
+            <div className="operation-form-grid">
+              <label>
+                Loan amount
+                <MoneyInput
+                  name="principal"
+                  currency={currency}
+                  value={principal || ''}
+                  minimum={currency === 'KHR' ? 100 : 0.01}
+                  required
+                  autoFocus
+                  onValueChange={(value) => setPrincipal(Number(value) || 0)}
+                />
+              </label>
+
+              <div className="loan-control-field">
+                <span className="field-label">Currency</span>
+                <SegmentedControl<Currency>
+                  label="Currency"
+                  value={currency}
+                  onChange={(nextCurrency) => {
+                    setCurrency(nextCurrency)
+                    if (nextCurrency === 'KHR') {
+                      setPrincipal((val) => Math.max(100, Math.round(val / 100) * 100))
+                      if (interestType === 'FIXED') setInterestValue((val) => Math.round(val / 100) * 100)
+                    }
+                  }}
+                  options={[
+                    { value: 'USD', label: 'USD ($)' },
+                    { value: 'KHR', label: 'KHR (៛)' },
+                  ]}
+                />
+              </div>
+
+              <div className="loan-control-field operation-wide">
+                <span className="field-label">Interest calculation</span>
+                <SegmentedControl<'NONE' | 'FIXED' | 'PERCENT'>
+                  label="Interest calculation"
+                  value={interestType}
+                  onChange={(nextInterestType) => {
+                    setInterestType(nextInterestType)
+                    if (nextInterestType === 'NONE') setInterestValue(0)
+                  }}
+                  options={[
+                    { value: 'NONE', label: 'No interest' },
+                    { value: 'PERCENT', label: 'Rate (%)' },
+                    { value: 'FIXED', label: 'Fixed money amount' },
+                  ]}
+                />
+              </div>
+
+              {interestType === 'NONE' ? (
+                <div className="loan-interest-field operation-wide">
+                  <span className="loan-interest-label">Interest details</span>
+                  <div className="loan-interest-note" role="status">
+                    <strong>No interest</strong>
+                    <span>The borrower repays only the loan amount.</span>
+                  </div>
+                </div>
+              ) : interestType === 'PERCENT' ? (
+                <label>
+                  Interest rate (%)
+                  <span className="device-unit-input">
+                    <input
+                      name="interestValue"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={interestValue || ''}
+                      onChange={(event) => setInterestValue(Number(event.target.value) || 0)}
+                    />
+                    <span>%</span>
+                  </span>
+                  <small>Applied once to the loan amount.</small>
+                </label>
+              ) : (
+                <label>
+                  Interest amount ({currency})
+                  <MoneyInput
+                    name="interestValue"
+                    currency={currency}
+                    value={interestValue || ''}
+                    minimum={0}
+                    onValueChange={(value) => setInterestValue(Number(value) || 0)}
+                  />
+                  <small>Added as a fixed money amount.</small>
+                </label>
+              )}
+
+              <label>
+                Loan date
+                <input
+                  name="loanDate"
+                  type="date"
+                  required
+                  value={loanDate}
+                  onChange={(e) => setLoanDate(e.target.value)}
+                />
+              </label>
+
+              <label>
+                Due date
+                <input
+                  name="dueDate"
+                  type="date"
+                  required
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                />
+              </label>
+
+              <label>
+                Remind before due
+                <select
+                  name="reminderDays"
+                  value={reminderDays}
+                  onChange={(e) => setReminderDays(Number(e.target.value))}
+                >
+                  <option value="0">On due date</option>
+                  <option value="1">1 day before</option>
+                  <option value="3">3 days before</option>
+                  <option value="7">7 days before</option>
+                  <option value="14">14 days before</option>
+                </select>
+              </label>
+
+              <label>
+                Reason <small className="optional-marker">Optional</small>
+                <input
+                  name="reason"
+                  placeholder="Emergency, business, personal..."
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                />
+              </label>
+
+              <label className="operation-wide">
+                Notes <small className="optional-marker">Optional</small>
+                <textarea
+                  name="notes"
+                  rows={3}
+                  placeholder="Agreement details or anything the owner should remember"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
+              </label>
+            </div>
+
+            <KeyValueSummary
+              columns={3}
+              className="loan-preview"
+              items={[
+                { id: 'principal', label: 'Principal', value: money(principal, currency) },
+                { id: 'interest', label: 'Interest', value: money(interestAmount, currency) },
+                { id: 'total', label: 'Total expected', value: money(principal + interestAmount, currency), tone: 'success' },
+              ]}
+            />
+          </>
+        )}
+
+        <OperationWorkflowFooter
+          secondaryAction={
+            step === 1 ? (
+              <button type="button" className="ghost-button" onClick={onClose} disabled={busy}>
+                Cancel
+              </button>
+            ) : (
+              <button type="button" className="ghost-button" onClick={() => setStep(1)} disabled={busy}>
+                Back
+              </button>
+            )
+          }
+          primaryAction={
+            step === 1 ? (
+              <button
+                type="button"
+                className="primary-button"
+                onClick={handleContinue}
+                disabled={busy || !borrowerName.trim()}
+              >
+                Continue
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="primary-button"
+                disabled={busy || principal <= 0}
+              >
+                {busy ? 'Creating...' : 'Create loan'}
+              </button>
+            )
+          }
+        />
+      </form>
+    </OperationModalShell>
+  )
 }
 
 function LoanDetailModal({ detail, user, busy, error, paymentConfirmation, cancelConfirmation, deleteConfirmation, onClose, onPayment, onDueDate, onCancel, onConfirmCancel, onDelete, onConfirmDelete, onCancelConfirmationClose, onDeleteConfirmationClose }: {
@@ -298,107 +579,207 @@ function LoanDetailModal({ detail, user, busy, error, paymentConfirmation, cance
   const canDelete = user?.role === 'OWNER' && !open
 
   if (paymentConfirmation) {
-    return <Modal title="Payment recorded" eyebrow="Repayment" description="The loan balance and payment history have been updated." compact confirmation onClose={onClose}>
-      <section className="record-created-workflow" role="status" aria-live="polite">
-        <div className="record-created-card">
-          <span className="record-created-check"><CheckCircle2 size={38} /></span>
-          <div><span className="eyebrow">Repayment saved</span><h3>{paymentConfirmation.status === 'PAID' ? 'Loan paid in full' : 'Loan payment recorded'}</h3></div>
-          <dl>
-            <div><dt>Payment received</dt><dd>{money(paymentConfirmation.amount, paymentConfirmation.currency)}</dd></div>
-            <div><dt>Remaining balance</dt><dd><span>{money(paymentConfirmation.remainingBalance, paymentConfirmation.currency)}</span></dd></div>
-            <div><dt>Payment method</dt><dd>{paymentConfirmation.paymentMethod}</dd></div>
-          </dl>
-        </div>
-        <footer className="operation-modal-actions">
-          {paymentConfirmation.status === 'PAID' && user?.role === 'OWNER' && <button type="button" className="ghost-button danger-button" onClick={onDelete}><Trash2 size={15} /> Delete loan</button>}
-          <button type="button" className="primary-button record-created-done" onClick={onClose}><CheckCircle2 size={16} /> Done</button>
-        </footer>
-      </section>
-    </Modal>
+    return (
+      <OperationModalShell
+        title="Payment recorded"
+        eyebrow="Repayment"
+        description="The loan balance and payment history have been updated."
+        icon={<CheckCircle2 size={21} />}
+        compact
+        confirmation
+        className="loan-modal"
+        onClose={onClose}
+      >
+        <section className="record-created-workflow" role="status" aria-live="polite">
+          <div className="record-created-card">
+            <span className="record-created-check"><CheckCircle2 size={38} /></span>
+            <div><span className="eyebrow">Repayment saved</span><h3>{paymentConfirmation.status === 'PAID' ? 'Loan paid in full' : 'Loan payment recorded'}</h3></div>
+            <KeyValueSummary
+              columns={3}
+              items={[
+                { id: 'amount', label: 'Payment received', value: money(paymentConfirmation.amount, paymentConfirmation.currency) },
+                { id: 'remaining', label: 'Remaining balance', value: money(paymentConfirmation.remainingBalance, paymentConfirmation.currency) },
+                { id: 'method', label: 'Payment method', value: paymentConfirmation.paymentMethod },
+              ]}
+            />
+          </div>
+          <OperationWorkflowFooter
+            secondaryAction={
+              paymentConfirmation.status === 'PAID' && user?.role === 'OWNER' ? (
+                <button type="button" className="ghost-button danger-button" onClick={onDelete}>
+                  <Trash2 size={15} /> Delete loan
+                </button>
+              ) : undefined
+            }
+            primaryAction={
+              <button type="button" className="primary-button record-created-done" onClick={onClose}>
+                <CheckCircle2 size={16} /> Done
+              </button>
+            }
+          />
+        </section>
+      </OperationModalShell>
+    )
   }
 
   if (cancelConfirmation) {
-    return <Modal title="Cancel this loan?" eyebrow="Loan cancellation" description="Confirm that this agreement should be closed without a repayment." compact confirmation onClose={onCancelConfirmationClose}>
-      <section className="loan-cancel-confirmation" aria-describedby="loan-cancel-description">
-        <span className="loan-cancel-confirmation-icon"><AlertTriangle size={22} /></span>
-        <div>
-          <strong>{loan.loanNo}</strong>
-          <span>{loan.borrower.name} · {money(loan.remainingBalance, loan.currency)} remaining</span>
-          <p id="loan-cancel-description">No payments have been recorded, so this loan can be cancelled. It will remain in the audit history with a cancelled status.</p>
-        </div>
-      </section>
-      {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
-      <footer className="operation-modal-actions loan-cancel-actions">
-        <button type="button" className="ghost-button" disabled={busy} onClick={onCancelConfirmationClose}>Keep loan</button>
-        <button type="button" className="danger-button loan-cancel-confirm-button" disabled={busy} onClick={onConfirmCancel}>{busy ? 'Cancelling...' : 'Cancel loan'}</button>
-      </footer>
-    </Modal>
+    return (
+      <OperationModalShell
+        title="Cancel this loan?"
+        eyebrow="Loan cancellation"
+        description="Confirm that this agreement should be closed without a repayment."
+        icon={<AlertTriangle size={21} />}
+        compact
+        confirmation
+        className="loan-modal"
+        error={error}
+        busy={busy}
+        onClose={onCancelConfirmationClose}
+      >
+        <section className="loan-cancel-confirmation" aria-describedby="loan-cancel-description">
+          <span className="loan-cancel-confirmation-icon"><AlertTriangle size={22} /></span>
+          <div>
+            <strong>{loan.loanNo}</strong>
+            <span>{loan.borrower.name} · {money(loan.remainingBalance, loan.currency)} remaining</span>
+            <p id="loan-cancel-description">No payments have been recorded, so this loan can be cancelled. It will remain in the audit history with a cancelled status.</p>
+          </div>
+        </section>
+        <OperationWorkflowFooter
+          className="loan-cancel-actions"
+          secondaryAction={
+            <button type="button" className="ghost-button" disabled={busy} onClick={onCancelConfirmationClose}>
+              Keep loan
+            </button>
+          }
+          primaryAction={
+            <button type="button" className="danger-button loan-cancel-confirm-button" disabled={busy} onClick={onConfirmCancel}>
+              {busy ? 'Cancelling...' : 'Cancel loan'}
+            </button>
+          }
+        />
+      </OperationModalShell>
+    )
   }
 
   if (deleteConfirmation) {
-    return <Modal title="Delete this loan?" eyebrow="Permanent deletion" description="This removes the completed loan and its payment records." compact confirmation onClose={onDeleteConfirmationClose}>
-      <section className="loan-cancel-confirmation loan-delete-confirmation" aria-describedby="loan-delete-description">
-        <span className="loan-cancel-confirmation-icon"><Trash2 size={21} /></span>
-        <div>
-          <strong>{loan.loanNo}</strong>
-          <span>{loan.borrower.name} · {statusLabel(loan.status)}</span>
-          <p id="loan-delete-description">This permanently removes the loan, its repayments, and related receipts. This cannot be undone.</p>
-        </div>
-      </section>
-      {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
-      <footer className="operation-modal-actions loan-cancel-actions">
-        <button type="button" className="ghost-button" disabled={busy} onClick={onDeleteConfirmationClose}>Keep record</button>
-        <button type="button" className="danger-button loan-cancel-confirm-button" disabled={busy} onClick={onConfirmDelete}>{busy ? 'Deleting...' : 'Delete permanently'}</button>
-      </footer>
-    </Modal>
+    return (
+      <OperationModalShell
+        title="Delete this loan?"
+        eyebrow="Permanent deletion"
+        description="This removes the completed loan and its payment records."
+        icon={<Trash2 size={21} />}
+        compact
+        confirmation
+        className="loan-modal"
+        error={error}
+        busy={busy}
+        onClose={onDeleteConfirmationClose}
+      >
+        <section className="loan-cancel-confirmation loan-delete-confirmation" aria-describedby="loan-delete-description">
+          <span className="loan-cancel-confirmation-icon"><Trash2 size={21} /></span>
+          <div>
+            <strong>{loan.loanNo}</strong>
+            <span>{loan.borrower.name} · {statusLabel(loan.status)}</span>
+            <p id="loan-delete-description">This permanently removes the loan, its repayments, and related receipts. This cannot be undone.</p>
+          </div>
+        </section>
+        <OperationWorkflowFooter
+          className="loan-cancel-actions"
+          secondaryAction={
+            <button type="button" className="ghost-button" disabled={busy} onClick={onDeleteConfirmationClose}>
+              Keep record
+            </button>
+          }
+          primaryAction={
+            <button type="button" className="danger-button loan-cancel-confirm-button" disabled={busy} onClick={onConfirmDelete}>
+              {busy ? 'Deleting...' : 'Delete permanently'}
+            </button>
+          }
+        />
+      </OperationModalShell>
+    )
   }
 
-  return <Modal title={`${loan.loanNo} · ${loan.borrower.name}`} eyebrow="Loan record" description={`${dueDescription(loan)} · ${money(loan.remainingBalance, loan.currency)} remaining`} onClose={onClose}>
-    {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
-    <div className="loan-detail-scroll">
-      <section className="loan-detail-summary">
-        <div><span>Borrower</span><strong>{loan.borrower.name}</strong><small><Phone size={13} /> {loan.borrower.phone || 'No phone recorded'}</small></div>
-        <div><span>Principal</span><strong>{money(loan.principal, loan.currency)}</strong><small>{loan.interestType === 'NONE' ? 'No interest' : `${money(loan.interestAmount, loan.currency)} interest`}</small></div>
-        <div><span>Total expected</span><strong>{money(loan.totalDue, loan.currency)}</strong><small>{money(loan.amountPaid, loan.currency)} received</small></div>
-        <div><span>Remaining</span><strong>{money(loan.remainingBalance, loan.currency)}</strong><small>{dateText(loan.dueDate)}</small></div>
-      </section>
+  return (
+    <OperationModalShell
+      title={`${loan.loanNo} · ${loan.borrower.name}`}
+      eyebrow="Loan record"
+      description={`${dueDescription(loan)} · ${money(loan.remainingBalance, loan.currency)} remaining`}
+      icon={<Banknote size={21} />}
+      className="loan-modal"
+      error={error}
+      busy={busy}
+      onClose={onClose}
+    >
+      <div className="loan-detail-scroll">
+        <KeyValueSummary
+          columns={4}
+          className="loan-detail-summary"
+          items={[
+            { id: 'borrower', label: 'Borrower', value: loan.borrower.name, supportingText: <><Phone size={13} /> {loan.borrower.phone || 'No phone recorded'}</> },
+            { id: 'principal', label: 'Principal', value: money(loan.principal, loan.currency), supportingText: loan.interestType === 'NONE' ? 'No interest' : `${money(loan.interestAmount, loan.currency)} interest` },
+            { id: 'totalDue', label: 'Total expected', value: money(loan.totalDue, loan.currency), supportingText: `${money(loan.amountPaid, loan.currency)} received` },
+            { id: 'remaining', label: 'Remaining', value: money(loan.remainingBalance, loan.currency), supportingText: dateText(loan.dueDate), tone: 'warning' },
+          ]}
+        />
 
-      <section className="loan-detail-grid">
-        <article className="loan-detail-card">
-          <div className="loan-card-heading"><div><span className="eyebrow">Agreement</span><h3>Loan details</h3></div><LoanStatusBadge status={loan.status} /></div>
-          <dl className="loan-definition-list">
-            <div><dt>Loan date</dt><dd>{dateText(loan.loanDate)}</dd></div>
-            <div><dt>Due date</dt><dd>{dateText(loan.dueDate)}</dd></div>
-            <div><dt>National ID</dt><dd>{loan.borrower.nationalIdNumber || 'Not recorded'}</dd></div>
-            <div><dt>Address</dt><dd>{loan.borrower.address || 'Not recorded'}</dd></div>
-            <div><dt>Reason</dt><dd>{loan.reason || 'No reason recorded'}</dd></div>
-            <div><dt>Notes</dt><dd>{loan.notes || 'No notes'}</dd></div>
-          </dl>
-          {canManage && open && <form className="loan-due-form" onSubmit={onDueDate}><label>Change due date<input name="dueDate" type="date" required defaultValue={dateInput(new Date(loan.dueDate))} /></label><button className="ghost-button" disabled={busy}>Save due date</button></form>}
-        </article>
+        <section className="loan-detail-grid">
+          <OperationSectionCard
+            title="Loan details"
+            eyebrow="Agreement"
+            badge={<LoanStatusBadge status={loan.status} />}
+            className="loan-detail-card"
+          >
+            <dl className="loan-definition-list">
+              <div><dt>Loan date</dt><dd>{dateText(loan.loanDate)}</dd></div>
+              <div><dt>Due date</dt><dd>{dateText(loan.dueDate)}</dd></div>
+              <div><dt>National ID</dt><dd>{loan.borrower.nationalIdNumber || 'Not recorded'}</dd></div>
+              <div><dt>Address</dt><dd>{loan.borrower.address || 'Not recorded'}</dd></div>
+              <div><dt>Reason</dt><dd>{loan.reason || 'No reason recorded'}</dd></div>
+              <div><dt>Notes</dt><dd>{loan.notes || 'No notes'}</dd></div>
+            </dl>
+            {canManage && open && (
+              <form className="loan-due-form" onSubmit={onDueDate}>
+                <label>Change due date<input name="dueDate" type="date" required defaultValue={dateInput(new Date(loan.dueDate))} /></label>
+                <button className="ghost-button" disabled={busy}>Save due date</button>
+              </form>
+            )}
+          </OperationSectionCard>
 
-        <article className="loan-detail-card">
-          <div className="loan-card-heading"><div><span className="eyebrow">Repayment</span><h3>Record payment</h3></div><CircleDollarSign size={21} /></div>
-          {canPay && open ? <form className="loan-payment-form" onSubmit={onPayment}>
-            <label>Amount<input name="amount" type="number" min={loan.currency === 'KHR' ? '1' : '0.01'} max={loan.remainingBalance} step={loan.currency === 'KHR' ? '1' : '0.01'} inputMode={loan.currency === 'KHR' ? 'numeric' : 'decimal'} required placeholder={String(loan.remainingBalance)} /></label>
-            <label>Payment method<select name="paymentMethod" defaultValue="CASH"><option value="CASH">Cash</option><option value="KHQR">KHQR</option><option value="BANK">Bank transfer</option><option value="CARD">Card</option><option value="OTHER">Other</option></select></label>
-            <label>Payment date<input name="paidAt" type="date" required defaultValue={dateInput(new Date())} /></label>
-            <label>Reference <small className="optional-marker">Optional</small><input name="reference" placeholder="Receipt or transfer reference" /></label>
-            <label className="loan-payment-note">Note <small className="optional-marker">Optional</small><textarea name="note" rows={2} placeholder="Payment note" /></label>
-            <button className="primary-button" disabled={busy}>{busy ? 'Recording...' : 'Record payment'}</button>
-          </form> : <div className="loan-payment-complete"><BadgeCheck size={28} /><strong>{loan.status === 'PAID' ? 'Loan paid in full' : loan.status === 'CANCELLED' ? 'Loan cancelled' : 'You cannot record payments'}</strong></div>}
-        </article>
-      </section>
+          <OperationSectionCard
+            title="Record payment"
+            eyebrow="Repayment"
+            badge={<CircleDollarSign size={21} />}
+            className="loan-detail-card"
+          >
+            {canPay && open ? (
+              <form className="loan-payment-form" onSubmit={onPayment}>
+                <label>Amount<input name="amount" type="number" min={loan.currency === 'KHR' ? '1' : '0.01'} max={loan.remainingBalance} step={loan.currency === 'KHR' ? '1' : '0.01'} inputMode={loan.currency === 'KHR' ? 'numeric' : 'decimal'} required placeholder={String(loan.remainingBalance)} /></label>
+                <label>Payment method<select name="paymentMethod" defaultValue="CASH"><option value="CASH">Cash</option><option value="KHQR">KHQR</option><option value="BANK">Bank transfer</option><option value="CARD">Card</option><option value="OTHER">Other</option></select></label>
+                <label>Payment date<input name="paidAt" type="date" required defaultValue={dateInput(new Date())} /></label>
+                <label>Reference <small className="optional-marker">Optional</small><input name="reference" placeholder="Receipt or transfer reference" /></label>
+                <label className="loan-payment-note">Note <small className="optional-marker">Optional</small><textarea name="note" rows={2} placeholder="Payment note" /></label>
+                <button className="primary-button" disabled={busy}>{busy ? 'Recording...' : 'Record payment'}</button>
+              </form>
+            ) : (
+              <div className="loan-payment-complete">
+                <BadgeCheck size={28} />
+                <strong>{loan.status === 'PAID' ? 'Loan paid in full' : loan.status === 'CANCELLED' ? 'Loan cancelled' : 'You cannot record payments'}</strong>
+              </div>
+            )}
+          </OperationSectionCard>
+        </section>
 
-      <section className="loan-payment-history">
-        <div className="loan-card-heading"><div><span className="eyebrow">Audit trail</span><h3>Payment history</h3></div><span>{payments.length} payment{payments.length === 1 ? '' : 's'}</span></div>
-        {payments.length > 0 ? <div className="loan-payment-list">{payments.map((payment) => <article key={payment._id}><span className="loan-payment-icon"><Banknote size={17} /></span><div><strong>{money(payment.amount, loan.currency)}</strong><small>{payment.paymentNo} · {payment.paymentMethod}</small></div><div><strong>{dateText(payment.paidAt)}</strong><small>{payment.receivedBy?.name || 'Staff'}{payment.reference ? ` · ${payment.reference}` : ''}</small></div></article>)}</div> : <div className="loan-empty-history"><FileText size={27} /><span>No repayments recorded yet.</span></div>}
-      </section>
+        <section className="loan-payment-history">
+          <div className="loan-card-heading"><div><span className="eyebrow">Audit trail</span><h3>Payment history</h3></div><span>{payments.length} payment{payments.length === 1 ? '' : 's'}</span></div>
+          {payments.length > 0 ? <div className="loan-payment-list">{payments.map((payment) => <article key={payment._id}><span className="loan-payment-icon"><Banknote size={17} /></span><div><strong>{money(payment.amount, loan.currency)}</strong><small>{payment.paymentNo} · {payment.paymentMethod}</small></div><div><strong>{dateText(payment.paidAt)}</strong><small>{payment.receivedBy?.name || 'Staff'}{payment.reference ? ` · ${payment.reference}` : ''}</small></div></article>)}</div> : <div className="loan-empty-history"><FileText size={27} /><span>No repayments recorded yet.</span></div>}
+        </section>
 
-      {canManage && open && loan.amountPaid === 0 && <div className="loan-danger-zone"><div><strong>Cancel this loan</strong><span>Only loans without repayment history can be cancelled.</span></div><button type="button" className="ghost-button danger-button" disabled={busy} onClick={onCancel}>Cancel loan</button></div>}
-      {canDelete && <div className="loan-danger-zone loan-delete-zone"><div><strong>Delete completed loan</strong><span>Permanently remove this {loan.status === 'PAID' ? 'paid' : 'cancelled'} loan and its linked payment records.</span></div><button type="button" className="ghost-button danger-button" disabled={busy} onClick={onDelete}><Trash2 size={15} /> Delete loan</button></div>}
-    </div>
-  </Modal>
+        {canManage && open && loan.amountPaid === 0 && <div className="loan-danger-zone"><div><strong>Cancel this loan</strong><span>Only loans without repayment history can be cancelled.</span></div><button type="button" className="ghost-button danger-button" disabled={busy} onClick={onCancel}>Cancel loan</button></div>}
+        {canDelete && <div className="loan-danger-zone loan-delete-zone"><div><strong>Delete completed loan</strong><span>Permanently remove this {loan.status === 'PAID' ? 'paid' : 'cancelled'} loan and its linked payment records.</span></div><button type="button" className="ghost-button danger-button" disabled={busy} onClick={onDelete}><Trash2 size={15} /> Delete loan</button></div>}
+      </div>
+    </OperationModalShell>
+  )
 }
 
 export interface LoanPageProps {

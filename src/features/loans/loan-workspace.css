@@ -229,6 +229,19 @@
   display: none;
 }
 
+.loan-control-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.loan-control-field .field-label {
+  color: var(--muted-text, #94a3b8);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+
 .loan-preview {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
