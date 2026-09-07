@@ -147,6 +147,9 @@ export default function OperationModalBridge() {
   const [purchaseStep, setPurchaseStep] = useState<1 | 2>(1)
   const [purchaseAttempted, setPurchaseAttempted] = useState(false)
   const [purchaseInventoryLoading, setPurchaseInventoryLoading] = useState(false)
+  const [suppliersLoading, setSuppliersLoading] = useState(false)
+  const [customersLoading, setCustomersLoading] = useState(false)
+  const [currencyNotice, setCurrencyNotice] = useState('')
   const [usdKhrRate, setUsdKhrRate] = useState(4100)
   const [imeiScanDeviceId, setImeiScanDeviceId] = useState<string | null>(null)
   const [imeiScanError, setImeiScanError] = useState('')
@@ -255,8 +258,13 @@ export default function OperationModalBridge() {
   const purchasePaid = Math.max(0, Number(purchaseAmountPaid) || 0)
   const purchaseBalance = Math.max(0, purchaseTotal - purchasePaid)
   const purchasePaymentStatus = purchasePaid <= 0 ? 'UNPAID' : purchasePaid < purchaseTotal ? 'PARTIAL' : 'PAID'
+  const purchasePaidUsdDecimalsInvalid = purchaseCurrency === 'USD' && (() => {
+    const parts = String(purchaseAmountPaid).trim().split('.')
+    return parts.length > 2 || Boolean(parts[1] && parts[1].length > 2)
+  })()
   const purchasePaidInvalid = purchasePaid > purchaseTotal
     || (purchaseCurrency === 'KHR' && (!Number.isInteger(purchasePaid) || purchasePaid % 100 !== 0))
+    || purchasePaidUsdDecimalsInvalid
   const selectedSaleItem = inventory.find((item) => item._id === saleItemId)
   const canManuallyPriceSale = getSessionUser()?.role === 'OWNER'
   const stockMatches = useMemo(() => {
@@ -413,9 +421,11 @@ export default function OperationModalBridge() {
         .finally(() => setStockInventoryLoading(false))
     }
     if (kind === 'sale' || kind === 'pawn' || kind === 'purchase') {
+      setCustomersLoading(true)
       api<{ customers: Customer[] }>('/customers')
         .then((result) => setCustomers(Array.isArray(result?.customers) ? result.customers : []))
         .catch((reason: Error) => setError(reason.message))
+        .finally(() => setCustomersLoading(false))
     }
     if (kind === 'sale') {
       setSaleInventoryLoading(true)
@@ -442,9 +452,11 @@ export default function OperationModalBridge() {
         .catch(() => setPaywayAvailable(false))
     }
     if (kind === 'purchase') {
+      setSuppliersLoading(true)
       api<{ suppliers: Supplier[] }>('/suppliers')
         .then((result) => setSuppliers(Array.isArray(result?.suppliers) ? result.suppliers : []))
         .catch((reason: Error) => setError(reason.message))
+        .finally(() => setSuppliersLoading(false))
       api<{ usdKhr: number }>('/exchange-rates')
         .then((result) => setUsdKhrRate(result.usdKhr))
         .catch(() => setUsdKhrRate(4100))
@@ -582,16 +594,6 @@ export default function OperationModalBridge() {
     setSellerName('')
     setSellerPhone('')
     setSellerNationalId('')
-    setPaywayAvailable(false)
-    setSaleInventoryLoading(false)
-    khqrFinalizing.current = false
-    khqrChecking.current = false
-    setSellerType('WALK_IN')
-    setSupplierId('')
-    setSellerCustomerId('')
-    setSellerName('')
-    setSellerPhone('')
-    setSellerNationalId('')
     setPurchaseDate(localDateValue())
     setPurchasePaymentMethod('CASH')
     setPurchaseCurrency('USD')
@@ -601,6 +603,11 @@ export default function OperationModalBridge() {
     setPurchaseStep(1)
     setPurchaseAttempted(false)
     setPurchaseInventoryLoading(false)
+    setSuppliersLoading(false)
+    setCustomersLoading(false)
+    setCurrencyNotice('')
+    setImeiScanDeviceId(null)
+    setImeiScanError('')
   }
 
   const close = () => {
@@ -754,12 +761,75 @@ export default function OperationModalBridge() {
   }
 
   function updatePurchaseCategory(id: string, category: StockCategory) {
-    updatePurchaseDevice(id, {
-      category,
-      quantity: '1',
-      inventoryMode: 'NEW',
-      existingInventoryItem: '',
-    })
+    setPurchaseDevices((current) => current.map((device) => {
+      if (device.id !== id) return device
+      const isPhoneOrTablet = category === 'PHONE' || category === 'TABLET'
+      return {
+        ...device,
+        category,
+        quantity: category === 'PHONE' ? '1' : device.quantity || '1',
+        inventoryMode: 'NEW',
+        existingInventoryItem: '',
+        brand: (category === 'PHONE' || category === 'TABLET' || category === 'ACCESSORY') ? device.brand : '',
+        model: isPhoneOrTablet ? device.model : '',
+        storage: isPhoneOrTablet ? device.storage : '',
+        color: isPhoneOrTablet ? device.color : '',
+        imei: category === 'PHONE' ? device.imei : '',
+        ram: category === 'PHONE' ? device.ram : '',
+        batteryHealth: category === 'PHONE' ? device.batteryHealth : '',
+        carrierLock: category === 'PHONE' ? device.carrierLock : 'UNKNOWN',
+        accessoriesIncluded: category === 'PHONE' ? device.accessoriesIncluded : [],
+        compatibleModels: category === 'SPARE_PART' ? device.compatibleModels : '',
+        oemQuality: category === 'SPARE_PART' ? device.oemQuality : '',
+        name: !isPhoneOrTablet ? device.name : '',
+        sku: category !== 'PHONE' ? device.sku : '',
+      }
+    }))
+  }
+
+  function updatePurchaseInventoryMode(id: string, mode: PurchaseInventoryMode) {
+    setPurchaseDevices((current) => current.map((device) => {
+      if (device.id !== id) return device
+      if (mode === 'EXISTING') {
+        return {
+          ...device,
+          inventoryMode: 'EXISTING',
+          existingInventoryItem: '',
+          imei: '',
+          brand: '',
+          model: '',
+          storage: '',
+          ram: '',
+          color: '',
+          name: '',
+          sku: '',
+          batteryHealth: '',
+          carrierLock: 'UNKNOWN',
+          accessoriesIncluded: [],
+          compatibleModels: '',
+          oemQuality: '',
+          notes: '',
+        }
+      }
+      return {
+        ...device,
+        inventoryMode: 'NEW',
+        existingInventoryItem: '',
+      }
+    }))
+  }
+
+  function handlePurchaseCurrencyChange(nextCurrency: PurchaseCurrency) {
+    if (nextCurrency === purchaseCurrency) return
+    const hasEnteredPrices = purchaseDevices.some((item) => item.purchasePrice.trim() !== '') || (purchaseAmountPaid.trim() !== '' && purchaseAmountPaid !== '0')
+    setPurchaseCurrency(nextCurrency)
+    if (hasEnteredPrices) {
+      setPurchaseDevices((current) => current.map((item) => ({ ...item, purchasePrice: '' })))
+      setPurchaseAmountPaid('0')
+      setCurrencyNotice(`Switched to ${nextCurrency}. Previously entered purchase prices and amount paid were cleared to prevent currency confusion.`)
+    } else {
+      setCurrencyNotice('')
+    }
   }
 
   function openImeiScanner(deviceId: string) {
@@ -774,10 +844,11 @@ export default function OperationModalBridge() {
       return
     }
     if (!imeiScanDeviceId) return
-    setPurchaseDevices((current) => current.map((device) => device.id === imeiScanDeviceId ? { ...device, imei } : device))
+    const targetDeviceId = imeiScanDeviceId
+    setPurchaseDevices((current) => current.map((device) => device.id === targetDeviceId ? { ...device, imei } : device))
     setImeiScanDeviceId(null)
     setImeiScanError('')
-    window.setTimeout(() => imeiInputs.current.get(imeiScanDeviceId)?.focus(), 0)
+    window.setTimeout(() => imeiInputs.current.get(targetDeviceId)?.focus(), 0)
   }, [imeiScanDeviceId])
 
   function purchaseItemErrors(item: PurchaseDevice) {
@@ -785,14 +856,31 @@ export default function OperationModalBridge() {
     const price = Number(item.purchasePrice)
     const quantity = Number(item.quantity)
     const validGigabytes = (value: string) => Number.isFinite(Number(value)) && Number(value) > 0
-    if (!Number.isFinite(price) || price < 0 || item.purchasePrice === '') errors.purchasePrice = 'Enter a valid unit purchase price'
-    else if (purchaseCurrency === 'KHR' && (!Number.isInteger(price) || price % 100 !== 0)) errors.purchasePrice = 'Use a whole KHR amount in increments of 100'
-    if (item.category !== 'PHONE' && (!Number.isInteger(quantity) || quantity < 1)) errors.quantity = 'Quantity must be at least 1'
+
+    if (!Number.isFinite(price) || price <= 0 || item.purchasePrice.trim() === '') {
+      errors.purchasePrice = 'Enter a valid unit purchase price greater than zero'
+    } else if (purchaseCurrency === 'KHR') {
+      if (!Number.isInteger(price) || price % 100 !== 0) {
+        errors.purchasePrice = 'Use a whole KHR amount in increments of 100'
+      }
+    } else {
+      const priceStr = item.purchasePrice.trim()
+      const parts = priceStr.split('.')
+      if (parts.length > 2 || (parts[1] && parts[1].length > 2)) {
+        errors.purchasePrice = 'USD purchase price cannot exceed 2 decimal places'
+      }
+    }
+
+    if (item.category !== 'PHONE' && (!Number.isInteger(quantity) || quantity < 1)) {
+      errors.quantity = 'Quantity must be at least 1'
+    }
+
     if (item.inventoryMode === 'EXISTING') {
       if (!canRestockExisting(item.category)) errors.existingInventoryItem = 'Phones and tablets must be entered as new units'
       else if (!item.existingInventoryItem) errors.existingInventoryItem = 'Select an existing inventory product'
       return errors
     }
+
     if (item.category === 'PHONE') {
       if (!/^\d{15}$/.test(item.imei)) errors.imei = 'IMEI must contain exactly 15 digits'
       if (!item.brand.trim()) errors.brand = 'Brand is required'
@@ -813,6 +901,76 @@ export default function OperationModalBridge() {
       if (item.category === 'SPARE_PART' && !item.oemQuality) errors.oemQuality = 'Select OEM quality'
     }
     return errors
+  }
+
+  function sanitizePurchaseItem(device: PurchaseDevice) {
+    const base = {
+      category: device.category,
+      purchasePrice: Number(device.purchasePrice),
+    }
+    if (device.inventoryMode === 'EXISTING') {
+      return {
+        ...base,
+        inventoryItem: device.existingInventoryItem,
+        quantity: Math.max(1, Number(device.quantity) || 1),
+      }
+    }
+    const common = {
+      ...base,
+      condition: device.condition || 'NEW',
+      notes: device.notes.trim() || undefined,
+    }
+    if (device.category === 'PHONE') {
+      return {
+        ...common,
+        imei: device.imei.trim(),
+        brand: device.brand.trim(),
+        model: device.model.trim(),
+        storage: device.storage.trim(),
+        ram: device.ram.trim() || undefined,
+        color: device.color.trim(),
+        batteryHealth: device.batteryHealth ? Number(device.batteryHealth) : undefined,
+        carrierLock: device.carrierLock || 'UNKNOWN',
+        accessoriesIncluded: device.accessoriesIncluded.length > 0 ? device.accessoriesIncluded : undefined,
+        quantity: 1,
+      }
+    }
+    if (device.category === 'TABLET') {
+      return {
+        ...common,
+        brand: device.brand.trim(),
+        model: device.model.trim(),
+        storage: device.storage.trim(),
+        color: device.color.trim(),
+        sku: device.sku.trim() ? device.sku.trim().toUpperCase() : undefined,
+        quantity: Math.max(1, Number(device.quantity) || 1),
+      }
+    }
+    if (device.category === 'ACCESSORY') {
+      return {
+        ...common,
+        name: device.name.trim(),
+        brand: device.brand.trim(),
+        sku: device.sku.trim().toUpperCase(),
+        quantity: Math.max(1, Number(device.quantity) || 1),
+      }
+    }
+    if (device.category === 'SPARE_PART') {
+      return {
+        ...common,
+        name: device.name.trim(),
+        compatibleModels: device.compatibleModels.trim(),
+        oemQuality: device.oemQuality || undefined,
+        sku: device.sku.trim() ? device.sku.trim().toUpperCase() : undefined,
+        quantity: Math.max(1, Number(device.quantity) || 1),
+      }
+    }
+    return {
+      ...common,
+      name: device.name.trim(),
+      sku: device.sku.trim() ? device.sku.trim().toUpperCase() : undefined,
+      quantity: Math.max(1, Number(device.quantity) || 1),
+    }
   }
 
   const purchaseSellerValid = sellerType === 'EXISTING_SUPPLIER'
@@ -902,9 +1060,11 @@ export default function OperationModalBridge() {
         ? 'Amount paid cannot exceed the purchase total'
         : purchaseCurrency === 'KHR' && (!Number.isInteger(purchasePaid) || purchasePaid % 100 !== 0)
           ? 'Amount paid must use whole 100 KHR increments'
-        : new Set(existingPurchaseIds).size !== existingPurchaseIds.length
-          ? 'Add each existing product only once per purchase'
-          : 'Complete the highlighted item fields')
+          : purchasePaidUsdDecimalsInvalid
+            ? 'Amount paid cannot have more than 2 decimal places'
+            : new Set(existingPurchaseIds).size !== existingPurchaseIds.length
+              ? 'Add each existing product only once per purchase'
+              : 'Complete the highlighted item fields')
       return
     }
     setBusy(true)
@@ -921,14 +1081,13 @@ export default function OperationModalBridge() {
       exchangeRate: purchaseCurrency === 'KHR' ? usdKhrRate : 1,
       amountPaid: purchasePaid,
       notes: purchaseNotes,
-      items: purchaseDevices.map(({ id: _id, collapsed: _collapsed, inventoryMode, existingInventoryItem, ...item }) => ({
-        ...item,
-        inventoryItem: inventoryMode === 'EXISTING' ? existingInventoryItem : undefined,
-      })),
+      items: purchaseDevices.map(sanitizePurchaseItem),
     }
     try {
-      const result = await api<{ trade: { items: { inventoryItem: InventoryItem }[] } }>('/trades', { method: 'POST', body: JSON.stringify(payload) })
-      const purchasedItems = result.trade.items.map((item) => item.inventoryItem).filter(Boolean)
+      const result = await api<{ trade?: { items?: { inventoryItem?: InventoryItem }[] } }>('/trades', { method: 'POST', body: JSON.stringify(payload) })
+      const purchasedItems = Array.isArray(result?.trade?.items)
+        ? (result.trade.items.map((item) => item?.inventoryItem).filter(Boolean) as InventoryItem[])
+        : []
       if (purchasedItems.length > 0) {
         setLabelItems(purchasedItems)
         setKind('label')
@@ -1252,6 +1411,7 @@ export default function OperationModalBridge() {
       error={error}
       busy={busy}
       compact={kind === 'label' || (kind === 'sale' && Boolean(saleKhqr || saleCompleted)) || (kind === 'pawn' && Boolean(pawnCreated)) || (kind === 'stock' && Boolean(stockAdjustmentComplete))}
+      className={kind === 'purchase' && purchaseStep === 2 ? 'purchase-modal-step-2' : undefined}
       dismissible={!(kind === 'sale' && saleKhqr && !saleCompleted)}
       dismissOnEscape={kind !== 'pawn'}
       onClose={close}
@@ -1334,21 +1494,70 @@ export default function OperationModalBridge() {
           title="Seller and purchase details"
           description="Choose who is selling, then record the date, payment method, and currency."
         >
+          {currencyNotice && (
+            <div className="purchase-currency-notice" role="status">
+              <AlertTriangle size={16} />
+              <span>{currencyNotice}</span>
+            </div>
+          )}
           <SegmentedControl
             label="Seller type"
             value={sellerType}
             options={sellerTypeOptions}
+            className="purchase-seller-tabs"
             onChange={setSellerType}
           />
           <div className="operation-form-grid purchase-fields-grid">
-            {sellerType === 'EXISTING_SUPPLIER' ? <label className={`operation-wide ${purchaseAttempted && !supplierId ? 'field-invalid' : ''}`}>Supplier<select required value={supplierId} onChange={(event) => setSupplierId(event.target.value)}><option value="" disabled>Select supplier</option>{suppliers.map((supplier) => <option key={supplier._id} value={supplier._id}>{supplier.name}{supplier.phone ? ` — ${supplier.phone}` : ''}</option>)}</select>{purchaseAttempted && !supplierId && <small>Select a supplier</small>}</label> : sellerType === 'EXISTING_CUSTOMER' ? <label className={`operation-wide ${purchaseAttempted && !sellerCustomerId ? 'field-invalid' : ''}`}>Customer<select required value={sellerCustomerId} onChange={(event) => setSellerCustomerId(event.target.value)}><option value="" disabled>Select customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name}{customer.phone ? ` — ${customer.phone}` : ' — No phone recorded'}</option>)}</select>{purchaseAttempted && !sellerCustomerId && <small>Select a customer</small>}</label> : <>
+            {sellerType === 'EXISTING_SUPPLIER' ? (
+              <label className={`operation-wide ${purchaseAttempted && !supplierId ? 'field-invalid' : ''}`}>
+                Supplier
+                <select
+                  required
+                  disabled={suppliersLoading || suppliers.length === 0}
+                  value={supplierId}
+                  onChange={(event) => setSupplierId(event.target.value)}
+                >
+                  <option value="" disabled>
+                    {suppliersLoading ? 'Loading suppliers...' : suppliers.length === 0 ? 'No suppliers registered yet' : 'Select supplier'}
+                  </option>
+                  {suppliers.map((supplier) => (
+                    <option key={supplier._id} value={supplier._id}>
+                      {supplier.name}{supplier.phone ? ` — ${supplier.phone}` : ''}
+                    </option>
+                  ))}
+                </select>
+                {purchaseAttempted && !supplierId && <small>Select a supplier</small>}
+                {!suppliersLoading && suppliers.length === 0 && <small className="field-hint">Add suppliers in the Suppliers section first, or choose New supplier.</small>}
+              </label>
+            ) : sellerType === 'EXISTING_CUSTOMER' ? (
+              <label className={`operation-wide ${purchaseAttempted && !sellerCustomerId ? 'field-invalid' : ''}`}>
+                Customer
+                <select
+                  required
+                  disabled={customersLoading || customers.length === 0}
+                  value={sellerCustomerId}
+                  onChange={(event) => setSellerCustomerId(event.target.value)}
+                >
+                  <option value="" disabled>
+                    {customersLoading ? 'Loading customers...' : customers.length === 0 ? 'No customers registered yet' : 'Select customer'}
+                  </option>
+                  {customers.map((customer) => (
+                    <option key={customer._id} value={customer._id}>
+                      {customer.name}{customer.phone ? ` — ${customer.phone}` : ' — No phone recorded'}
+                    </option>
+                  ))}
+                </select>
+                {purchaseAttempted && !sellerCustomerId && <small>Select a customer</small>}
+                {!customersLoading && customers.length === 0 && <small className="field-hint">Add customers in the Customers section first, or choose Walk-in / New customer.</small>}
+              </label>
+            ) : <>
               <label className={purchaseAttempted && !sellerName.trim() ? 'field-invalid' : ''}>Seller name<input required value={sellerName} onChange={(event) => setSellerName(event.target.value)} placeholder={sellerType === 'NEW_SUPPLIER' ? 'Supplier or business name' : 'Customer name'} />{purchaseAttempted && !sellerName.trim() && <small>Seller name is required</small>}</label>
               <label className={purchaseAttempted && sellerType === 'NEW_CUSTOMER' && !sellerPhone.trim() ? 'field-invalid' : ''}>Phone number {sellerType !== 'NEW_CUSTOMER' && <small className="optional-marker">Optional</small>}<input required={sellerType === 'NEW_CUSTOMER'} value={sellerPhone} onChange={(event) => setSellerPhone(event.target.value)} placeholder="012 345 678" />{purchaseAttempted && sellerType === 'NEW_CUSTOMER' && !sellerPhone.trim() && <small>Phone number is required for a new customer</small>}</label>
               <label>National ID <small className="optional-marker">Optional</small><input value={sellerNationalId} onChange={(event) => setSellerNationalId(event.target.value)} /></label>
             </>}
             <label>Purchase date<input type="date" required value={purchaseDate} onChange={(event) => setPurchaseDate(event.target.value)} /></label>
             <label>Payment method<select value={purchasePaymentMethod} onChange={(event) => setPurchasePaymentMethod(event.target.value)}><option value="CASH">Cash</option><option value="BANK">Bank transfer</option><option value="CARD">Card</option><option value="OTHER">Other</option></select></label>
-            <label>Currency<select value={purchaseCurrency} onChange={(event) => setPurchaseCurrency(event.target.value as PurchaseCurrency)}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Khmer Riel</option></select></label>
+            <label>Currency<select value={purchaseCurrency} onChange={(event) => handlePurchaseCurrencyChange(event.target.value as PurchaseCurrency)}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Khmer Riel</option></select></label>
             <label className="operation-wide">Purchase notes <small className="optional-marker">Optional</small><textarea rows={2} value={purchaseNotes} onChange={(event) => setPurchaseNotes(event.target.value)} /></label>
           </div>
         </OperationSectionCard>
@@ -1408,11 +1617,11 @@ export default function OperationModalBridge() {
                 <label className="purchase-category-select">Category<select value={device.category} onChange={(event) => updatePurchaseCategory(device.id, event.target.value as StockCategory)}>{(['PHONE', 'TABLET', 'ACCESSORY', 'SPARE_PART', 'OTHER'] as StockCategory[]).map((value) => <option value={value} key={value}>{value.replace('_', ' ')}</option>)}</select></label>
                 <fieldset className="purchase-category-picker"><legend>Category</legend>{(['PHONE', 'TABLET', 'ACCESSORY', 'SPARE_PART', 'OTHER'] as StockCategory[]).map((value) => <button type="button" key={value} className={device.category === value ? 'active' : ''} onClick={() => updatePurchaseCategory(device.id, value)}>{value.replace('_', ' ')}</button>)}</fieldset>
 
-                {canRestockExisting(device.category) && <fieldset className="purchase-inventory-mode"><legend>Product record</legend><button type="button" className={device.inventoryMode === 'NEW' ? 'active' : ''} onClick={() => updatePurchaseDevice(device.id, { inventoryMode: 'NEW', existingInventoryItem: '' })}><Plus size={16} /><span>New product<small>Create a new SKU</small></span>{device.inventoryMode === 'NEW' && <CheckCircle2 size={16} />}</button><button type="button" className={device.inventoryMode === 'EXISTING' ? 'active' : ''} onClick={() => updatePurchaseDevice(device.id, { inventoryMode: 'EXISTING', existingInventoryItem: '' })}><RefreshCw size={16} /><span>Existing product<small>Increase current quantity</small></span>{device.inventoryMode === 'EXISTING' && <CheckCircle2 size={16} />}</button></fieldset>}
+                {canRestockExisting(device.category) && <fieldset className="purchase-inventory-mode"><legend>Product record</legend><button type="button" className={device.inventoryMode === 'NEW' ? 'active' : ''} onClick={() => updatePurchaseInventoryMode(device.id, 'NEW')}><Plus size={16} /><span>New product<small>Create a new SKU</small></span>{device.inventoryMode === 'NEW' && <CheckCircle2 size={16} />}</button><button type="button" className={device.inventoryMode === 'EXISTING' ? 'active' : ''} onClick={() => updatePurchaseInventoryMode(device.id, 'EXISTING')}><RefreshCw size={16} /><span>Existing product<small>Increase current quantity</small></span>{device.inventoryMode === 'EXISTING' && <CheckCircle2 size={16} />}</button></fieldset>}
 
                 {device.inventoryMode === 'EXISTING' ? <>
                   <div className="device-group-label"><span>Existing inventory product</span><small>Only quantity-based products can be restocked</small></div>
-                  <label className={`device-existing-product ${purchaseAttempted && itemErrors.existingInventoryItem ? 'field-invalid' : ''}`}>Product<select required disabled={purchaseInventoryLoading || existingOptions.length === 0} value={device.existingInventoryItem} onChange={(event) => updatePurchaseDevice(device.id, { existingInventoryItem: event.target.value })}><option value="" disabled>{purchaseInventoryLoading ? 'Loading inventory...' : existingOptions.length === 0 ? `No existing ${device.category.replace('_', ' ').toLowerCase()} products` : 'Select an existing product'}</option>{existingOptions.map((item) => <option key={item._id} value={item._id}>{item.name} — {item.sku} — Qty {item.quantity}</option>)}</select>{purchaseAttempted && itemErrors.existingInventoryItem && <small>{itemErrors.existingInventoryItem}</small>}</label>
+                  <label className={`device-existing-product ${purchaseAttempted && itemErrors.existingInventoryItem ? 'field-invalid' : ''}`}>Product<select required disabled={purchaseInventoryLoading || existingOptions.length === 0} value={device.existingInventoryItem} onChange={(event) => updatePurchaseDevice(device.id, { existingInventoryItem: event.target.value })}><option value="" disabled>{purchaseInventoryLoading ? 'Loading inventory...' : existingOptions.length === 0 ? `No existing ${device.category.replace('_', ' ').toLowerCase()} products in stock` : 'Select an existing product'}</option>{existingOptions.map((item) => <option key={item._id} value={item._id}>{item.name} — {item.sku} — Qty {item.quantity}</option>)}</select>{purchaseAttempted && itemErrors.existingInventoryItem && <small>{itemErrors.existingInventoryItem}</small>}</label>
                   {existingItem && <div className="purchase-existing-summary"><span className="stock-adjustment-result-icon"><Package size={19} /></span><p><strong>{existingItem.name}</strong><small>{existingItem.sku} · {existingItem.category.replace('_', ' ')}</small></p><div><span>Current stock</span><strong>{existingItem.quantity}</strong></div><div><span>After purchase</span><strong>{existingItem.quantity + Math.max(1, Number(device.quantity) || 1)}</strong></div></div>}
                   <label className={purchaseAttempted && itemErrors.quantity ? 'field-invalid' : ''}>Quantity purchased<input required type="number" min="1" step="1" value={device.quantity} onChange={(event) => updatePurchaseDevice(device.id, { quantity: event.target.value })} />{purchaseAttempted && itemErrors.quantity && <small>{itemErrors.quantity}</small>}</label>
                 </> : <>
@@ -1441,18 +1650,28 @@ export default function OperationModalBridge() {
                     <label>Carrier lock<select value={device.carrierLock} onChange={(event) => updatePurchaseDevice(device.id, { carrierLock: event.target.value })}><option value="UNKNOWN">Unknown</option><option value="UNLOCKED">Unlocked</option><option value="LOCKED">Carrier locked</option></select></label>
                     <fieldset className="device-accessories"><legend>Accessories included</legend>{['BOX', 'CHARGER', 'CABLE', 'CASE', 'EARPHONES'].map((accessory) => <label key={accessory}><input type="checkbox" checked={device.accessoriesIncluded.includes(accessory)} onChange={(event) => updatePurchaseDevice(device.id, { accessoriesIncluded: event.target.checked ? [...device.accessoriesIncluded, accessory] : device.accessoriesIncluded.filter((item) => item !== accessory) })} /> {accessory.charAt(0) + accessory.slice(1).toLowerCase()}</label>)}</fieldset>
                   </SerializedDeviceFields>
-                ) : <>
-                  {device.category === 'TABLET' ? <>
-                    <label className={purchaseAttempted && itemErrors.brand ? 'field-invalid' : ''}>Brand<input required value={device.brand} onChange={(event) => updatePurchaseDevice(device.id, { brand: event.target.value })} placeholder="Apple" />{purchaseAttempted && itemErrors.brand && <small>{itemErrors.brand}</small>}</label>
-                    <label className={purchaseAttempted && itemErrors.model ? 'field-invalid' : ''}>Model<input required value={device.model} onChange={(event) => updatePurchaseDevice(device.id, { model: event.target.value })} placeholder="iPad Air" />{purchaseAttempted && itemErrors.model && <small>{itemErrors.model}</small>}</label>
-                    <label className={purchaseAttempted && itemErrors.storage ? 'field-invalid' : ''}>Storage<div className="device-unit-input"><input required type="number" min="1" step="1" value={device.storage} onChange={(event) => updatePurchaseDevice(device.id, { storage: event.target.value })} placeholder="256" /><span>GB</span></div>{purchaseAttempted && itemErrors.storage && <small>{itemErrors.storage}</small>}</label>
-                    <label className={purchaseAttempted && itemErrors.color ? 'field-invalid' : ''}>Color<input required value={device.color} onChange={(event) => updatePurchaseDevice(device.id, { color: event.target.value })} placeholder="Space Gray" />{purchaseAttempted && itemErrors.color && <small>{itemErrors.color}</small>}</label>
+                ) : device.category === 'TABLET' ? (
+                  <SerializedDeviceFields
+                    asContainer={false}
+                    showGroupHeading={false}
+                    showImei={false}
+                    showRam={false}
+                    values={{
+                      brand: device.brand,
+                      model: device.model,
+                      storage: device.storage,
+                      color: device.color,
+                    }}
+                    errors={purchaseAttempted ? itemErrors : undefined}
+                    onChange={(field, value) => updatePurchaseDevice(device.id, { [field]: value })}
+                  >
                     <label>SKU <small className="optional-marker">Optional</small><input value={device.sku} onChange={(event) => updatePurchaseDevice(device.id, { sku: event.target.value.toUpperCase() })} placeholder="Generated if empty" /></label>
-                  </> : <>
-                    <label className={purchaseAttempted && itemErrors.name ? 'field-invalid' : ''}>{device.category === 'SPARE_PART' ? 'Part name' : 'Item name'}<input required value={device.name} onChange={(event) => updatePurchaseDevice(device.id, { name: event.target.value })} placeholder={device.category === 'ACCESSORY' ? 'USB-C charger' : device.category === 'SPARE_PART' ? 'OLED display assembly' : 'Product name'} />{purchaseAttempted && itemErrors.name && <small>{itemErrors.name}</small>}</label>
-                    {device.category === 'ACCESSORY' && <label className={purchaseAttempted && itemErrors.brand ? 'field-invalid' : ''}>Brand<input required value={device.brand} onChange={(event) => updatePurchaseDevice(device.id, { brand: event.target.value })} placeholder="Anker" />{purchaseAttempted && itemErrors.brand && <small>{itemErrors.brand}</small>}</label>}
-                    <label className={purchaseAttempted && itemErrors.sku ? 'field-invalid' : ''}>SKU {device.category !== 'ACCESSORY' && <small className="optional-marker">Optional</small>}<input required={device.category === 'ACCESSORY'} value={device.sku} onChange={(event) => updatePurchaseDevice(device.id, { sku: event.target.value.toUpperCase() })} placeholder={device.category === 'ACCESSORY' ? 'Required SKU' : 'Generated if empty'} />{purchaseAttempted && itemErrors.sku && <small>{itemErrors.sku}</small>}</label>
-                  </>}
+                    <label className={purchaseAttempted && itemErrors.quantity ? 'field-invalid' : ''}>Quantity<input required type="number" min="1" step="1" value={device.quantity} onChange={(event) => updatePurchaseDevice(device.id, { quantity: event.target.value })} />{purchaseAttempted && itemErrors.quantity && <small>{itemErrors.quantity}</small>}</label>
+                  </SerializedDeviceFields>
+                ) : <>
+                  <label className={purchaseAttempted && itemErrors.name ? 'field-invalid' : ''}>{device.category === 'SPARE_PART' ? 'Part name' : 'Item name'}<input required value={device.name} onChange={(event) => updatePurchaseDevice(device.id, { name: event.target.value })} placeholder={device.category === 'ACCESSORY' ? 'USB-C charger' : device.category === 'SPARE_PART' ? 'OLED display assembly' : 'Product name'} />{purchaseAttempted && itemErrors.name && <small>{itemErrors.name}</small>}</label>
+                  {device.category === 'ACCESSORY' && <label className={purchaseAttempted && itemErrors.brand ? 'field-invalid' : ''}>Brand<input required value={device.brand} onChange={(event) => updatePurchaseDevice(device.id, { brand: event.target.value })} placeholder="Anker" />{purchaseAttempted && itemErrors.brand && <small>{itemErrors.brand}</small>}</label>}
+                  <label className={purchaseAttempted && itemErrors.sku ? 'field-invalid' : ''}>SKU {device.category !== 'ACCESSORY' && <small className="optional-marker">Optional</small>}<input required={device.category === 'ACCESSORY'} value={device.sku} onChange={(event) => updatePurchaseDevice(device.id, { sku: event.target.value.toUpperCase() })} placeholder={device.category === 'ACCESSORY' ? 'Required SKU' : 'Generated if empty'} />{purchaseAttempted && itemErrors.sku && <small>{itemErrors.sku}</small>}</label>
                   {device.category === 'SPARE_PART' && <><label className={purchaseAttempted && itemErrors.compatibleModels ? 'field-invalid' : ''}>Compatible models<input required value={device.compatibleModels} onChange={(event) => updatePurchaseDevice(device.id, { compatibleModels: event.target.value })} placeholder="iPhone 13, iPhone 13 Pro" />{purchaseAttempted && itemErrors.compatibleModels && <small>{itemErrors.compatibleModels}</small>}</label><label className={purchaseAttempted && itemErrors.oemQuality ? 'field-invalid' : ''}>OEM quality<select required value={device.oemQuality} onChange={(event) => updatePurchaseDevice(device.id, { oemQuality: event.target.value })}><option value="" disabled>Select quality</option><option value="OEM">OEM</option><option value="ORIGINAL">Original</option><option value="AFTERMARKET_PREMIUM">Aftermarket premium</option><option value="AFTERMARKET">Aftermarket</option></select>{purchaseAttempted && itemErrors.oemQuality && <small>{itemErrors.oemQuality}</small>}</label></>}
                   <label className={purchaseAttempted && itemErrors.quantity ? 'field-invalid' : ''}>Quantity<input required type="number" min="1" step="1" value={device.quantity} onChange={(event) => updatePurchaseDevice(device.id, { quantity: event.target.value })} />{purchaseAttempted && itemErrors.quantity && <small>{itemErrors.quantity}</small>}</label>
                 </>}
@@ -1532,13 +1751,32 @@ export default function OperationModalBridge() {
         </>}
       </form>}
 
-      {kind === 'purchase' && imeiScanDeviceId && <div className="imei-scanner-backdrop" role="presentation">
-        <section className="imei-scanner-dialog" role="dialog" aria-modal="true" aria-labelledby="imei-scanner-title">
-          <header><span><Camera size={20} /></span><div><small>CAMERA ACTIVE</small><h3 id="imei-scanner-title">Point camera at the IMEI</h3><p>The IMEI will be filled automatically when the 15-digit barcode is detected.</p></div><button type="button" onClick={() => setImeiScanDeviceId(null)} aria-label="Close IMEI scanner"><X size={18} /></button></header>
-          {imeiScanError && <div className="imei-scan-error"><AlertTriangle size={16} />{imeiScanError}</div>}
-          <CameraBarcodeReader autoStart readerId="phoneflow-imei-reader" onScan={applyScannedImei} onError={setImeiScanError} />
-        </section>
-      </div>}
+      {kind === 'purchase' && imeiScanDeviceId && (
+        <OperationModalShell
+          scanner
+          compact
+          icon={<Camera size={20} />}
+          eyebrow="Camera active"
+          title="Point camera at the IMEI"
+          description="The IMEI will be filled automatically when the 15-digit barcode is detected."
+          error={imeiScanError}
+          onClose={() => {
+            const returnId = imeiScanDeviceId
+            setImeiScanDeviceId(null)
+            setImeiScanError('')
+            window.setTimeout(() => imeiInputs.current.get(returnId)?.focus(), 0)
+          }}
+          className="purchase-scanner-modal"
+          ariaLabel="Point camera at the IMEI"
+        >
+          <CameraBarcodeReader
+            autoStart
+            readerId="phoneflow-imei-reader"
+            onScan={applyScannedImei}
+            onError={setImeiScanError}
+          />
+        </OperationModalShell>
+      )}
 
       {kind === 'scan' && (!scannedItem ? <ScannerWorkflow
         code={scanCode}

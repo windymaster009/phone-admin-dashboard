@@ -156,4 +156,23 @@ describe('SerializedDeviceFields', () => {
     expect(screen.getByPlaceholderText('Blue')).toBeDisabled()
     expect(screen.getByRole('button', { name: /scan imei/i })).toBeDisabled()
   })
+
+  it('omits IMEI and RAM fields when showImei and showRam are false for tablets', () => {
+    render(
+      <SerializedDeviceFields
+        values={{ brand: 'Apple', model: 'iPad Air', storage: '256', color: 'Space Gray' }}
+        onChange={vi.fn()}
+        showImei={false}
+        showRam={false}
+      />,
+    )
+
+    expect(screen.queryByPlaceholderText('15-digit IMEI')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /scan imei/i })).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('6')).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Apple')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('iPhone 13 Pro')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('128')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('Blue')).toBeInTheDocument()
+  })
 })

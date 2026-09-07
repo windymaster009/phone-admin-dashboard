@@ -28,7 +28,7 @@ export default function OperationWorkflowFooter({
     <footer className={`operation-workflow-footer operation-modal-actions ${className}`.trim()}>
       {summary && (
         isWorkflowFooterSummary(summary) ? (
-          <div className="operation-workflow-footer-summary purchase-submit-summary">
+          <div className="operation-workflow-footer-summary">
             {summary.stepText && <span>{summary.stepText}</span>}
             {summary.detailText && <strong>{summary.detailText}</strong>}
           </div>

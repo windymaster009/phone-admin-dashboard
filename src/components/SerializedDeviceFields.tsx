@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import ScannerTriggerButton from './scanner/ScannerTriggerButton'
 
 export type SerializedDeviceValues = {
-  imei: string
+  imei?: string
   brand: string
   model: string
   storage: string
@@ -21,6 +21,8 @@ export type SerializedDeviceFieldsProps = {
   imeiRef?: (node: HTMLInputElement | null) => void
   includeNames?: boolean
   showGroupHeading?: boolean
+  showImei?: boolean
+  showRam?: boolean
   asContainer?: boolean
   children?: ReactNode
   className?: string
@@ -35,6 +37,8 @@ export default function SerializedDeviceFields({
   imeiRef,
   includeNames = false,
   showGroupHeading = true,
+  showImei = true,
+  showRam = true,
   asContainer = true,
   children,
   className = '',
@@ -54,34 +58,36 @@ export default function SerializedDeviceFields({
       )}
 
       {/* IMEI Field */}
-      <label className={`device-imei-field ${errors?.imei ? 'field-invalid' : ''}`.trim()}>
-        <span>IMEI</span>
-        <div>
-          <input
-            ref={imeiRef}
-            name={includeNames ? 'imei' : undefined}
-            required
-            disabled={disabled}
-            inputMode="numeric"
-            pattern="[0-9]{15}"
-            maxLength={15}
-            value={values.imei}
-            onChange={(e) => handleImeiChange(e.target.value)}
-            placeholder="15-digit IMEI"
-          />
-          {onScan && (
-            <ScannerTriggerButton
-              label="Scan IMEI"
-              iconSize={16}
-              onClick={onScan}
+      {showImei && (
+        <label className={`device-imei-field ${errors?.imei ? 'field-invalid' : ''}`.trim()}>
+          <span>IMEI</span>
+          <div>
+            <input
+              ref={imeiRef}
+              name={includeNames ? 'imei' : undefined}
+              required
               disabled={disabled}
+              inputMode="numeric"
+              pattern="[0-9]{15}"
+              maxLength={15}
+              value={values.imei || ''}
+              onChange={(e) => handleImeiChange(e.target.value)}
+              placeholder="15-digit IMEI"
             />
-          )}
-        </div>
-        <small>
-          {errors?.imei ? errors.imei : 'Scan with a handheld scanner or this device camera.'}
-        </small>
-      </label>
+            {onScan && (
+              <ScannerTriggerButton
+                label="Scan IMEI"
+                iconSize={16}
+                onClick={onScan}
+                disabled={disabled}
+              />
+            )}
+          </div>
+          <small>
+            {errors?.imei ? errors.imei : 'Scan with a handheld scanner or this device camera.'}
+          </small>
+        </label>
+      )}
 
       {/* Brand Field */}
       <label className={errors?.brand ? 'field-invalid' : ''}>
@@ -132,23 +138,25 @@ export default function SerializedDeviceFields({
       </label>
 
       {/* RAM Field (Optional) */}
-      <label className={errors?.ram ? 'field-invalid' : ''}>
-        RAM <small className="optional-marker">Optional</small>
-        <div className="device-unit-input">
-          <input
-            name={includeNames ? 'ram' : undefined}
-            disabled={disabled}
-            type="number"
-            min="1"
-            step="1"
-            value={values.ram || ''}
-            onChange={(e) => onChange('ram', e.target.value)}
-            placeholder="6"
-          />
-          <span>GB</span>
-        </div>
-        {errors?.ram && <small>{errors.ram}</small>}
-      </label>
+      {showRam && (
+        <label className={errors?.ram ? 'field-invalid' : ''}>
+          RAM <small className="optional-marker">Optional</small>
+          <div className="device-unit-input">
+            <input
+              name={includeNames ? 'ram' : undefined}
+              disabled={disabled}
+              type="number"
+              min="1"
+              step="1"
+              value={values.ram || ''}
+              onChange={(e) => onChange('ram', e.target.value)}
+              placeholder="6"
+            />
+            <span>GB</span>
+          </div>
+          {errors?.ram && <small>{errors.ram}</small>}
+        </label>
+      )}
 
       {/* Color Field */}
       <label className={errors?.color ? 'field-invalid' : ''}>

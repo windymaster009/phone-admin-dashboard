@@ -24,7 +24,7 @@ export default function OperationWorkflowStepper({
 }: OperationWorkflowStepperProps) {
   return (
     <div
-      className={`operation-workflow-stepper purchase-stepper ${className}`.trim()}
+      className={`operation-workflow-stepper ${className}`.trim()}
       role="group"
       aria-label={ariaLabel}
     >
@@ -33,7 +33,7 @@ export default function OperationWorkflowStepper({
         const totalSteps = steps.length
         const isActive = step.status === 'active'
         const isComplete = step.status === 'complete'
-        const stepClass = `operation-workflow-step purchase-step ${isActive ? 'active' : ''} ${isComplete ? 'complete' : ''}`.trim()
+        const stepClass = `operation-workflow-step ${isActive ? 'active' : ''} ${isComplete ? 'complete' : ''}`.trim()
         const stepAriaLabel = step.ariaLabel || `Step ${stepNumber} of ${totalSteps}: ${step.title}${step.description ? ` · ${step.description}` : ''}`
 
         const content: ReactNode = (

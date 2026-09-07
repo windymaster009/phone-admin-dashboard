@@ -73,7 +73,7 @@ export default function SegmentedControl<T extends string = string>({
   return (
     <div
       ref={containerRef}
-      className={`segmented-control purchase-seller-tabs ${className}`.trim()}
+      className={`segmented-control ${className}`.trim()}
       role="tablist"
       aria-label={label}
     >

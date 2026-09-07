@@ -1892,16 +1892,23 @@ body.operation-modal-open {
 
   .operation-modal-purchase {
     width: 100%;
-    height: min(80dvh, 640px);
+    height: auto;
     max-height: calc(100dvh - 32px);
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
     border-radius: 20px;
+    overflow: hidden;
+  }
+
+  .operation-modal-purchase.purchase-modal-step-2 {
+    height: min(90dvh, 720px);
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
   }
 
   /* Compensate for the app's zoom-based Default / Comfortable / Large display sizes. */
-  .app[data-font-size='comfortable'] .operation-modal-purchase { height: min(72.7273dvh, 582px); max-height: calc(90.9091dvh - 29px); }
-  .app[data-font-size='large'] .operation-modal-purchase { height: min(66.6667dvh, 533px); max-height: calc(83.3333dvh - 27px); }
+  .app[data-font-size='comfortable'] .operation-modal-purchase.purchase-modal-step-2 { height: min(84dvh, 660px); max-height: calc(90.9091dvh - 29px); }
+  .app[data-font-size='large'] .operation-modal-purchase.purchase-modal-step-2 { height: min(78dvh, 600px); max-height: calc(83.3333dvh - 27px); }
 
   .operation-modal-purchase .operation-modal-header {
     gap: 11px;
@@ -1935,13 +1942,23 @@ body.operation-modal-open {
   .operation-modal-purchase .purchase-workflow-form {
     min-height: 0;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
   }
 
+  .operation-modal-purchase.purchase-modal-step-2 .purchase-workflow-form {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+
+  .operation-modal-purchase .operation-workflow-stepper,
   .operation-modal-purchase .purchase-stepper {
     grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr);
     padding: 10px 17px;
   }
 
+  .operation-modal-purchase .operation-workflow-stepper .operation-workflow-step,
   .operation-modal-purchase .purchase-stepper .purchase-step {
     min-height: 44px;
     justify-content: center;
@@ -1950,12 +1967,14 @@ body.operation-modal-open {
     border-radius: 10px;
   }
 
+  .operation-modal-purchase .operation-workflow-stepper .operation-workflow-step > span,
   .operation-modal-purchase .purchase-stepper .purchase-step > span {
     width: 28px;
     height: 28px;
     font-size: 10px;
   }
 
+  .operation-modal-purchase .operation-workflow-stepper .operation-workflow-step strong,
   .operation-modal-purchase .purchase-stepper .purchase-step strong {
     overflow: hidden;
     font-size: 10px;
@@ -1971,19 +1990,23 @@ body.operation-modal-open {
     touch-action: pan-y;
   }
 
+  .operation-modal-purchase .operation-section-card,
   .operation-modal-purchase .purchase-section-card {
     padding: 12px;
     border-radius: 14px;
   }
 
+  .operation-modal-purchase .operation-section-heading-plain,
   .operation-modal-purchase .purchase-section-heading-plain {
     margin-bottom: 10px;
   }
 
+  .operation-modal-purchase .operation-section-heading-plain h3,
   .operation-modal-purchase .purchase-section-heading-plain h3 {
     font-size: 14px;
   }
 
+  .operation-modal-purchase .operation-section-heading-plain p,
   .operation-modal-purchase .purchase-section-heading-plain p {
     font-size: 9px;
     line-height: 1.4;
@@ -1991,25 +2014,36 @@ body.operation-modal-open {
 
   /* Put the frequent seller choices first and keep the walk-in option easy to spot. */
   .operation-modal-purchase .purchase-seller-tabs {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
     gap: 6px;
     margin-bottom: 12px;
     padding: 4px;
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+    border-radius: 12px;
   }
 
   .operation-modal-purchase .purchase-seller-tabs button {
     min-width: 0;
-    min-height: 40px;
-    padding: 6px 5px;
+    min-height: 44px;
+    padding: 8px 6px;
+    font-size: 10px;
+    line-height: 1.25;
+    border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+    border-radius: 9px;
     overflow: hidden;
-    font-size: 9px;
-    line-height: 1.2;
     text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
+    text-align: center;
+  }
+
+  .operation-modal-purchase .purchase-seller-tabs button:focus-visible {
+    outline: 2px solid var(--primary, #8b5cf6);
+    outline-offset: 2px;
   }
 
   .operation-modal-purchase .purchase-seller-tabs button:nth-child(3) {
-    grid-column: 1 / -1;
+    grid-column: 1 / -1 !important;
   }
 
   .operation-modal-purchase .purchase-fields-grid {
@@ -2704,14 +2738,13 @@ body.operation-modal-open {
     height: 64px;
   }
 
-  .purchase-section-card { padding: 14px; }
+  .operation-section-card, .purchase-section-card { padding: 14px; }
   .purchase-workflow-form { padding: 0; }
   .purchase-step-content { padding: 0 17px 17px; }
-  .purchase-stepper { width: 100%; grid-template-columns: minmax(0,1fr) 22px minmax(0,1fr); padding: 13px 17px; }
-  .purchase-stepper .purchase-step { min-width: 0; gap: 7px; padding-inline: 3px; }
-  .purchase-stepper .purchase-step small { display: none; }
-  .purchase-seller-tabs { grid-template-columns: 1fr; }
-  .purchase-payment-summary { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .operation-workflow-stepper, .purchase-stepper { width: 100%; grid-template-columns: minmax(0,1fr) 22px minmax(0,1fr); padding: 13px 17px; }
+  .operation-workflow-stepper .operation-workflow-step, .purchase-stepper .purchase-step { min-width: 0; gap: 7px; padding-inline: 3px; }
+  .operation-workflow-stepper .operation-workflow-step small, .purchase-stepper .purchase-step small { display: none; }
+  .key-value-summary.purchase-payment-summary, .purchase-payment-summary { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .pawn-customer-summary, .pawn-contract-summary { grid-template-columns: 1fr; }
   .pawn-term-selector > div { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .pawn-term-selector button {
@@ -2753,6 +2786,7 @@ body.operation-modal-open {
     width: 100%;
     min-height: 44px;
   }
+  .operation-workflow-footer-summary,
   .purchase-submit-summary { display: none; }
   .barcode-label-preview-list { grid-template-columns: 1fr; }
 

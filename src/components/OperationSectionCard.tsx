@@ -28,10 +28,10 @@ export default function OperationSectionCard({
   return (
     <section
       id={id}
-      className={`operation-section-card purchase-section-card ${className}`.trim()}
+      className={`operation-section-card ${className}`.trim()}
     >
       <div
-        className={`operation-section-heading purchase-section-heading ${isPlainHeading ? 'purchase-section-heading-plain' : ''}`.trim()}
+        className={`operation-section-heading ${isPlainHeading ? 'operation-section-heading-plain purchase-section-heading-plain' : ''}`.trim()}
       >
         {marker && <span>{marker}</span>}
         <div>
