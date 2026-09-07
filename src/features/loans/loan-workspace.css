@@ -293,7 +293,16 @@
 }
 
 .loan-borrower-summary {
+  gap: 10px;
   margin-top: 0;
+  padding-top: 14px;
+}
+
+.loan-borrower-summary > .key-value-item {
+  padding: 12px;
+  border: 1px solid var(--border-strong, rgba(148, 163, 184, 0.28));
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--surface-solid, #151e34) 88%, var(--bg-soft, #10172a));
 }
 
 .loan-borrower-summary .key-value-value {
@@ -498,6 +507,7 @@
 
 @media (max-width: 640px) {
   .loan-borrower-fields,
+  .loan-borrower-summary,
   .loan-control-field .segmented-control.loan-interest-options {
     grid-template-columns: 1fr;
   }
@@ -724,6 +734,7 @@
 }
 
 :root[data-theme='light'] .loan-preview,
+:root[data-theme='light'] .loan-borrower-summary > .key-value-item,
 :root[data-theme='light'] .loan-detail-summary > div,
 :root[data-theme='light'] .loan-detail-card,
 :root[data-theme='light'] .loan-payment-history {

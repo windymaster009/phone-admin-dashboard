@@ -368,6 +368,9 @@ describe('LoanPage component and shared component adoption', () => {
     expect(within(dialog).getByText(existingCustomer.phone)).toBeInTheDocument()
     expect(within(dialog).getByText(existingCustomer.nationalIdNumber)).toBeInTheDocument()
     expect(within(dialog).getByText(existingCustomer.address)).toBeInTheDocument()
+    const borrowerSummary = within(dialog).getByRole('list')
+    expect(borrowerSummary).toHaveClass('loan-borrower-summary')
+    expect(within(borrowerSummary).getAllByRole('listitem')).toHaveLength(4)
 
     await user.click(within(dialog).getByRole('button', { name: 'Continue' }))
     await user.type(within(dialog).getByLabelText(/Loan amount/i), '750')
