@@ -1438,11 +1438,49 @@ export default function OperationModalBridge() {
           <div className="purchase-step-content">
             <section className="purchase-section-card">
               <div className="purchase-section-heading"><span>1</span><div><h3>Customer verification</h3><p>Choose the collateral owner and confirm ownership. Recording a National ID is optional.</p></div></div>
-              <div className="purchase-seller-tabs pawn-customer-tabs">
-                <button type="button" className={pawnCustomerMode === 'EXISTING' ? 'active' : ''} onClick={() => { setPawnCustomerMode('EXISTING'); setPawnOwnershipConfirmed(false); setError('') }}>Existing customer</button>
-                <button type="button" className={pawnCustomerMode === 'NEW' ? 'active' : ''} onClick={() => { setPawnCustomerMode('NEW'); setPawnOwnershipConfirmed(false); setError('') }}>New customer</button>
+              <div className="purchase-seller-tabs pawn-customer-tabs" role="tablist" aria-label="Customer type">
+                <button
+                  type="button"
+                  role="tab"
+                  id="pawn-customer-tab-existing"
+                  aria-selected={pawnCustomerMode === 'EXISTING'}
+                  aria-controls="pawn-customer-panel"
+                  className={pawnCustomerMode === 'EXISTING' ? 'active' : ''}
+                  onClick={() => { setPawnCustomerMode('EXISTING'); setPawnOwnershipConfirmed(false); setError('') }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+                      event.preventDefault()
+                      setPawnCustomerMode('NEW')
+                      setPawnOwnershipConfirmed(false)
+                      setError('')
+                      document.getElementById('pawn-customer-tab-new')?.focus()
+                    }
+                  }}
+                >
+                  Existing customer
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  id="pawn-customer-tab-new"
+                  aria-selected={pawnCustomerMode === 'NEW'}
+                  aria-controls="pawn-customer-panel"
+                  className={pawnCustomerMode === 'NEW' ? 'active' : ''}
+                  onClick={() => { setPawnCustomerMode('NEW'); setPawnOwnershipConfirmed(false); setError('') }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+                      event.preventDefault()
+                      setPawnCustomerMode('EXISTING')
+                      setPawnOwnershipConfirmed(false)
+                      setError('')
+                      document.getElementById('pawn-customer-tab-existing')?.focus()
+                    }
+                  }}
+                >
+                  New customer
+                </button>
               </div>
-              <div className="operation-form-grid purchase-fields-grid">
+              <div id="pawn-customer-panel" role="tabpanel" aria-labelledby={pawnCustomerMode === 'EXISTING' ? 'pawn-customer-tab-existing' : 'pawn-customer-tab-new'} className="operation-form-grid purchase-fields-grid">
                 {pawnCustomerMode === 'EXISTING' ? <label className={`operation-wide ${pawnAttempted && !pawnCustomerId ? 'field-invalid' : ''}`}>Customer<select required value={pawnCustomerId} onChange={(event) => { setPawnCustomerId(event.target.value); setPawnOwnershipConfirmed(false); setError('') }}><option value="" disabled>Select customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name}{customer.phone ? ` — ${customer.phone}` : ' — No phone recorded'}{customer.nationalIdNumber ? ' — ID recorded' : ' — ID not provided'}</option>)}</select>{pawnAttempted && !pawnCustomerId && <small>Select a customer</small>}</label> : <>
                   <label className={pawnAttempted && !pawnWalkInName.trim() ? 'field-invalid' : ''}>Customer name<input required value={pawnWalkInName} onChange={(event) => setPawnWalkInName(event.target.value)} placeholder="Full name" />{pawnAttempted && !pawnWalkInName.trim() && <small>Name is required</small>}</label>
                   <label>Phone number <small className="optional-marker">Optional</small><input value={pawnWalkInPhone} onChange={(event) => setPawnWalkInPhone(event.target.value)} placeholder="012 345 678" /></label>
@@ -1522,7 +1560,37 @@ export default function OperationModalBridge() {
               <div className="operation-form-grid purchase-fields-grid pawn-contract-fields">
                 <label><span className="operation-label-heading">Principal ({pawnCurrency}) <small>Maximum {pawnAmountText(maximumPawn, pawnCurrency)}</small></span><MoneyInput name="principal" currency={pawnCurrency} minimum={pawnCurrency === 'KHR' ? 100 : 0.01} maximum={maximumPawn || undefined} clampToMaximum required value={pawnPrincipal} aria-describedby={pawnPrincipalLimitMessage ? 'pawn-principal-limit' : undefined} onValueChange={(value) => { setPawnPrincipal(value); setPawnPrincipalLimitMessage('') }} onMaximumExceeded={(limit) => setPawnPrincipalLimitMessage(`Principal capped at ${pawnAmountText(limit, pawnCurrency)}.`)} />{pawnPrincipalLimitMessage && <small id="pawn-principal-limit" className="operation-field-warning" role="status">{pawnPrincipalLimitMessage}</small>}</label>
                 {pawnAutoCalculate ? <label>Daily pawn fee rate<div className="device-unit-input"><input type="number" min="0" max="100" step="0.01" required value={pawnDailyFeeRate} onChange={(event) => setPawnDailyFeeRate(event.target.value)} aria-label="Daily pawn fee rate" /><span>% / day</span></div><small className="pawn-daily-fee-help">Charges {pawnAmountText(pawnDailyFeeAmount, pawnCurrency)} per day.</small></label> : <label><span className="operation-label-heading">Fee at due date ({pawnCurrency}) <small>Maximum {pawnAmountText(pawnMaximumFeeAtDue, pawnCurrency)}</small></span><MoneyInput currency={pawnCurrency} maximum={pawnMaximumFeeAtDue || undefined} required value={pawnFeeAtDue} onValueChange={setPawnFeeAtDue} aria-label="Fee at due date" placeholder={pawnPrincipalAmount > 0 ? 'Enter total fee' : 'Enter principal first'} /><small className="pawn-daily-fee-help">Equivalent to {pawnEffectiveDailyFeeRate.toLocaleString(undefined, { maximumFractionDigits: 2 })}% / day · {pawnAmountText(pawnDailyFeeAmount, pawnCurrency)} / day.</small></label>}
-                <fieldset className="pawn-term-selector operation-wide"><legend>Pawn term</legend><div role="radiogroup" aria-label="Pawn term">{([{ days: 3, label: '3 Days' }, { days: 7, label: '1 Week' }, { days: 15, label: 'Half Month' }, { days: 30, label: '1 Month' }] as const).map((term) => <button key={term.days} type="button" role="radio" aria-checked={pawnTermDays === term.days} className={pawnTermDays === term.days ? 'active' : ''} onClick={() => setPawnTermDays(term.days)}><strong>{term.label}</strong><small>{term.days} days</small></button>)}</div></fieldset>
+                <fieldset className="pawn-term-selector operation-wide">
+                  <legend>Pawn term</legend>
+                  <div role="radiogroup" aria-label="Pawn term">
+                    {([{ days: 3, label: '3 Days' }, { days: 7, label: '1 Week' }, { days: 15, label: 'Half Month' }, { days: 30, label: '1 Month' }] as const).map((term, index, terms) => (
+                      <button
+                        key={term.days}
+                        type="button"
+                        role="radio"
+                        aria-checked={pawnTermDays === term.days}
+                        className={pawnTermDays === term.days ? 'active' : ''}
+                        onClick={() => setPawnTermDays(term.days)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+                            event.preventDefault()
+                            const next = terms[(index + 1) % terms.length]
+                            setPawnTermDays(next.days)
+                            event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('button')[(index + 1) % terms.length]?.focus()
+                          } else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+                            event.preventDefault()
+                            const prev = terms[(index - 1 + terms.length) % terms.length]
+                            setPawnTermDays(prev.days)
+                            event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('button')[(index - 1 + terms.length) % terms.length]?.focus()
+                          }
+                        }}
+                      >
+                        <strong>{term.label}</strong>
+                        <small>{term.days} days</small>
+                      </button>
+                    ))}
+                  </div>
+                </fieldset>
                 <label className="operation-wide">Contract notes <small className="optional-marker">Optional</small><textarea name="notes" rows={2} /></label>
               </div>
               <div className="pawn-contract-summary">

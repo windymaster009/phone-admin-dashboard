@@ -11,7 +11,7 @@ type ScannerTriggerButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, '
   label: string
   description?: string
   trailing?: ReactNode
-  variant?: 'toolbar' | 'quick-action'
+  variant?: 'toolbar' | 'quick-action' | 'icon-only'
   iconSize?: number
 }
 
@@ -31,6 +31,16 @@ export default function ScannerTriggerButton({
         <span className="quick-icon blue"><ScanLine size={iconSize || 19} aria-hidden="true" /></span>
         <p>{label}{description && <small>{description}</small>}</p>
         {trailing}
+      </button>
+    )
+  }
+
+  if (variant === 'icon-only') {
+    const iconOnlyClassName = ['secondary-button', 'scanner-trigger-icon-only', className].filter(Boolean).join(' ')
+    return (
+      <button type={type} className={iconOnlyClassName} aria-label={buttonProps['aria-label'] || label} {...buttonProps}>
+        <ScanLine size={iconSize || 18} aria-hidden="true" />
+        <span className="sr-only">{label}</span>
       </button>
     )
   }

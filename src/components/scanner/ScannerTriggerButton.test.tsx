@@ -23,6 +23,17 @@ describe('ScannerTriggerButton', () => {
     expect(screen.getByTestId('trailing-icon')).toBeInTheDocument()
   })
 
+  it('supports the accessible icon-only variant', async () => {
+    const user = userEvent.setup()
+    const onClick = vi.fn()
+    render(<ScannerTriggerButton label="Scan IMEI" variant="icon-only" className="imei-scanner" onClick={onClick} />)
+
+    const button = screen.getByRole('button', { name: 'Scan IMEI' })
+    expect(button).toHaveClass('secondary-button', 'scanner-trigger-icon-only', 'imei-scanner')
+    await user.click(button)
+    expect(onClick).toHaveBeenCalledOnce()
+  })
+
   it('opens the shared product scanner event', () => {
     const listener = vi.fn()
     window.addEventListener(PRODUCT_SCANNER_EVENT, listener)

@@ -166,9 +166,28 @@ describe('OperationModalBridge component', () => {
       expect(screen.getByText(/New pawn contract/i)).toBeInTheDocument()
     })
 
-    // Check Step 1 stepper and structure
+    // Check Step 1 stepper, header close, and structure
     expect(screen.getByLabelText(/Step 1 of 2: Customer verification/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Existing customer/i })).toHaveClass('active')
+    expect(screen.getByRole('button', { name: /Close/i })).toBeInTheDocument()
+
+    // Verify customer tabs have tablist and tab roles with aria-selected
+    const tablist = screen.getByRole('tablist', { name: /Customer type/i })
+    expect(tablist).toBeInTheDocument()
+
+    const existingTab = screen.getByRole('tab', { name: /Existing customer/i })
+    const newTab = screen.getByRole('tab', { name: /New customer/i })
+    expect(existingTab).toHaveAttribute('aria-selected', 'true')
+    expect(existingTab).toHaveClass('active')
+    expect(newTab).toHaveAttribute('aria-selected', 'false')
+
+    // Test tab keyboard arrow navigation
+    fireEvent.keyDown(existingTab, { key: 'ArrowRight' })
+    expect(newTab).toHaveAttribute('aria-selected', 'true')
+    expect(existingTab).toHaveAttribute('aria-selected', 'false')
+
+    fireEvent.keyDown(newTab, { key: 'ArrowLeft' })
+    expect(existingTab).toHaveAttribute('aria-selected', 'true')
+
     expect(screen.getByRole('button', { name: /Continue to collateral/i })).toBeInTheDocument()
 
     // 2. Validation error test: click continue without selecting customer/ownership
@@ -179,13 +198,15 @@ describe('OperationModalBridge component', () => {
       expect(screen.getByText('Select a customer', { selector: 'small' })).toBeInTheDocument()
     })
 
-    // 3. Switch to "New customer" mode
-    fireEvent.click(screen.getByRole('button', { name: /New customer/i }))
+    // 3. Switch to "New customer" mode via click
+    fireEvent.click(newTab)
+    expect(newTab).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByPlaceholderText(/Full name/i)).toBeInTheDocument()
     expect(screen.getByPlaceholderText(/Leave blank to protect privacy/i)).toBeInTheDocument()
 
     // Switch back to "Existing customer" mode
-    fireEvent.click(screen.getByRole('button', { name: /Existing customer/i }))
+    fireEvent.click(existingTab)
+    expect(existingTab).toHaveAttribute('aria-selected', 'true')
 
     // Select the customer
     const customerSelect = screen.getByRole('combobox')
@@ -204,6 +225,19 @@ describe('OperationModalBridge component', () => {
       expect(screen.getByText(/Phone valuation and contract terms/i)).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Enter valuation details/i })).toBeInTheDocument()
     })
+
+    // Verify term selector radiogroup and radio items
+    const termRadiogroup = screen.getByRole('radiogroup', { name: /Pawn term/i })
+    expect(termRadiogroup).toBeInTheDocument()
+    const termRadios = screen.getAllByRole('radio')
+    expect(termRadios).toHaveLength(4)
+    const oneWeekRadio = screen.getByRole('radio', { name: /1 Week/i })
+    expect(oneWeekRadio).toHaveAttribute('aria-checked', 'true')
+
+    // Keyboard navigation between term radios (1 Week -> Half Month)
+    fireEvent.keyDown(oneWeekRadio, { key: 'ArrowRight' })
+    const halfMonthRadio = screen.getByRole('radio', { name: /Half Month/i })
+    expect(halfMonthRadio).toHaveAttribute('aria-checked', 'true')
 
     // 5. Back button returns to Step 1
     fireEvent.click(screen.getByRole('button', { name: /Back/i }))

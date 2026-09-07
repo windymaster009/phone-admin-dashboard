@@ -1418,7 +1418,7 @@ body.operation-modal-open {
 .pawn-term-selector { min-width: 0; margin: 0; padding: 0; border: 0; }
 .pawn-term-selector legend { margin-bottom: 7px; color: var(--muted, #8f9bb4); font-size: 9px; font-weight: 700; }
 .pawn-term-selector > div { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; }
-.pawn-term-selector button { min-width: 0; display: grid; gap: 4px; padding: 11px 12px; text-align: left; color: var(--muted, #8f9bb4); border: 1px solid var(--border, rgba(255,255,255,.08)); border-radius: 10px; background: var(--surface-solid, #151e34); }
+.pawn-term-selector button { min-width: 0; min-height: 44px; display: grid; align-content: center; gap: 4px; padding: 9px 12px; text-align: left; color: var(--muted, #8f9bb4); border: 1px solid var(--border, rgba(255,255,255,.08)); border-radius: 10px; background: var(--surface-solid, #151e34); }
 .pawn-term-selector button strong { color: var(--text, #f4f6fb); font-size: 10px; }
 .pawn-term-selector button small { color: inherit; font-size: 8px; }
 .pawn-term-selector button:hover,
@@ -1700,8 +1700,10 @@ body.operation-modal-open {
   }
 
   .operation-modal-purchase .operation-modal-close {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
   }
 
   .operation-modal-purchase .purchase-workflow-form {
@@ -1846,8 +1848,10 @@ body.operation-modal-open {
   }
 
   .operation-modal-sale .operation-modal-close {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
   }
 
   .operation-modal-sale .sale-form {
@@ -2001,8 +2005,10 @@ body.operation-modal-open {
   }
 
   .operation-modal-scan .operation-modal-close {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
   }
 
   .operation-modal-scan .scanner-workflow {
@@ -2123,8 +2129,12 @@ body.operation-modal-open {
   }
 
   .operation-modal-pawn .operation-modal-close {
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    display: grid;
+    place-items: center;
   }
 
   .operation-modal-pawn .operation-modal-error {
@@ -2144,14 +2154,18 @@ body.operation-modal-open {
     flex: 0 0 auto;
     grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr);
     padding: 10px 17px;
+    cursor: default;
+    user-select: none;
   }
 
   .operation-modal-pawn .purchase-stepper .purchase-step {
     min-height: 44px;
     justify-content: center;
     gap: 6px;
-    padding: 6px;
+    padding: 6px 8px;
     border-radius: 10px;
+    cursor: default;
+    user-select: none;
   }
 
   .operation-modal-pawn .purchase-stepper .purchase-step > span {
@@ -2161,10 +2175,9 @@ body.operation-modal-open {
   }
 
   .operation-modal-pawn .purchase-stepper .purchase-step strong {
-    overflow: hidden;
     font-size: 10px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    line-height: 1.18;
+    white-space: normal;
   }
 
   .operation-modal-pawn .purchase-step-content {
@@ -2205,19 +2218,24 @@ body.operation-modal-open {
 
   .operation-modal-pawn .purchase-seller-tabs.pawn-customer-tabs {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 6px;
-    margin-bottom: 11px;
+    gap: 8px;
+    margin-bottom: 12px;
     padding: 4px;
   }
 
   .operation-modal-pawn .purchase-seller-tabs.pawn-customer-tabs button {
     min-width: 0;
-    min-height: 40px;
-    padding: 6px;
-    overflow: hidden;
-    font-size: 9px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    min-height: 44px;
+    padding: 8px 10px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1.25;
+    white-space: normal;
+    text-align: center;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .operation-modal-pawn .purchase-fields-grid {
@@ -2226,8 +2244,8 @@ body.operation-modal-open {
 
   .operation-modal-pawn .pawn-workflow-form > .operation-modal-actions {
     flex: 0 0 auto;
-    display: grid;
-    grid-template-columns: minmax(0, .78fr) minmax(0, 1.22fr);
+    display: flex;
+    flex-direction: column-reverse;
     gap: 8px;
     margin: 0;
     padding: 12px 17px max(12px, env(safe-area-inset-bottom));
@@ -2237,10 +2255,21 @@ body.operation-modal-open {
   }
 
   .operation-modal-pawn .pawn-workflow-form > .operation-modal-actions button {
+    width: 100%;
     min-width: 0;
     min-height: 44px;
-    padding-inline: 10px;
-    white-space: nowrap;
+    padding: 10px 14px;
+    font-size: var(--text-xs);
+    white-space: normal;
+    text-align: center;
+    line-height: 1.25;
+    word-break: normal;
+    overflow-wrap: break-word;
+  }
+
+  .operation-modal-pawn .pawn-workflow-form > .operation-modal-actions button:disabled {
+    opacity: 0.72;
+    cursor: not-allowed;
   }
 
   .operation-modal-stock .operation-modal-header {
@@ -2457,6 +2486,27 @@ body.operation-modal-open {
   .purchase-payment-summary { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .pawn-customer-summary, .pawn-contract-summary { grid-template-columns: 1fr; }
   .pawn-term-selector > div { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .pawn-term-selector button {
+    min-height: 44px;
+    align-content: center;
+  }
+  .pawn-assessment-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .pawn-assessment-heading > div {
+    min-width: 0;
+    flex: 1 1 160px;
+  }
+  .pawn-assessment-heading .calculation-mode-toggle {
+    min-height: 44px;
+    padding: 0 12px;
+    gap: 8px;
+    flex: 0 0 auto;
+  }
   .pawn-assessment-grid { grid-template-columns: 1fr; padding: 13px; }
   .pawn-assessment-accessories { grid-column: 1; }
   .pawn-inline-policy,
@@ -2471,6 +2521,10 @@ body.operation-modal-open {
   .purchase-existing-summary > div { grid-column: 2; min-width: 0; padding: 7px 0 0; border-top: 1px solid var(--border,rgba(255,255,255,.08)); border-left: 0; }
   .device-imei-field, .device-accessories, .device-notes-field { grid-column: 1; }
   .device-imei-field > div { grid-template-columns: 1fr; }
+  .device-imei-field > div .secondary-button {
+    width: 100%;
+    min-height: 44px;
+  }
   .purchase-submit-summary { display: none; }
   .barcode-label-preview-list { grid-template-columns: 1fr; }
 
@@ -2506,6 +2560,19 @@ body.operation-modal-open {
   .scanner-result-actions button { min-width: 0; }
   .scanner-result-actions > .secondary-button { width: 100%; }
   .label-prompt .operation-modal-actions { margin-left: -17px; margin-right: -17px; }
+}
+
+@media (min-width: 480px) and (max-width: 700px) {
+  .operation-modal-pawn .pawn-workflow-form > .operation-modal-actions {
+    display: grid;
+    grid-template-columns: minmax(0, .78fr) minmax(0, 1.22fr);
+  }
+
+  .app[data-font-size='comfortable'] .operation-modal-pawn .pawn-workflow-form > .operation-modal-actions,
+  .app[data-font-size='large'] .operation-modal-pawn .pawn-workflow-form > .operation-modal-actions {
+    display: flex !important;
+    flex-direction: column-reverse !important;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
