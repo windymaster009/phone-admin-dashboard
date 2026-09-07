@@ -83,7 +83,37 @@ export default function OperationModalShell({
   const confirmationClass = confirmation ? 'loan-modal-confirmation' : ''
   const scannerClass = scanner ? 'loan-modal-scanner' : ''
   const sectionClass = `operation-modal ${kindClass} ${compactClass} ${confirmationClass} ${scannerClass} ${className}`.trim()
+  const backdropRef = useRef<HTMLDivElement>(null)
   const dialogRef = useRef<HTMLElement>(null)
+
+  useEffect(() => {
+    const backdrop = backdropRef.current
+    if (!backdrop) return
+
+    const syncVisualViewport = () => {
+      const viewport = window.visualViewport
+      const height = viewport?.height ?? window.innerHeight
+      const width = viewport?.width ?? window.innerWidth
+      const top = viewport?.offsetTop ?? 0
+      const left = viewport?.offsetLeft ?? 0
+
+      backdrop.style.setProperty('--operation-viewport-height', `${Math.max(0, height)}px`)
+      backdrop.style.setProperty('--operation-viewport-width', `${Math.max(0, width)}px`)
+      backdrop.style.setProperty('--operation-viewport-top', `${Math.max(0, top)}px`)
+      backdrop.style.setProperty('--operation-viewport-left', `${Math.max(0, left)}px`)
+    }
+
+    syncVisualViewport()
+    window.addEventListener('resize', syncVisualViewport)
+    window.visualViewport?.addEventListener('resize', syncVisualViewport)
+    window.visualViewport?.addEventListener('scroll', syncVisualViewport)
+
+    return () => {
+      window.removeEventListener('resize', syncVisualViewport)
+      window.visualViewport?.removeEventListener('resize', syncVisualViewport)
+      window.visualViewport?.removeEventListener('scroll', syncVisualViewport)
+    }
+  }, [])
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -129,7 +159,7 @@ export default function OperationModalShell({
   }, [kind, compact])
 
   const content = (
-    <div className={`operation-modal-backdrop ${className ? `${className}-backdrop` : ''}`.trim()} role="presentation">
+    <div ref={backdropRef} className={`operation-modal-backdrop ${className ? `${className}-backdrop` : ''}`.trim()} role="presentation">
       <section
         ref={dialogRef}
         className={sectionClass}
@@ -164,4 +194,3 @@ export default function OperationModalShell({
 
   return typeof document !== 'undefined' ? createPortal(content, document.body) : content
 }
-

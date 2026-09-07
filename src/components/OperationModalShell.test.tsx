@@ -77,4 +77,43 @@ describe('OperationModalShell component', () => {
     await user.keyboard('{Escape}')
     expect(handleClose).not.toHaveBeenCalled()
   })
+
+  it('sizes the shared backdrop from the visible browser viewport', () => {
+    const originalDescriptor = Object.getOwnPropertyDescriptor(window, 'visualViewport')
+    const addEventListener = vi.fn()
+    const removeEventListener = vi.fn()
+
+    Object.defineProperty(window, 'visualViewport', {
+      configurable: true,
+      value: {
+        height: 640,
+        width: 390,
+        offsetTop: 8,
+        offsetLeft: 0,
+        addEventListener,
+        removeEventListener,
+      } as unknown as VisualViewport,
+    })
+
+    try {
+      render(
+        <OperationModalShell kind="purchase" error="" onClose={vi.fn()}>
+          <div>Safe viewport content</div>
+        </OperationModalShell>,
+      )
+
+      const backdrop = screen.getByRole('dialog').parentElement
+      expect(backdrop).toHaveStyle({
+        '--operation-viewport-height': '640px',
+        '--operation-viewport-width': '390px',
+        '--operation-viewport-top': '8px',
+        '--operation-viewport-left': '0px',
+      })
+      expect(addEventListener).toHaveBeenCalledWith('resize', expect.any(Function))
+      expect(addEventListener).toHaveBeenCalledWith('scroll', expect.any(Function))
+    } finally {
+      if (originalDescriptor) Object.defineProperty(window, 'visualViewport', originalDescriptor)
+      else Reflect.deleteProperty(window, 'visualViewport')
+    }
+  })
 })
