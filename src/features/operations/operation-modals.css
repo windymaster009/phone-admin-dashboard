@@ -135,7 +135,7 @@ body.operation-modal-open {
 }
 
 .operation-label-heading small {
-  font-size: 9px;
+  font-size: max(9px, 0.7em);
   line-height: 1;
 }
 
@@ -157,7 +157,7 @@ body.operation-modal-open {
 .operation-form .optional-marker {
   justify-self: start;
   color: #a78bfa;
-  font-size: 8px;
+  font-size: max(9px, 0.75em);
   line-height: 1;
 }
 
@@ -1599,6 +1599,147 @@ body.operation-modal-open {
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
+/* ==========================================================================
+   Phase 3 — Tablet / narrow-desktop breakpoint (pawn modal only).
+   Range: 701px – 1024px.  At ≤700px the existing mobile block takes over.
+   All selectors are scoped to .operation-modal-pawn to avoid side-effects on
+   the purchase, sale, stock, and scan modals.
+   ========================================================================== */
+@media (max-width: 1024px) {
+  /* Ensure the pawn modal backdrop centres vertically on tablet/iPad and
+     respects device safe areas. */
+  .operation-modal-backdrop:has(.operation-modal-pawn) {
+    align-items: center;
+    padding:
+      max(16px, env(safe-area-inset-top))
+      max(16px, env(safe-area-inset-right))
+      max(16px, env(safe-area-inset-bottom))
+      max(16px, env(safe-area-inset-left));
+  }
+
+  /* Slightly tighten the header at tablet widths. */
+  .operation-modal-pawn .operation-modal-header {
+    gap: 12px;
+    padding: 18px 20px;
+  }
+
+  .operation-modal-pawn .operation-modal-header h2 { font-size: 20px; }
+  .operation-modal-pawn .operation-modal-header p  { font-size: 11px; }
+
+  /* Reduce card and step-content padding so the form doesn't feel cramped. */
+  .operation-modal-pawn .purchase-section-card {
+    padding: 15px;
+  }
+
+  .operation-modal-pawn .purchase-step-content {
+    gap: 14px;
+    padding: 0 20px 20px;
+  }
+
+  /* Tighten the stepper connector on tablet. */
+  .operation-modal-pawn .purchase-stepper {
+    width: min(620px, calc(100% - 40px));
+    padding: 12px 0;
+  }
+
+  /* ---- Step 1: Customer fields ------------------------------------------ */
+
+  /* 2-column at tablet instead of the inherited desktop 3-column. */
+  .operation-modal-pawn .purchase-fields-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 11px;
+  }
+
+  /* Existing-customer select spans both columns in a 2-col grid. */
+  .operation-modal-pawn .purchase-fields-grid .operation-wide {
+    grid-column: 1 / -1;
+  }
+
+  /* Customer summary: 2-col on tablet (it was 3-col desktop). */
+  .operation-modal-pawn .pawn-customer-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* ---- Step 2: Device collateral fields ---------------------------------- */
+
+  /* 2-column device grid on tablet. */
+  .operation-modal-pawn .device-fields-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 13px;
+  }
+
+  /* IMEI field and accessories fieldset stay full-width in the 2-col grid. */
+  .operation-modal-pawn .device-imei-field       { grid-column: 1 / -1; }
+  .operation-modal-pawn .pawn-assessment-accessories { grid-column: 1 / -1; }
+
+  /* ---- Valuation and assessment ----------------------------------------- */
+
+  /* Assessment grid: 2-column on tablet (was 3). */
+  .operation-modal-pawn .pawn-assessment-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* pawn-inline-policy: collapse to single column so the LTV range control
+     gets full width and explanatory text wraps naturally. */
+  .operation-modal-pawn .pawn-inline-policy {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 12px 13px;
+  }
+
+  /* pawn-inline-offer: single column on tablet; breakdown dl stays 2-col. */
+  .operation-modal-pawn .pawn-inline-offer {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 13px;
+  }
+
+  /* ---- Contract terms ---------------------------------------------------- */
+
+  /* Contract fields: 2-column on tablet. */
+  .operation-modal-pawn .pawn-contract-fields.purchase-fields-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Contract summary: 2-column on tablet (was 4). */
+  .operation-modal-pawn .pawn-contract-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* Term selector buttons have enough room to remain 4-column at tablet. */
+
+  /* ---- Typography minimums ---------------------------------------------- */
+
+  /* Ensure descriptive sub-labels are readable on 768px screens. */
+  .operation-modal-pawn .pawn-assessment-heading small,
+  .operation-modal-pawn .pawn-contract-fields-heading small,
+  .operation-modal-pawn .pawn-inline-policy > div > small {
+    font-size: max(10px, 0.78em);
+    line-height: 1.45;
+  }
+
+  .operation-modal-pawn .pawn-inline-inspection small,
+  .operation-modal-pawn .pawn-inline-offer dl > div {
+    font-size: max(9px, 0.76em);
+  }
+
+  .operation-modal-pawn .pawn-verification-check strong {
+    font-size: max(11px, 0.85em);
+  }
+
+  .operation-modal-pawn .pawn-verification-check small {
+    /* !important needed to beat .operation-form label small specificity. */
+    font-size: max(10px, 0.78em) !important;
+    line-height: 1.45;
+  }
+
+  /* Error banner: match the reduced lateral padding at tablet. */
+  .operation-modal-pawn .operation-modal-error {
+    margin: 12px 20px 0;
+    font-size: 12px;
+  }
+}
+
 @media (max-width: 700px) {
   .operation-modal-backdrop {
     align-items: end;
@@ -2185,10 +2326,12 @@ body.operation-modal-open {
     flex: 1 1 auto;
     overflow-y: auto;
     gap: 12px;
-    padding: 0 17px 16px;
+    padding: 0 17px max(16px, env(safe-area-inset-bottom));
     overscroll-behavior-y: contain;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
+    /* Ensure focused inputs scroll above the sticky footer on mobile. */
+    scroll-padding-bottom: 80px;
   }
 
   .operation-modal-pawn .purchase-section-card {
@@ -2511,9 +2654,9 @@ body.operation-modal-open {
   .pawn-assessment-accessories { grid-column: 1; }
   .pawn-inline-policy,
   .pawn-inline-offer { grid-template-columns: 1fr; gap: 12px; }
-  .pawn-inline-policy > label small { display: none; }
+  /* Keep the LTV hint visible on mobile — it is a meaningful instruction. */
   .pawn-inline-offer dl { grid-template-columns: 1fr; }
-  .device-fields-grid { grid-template-columns: 1fr; padding: 14px; }
+  .device-fields-grid { grid-template-columns: 1fr; padding: 12px; }
   .purchase-category-picker { display: none; }
   .purchase-category-select { grid-column: 1; display: flex !important; }
   .purchase-inventory-mode { grid-template-columns: 1fr; }
@@ -2572,6 +2715,56 @@ body.operation-modal-open {
   .app[data-font-size='large'] .operation-modal-pawn .pawn-workflow-form > .operation-modal-actions {
     display: flex !important;
     flex-direction: column-reverse !important;
+  }
+}
+
+/* Sub-range ≤430px: additional tightening for the smallest phone screens.
+   Only targets the pawn modal so other modals are unaffected. */
+@media (max-width: 430px) {
+  .operation-modal-pawn .purchase-step-content {
+    padding: 0 14px max(14px, env(safe-area-inset-bottom));
+  }
+
+  .operation-modal-pawn .purchase-section-card {
+    padding: 11px;
+  }
+
+  /* Reduce the large principal amount display so it fits on 320px. */
+  .operation-modal-pawn .pawn-inline-offer .pawn-offer-total > strong {
+    font-size: 20px;
+  }
+
+  .operation-modal-pawn .purchase-stepper {
+    padding: 9px 14px;
+  }
+
+  /* Allow the auto-calculate toggle to wrap to a second line on very narrow
+     screens rather than overflowing the assessment heading. */
+  .operation-modal-pawn .pawn-assessment-heading {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .operation-modal-pawn .pawn-assessment-heading .calculation-mode-toggle {
+    min-height: 40px;
+    padding: 0 10px;
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  /* Verification check: keep both lines readable at the smallest size. */
+  .operation-modal-pawn .pawn-verification-check strong {
+    font-size: max(11px, 0.85em);
+  }
+
+  .operation-modal-pawn .pawn-verification-check small {
+    font-size: max(10px, 0.78em) !important;
+  }
+
+  /* LTV policy label: allow the description lines to wrap fully. */
+  .operation-modal-pawn .pawn-inline-policy > label > div {
+    flex-wrap: wrap;
+    gap: 4px;
   }
 }
 
