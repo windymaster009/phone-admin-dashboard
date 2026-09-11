@@ -168,18 +168,17 @@ export default function ReceiptCenterBridge() {
   const generationClosed = useRef(false)
 
   const locate = useCallback(() => {
-    const tradeOrPawn = document.querySelector<HTMLElement>('.trade-detail-modal, .pawn-detail-modal')
-    if (tradeOrPawn) {
-      const footer = tradeOrPawn.querySelector<HTMLElement>('.detail-modal-footer')
-      const reference = tradeOrPawn.querySelector('h3')?.textContent?.trim()
+    const tradeModal = document.querySelector<HTMLElement>('.trade-detail-modal')
+    if (tradeModal) {
+      const footer = tradeModal.querySelector<HTMLElement>('.detail-modal-footer')
+      const reference = tradeModal.querySelector('h3')?.textContent?.trim()
       if (footer && reference) {
         let host = footer.querySelector<HTMLElement>('.receipt-action-host')
         if (!host) { host = document.createElement('span'); host.className = 'receipt-action-host'; footer.prepend(host) }
-        const sourceType = tradeOrPawn.classList.contains('trade-detail-modal') ? 'TRADE' : 'PAWN'
         setActionTarget(host)
-        setContext((current) => current?.sourceType === sourceType && current.reference === reference
+        setContext((current) => current?.sourceType === 'TRADE' && current.reference === reference
           ? current
-          : { sourceType, reference })
+          : { sourceType: 'TRADE', reference })
         return
       }
     }
@@ -252,7 +251,38 @@ export default function ReceiptCenterBridge() {
     }
   }, [])
 
+  const openDocumentsForSource = useCallback(async (source: SourceContext) => {
+    setBusy(true)
+    setError('')
+    try {
+      const query = new URLSearchParams({ sourceType: source.sourceType, reference: source.reference })
+      const response = await api<ReceiptOptionResponse>(`/receipts/options?${query}`)
+      setContext(source)
+      if (response.options.length === 1) {
+        await generate(source, response.options[0])
+      } else {
+        setPicker(response)
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to load receipt options')
+    } finally {
+      setBusy(false)
+    }
+  }, [generate])
+
+  const openDocuments = useCallback(async () => {
+    if (!context) return
+    await openDocumentsForSource(context)
+  }, [context, openDocumentsForSource])
+
   useEffect(() => {
+    const openDocumentsEvent = (event: Event) => {
+      const detail = (event as CustomEvent<{ sourceType?: ReceiptSourceType; reference?: string }>).detail
+      const reference = detail?.reference?.trim()
+      const sourceType = detail?.sourceType || 'PAWN'
+      if (!reference) return
+      void openDocumentsForSource({ sourceType, reference })
+    }
     const openPawnTicket = (event: Event) => {
       const detail = (event as CustomEvent<{ reference?: string; sourceSubId?: string }>).detail
       const reference = detail?.reference?.trim()
@@ -284,15 +314,17 @@ export default function ReceiptCenterBridge() {
         'THERMAL',
       )
     }
+    window.addEventListener('phoneflow:open-documents', openDocumentsEvent)
     window.addEventListener('phoneflow:open-pawn-ticket', openPawnTicket)
     window.addEventListener('phoneflow:open-trade-receipt', openTradeReceipt)
     window.addEventListener('phoneflow:open-refund-receipt', openRefundReceipt)
     return () => {
+      window.removeEventListener('phoneflow:open-documents', openDocumentsEvent)
       window.removeEventListener('phoneflow:open-pawn-ticket', openPawnTicket)
       window.removeEventListener('phoneflow:open-trade-receipt', openTradeReceipt)
       window.removeEventListener('phoneflow:open-refund-receipt', openRefundReceipt)
     }
-  }, [generate])
+  }, [generate, openDocumentsForSource])
 
   const closeViewer = useCallback(() => {
     setViewer(null)
@@ -310,17 +342,6 @@ export default function ReceiptCenterBridge() {
   }, [])
 
   useEffect(() => () => generationController.current?.abort(), [])
-
-  const openDocuments = useCallback(async () => {
-    if (!context) return
-    setBusy(true); setError('')
-    try {
-      const query = new URLSearchParams({ sourceType: context.sourceType, reference: context.reference })
-      const response = await api<ReceiptOptionResponse>(`/receipts/options?${query}`)
-      if (response.options.length === 1) await generate(context, response.options[0]); else setPicker(response)
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to load receipt options') }
-    finally { setBusy(false) }
-  }, [context, generate])
 
   return <>
     {actionTarget && context && createPortal(<button className="secondary-button receipt-detail-action" onClick={() => void openDocuments()} disabled={busy}><Printer size={15} /> {busy ? 'Loading...' : context.sourceType === 'TRADE' ? 'Print receipt' : 'Documents'}</button>, actionTarget)}
