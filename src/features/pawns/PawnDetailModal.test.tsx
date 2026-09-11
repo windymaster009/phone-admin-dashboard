@@ -81,20 +81,28 @@ describe('PawnDetailModal component', () => {
       />,
     )
 
-    // Utility actions
-    expect(screen.getByRole('button', { name: /Documents/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Print label/i })).toBeInTheDocument()
+    // Utility actions render in the utility region
+    const docsBtn = screen.getByRole('button', { name: /Documents/i })
+    const printBtn = screen.getByRole('button', { name: /Print label/i })
+    expect(docsBtn.closest('.detail-modal-utility-group')).toBeInTheDocument()
+    expect(printBtn.closest('.detail-modal-utility-group')).toBeInTheDocument()
 
-    // Transaction actions
-    expect(screen.getByRole('button', { name: /Due payment/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Extend pawn/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Redeem item/i })).toBeInTheDocument()
+    // Transaction actions render in the transaction region
+    const dueBtn = screen.getByRole('button', { name: /Due payment/i })
+    const extendBtn = screen.getByRole('button', { name: /Extend pawn/i })
+    const redeemBtn = screen.getByRole('button', { name: /Redeem item/i })
+    expect(dueBtn.closest('.detail-modal-transaction-group')).toBeInTheDocument()
+    expect(extendBtn.closest('.detail-modal-transaction-group')).toBeInTheDocument()
+    expect(redeemBtn.closest('.detail-modal-transaction-group')).toBeInTheDocument()
+    expect(redeemBtn).toHaveClass('primary-button')
 
-    // Destructive action for owner
-    expect(screen.getByRole('button', { name: /Delete contract/i })).toBeInTheDocument()
+    // Destructive action renders in a separate danger region
+    const deleteBtn = screen.getByRole('button', { name: /Delete contract/i })
+    expect(deleteBtn.closest('.detail-modal-danger-group')).toBeInTheDocument()
+    expect(deleteBtn.closest('.detail-modal-utility-group')).toBeNull()
 
-    // Neutral dismiss action
-    expect(screen.getByRole('button', { name: /^Close$/i })).toBeInTheDocument()
+    // Redundant footer close button is NOT rendered
+    expect(screen.queryByRole('button', { name: /^Close$/i })).not.toBeInTheDocument()
   })
 
   it('supports dashboard reuse with onOpenAll action', async () => {
@@ -288,5 +296,55 @@ describe('PawnDetailModal component', () => {
     )
 
     expect(screen.getByRole('button', { name: /Claim collateral/i })).toBeInTheDocument()
+  })
+
+  it('disables Due payment when no fee is due and disables Extend pawn when fee must be paid first', () => {
+    // 1. When due payment is 0
+    const zeroFeePawn: Pawn = {
+      ...mockPawnRecord,
+      accruedInterest: 0,
+      fees: 0,
+    }
+
+    const { rerender } = render(
+      <PawnDetailModal
+        pawn={zeroFeePawn}
+        onClose={vi.fn()}
+        onAction={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: /Due payment/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Extend pawn/i })).toBeEnabled()
+
+    // 2. When DAILY_SIMPLE fee model has fee due, Extend pawn requires fee to be paid first
+    const dailyFeeDuePawn: Pawn = {
+      ...mockPawnRecord,
+      feeModel: 'DAILY_SIMPLE',
+      feeSummary: {
+        feeModel: 'DAILY_SIMPLE',
+        termDays: 30,
+        accruedDays: 10,
+        accruedFee: 20,
+        dailyFeeAmount: 2,
+        dailyFeeRate: 0.33,
+        contractLengthDays: 30,
+        feeAtDueDate: 60,
+        totalAtDueDate: 660,
+        redemptionTotal: 620,
+        remainingPrincipal: 600,
+      },
+    }
+
+    rerender(
+      <PawnDetailModal
+        pawn={dailyFeeDuePawn}
+        onClose={vi.fn()}
+        onAction={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: /Due payment/i })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /Extend pawn/i })).toBeDisabled()
   })
 })

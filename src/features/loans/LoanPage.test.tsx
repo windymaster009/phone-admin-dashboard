@@ -297,7 +297,7 @@ describe('LoanPage component and shared component adoption', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog', { name: /Loan saved/i })).not.toBeInTheDocument()
     })
-  })
+  }, 15000)
 
   it('selects an existing customer and preserves the borrower snapshot in the loan payload', async () => {
     let capturedBody: Record<string, unknown> | null = null

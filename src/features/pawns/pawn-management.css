@@ -880,5 +880,32 @@
     width: 100%;
   }
 
+  /* Keep the four action rows clear without letting the footer dominate the viewport. */
+  .pawn-detail-modal .detail-modal-footer {
+    gap: 6px;
+    padding: 8px 12px max(10px, env(safe-area-inset-bottom, 0px));
+  }
+
+  .pawn-detail-modal .detail-modal-footer-main,
+  .pawn-detail-modal .detail-modal-action-group,
+  .pawn-detail-modal .detail-modal-footer-secondary {
+    gap: 6px;
+  }
+
+  .pawn-detail-modal .detail-modal-footer-secondary {
+    padding-top: 5px;
+  }
+
+  .pawn-detail-modal .detail-modal-footer button,
+  .pawn-detail-modal .detail-modal-footer a {
+    min-height: 38px;
+    padding: 7px 9px;
+    font-size: 11px;
+  }
+
+  .pawn-detail-modal .detail-modal-transaction-group > .primary-button,
+  .pawn-detail-modal .detail-modal-danger-group > * {
+    min-height: 40px;
+  }
 
 }

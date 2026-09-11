@@ -128,24 +128,52 @@ describe('DetailModal reusable component suite', () => {
   })
 
   describe('DetailModalFooter', () => {
-    it('renders utility, transaction, destructive, and dismiss action groups plus banner', () => {
+    it('renders utility, transaction, destructive, and dismiss actions in separate structural regions', () => {
       render(
         <DetailModalFooter
           banner={<div data-testid="footer-banner">Warning: Overdue</div>}
           utilityActions={<button type="button">Documents</button>}
-          destructiveAction={<button type="button">Delete</button>}
           transactionActions={<button type="button">Pay</button>}
           secondaryActions={<button type="button">View All</button>}
+          destructiveAction={<button type="button">Delete</button>}
           dismissAction={<button type="button">Close</button>}
         />,
       )
 
       expect(screen.getByTestId('footer-banner')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Documents' })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Pay' })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'View All' })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
+
+      const utilityBtn = screen.getByRole('button', { name: 'Documents' })
+      expect(utilityBtn.closest('.detail-modal-utility-group')).toBeInTheDocument()
+      expect(utilityBtn.closest('.detail-modal-footer-main')).toBeInTheDocument()
+
+      const payBtn = screen.getByRole('button', { name: 'Pay' })
+      const viewAllBtn = screen.getByRole('button', { name: 'View All' })
+      expect(payBtn.closest('.detail-modal-transaction-group')).toBeInTheDocument()
+      expect(viewAllBtn.closest('.detail-modal-transaction-group')).toBeInTheDocument()
+      expect(payBtn.closest('.detail-modal-footer-main')).toBeInTheDocument()
+
+      const deleteBtn = screen.getByRole('button', { name: 'Delete' })
+      expect(deleteBtn.closest('.detail-modal-danger-group')).toBeInTheDocument()
+      expect(deleteBtn.closest('.detail-modal-footer-secondary')).toBeInTheDocument()
+      expect(deleteBtn.closest('.detail-modal-utility-group')).toBeNull()
+
+      const closeBtn = screen.getByRole('button', { name: 'Close' })
+      expect(closeBtn.closest('.detail-modal-dismiss-group')).toBeInTheDocument()
+      expect(closeBtn.closest('.detail-modal-footer-secondary')).toBeInTheDocument()
+      expect(closeBtn.closest('.detail-modal-transaction-group')).toBeNull()
+    })
+
+    it('renders direct children for custom consumers like Inventory and Trade', () => {
+      render(
+        <DetailModalFooter>
+          <button type="button">Custom Direct Action</button>
+        </DetailModalFooter>,
+      )
+
+      const customBtn = screen.getByRole('button', { name: 'Custom Direct Action' })
+      expect(customBtn).toBeInTheDocument()
+      expect(customBtn.closest('.detail-modal-footer')).toBeInTheDocument()
+      expect(document.querySelector('.detail-modal-footer-main')).toBeNull()
     })
   })
 })

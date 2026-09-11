@@ -25,21 +25,37 @@ export default function DetailModalFooter({
     <footer className={`detail-modal-footer ${className}`.trim()}>
       {banner && <div className="detail-modal-footer-banner">{banner}</div>}
       {children ?? (
-        <div className="detail-modal-footer-content">
-          {(utilityActions || destructiveAction) && (
-            <div className="detail-modal-action-group detail-modal-utility-group">
-              {utilityActions}
-              {destructiveAction}
+        <>
+          {(utilityActions || transactionActions || secondaryActions) && (
+            <div className="detail-modal-footer-main">
+              {utilityActions && (
+                <div className="detail-modal-action-group detail-modal-utility-group">
+                  {utilityActions}
+                </div>
+              )}
+              {(transactionActions || secondaryActions) && (
+                <div className="detail-modal-action-group detail-modal-transaction-group">
+                  {secondaryActions}
+                  {transactionActions}
+                </div>
+              )}
             </div>
           )}
-          {(transactionActions || secondaryActions || dismissAction) && (
-            <div className="detail-modal-action-group detail-modal-primary-group">
-              {secondaryActions}
-              {transactionActions}
-              {dismissAction}
+          {(destructiveAction || dismissAction) && (
+            <div className="detail-modal-footer-secondary">
+              {destructiveAction && (
+                <div className="detail-modal-action-group detail-modal-danger-group">
+                  {destructiveAction}
+                </div>
+              )}
+              {dismissAction && (
+                <div className="detail-modal-action-group detail-modal-dismiss-group">
+                  {dismissAction}
+                </div>
+              )}
             </div>
           )}
-        </div>
+        </>
       )}
     </footer>
   )

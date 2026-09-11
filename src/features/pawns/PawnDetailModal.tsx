@@ -521,11 +521,6 @@ export default function PawnDetailModal({
                 </>
               ) : null
             }
-            dismissAction={
-              <button type="button" className="ghost-button" onClick={onClose}>
-                Close
-              </button>
-            }
           />
         )}
       </DetailModalShell>
