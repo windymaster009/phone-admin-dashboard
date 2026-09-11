@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Barcode, Grid2X2, List, MoreHorizontal, Package, Plus, ScanLine, Search, Smartphone, Wrench, X, type LucideIcon } from 'lucide-react'
+import { Barcode, Grid2X2, List, MoreHorizontal, Package, Plus, ScanLine, Search, Smartphone, Wrench, type LucideIcon } from 'lucide-react'
 import { api } from '../../lib/api'
 import type { InventoryItem, Pawn } from '../../types/domain'
 import { currency, money, riel, inventoryPriceCurrency, inventoryPriceText, inventoryDualPriceText, useExchangeRate, dateText, titleStatus, comingNext } from '../../lib/presentation'
@@ -12,6 +12,10 @@ import ScannerTriggerButton, { openProductScanner } from '../../components/scann
 import { getStoredInventoryView, setStoredInventoryView } from '../../lib/storage'
 import { printInventoryLabel } from './barcode'
 import NotificationToast from '../../components/NotificationToast'
+import DetailModalShell from '../../components/DetailModalShell'
+import DetailModalHeader from '../../components/DetailModalHeader'
+import DetailModalBody from '../../components/DetailModalBody'
+import DetailModalFooter from '../../components/DetailModalFooter'
 import './inventory-page.css'
 
 const categoryMeta: Record<InventoryItem['category'], { label: string; tone: 'violet' | 'blue' | 'orange'; Icon: LucideIcon; fallback: string }> = {
@@ -284,6 +288,12 @@ export default function InventoryView() {
     }
   }
 
+  function closeStockDetails() {
+    setSelectedItem(null)
+    setEditingPrice(false)
+    setError('')
+  }
+
   return (
     <>
       <div className="stock-page-heading">
@@ -393,41 +403,46 @@ export default function InventoryView() {
         )}
       </section>
       {selectedItem && (
-        <div className="modal-backdrop inventory-detail-backdrop" role="presentation">
-          <section className="detail-modal inventory-detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="stock-detail-title" aria-describedby="stock-detail-description">
-            <header className="detail-modal-header">
-              <InventoryPhoto item={selectedItem} size="large" />
-              <div>
-                <span className="eyebrow">Stock record</span>
-                <h3 id="stock-detail-title">{selectedItem.name}</h3>
-                <p id="stock-detail-description">{selectedItem.sku} · {titleStatus(selectedItem.category)}</p>
+        <DetailModalShell
+          onClose={closeStockDetails}
+          titleId="stock-detail-title"
+          descriptionId="stock-detail-description"
+          className="inventory-detail-modal"
+        >
+          <DetailModalHeader
+            leadingMedia={<InventoryPhoto item={selectedItem} size="large" />}
+            eyebrow="Stock record"
+            title={selectedItem.name}
+            titleId="stock-detail-title"
+            description={`${selectedItem.sku} · ${titleStatus(selectedItem.category)}`}
+            descriptionId="stock-detail-description"
+            onClose={closeStockDetails}
+            closeLabel="Close details"
+          />
+
+          <DetailModalBody className="inventory-detail-body">
+            <section className="inventory-detail-group inventory-summary-group" aria-labelledby="inventory-summary-title">
+              <div className="inventory-detail-section-heading">
+                <div><span className="eyebrow">Overview</span><h4 id="inventory-summary-title">Stock and pricing</h4></div>
               </div>
-              <button className="icon-button" onClick={() => { setSelectedItem(null); setEditingPrice(false) }} aria-label="Close details"><X size={18} /></button>
-            </header>
+              <div className="detail-grid">
+                <div className="inventory-status-summary"><span>Status</span><strong><StatusBadge status={selectedItem.status} /></strong>{selectedItem.relatedPawn && <small className="inventory-linked-pawn"><span>Pawn ID</span><b className="mono">{selectedItem.relatedPawn.pawnNo}</b></small>}</div>
+                <div><span>Quantity</span><strong>{selectedItem.quantity}</strong></div>
+                <div><span>Low stock level</span><strong>{selectedItem.reorderLevel}</strong></div>
+                <div><span>Buy price</span><strong>{money.format(selectedItem.buyPrice)}</strong></div>
+                <div><span>Sell price</span><strong>{inventoryDualPriceText(selectedItem)}</strong></div>
+                <div><span>Minimum sell</span><strong>{inventoryDualPriceText(selectedItem, true)}</strong></div>
+                <div><span>Barcode</span><strong className="mono">{selectedItem.barcode || selectedItem.sku}</strong></div>
+                <div><span>Source</span><strong>{selectedItem.source ? titleStatus(selectedItem.source) : 'Not recorded'}</strong></div>
+                <div><span>Created</span><strong>{selectedItem.createdAt ? dateText(selectedItem.createdAt) : 'Not recorded'}</strong></div>
+              </div>
+            </section>
 
-            <div className="inventory-detail-body">
-              <section className="inventory-detail-group inventory-summary-group" aria-labelledby="inventory-summary-title">
-                <div className="inventory-detail-section-heading">
-                  <div><span className="eyebrow">Overview</span><h4 id="inventory-summary-title">Stock and pricing</h4></div>
-                </div>
-                <div className="detail-grid">
-                  <div className="inventory-status-summary"><span>Status</span><strong><StatusBadge status={selectedItem.status} /></strong>{selectedItem.relatedPawn && <small className="inventory-linked-pawn"><span>Pawn ID</span><b className="mono">{selectedItem.relatedPawn.pawnNo}</b></small>}</div>
-                  <div><span>Quantity</span><strong>{selectedItem.quantity}</strong></div>
-                  <div><span>Low stock level</span><strong>{selectedItem.reorderLevel}</strong></div>
-                  <div><span>Buy price</span><strong>{money.format(selectedItem.buyPrice)}</strong></div>
-                  <div><span>Sell price</span><strong>{inventoryDualPriceText(selectedItem)}</strong></div>
-                  <div><span>Minimum sell</span><strong>{inventoryDualPriceText(selectedItem, true)}</strong></div>
-                  <div><span>Barcode</span><strong className="mono">{selectedItem.barcode || selectedItem.sku}</strong></div>
-                  <div><span>Source</span><strong>{selectedItem.source ? titleStatus(selectedItem.source) : 'Not recorded'}</strong></div>
-                  <div><span>Created</span><strong>{selectedItem.createdAt ? dateText(selectedItem.createdAt) : 'Not recorded'}</strong></div>
-                </div>
-              </section>
-
-              <section className="inventory-detail-group inventory-information-group" aria-labelledby="inventory-information-title">
-                <div className="inventory-detail-section-heading">
-                  <div><span className="eyebrow">Information</span><h4 id="inventory-information-title">Product details</h4></div>
-                </div>
-                <div className="detail-sections">
+            <section className="inventory-detail-group inventory-information-group" aria-labelledby="inventory-information-title">
+              <div className="inventory-detail-section-heading">
+                <div><span className="eyebrow">Information</span><h4 id="inventory-information-title">Product details</h4></div>
+              </div>
+              <div className="detail-sections">
                 <article>
                   <span className="eyebrow">Product</span>
                   <p><strong>{[selectedItem.brand, selectedItem.model].filter(Boolean).join(' ') || selectedItem.name}</strong></p>
@@ -451,47 +466,60 @@ export default function InventoryView() {
                   <p><strong>{selectedItem.imageUrl ? 'Product photo added' : 'No product photo'}</strong></p>
                   <p>{selectedItem.imageUrl ? 'Use Change photo below to replace it.' : 'Use Add photo below to upload one.'}</p>
                 </article>
-                </div>
-              </section>
+              </div>
+            </section>
 
-              {editingPrice && <div className="inventory-price-editor">
-                <div className="inventory-price-heading"><span className="eyebrow">Inventory pricing</span><h4>Set selling prices</h4><p>Enter either currency and the other price updates automatically. Choose which currency opens first in New Sale.</p><small>Reference rate: 1 USD = {riel.format(usdKhrRate)} KHR</small></div>
-                <div className="inventory-price-columns">
-                  <section className={`inventory-currency-column ${priceCurrency === 'USD' ? 'is-default' : ''}`} aria-labelledby="inventory-usd-price-title">
-                    <header><span className="inventory-currency-mark">$</span><div><strong id="inventory-usd-price-title">US Dollar</strong><small>USD</small></div><label className="inventory-default-currency"><input type="radio" name="default-price-currency" checked={priceCurrency === 'USD'} onChange={() => changePriceCurrency('USD')} /><span>Open first</span></label></header>
-                    <label>Regular selling price<div className="input-prefix"><span>$</span><MoneyInput autoFocus currency="USD" minimum={0} value={usdSellingPriceDraft} onValueChange={changeUsdSellingPrice} placeholder="0.00" aria-label="Regular selling price in US dollars" /></div></label>
-                    <label>Minimum selling price<div className="input-prefix"><span>$</span><MoneyInput currency="USD" minimum={0} maximum={Number(usdSellingPriceDraft || 0)} value={usdMinimumPriceDraft} onValueChange={changeUsdMinimumPrice} placeholder="0.00" aria-label="Minimum selling price in US dollars" /></div></label>
-                  </section>
-                  <section className={`inventory-currency-column ${priceCurrency === 'KHR' ? 'is-default' : ''}`} aria-labelledby="inventory-khr-price-title">
-                    <header><span className="inventory-currency-mark">៛</span><div><strong id="inventory-khr-price-title">Cambodian Riel</strong><small>KHR</small></div><label className="inventory-default-currency"><input type="radio" name="default-price-currency" checked={priceCurrency === 'KHR'} onChange={() => changePriceCurrency('KHR')} /><span>Open first</span></label></header>
-                    <label>Regular selling price<div className="input-prefix"><span>៛</span><MoneyInput currency="KHR" minimum={0} value={khrSellingPriceDraft} onValueChange={changeKhrSellingPrice} placeholder="0" aria-label="Regular selling price in Cambodian riel" /></div></label>
-                    <label>Minimum selling price<div className="input-prefix"><span>៛</span><MoneyInput currency="KHR" minimum={0} maximum={Number(khrSellingPriceDraft || 0)} value={khrMinimumPriceDraft} onValueChange={changeKhrMinimumPrice} placeholder="0" aria-label="Minimum selling price in Cambodian riel" /></div></label>
-                  </section>
-                </div>
-                <p className="inventory-price-help">Minimum prices control the largest discount allowed in each currency.</p>
-                <div className="inventory-price-actions"><button className="ghost-button" onClick={() => { setEditingPrice(false); setError('') }}>Cancel</button><button className="primary-button" onClick={() => void saveSellingPrice()} disabled={savingPrice || Number(usdMinimumPriceDraft || 0) > Number(usdSellingPriceDraft || 0) || Number(khrMinimumPriceDraft || 0) > Number(khrSellingPriceDraft || 0)}>{savingPrice ? 'Saving…' : 'Save prices'}</button></div>
-              </div>}
+            {editingPrice && <div className="inventory-price-editor">
+              <div className="inventory-price-heading"><span className="eyebrow">Inventory pricing</span><h4>Set selling prices</h4><p>Enter either currency and the other price updates automatically. Choose which currency opens first in New Sale.</p><small>Reference rate: 1 USD = {riel.format(usdKhrRate)} KHR</small></div>
+              <div className="inventory-price-columns">
+                <section className={`inventory-currency-column ${priceCurrency === 'USD' ? 'is-default' : ''}`} aria-labelledby="inventory-usd-price-title">
+                  <header><span className="inventory-currency-mark">$</span><div><strong id="inventory-usd-price-title">US Dollar</strong><small>USD</small></div><label className="inventory-default-currency"><input type="radio" name="default-price-currency" checked={priceCurrency === 'USD'} onChange={() => changePriceCurrency('USD')} /><span>Open first</span></label></header>
+                  <label>Regular selling price<div className="input-prefix"><span>$</span><MoneyInput autoFocus currency="USD" minimum={0} value={usdSellingPriceDraft} onValueChange={changeUsdSellingPrice} placeholder="0.00" aria-label="Regular selling price in US dollars" /></div></label>
+                  <label>Minimum selling price<div className="input-prefix"><span>$</span><MoneyInput currency="USD" minimum={0} maximum={Number(usdSellingPriceDraft || 0)} value={usdMinimumPriceDraft} onValueChange={changeUsdMinimumPrice} placeholder="0.00" aria-label="Minimum selling price in US dollars" /></div></label>
+                </section>
+                <section className={`inventory-currency-column ${priceCurrency === 'KHR' ? 'is-default' : ''}`} aria-labelledby="inventory-khr-price-title">
+                  <header><span className="inventory-currency-mark">៛</span><div><strong id="inventory-khr-price-title">Cambodian Riel</strong><small>KHR</small></div><label className="inventory-default-currency"><input type="radio" name="default-price-currency" checked={priceCurrency === 'KHR'} onChange={() => changePriceCurrency('KHR')} /><span>Open first</span></label></header>
+                  <label>Regular selling price<div className="input-prefix"><span>៛</span><MoneyInput currency="KHR" minimum={0} value={khrSellingPriceDraft} onValueChange={changeKhrSellingPrice} placeholder="0" aria-label="Regular selling price in Cambodian riel" /></div></label>
+                  <label>Minimum selling price<div className="input-prefix"><span>៛</span><MoneyInput currency="KHR" minimum={0} maximum={Number(khrSellingPriceDraft || 0)} value={khrMinimumPriceDraft} onValueChange={changeKhrMinimumPrice} placeholder="0" aria-label="Minimum selling price in Cambodian riel" /></div></label>
+                </section>
+              </div>
+              <p className="inventory-price-help">Minimum prices control the largest discount allowed in each currency.</p>
+              <div className="inventory-price-actions"><button className="ghost-button" onClick={() => { setEditingPrice(false); setError('') }}>Cancel</button><button className="primary-button" onClick={() => void saveSellingPrice()} disabled={savingPrice || Number(usdMinimumPriceDraft || 0) > Number(usdSellingPriceDraft || 0) || Number(khrMinimumPriceDraft || 0) > Number(khrSellingPriceDraft || 0)}>{savingPrice ? 'Saving…' : 'Save prices'}</button></div>
+            </div>}
 
-              {selectedItem.notes && (
-                <div className="detail-note">
-                  <span className="eyebrow">Notes</span>
-                  <p>{selectedItem.notes}</p>
-                </div>
-              )}
-            </div>
+            {selectedItem.notes && (
+              <div className="detail-note">
+                <span className="eyebrow">Notes</span>
+                <p>{selectedItem.notes}</p>
+              </div>
+            )}
+          </DetailModalBody>
 
-            <footer className="detail-modal-footer">
-              <label className={`secondary-button upload-photo-button ${savingPhoto ? 'disabled' : ''}`}>
-                <Package size={16} /> {savingPhoto ? 'Saving photo...' : selectedItem.imageUrl ? 'Change photo' : 'Add photo'}
-                <input type="file" accept="image/png,image/jpeg,image/webp" disabled={savingPhoto} onChange={(event) => void uploadPhoto(event.target.files?.[0])} />
-              </label>
-              {selectedItem.imageUrl && <button className="ghost-button" onClick={() => void removePhoto()} disabled={savingPhoto}>Remove photo</button>}
-              {!editingPrice && <button className="primary-button" onClick={openPriceEditor}>{selectedItem.sellPrice > 0 ? 'Change price' : 'Set selling price'}</button>}
-              <button className="secondary-button" onClick={() => printInventoryLabel(selectedItem)}><ScanLine size={16} /> Print label</button>
-              <button className="ghost-button" onClick={() => { setSelectedItem(null); setEditingPrice(false) }}>Close</button>
-            </footer>
-          </section>
-        </div>
+          <DetailModalFooter
+            utilityActions={
+              <>
+                <label className={`secondary-button upload-photo-button ${savingPhoto ? 'disabled' : ''}`}>
+                  <Package size={16} /> {savingPhoto ? 'Saving photo...' : selectedItem.imageUrl ? 'Change photo' : 'Add photo'}
+                  <input type="file" accept="image/png,image/jpeg,image/webp" disabled={savingPhoto} onChange={(event) => void uploadPhoto(event.target.files?.[0])} />
+                </label>
+                <button className="secondary-button" onClick={() => printInventoryLabel(selectedItem)}><ScanLine size={16} /> Print label</button>
+              </>
+            }
+            destructiveAction={
+              selectedItem.imageUrl ? (
+                <button className="ghost-button danger-ghost-button" onClick={() => void removePhoto()} disabled={savingPhoto}>Remove photo</button>
+              ) : undefined
+            }
+            transactionActions={
+              !editingPrice ? (
+                <button className="primary-button" onClick={openPriceEditor}>{selectedItem.sellPrice > 0 ? 'Change price' : 'Set selling price'}</button>
+              ) : undefined
+            }
+            dismissAction={
+              <button className="ghost-button" onClick={closeStockDetails}>Close</button>
+            }
+          />
+        </DetailModalShell>
       )}
       <NotificationToast message={toastMessage} onDismiss={() => setToastMessage('')} />
     </>

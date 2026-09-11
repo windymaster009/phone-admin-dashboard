@@ -8,6 +8,9 @@ import SectionHeader from '../../components/SectionHeader'
 import StatusBadge from '../../components/StatusBadge'
 import SummaryStats, { type SummaryStatTone } from '../../components/SummaryStats'
 import { BusinessPerformanceChart } from '../business/BusinessOverviewPage'
+import DetailModalShell from '../../components/DetailModalShell'
+import DetailModalHeader from '../../components/DetailModalHeader'
+import DetailModalBody from '../../components/DetailModalBody'
 import './reports-page.css'
 
 const reportSections = [
@@ -148,14 +151,6 @@ function CustomerReportModal({ onClose }: { onClose: () => void }) {
     return () => { active = false }
   }, [])
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
-
   const filteredCustomers = useMemo(() => customers.filter((customer) => {
     const term = search.trim().toLowerCase()
     const matchesSearch = !term || [customer.name, customer.phone, customer.nationalIdNumber, customer.address]
@@ -187,17 +182,20 @@ function CustomerReportModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <>
-    <div className={`modal-backdrop customer-report-backdrop ${activityReport ? 'is-full-report-open' : ''}`} role="presentation">
-      <section className={`detail-modal surface-card customer-report-modal ${activityReport ? 'is-full-report' : ''}`} role="dialog" aria-modal="true" aria-labelledby="customer-report-title" onClick={(event) => event.stopPropagation()}>
-        <header className="detail-modal-header">
-          <div>
-            <span className="eyebrow">Customer report</span>
-            <h3 id="customer-report-title">Find a customer</h3>
-            <p>Search the directory, then select a customer to review their profile.</p>
-          </div>
-          <button className="icon-button" onClick={onClose} aria-label="Close customer report"><X size={18} /></button>
-        </header>
+    <DetailModalShell
+      onClose={onClose}
+      titleId="customer-report-title"
+      className={`customer-report-modal ${activityReport ? 'is-full-report' : ''}`}
+    >
+      <DetailModalHeader
+        eyebrow="Customer report"
+        title="Find a customer"
+        titleId="customer-report-title"
+        description="Search the directory, then select a customer to review their profile."
+        onClose={onClose}
+        closeLabel="Close customer report"
+      />
+      <DetailModalBody className="customer-report-modal-body">
         <div className="customer-report-workspace">
           <aside className="customer-report-browser" aria-label="Customer list">
             <label className="customer-report-search">
@@ -269,9 +267,8 @@ function CustomerReportModal({ onClose }: { onClose: () => void }) {
             </> : <div className="customer-report-empty-profile"><Users size={24} /><h4>Select a customer</h4><p>Choose someone from the list to see their saved contact and identity details.</p></div>}
           </section>
         </div>
-      </section>
-    </div>
-    </>
+      </DetailModalBody>
+    </DetailModalShell>
   )
 }
 
@@ -297,14 +294,6 @@ function SupplierReportModal({ onClose }: { onClose: () => void }) {
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [])
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [onClose])
 
   const filteredSuppliers = useMemo(() => suppliers.filter((supplier) => {
     const term = search.trim().toLowerCase()
@@ -336,12 +325,20 @@ function SupplierReportModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className={`modal-backdrop customer-report-backdrop ${activityReport ? 'is-full-report-open' : ''}`} role="presentation">
-      <section className={`detail-modal surface-card customer-report-modal supplier-report-modal ${activityReport ? 'is-full-report' : ''}`} role="dialog" aria-modal="true" aria-labelledby="supplier-report-title" onClick={(event) => event.stopPropagation()}>
-        <header className="detail-modal-header">
-          <div><span className="eyebrow">Supplier report</span><h3 id="supplier-report-title">Find a supplier</h3><p>Search the directory, then review the supplier’s linked purchases.</p></div>
-          <button className="icon-button" onClick={onClose} aria-label="Close supplier report"><X size={18} /></button>
-        </header>
+    <DetailModalShell
+      onClose={onClose}
+      titleId="supplier-report-title"
+      className={`customer-report-modal supplier-report-modal ${activityReport ? 'is-full-report' : ''}`}
+    >
+      <DetailModalHeader
+        eyebrow="Supplier report"
+        title="Find a supplier"
+        titleId="supplier-report-title"
+        description="Search the directory, then review the supplier’s linked purchases."
+        onClose={onClose}
+        closeLabel="Close supplier report"
+      />
+      <DetailModalBody className="customer-report-modal-body">
         <div className="customer-report-workspace">
           <aside className="customer-report-browser" aria-label="Supplier list">
             <label className="customer-report-search"><span>Search suppliers</span><div className="search-field"><Search size={17} /><input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Name, phone, or National ID" disabled={loading} /></div></label>
@@ -374,8 +371,8 @@ function SupplierReportModal({ onClose }: { onClose: () => void }) {
             </> : <div className="customer-report-empty-profile"><Building2 size={24} /><h4>Select a supplier</h4><p>Choose a supplier from the list to view their saved contact details and purchase history.</p></div>}
           </section>
         </div>
-      </section>
-    </div>
+      </DetailModalBody>
+    </DetailModalShell>
   )
 }
 

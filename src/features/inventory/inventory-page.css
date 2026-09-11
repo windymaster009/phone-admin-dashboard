@@ -210,7 +210,7 @@
   object-fit: contain;
 }
 
-.detail-modal-header > .inventory-photo-large {
+.detail-modal-header .inventory-photo-large {
   width: 104px;
   height: 104px;
 }
@@ -285,10 +285,6 @@
 /* Inventory Detail Modal */
 .inventory-detail-modal {
   width: min(940px, 100%);
-  max-height: min(820px, calc(100vh - 48px));
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
 }
 
 .inventory-detail-modal .detail-modal-header {
@@ -297,23 +293,23 @@
   padding: 18px 20px;
 }
 
-.inventory-detail-modal .detail-modal-header > .inventory-photo-large {
+.inventory-detail-modal .detail-modal-header .inventory-photo-large {
   width: 72px;
   height: 72px;
   border-radius: var(--radius-xl);
 }
 
-.inventory-detail-modal .detail-modal-header > .inventory-photo-large:not(.has-image) {
+.inventory-detail-modal .detail-modal-header .inventory-photo-large:not(.has-image) {
   width: 68px;
   height: 68px;
   border-radius: var(--radius-xl);
 }
 
-.inventory-detail-modal .detail-modal-header > .inventory-photo-large:not(.has-image) small {
+.inventory-detail-modal .detail-modal-header .inventory-photo-large:not(.has-image) small {
   display: none;
 }
 
-.inventory-detail-modal .detail-modal-header > .inventory-photo-large:not(.has-image) svg {
+.inventory-detail-modal .detail-modal-header .inventory-photo-large:not(.has-image) svg {
   width: 30px;
   height: 30px;
 }
@@ -511,14 +507,6 @@
   line-height: 1.5;
 }
 
-.inventory-detail-modal .detail-modal-footer {
-  flex: 0 0 auto;
-  flex-wrap: wrap;
-  padding: 13px 20px;
-  background: var(--surface-solid);
-  box-shadow: 0 -10px 24px color-mix(in srgb, var(--text) 10%, transparent);
-}
-
 .inventory-detail-modal .detail-modal-footer .primary-button,
 .inventory-detail-modal .detail-modal-footer .secondary-button,
 .inventory-detail-modal .detail-modal-footer .ghost-button {
@@ -528,60 +516,56 @@
 }
 
 /* Light Mode Overrides for Inventory Detail Modal */
-.app[data-theme='light'] .inventory-detail-backdrop {
-  background: rgba(23, 37, 29, 0.56);
-}
-
-.app[data-theme='light'] .inventory-detail-modal {
+:root[data-theme='light'] .inventory-detail-modal {
   border-color: rgba(31, 73, 48, 0.16);
   background: #f5f9f5;
   box-shadow: 0 24px 70px rgba(20, 48, 31, 0.2);
 }
 
-.app[data-theme='light'] .inventory-detail-modal .detail-modal-header {
+:root[data-theme='light'] .inventory-detail-modal .detail-modal-header {
   border-color: rgba(31, 73, 48, 0.12);
   background: linear-gradient(135deg, rgba(47, 143, 91, 0.14), rgba(248, 252, 248, 0.96));
 }
 
-.app[data-theme='light'] .inventory-detail-modal .detail-modal-header p,
-.app[data-theme='light'] .inventory-detail-section-heading > p,
-.app[data-theme='light'] .inventory-detail-modal .detail-sections p,
-.app[data-theme='light'] .inventory-detail-modal .detail-note p {
+:root[data-theme='light'] .inventory-detail-modal .detail-modal-header p,
+:root[data-theme='light'] .inventory-detail-section-heading > p,
+:root[data-theme='light'] .inventory-detail-modal .detail-sections p,
+:root[data-theme='light'] .inventory-detail-modal .detail-note p {
   color: #596f61;
 }
 
-.app[data-theme='light'] .inventory-detail-body {
+:root[data-theme='light'] .inventory-detail-body {
   background: #eef4ef;
 }
 
-.app[data-theme='light'] .inventory-summary-group {
+:root[data-theme='light'] .inventory-summary-group {
   border-color: rgba(31, 73, 48, 0.11);
 }
 
-.app[data-theme='light'] .inventory-detail-modal .detail-grid div,
-.app[data-theme='light'] .inventory-detail-modal .detail-grid div:nth-child(4),
-.app[data-theme='light'] .inventory-detail-modal .detail-grid div:nth-child(5),
-.app[data-theme='light'] .inventory-detail-modal .detail-sections article,
-.app[data-theme='light'] .inventory-detail-modal .detail-note {
+:root[data-theme='light'] .inventory-detail-modal .detail-grid div,
+:root[data-theme='light'] .inventory-detail-modal .detail-grid div:nth-child(4),
+:root[data-theme='light'] .inventory-detail-modal .detail-grid div:nth-child(5),
+:root[data-theme='light'] .inventory-detail-modal .detail-sections article,
+:root[data-theme='light'] .inventory-detail-modal .detail-note {
   border-color: rgba(31, 73, 48, 0.13);
   background: #f9fcf9;
 }
 
-.app[data-theme='light'] .inventory-detail-modal .detail-grid div:nth-child(1) {
+:root[data-theme='light'] .inventory-detail-modal .detail-grid div:nth-child(1) {
   border-color: rgba(47, 143, 91, 0.3);
   background: rgba(47, 143, 91, 0.08);
 }
 
-.app[data-theme='light'] .inventory-detail-modal .detail-grid div:hover {
+:root[data-theme='light'] .inventory-detail-modal .detail-grid div:hover {
   border-color: rgba(47, 143, 91, 0.32);
   background: #f3f9f4;
 }
 
-.app[data-theme='light'] .inventory-detail-modal .detail-sections article {
+:root[data-theme='light'] .inventory-detail-modal .detail-sections article {
   border-top-width: 1px;
 }
 
-.app[data-theme='light'] .inventory-detail-modal .detail-modal-footer {
+:root[data-theme='light'] .inventory-detail-modal .detail-modal-footer {
   border-color: rgba(31, 73, 48, 0.12);
   background: #f8fcf8;
   box-shadow: 0 -10px 24px rgba(31, 73, 48, 0.08);
@@ -1014,16 +998,12 @@
     height: 36px;
   }
 
-  .inventory-detail-modal {
-    height: calc(100vh - 24px);
-  }
-
   .inventory-detail-modal .detail-modal-header {
     padding: 14px 12px;
     gap: 12px;
   }
 
-  .inventory-detail-modal .detail-modal-header > .inventory-photo-large {
+  .inventory-detail-modal .detail-modal-header .inventory-photo-large {
     width: 74px;
     height: 74px;
     border-radius: 13px;
@@ -1045,17 +1025,20 @@
     padding: 12px;
   }
 
-  .inventory-detail-modal .detail-modal-footer {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    padding: 11px 12px;
+  .inventory-detail-modal .detail-modal-transaction-group {
+    order: 1;
   }
 
-  .inventory-detail-modal .detail-modal-footer > * {
-    width: 100%;
-    min-height: 40px;
-    justify-content: center;
+  .inventory-detail-modal .detail-modal-utility-group {
+    order: 2;
+  }
+
+  .inventory-detail-modal .detail-modal-danger-group {
+    order: 3;
+  }
+
+  .inventory-detail-modal .detail-modal-dismiss-group {
+    order: 4;
   }
 
   .inventory-price-editor {
