@@ -58,6 +58,18 @@ Object.defineProperty(window, 'IntersectionObserver', {
 window.scrollTo = vi.fn()
 Element.prototype.scrollIntoView = vi.fn()
 
+// Polyfill HTMLDialogElement for jsdom if needed
+if (typeof HTMLDialogElement !== 'undefined') {
+  HTMLDialogElement.prototype.showModal = HTMLDialogElement.prototype.showModal || function(this: HTMLDialogElement) {
+    this.open = true
+    this.setAttribute('open', '')
+  }
+  HTMLDialogElement.prototype.close = HTMLDialogElement.prototype.close || function(this: HTMLDialogElement) {
+    this.open = false
+    this.removeAttribute('open')
+  }
+}
+
 // Deterministic mocks for printing and popup windows
 window.print = vi.fn()
 window.alert = vi.fn()

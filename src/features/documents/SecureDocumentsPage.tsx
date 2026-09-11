@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { api, apiBlob, getSessionUser } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
+import NotificationToast from '../../components/NotificationToast'
 
 type Customer = { _id: string; name: string; phone?: string; active?: boolean }
 type DocumentCategory = 'NATIONAL_ID_FRONT' | 'NATIONAL_ID_BACK' | 'CUSTOMER_PHOTO' | 'PAWN_ITEM_PHOTO' | 'SIGNED_AGREEMENT' | 'PURCHASE_EVIDENCE' | 'OTHER'
@@ -75,6 +76,7 @@ export default function SecureDocumentsPage() {
   const [error, setError] = useState('')
   const [customerDirectoryOpen, setCustomerDirectoryOpen] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<CustomerDocument | null>(null)
+  const [toastMessage, setToastMessage] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const deleteDialogRef = useRef<HTMLDialogElement>(null)
   const documentRequestRef = useRef(0)
@@ -155,7 +157,12 @@ export default function SecureDocumentsPage() {
   async function confirmDelete() {
     if (!canDelete || !pendingDelete) return
     const document = pendingDelete; setBusy(true); setError('')
-    try { await api(`/customer-documents/${document._id}`, { method: 'DELETE' }); setPendingDelete(null); await Promise.all([loadDocuments(selectedCustomerId), loadSummary()]) }
+    try {
+      await api(`/customer-documents/${document._id}`, { method: 'DELETE' });
+      setPendingDelete(null);
+      await Promise.all([loadDocuments(selectedCustomerId), loadSummary()]);
+      setToastMessage('Secure document deleted successfully.')
+    }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to delete the secure document') }
     finally { setBusy(false) }
   }
@@ -223,6 +230,22 @@ export default function SecureDocumentsPage() {
       </main>
     </section>
 
-    <dialog ref={deleteDialogRef} className="secure-delete-dialog" onClose={() => setPendingDelete(null)}><div className="secure-delete-dialog-content"><span className="secure-delete-mark"><Trash2 size={21} aria-hidden="true" /></span><div><h3>Delete this secure document?</h3><p><strong>{pendingDelete?.originalName}</strong> will be permanently removed. This action cannot be undone.</p></div><div className="secure-delete-actions"><button type="button" className="ghost-button" onClick={() => setPendingDelete(null)} disabled={busy}>Cancel</button><button type="button" className="danger-button" onClick={() => void confirmDelete()} disabled={busy}>{busy ? 'Deleting…' : 'Delete document'}</button></div></div></dialog>
+    {pendingDelete && (
+      <dialog ref={deleteDialogRef} className="secure-delete-dialog" onClose={() => setPendingDelete(null)}>
+        <div className="secure-delete-dialog-content">
+          <span className="secure-delete-mark"><Trash2 size={21} aria-hidden="true" /></span>
+          <div>
+            <h3>Delete this secure document?</h3>
+            <p><strong>{pendingDelete.originalName}</strong> will be permanently removed. This action cannot be undone.</p>
+            {error && <div className="secure-documents-error" role="alert" style={{ marginTop: 10 }}><AlertTriangle size={16} aria-hidden="true" /><span>{error}</span></div>}
+          </div>
+          <div className="secure-delete-actions">
+            <button type="button" className="ghost-button" onClick={() => { setPendingDelete(null); setError('') }} disabled={busy}>Cancel</button>
+            <button type="button" className="danger-button" onClick={() => void confirmDelete()} disabled={busy}>{busy ? 'Deleting…' : 'Delete document'}</button>
+          </div>
+        </div>
+      </dialog>
+    )}
+    <NotificationToast message={toastMessage} onDismiss={() => setToastMessage('')} />
   </div>
 }

@@ -3,6 +3,7 @@ import { BadgeCheck, Calculator, Database, LogOut, Settings, Smartphone, Server,
 import { api, type SessionUser } from '../../lib/api'
 import { titleStatus } from '../../lib/presentation'
 import SectionHeader from '../../components/SectionHeader'
+import NotificationToast from '../../components/NotificationToast'
 import { getStoredValuations, clearStoredValuations } from '../../lib/storage'
 import type { AppFontSize } from '../../app/types'
 import './settings-page.css'
@@ -19,6 +20,7 @@ export default function SettingsView({
   onFontSizeChange: (fontSize: AppFontSize) => void
 }) {
   const [savedValuations, setSavedValuations] = useState<unknown[]>(getStoredValuations)
+  const [toastMessage, setToastMessage] = useState('')
   const fontSizeOptions: Array<{
     value: AppFontSize
     label: string
@@ -149,7 +151,11 @@ export default function SettingsView({
             <button
               className="ghost-button danger-button"
               disabled={savedValuations.length === 0}
-              onClick={() => { clearStoredValuations(); setSavedValuations([]) }}
+              onClick={() => {
+                clearStoredValuations()
+                setSavedValuations([])
+                setToastMessage('Saved valuations cleared successfully.')
+              }}
             >
               <Trash2 size={15} />Clear records
             </button>
@@ -157,6 +163,7 @@ export default function SettingsView({
         </article>
         </div>
       </section>
+      <NotificationToast message={toastMessage} onDismiss={() => setToastMessage('')} />
     </>
   )
 }

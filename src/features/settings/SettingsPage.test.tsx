@@ -88,5 +88,6 @@ describe('SettingsPage component', () => {
     await user.click(clearButton)
     expect(screen.getByText('0')).toBeInTheDocument()
     expect(clearButton).toBeDisabled()
+    expect(screen.getByRole('status')).toHaveTextContent('Saved valuations cleared successfully.')
   })
 })

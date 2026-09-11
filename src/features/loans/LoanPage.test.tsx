@@ -556,4 +556,261 @@ describe('LoanPage component and shared component adoption', () => {
       expect(screen.getAllByText('200,000,000 ៛').length).toBeGreaterThanOrEqual(1)
     })
   })
+
+  it('successfully deletes a paid loan, closes modal, refreshes list, and displays success toast', async () => {
+    const paidLoan = {
+      ...mockLoanRecord,
+      _id: 'loan-paid-1',
+      loanNo: 'LN-2026-PAID',
+      status: 'PAID' as const,
+      remainingBalance: 0,
+      amountPaid: 1100,
+    }
+
+    let loansList = [paidLoan]
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = (init?.method || 'GET').toUpperCase()
+
+      if (url.includes('/auth/me')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ user: mockOwnerUser }),
+        } as Response
+      }
+
+      if (url.includes('/loans/loan-paid-1') && method === 'DELETE') {
+        loansList = []
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ success: true }),
+        } as Response
+      }
+
+      if (url.includes('/loans/loan-paid-1') && method === 'GET') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ loan: paidLoan, payments: [] }),
+        } as Response
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({
+          loans: loansList,
+          summary: mockSummary,
+        }),
+      } as Response
+    })
+
+    const user = userEvent.setup()
+    render(<LoanPage summary={mockSummary} />)
+
+    await waitFor(() => {
+      expect(screen.getAllByText(paidLoan.loanNo).length).toBeGreaterThan(0)
+    })
+
+    // Open detail
+    const openButtons = screen.getAllByRole('button', { name: new RegExp(`View.*${paidLoan.loanNo}`, 'i') })
+    await user.click(openButtons[0])
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: new RegExp(paidLoan.loanNo, 'i') })).toBeInTheDocument()
+    })
+
+    // Click "Delete loan" in danger zone
+    const deleteButton = screen.getByRole('button', { name: /Delete loan/i })
+    await user.click(deleteButton)
+
+    // Delete confirmation appears
+    expect(screen.getByText(/Delete this loan\?/i)).toBeInTheDocument()
+
+    // Confirm deletion
+    const confirmButton = screen.getByRole('button', { name: /Delete permanently/i })
+    await user.click(confirmButton)
+
+    // Success toast appears
+    await waitFor(() => {
+      expect(screen.getByText('Loan deleted successfully.')).toBeInTheDocument()
+    })
+
+    // Modal is closed and loan removed from list
+    expect(screen.queryByRole('dialog', { name: new RegExp(paidLoan.loanNo, 'i') })).not.toBeInTheDocument()
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining('/loans/loan-paid-1'),
+      expect.objectContaining({ method: 'DELETE' }),
+    )
+  })
+
+  it('keeps detail modal open and shows error notification on failed loan deletion', async () => {
+    const paidLoan = {
+      ...mockLoanRecord,
+      _id: 'loan-paid-2',
+      loanNo: 'LN-2026-PAID-2',
+      status: 'PAID' as const,
+      remainingBalance: 0,
+      amountPaid: 1100,
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = (init?.method || 'GET').toUpperCase()
+
+      if (url.includes('/auth/me')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ user: mockOwnerUser }),
+        } as Response
+      }
+
+      if (url.includes('/loans/loan-paid-2') && method === 'DELETE') {
+        return {
+          ok: false,
+          status: 400,
+          headers: new Headers(),
+          json: async () => ({ message: 'Cannot delete loan linked to locked tax audit' }),
+        } as Response
+      }
+
+      if (url.includes('/loans/loan-paid-2') && method === 'GET') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ loan: paidLoan, payments: [] }),
+        } as Response
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({
+          loans: [paidLoan],
+          summary: mockSummary,
+        }),
+      } as Response
+    })
+
+    const user = userEvent.setup()
+    render(<LoanPage summary={mockSummary} />)
+
+    await waitFor(() => {
+      expect(screen.getAllByText(paidLoan.loanNo).length).toBeGreaterThan(0)
+    })
+
+    const openButtons = screen.getAllByRole('button', { name: new RegExp(`View.*${paidLoan.loanNo}`, 'i') })
+    await user.click(openButtons[0])
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: new RegExp(paidLoan.loanNo, 'i') })).toBeInTheDocument()
+    })
+
+    const deleteButton = screen.getByRole('button', { name: /Delete loan/i })
+    await user.click(deleteButton)
+
+    expect(screen.getByText(/Delete this loan\?/i)).toBeInTheDocument()
+
+    const confirmButton = screen.getByRole('button', { name: /Delete permanently/i })
+    await user.click(confirmButton)
+
+    // Error is displayed
+    await waitFor(() => {
+      expect(screen.getByText(/Cannot delete loan linked to locked tax audit/i)).toBeInTheDocument()
+    })
+
+    // Delete confirmation dialog remains open with error
+    expect(screen.getByRole('dialog', { name: /Delete this loan\?/i })).toBeInTheDocument()
+
+    // No success toast is shown
+    expect(screen.queryByText('Loan deleted successfully.')).not.toBeInTheDocument()
+  })
+
+  it('does not delete loan or show toast when user cancels confirmation', async () => {
+    const paidLoan = {
+      ...mockLoanRecord,
+      _id: 'loan-paid-3',
+      loanNo: 'LN-2026-PAID-3',
+      status: 'PAID' as const,
+      remainingBalance: 0,
+      amountPaid: 1100,
+    }
+
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = (init?.method || 'GET').toUpperCase()
+
+      if (url.includes('/auth/me')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ user: mockOwnerUser }),
+        } as Response
+      }
+
+      if (url.includes('/loans/loan-paid-3') && method === 'GET') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ loan: paidLoan, payments: [] }),
+        } as Response
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({
+          loans: [paidLoan],
+          summary: mockSummary,
+        }),
+      } as Response
+    })
+
+    const user = userEvent.setup()
+    render(<LoanPage summary={mockSummary} />)
+
+    await waitFor(() => {
+      expect(screen.getAllByText(paidLoan.loanNo).length).toBeGreaterThan(0)
+    })
+
+    const openButtons = screen.getAllByRole('button', { name: new RegExp(`View.*${paidLoan.loanNo}`, 'i') })
+    await user.click(openButtons[0])
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: new RegExp(paidLoan.loanNo, 'i') })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /Delete loan/i }))
+    expect(screen.getByText(/Delete this loan\?/i)).toBeInTheDocument()
+
+    // Click "Keep record" to cancel deletion
+    const keepButton = screen.getByRole('button', { name: /Keep record/i })
+    await user.click(keepButton)
+
+    // Confirmation dialog closed, detail modal still open
+    expect(screen.queryByText(/Delete this loan\?/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: new RegExp(paidLoan.loanNo, 'i') })).toBeInTheDocument()
+
+    // No DELETE request sent
+    expect(fetchSpy).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ method: 'DELETE' }),
+    )
+
+    // No success toast
+    expect(screen.queryByText('Loan deleted successfully.')).not.toBeInTheDocument()
+  })
 })

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import QRCode from 'react-qr-code'
+import NotificationToast from '../../components/NotificationToast'
 import './security-workspace.css'
 import './two-factor.css'
 import {
@@ -181,6 +182,7 @@ export default function SecurityWorkspacePage() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [toastMessage, setToastMessage] = useState('')
   const [copied, setCopied] = useState('')
   const [clock, setClock] = useState(Date.now())
 
@@ -281,6 +283,7 @@ export default function SecurityWorkspacePage() {
     try {
       await api(`/users/${encodeURIComponent(userId)}`, { method: 'DELETE' })
       await load()
+      setToastMessage('Staff account deleted successfully.')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to delete the user account')
     } finally {
@@ -325,6 +328,7 @@ export default function SecurityWorkspacePage() {
     try {
       await api(`/security/sessions/${encodeURIComponent(session.id)}`, { method: 'DELETE' })
       await load()
+      setToastMessage('Device signed out successfully.')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to revoke the session')
     } finally {
@@ -601,6 +605,7 @@ export default function SecurityWorkspacePage() {
           </section>
         </div>
       </div>
+      <NotificationToast message={toastMessage} onDismiss={() => setToastMessage('')} />
     </div>
   )
 }

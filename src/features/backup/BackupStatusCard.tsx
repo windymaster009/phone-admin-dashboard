@@ -4,6 +4,7 @@ import './backup-status.css'
 import { AlertTriangle, BadgeCheck, Check, Download, FileUp, RefreshCcw, RotateCcw, Trash2, X } from 'lucide-react'
 import { ApiError, api, setAuthTransitionInProgress, setToken } from '../../lib/api'
 import { safeStorage } from '../../lib/storage'
+import NotificationToast from '../../components/NotificationToast'
 
 type BackupMetadata = {
   filename: string
@@ -95,6 +96,7 @@ export default function BackupStatusCard() {
   const [selectedBackups, setSelectedBackups] = useState<Set<string>>(() => new Set())
   const [bulkDeleteBusy, setBulkDeleteBusy] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState<DeleteConfirmation | null>(null)
+  const [toastMessage, setToastMessage] = useState('')
   const [restoreCandidate, setRestoreCandidate] = useState<RestoreCandidate | null>(null)
   const [restoreInspectBusy, setRestoreInspectBusy] = useState(false)
   const [restoreBusy, setRestoreBusy] = useState(false)
@@ -266,16 +268,18 @@ export default function BackupStatusCard() {
       try {
         await api(`/backups/${encodeURIComponent(backup.filename)}`, { method: 'DELETE' })
         await Promise.all([refreshStatus(), refreshList()])
+        setToastMessage('Backup deleted successfully.')
+        setDeleteConfirmation(null)
       } catch (reason) {
         setError(reason instanceof Error ? reason.message : 'Unable to delete backup')
       } finally {
         setDeleteBusy('')
-        setDeleteConfirmation(null)
       }
       return
     }
 
     setBulkDeleteBusy(true)
+    const count = deleteConfirmation.filenames.length
     try {
       await api('/backups', {
         method: 'DELETE',
@@ -283,11 +287,12 @@ export default function BackupStatusCard() {
       })
       setSelectedBackups(new Set())
       await Promise.all([refreshStatus(), refreshList()])
+      setToastMessage(`${count} backups deleted successfully.`)
+      setDeleteConfirmation(null)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to delete selected backups')
     } finally {
       setBulkDeleteBusy(false)
-      setDeleteConfirmation(null)
     }
   }
 
@@ -547,9 +552,15 @@ export default function BackupStatusCard() {
                   : 'The selected backup archives and their metadata will be permanently removed.'}
                 {' '}This action cannot be undone.
               </p>
+              {error && (
+                <div className="backup-manager-error" role="alert" style={{ marginTop: 12 }}>
+                  <AlertTriangle size={15} />
+                  <span>{error}</span>
+                </div>
+              )}
             </div>
             <div className="backup-delete-dialog-actions">
-              <button className="ghost-button" onClick={() => setDeleteConfirmation(null)} disabled={deleteConfirmationBusy} autoFocus>Cancel</button>
+              <button className="ghost-button" onClick={() => { setDeleteConfirmation(null); setError('') }} disabled={deleteConfirmationBusy} autoFocus>Cancel</button>
               <button className="backup-delete-confirm-button" onClick={confirmDelete} disabled={deleteConfirmationBusy}>
                 {deleteConfirmationBusy ? <RefreshCcw className="backup-button-spin" size={16} /> : <Trash2 size={16} />}
                 {deleteConfirmationBusy ? 'Deleting…' : `Delete ${confirmationPlural}`}
@@ -647,6 +658,7 @@ export default function BackupStatusCard() {
         </div>,
         document.body,
       )}
+      <NotificationToast message={toastMessage} onDismiss={() => setToastMessage('')} />
     </>
   )
 }

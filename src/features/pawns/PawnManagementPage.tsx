@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { AlertTriangle, ArrowUpRight, BadgeCheck, CheckCircle2, Clock3, HandCoins, MoreHorizontal, Plus, RefreshCcw, Search, X } from 'lucide-react'
+import { AlertTriangle, ArrowUpRight, BadgeCheck, Clock3, HandCoins, MoreHorizontal, Plus, RefreshCcw, Search } from 'lucide-react'
 import { api, type SessionUser } from '../../lib/api'
 import type { Pawn, PawnAction } from '../../types/domain'
 import { comingNext, dateText, money, pawnEquivalentText, pawnMoney, pawnUsdValue, useExchangeRate } from '../../lib/presentation'
@@ -9,6 +8,7 @@ import SectionHeader from '../../components/SectionHeader'
 import StatusBadge from '../../components/StatusBadge'
 import SummaryStats from '../../components/SummaryStats'
 import ScannerTriggerButton, { openProductScanner } from '../../components/scanner/ScannerTriggerButton'
+import NotificationToast from '../../components/NotificationToast'
 import PawnDetailModal, { pawnOutstanding } from './PawnDetailModal'
 import { PAWN_CREATED_EVENT, type PawnCreatedEventDetail } from './pawnEvents'
 import './pawn-management.css'
@@ -23,12 +23,6 @@ export default function PawnView({ user }: { user: SessionUser }) {
   const [error, setError] = useState('')
   const [successToast, setSuccessToast] = useState('')
   const exchangeRate = useExchangeRate()
-
-  useEffect(() => {
-    if (!successToast) return
-    const timer = window.setTimeout(() => setSuccessToast(''), 4000)
-    return () => window.clearTimeout(timer)
-  }, [successToast])
 
   useEffect(() => {
     api<{ pawns: Pawn[] }>('/pawns')
@@ -176,20 +170,7 @@ export default function PawnView({ user }: { user: SessionUser }) {
         </div>
       </article>
       {selectedPawn && <PawnDetailModal pawn={selectedPawn} onClose={() => setSelectedPawn(null)} onAction={updatePawn} canDelete={user.role === 'OWNER'} onDelete={deletePawn} />}
-      {successToast && createPortal(
-        <div className="pawn-toast success" role="status" aria-live="polite">
-          <CheckCircle2 size={16} aria-hidden="true" />
-          <span>{successToast}</span>
-          <button
-            type="button"
-            onClick={() => setSuccessToast('')}
-            aria-label="Dismiss message"
-          >
-            <X size={14} />
-          </button>
-        </div>,
-        document.body
-      )}
+      <NotificationToast message={successToast} onDismiss={() => setSuccessToast('')} />
     </>
   )
 }

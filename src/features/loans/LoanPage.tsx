@@ -23,6 +23,7 @@ import SummaryStats from '../../components/SummaryStats'
 import ScannerWorkflow from '../../components/scanner/ScannerWorkflow'
 import ScannerTriggerButton from '../../components/scanner/ScannerTriggerButton'
 import OperationModalShell from '../../components/OperationModalShell'
+import NotificationToast from '../../components/NotificationToast'
 import OperationWorkflowStepper, { type WorkflowStep } from '../../components/OperationWorkflowStepper'
 import OperationWorkflowFooter from '../../components/OperationWorkflowFooter'
 import OperationSectionCard from '../../components/OperationSectionCard'
@@ -931,6 +932,7 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
   const [paymentConfirmation, setPaymentConfirmation] = useState<LoanPaymentConfirmation | null>(null)
   const [cancelConfirmation, setCancelConfirmation] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState(false)
+  const [toastMessage, setToastMessage] = useState('')
 
   const loadLoans = useCallback(async () => {
     setLoading(true)
@@ -1087,6 +1089,7 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
       setDetail(null)
       setDeleteConfirmation(false)
       await loadLoans()
+      setToastMessage('Loan deleted successfully.')
     } catch (reason) {
       setModalError(reason instanceof Error ? reason.message : 'Unable to delete loan')
     } finally {
@@ -1147,5 +1150,6 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
     {showCreate && <CreateLoanModal busy={busy} error={modalError} createdLoan={createdLoan} onClose={() => { if (!busy) { setShowCreate(false); setCreatedLoan(null) } }} onSubmit={createLoan} />}
     {showScanner && <ScanLoanModal busy={busy} error={scannerError} onClose={() => { if (!busy) { setShowScanner(false); setScannerError('') } }} onScan={(value) => void findLoanByBarcode(value)} />}
     {detail && <LoanDetailModal detail={detail} user={user} busy={busy} error={modalError} paymentConfirmation={paymentConfirmation} cancelConfirmation={cancelConfirmation} deleteConfirmation={deleteConfirmation} onClose={() => { if (!busy) { setDetail(null); setPaymentConfirmation(null); setCancelConfirmation(false); setDeleteConfirmation(false) } }} onPayment={recordPayment} onDueDate={changeDueDate} onCancel={() => { setModalError(''); setCancelConfirmation(true) }} onConfirmCancel={cancelLoan} onDelete={() => { setModalError(''); setPaymentConfirmation(null); setCancelConfirmation(false); setDeleteConfirmation(true) }} onConfirmDelete={deleteLoan} onCancelConfirmationClose={() => { if (!busy) { setCancelConfirmation(false); setModalError('') } }} onDeleteConfirmationClose={() => { if (!busy) { setDeleteConfirmation(false); setModalError('') } }} />}
+    <NotificationToast message={toastMessage} onDismiss={() => setToastMessage('')} />
   </div>
 }

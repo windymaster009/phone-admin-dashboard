@@ -11,6 +11,7 @@ import SummaryStats from '../../components/SummaryStats'
 import ScannerTriggerButton, { openProductScanner } from '../../components/scanner/ScannerTriggerButton'
 import { getStoredInventoryView, setStoredInventoryView } from '../../lib/storage'
 import { printInventoryLabel } from './barcode'
+import NotificationToast from '../../components/NotificationToast'
 import './inventory-page.css'
 
 const categoryMeta: Record<InventoryItem['category'], { label: string; tone: 'violet' | 'blue' | 'orange'; Icon: LucideIcon; fallback: string }> = {
@@ -56,6 +57,7 @@ export default function InventoryView() {
   const [priceCurrency, setPriceCurrency] = useState<'USD' | 'KHR'>('USD')
   const [savingPrice, setSavingPrice] = useState(false)
   const [savingPhoto, setSavingPhoto] = useState(false)
+  const [toastMessage, setToastMessage] = useState('')
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('ALL')
   const [statusFilter, setStatusFilter] = useState('ALL')
@@ -274,6 +276,7 @@ export default function InventoryView() {
     try {
       const result = await api<{ item: InventoryItem }>(`/inventory/${selectedItem._id}/photo`, { method: 'DELETE' })
       updateInventoryItem(result.item)
+      setToastMessage('Product photo removed successfully.')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to remove product photo')
     } finally {
@@ -490,6 +493,7 @@ export default function InventoryView() {
           </section>
         </div>
       )}
+      <NotificationToast message={toastMessage} onDismiss={() => setToastMessage('')} />
     </>
   )
 }

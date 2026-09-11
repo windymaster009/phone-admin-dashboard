@@ -1,0 +1,154 @@
+/* ==========================================================================
+   Shared Notification Toast
+   Floating portal notifications positioned above modals and mobile viewports
+   ========================================================================== */
+
+.notification-toast,
+.pawn-toast {
+  position: fixed;
+  right: max(22px, env(safe-area-inset-right, 0px));
+  bottom: max(22px, env(safe-area-inset-bottom, 0px));
+  z-index: 2200;
+  max-width: min(420px, calc(100vw - 32px));
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: var(--radius-lg, 12px);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.45);
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: 600;
+  line-height: 1.4;
+  box-sizing: border-box;
+  animation: notification-toast-fade-in var(--dur-micro, 120ms) var(--ease-out);
+}
+
+/* Success tone */
+.notification-toast.success,
+.pawn-toast.success {
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--green) 40%, var(--border));
+  background: color-mix(in srgb, var(--green) 12%, var(--surface-solid, #151e34));
+}
+
+.notification-toast.success svg:first-child,
+.pawn-toast.success svg:first-child {
+  color: var(--green);
+  flex-shrink: 0;
+}
+
+:root[data-theme='light'] .notification-toast.success,
+:root[data-theme='light'] .pawn-toast.success {
+  color: #064e3b;
+  border-color: rgba(16, 185, 129, 0.35);
+  background: #ecfdf5;
+  box-shadow: 0 16px 36px rgba(16, 185, 129, 0.15), 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+:root[data-theme='light'] .notification-toast.success svg:first-child,
+:root[data-theme='light'] .pawn-toast.success svg:first-child {
+  color: #059669;
+}
+
+/* Error tone */
+.notification-toast.error {
+  color: var(--text);
+  border: 1px solid color-mix(in srgb, var(--red) 40%, var(--border));
+  background: color-mix(in srgb, var(--red) 12%, var(--surface-solid, #151e34));
+}
+
+.notification-toast.error svg:first-child {
+  color: var(--red);
+  flex-shrink: 0;
+}
+
+:root[data-theme='light'] .notification-toast.error {
+  color: #7f1d1d;
+  border-color: rgba(239, 68, 68, 0.35);
+  background: #fef2f2;
+  box-shadow: 0 16px 36px rgba(239, 68, 68, 0.15), 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+:root[data-theme='light'] .notification-toast.error svg:first-child {
+  color: #dc2626;
+}
+
+/* Content and controls */
+.notification-toast span,
+.pawn-toast span {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.notification-toast button,
+.pawn-toast button {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm, 7px);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.notification-toast button:hover,
+.pawn-toast button:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.notification-toast button:focus-visible,
+.pawn-toast button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
+
+:root[data-theme='light'] .notification-toast.success button,
+:root[data-theme='light'] .pawn-toast.success button {
+  color: #065f46;
+  background: rgba(5, 150, 105, 0.12);
+}
+
+:root[data-theme='light'] .notification-toast.success button:hover,
+:root[data-theme='light'] .pawn-toast.success button:hover {
+  color: #047857;
+  background: rgba(5, 150, 105, 0.22);
+}
+
+:root[data-theme='light'] .notification-toast.error button {
+  color: #991b1b;
+  background: rgba(220, 38, 38, 0.12);
+}
+
+:root[data-theme='light'] .notification-toast.error button:hover {
+  color: #7f1d1d;
+  background: rgba(220, 38, 38, 0.22);
+}
+
+/* Mobile safe area handling */
+@media (max-width: 640px) {
+  .notification-toast,
+  .pawn-toast {
+    right: max(16px, env(safe-area-inset-right, 0px));
+    left: max(16px, env(safe-area-inset-left, 0px));
+    bottom: max(16px, calc(env(safe-area-inset-bottom, 0px) + 12px));
+    max-width: none;
+  }
+}
+
+@keyframes notification-toast-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
