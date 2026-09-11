@@ -259,6 +259,80 @@ describe('PawnDetailModal component', () => {
     })
   })
 
+  it('prevents duplicate submissions by disabling the Delete button while request is running', async () => {
+    let resolveDeletePromise!: () => void
+    const deletePromise = new Promise<void>((resolve) => {
+      resolveDeletePromise = resolve
+    })
+    const handleDelete = vi.fn().mockImplementation(() => deletePromise)
+    const handleClose = vi.fn()
+    const user = userEvent.setup()
+
+    render(
+      <PawnDetailModal
+        pawn={mockPawnRecord}
+        onClose={handleClose}
+        canDelete={true}
+        onDelete={handleDelete}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /Delete contract/i }))
+    const deletePermanentBtn = screen.getByRole('button', { name: /Delete permanently/i })
+
+    // Click once to initiate deletion
+    await user.click(deletePermanentBtn)
+    expect(handleDelete).toHaveBeenCalledTimes(1)
+
+    // Button should now be disabled with busy state
+    expect(deletePermanentBtn).toBeDisabled()
+    expect(deletePermanentBtn).toHaveTextContent(/Deleting\.\.\./i)
+
+    // Attempting another click while busy should NOT trigger handleDelete again
+    await user.click(deletePermanentBtn)
+    expect(handleDelete).toHaveBeenCalledTimes(1)
+
+    // Complete the request
+    resolveDeletePromise()
+    await waitFor(() => {
+      expect(handleClose).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  it('keeps modal open and shows error alert when deletion fails', async () => {
+    const handleDelete = vi.fn().mockRejectedValue(new Error('Pawn record is locked in active audit'))
+    const handleClose = vi.fn()
+    const user = userEvent.setup()
+
+    render(
+      <PawnDetailModal
+        pawn={mockPawnRecord}
+        onClose={handleClose}
+        canDelete={true}
+        onDelete={handleDelete}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /Delete contract/i }))
+    const deletePermanentBtn = screen.getByRole('button', { name: /Delete permanently/i })
+    await user.click(deletePermanentBtn)
+
+    await waitFor(() => {
+      expect(handleDelete).toHaveBeenCalledTimes(1)
+    })
+
+    // Modal should NOT be closed
+    expect(handleClose).not.toHaveBeenCalled()
+
+    // Confirmation dialog should still be present with error alert
+    const errorAlert = screen.getByRole('alert')
+    expect(errorAlert).toBeInTheDocument()
+    expect(errorAlert).toHaveTextContent(/Pawn record is locked in active audit/i)
+
+    // Button should be re-enabled for user to retry or cancel
+    expect(deletePermanentBtn).toBeEnabled()
+  })
+
   it('closes modal when close button is clicked or Escape key is pressed', async () => {
     const handleClose = vi.fn()
     const user = userEvent.setup()

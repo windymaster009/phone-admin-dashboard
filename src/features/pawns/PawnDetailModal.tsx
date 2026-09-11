@@ -159,7 +159,7 @@ export default function PawnDetailModal({
   }
 
   async function deletePawn() {
-    if (!onDelete) return
+    if (!onDelete || deleteBusy) return
     setDeleteBusy(true)
     setDeleteError('')
     try {
@@ -528,7 +528,7 @@ export default function PawnDetailModal({
       {deleteConfirmation && (
         <DetailModalShell
           compact
-          onClose={() => setDeleteConfirmation(false)}
+          onClose={() => { if (!deleteBusy) setDeleteConfirmation(false) }}
           titleId="pawn-delete-title"
           className="pawn-delete-modal"
         >
@@ -537,7 +537,7 @@ export default function PawnDetailModal({
             title="Delete this pawn?"
             titleId="pawn-delete-title"
             description="This cannot be undone."
-            onClose={() => setDeleteConfirmation(false)}
+            onClose={() => { if (!deleteBusy) setDeleteConfirmation(false) }}
             closeLabel="Close delete confirmation"
           />
           <DetailModalBody className="pawn-delete-content">

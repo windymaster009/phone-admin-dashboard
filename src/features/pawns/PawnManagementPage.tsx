@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { AlertTriangle, ArrowUpRight, BadgeCheck, Clock3, HandCoins, MoreHorizontal, Plus, RefreshCcw, Search } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { AlertTriangle, ArrowUpRight, BadgeCheck, CheckCircle2, Clock3, HandCoins, MoreHorizontal, Plus, RefreshCcw, Search, X } from 'lucide-react'
 import { api, type SessionUser } from '../../lib/api'
 import type { Pawn, PawnAction } from '../../types/domain'
 import { comingNext, dateText, money, pawnEquivalentText, pawnMoney, pawnUsdValue, useExchangeRate } from '../../lib/presentation'
@@ -9,6 +10,7 @@ import StatusBadge from '../../components/StatusBadge'
 import SummaryStats from '../../components/SummaryStats'
 import ScannerTriggerButton, { openProductScanner } from '../../components/scanner/ScannerTriggerButton'
 import PawnDetailModal, { pawnOutstanding } from './PawnDetailModal'
+import { PAWN_CREATED_EVENT, type PawnCreatedEventDetail } from './pawnEvents'
 import './pawn-management.css'
 
 export default function PawnView({ user }: { user: SessionUser }) {
@@ -19,13 +21,36 @@ export default function PawnView({ user }: { user: SessionUser }) {
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [pawnSort, setPawnSort] = useState<'newest' | 'oldest' | 'due-soonest' | 'due-latest'>('newest')
   const [error, setError] = useState('')
+  const [successToast, setSuccessToast] = useState('')
   const exchangeRate = useExchangeRate()
+
+  useEffect(() => {
+    if (!successToast) return
+    const timer = window.setTimeout(() => setSuccessToast(''), 4000)
+    return () => window.clearTimeout(timer)
+  }, [successToast])
 
   useEffect(() => {
     api<{ pawns: Pawn[] }>('/pawns')
       .then((result) => setPawns(Array.isArray(result?.pawns) ? result.pawns : []))
       .catch((reason: Error) => setError(reason.message))
       .finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    const addCreatedPawn = (event: Event) => {
+      const createdPawn = (event as CustomEvent<PawnCreatedEventDetail>).detail?.pawn
+      if (!createdPawn?._id) return
+
+      setPawns((current) => [
+        createdPawn,
+        ...current.filter((pawn) => pawn._id !== createdPawn._id),
+      ])
+      setError('')
+    }
+
+    window.addEventListener(PAWN_CREATED_EVENT, addCreatedPawn)
+    return () => window.removeEventListener(PAWN_CREATED_EVENT, addCreatedPawn)
   }, [])
 
   const visiblePawns = pawns
@@ -71,6 +96,7 @@ export default function PawnView({ user }: { user: SessionUser }) {
     const pawnToDelete = selectedPawn
     await api<{ deleted: true; pawnNo: string }>(`/pawns/${pawnToDelete._id}`, { method: 'DELETE' })
     setPawns((current) => current.filter((pawn) => pawn._id !== pawnToDelete._id))
+    setSuccessToast('Pawn contract deleted successfully.')
   }
 
   const openPawns = pawns.filter((pawn) => ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED'].includes(pawn.status))
@@ -150,6 +176,20 @@ export default function PawnView({ user }: { user: SessionUser }) {
         </div>
       </article>
       {selectedPawn && <PawnDetailModal pawn={selectedPawn} onClose={() => setSelectedPawn(null)} onAction={updatePawn} canDelete={user.role === 'OWNER'} onDelete={deletePawn} />}
+      {successToast && createPortal(
+        <div className="pawn-toast success" role="status" aria-live="polite">
+          <CheckCircle2 size={16} aria-hidden="true" />
+          <span>{successToast}</span>
+          <button
+            type="button"
+            onClick={() => setSuccessToast('')}
+            aria-label="Dismiss message"
+          >
+            <X size={14} />
+          </button>
+        </div>,
+        document.body
+      )}
     </>
   )
 }

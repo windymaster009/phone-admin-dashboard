@@ -27,6 +27,7 @@ import {
   X,
 } from 'lucide-react'
 import { api, getSessionUser } from '../../lib/api'
+import type { Pawn } from '../../types/domain'
 import { safeStorage } from '../../lib/storage'
 import MoneyInput from '../../components/MoneyInput'
 import AutoCalculateToggle from '../../components/AutoCalculateToggle'
@@ -42,6 +43,7 @@ import OperationModalShell from './OperationModalShell'
 import CameraBarcodeReader from '../../components/scanner/CameraBarcodeReader'
 import ScannerWorkflow from '../../components/scanner/ScannerWorkflow'
 import ScannerTriggerButton, { PRODUCT_SCANNER_EVENT } from '../../components/scanner/ScannerTriggerButton'
+import { notifyPawnCreated } from '../pawns/pawnEvents'
 import { ModalKind, StockCategory, Customer, InventoryItem, RelatedPawn, Supplier, SellerType, PurchaseCurrency, SaleCurrency, PawnCurrency, PurchaseInventoryMode, PawnCustomerMode, SalePaymentMethod, SalePaymentPhase, StockAdjustmentMode, StockAdjustmentStatus, PawnValuationSnapshot, CreatedPawn, CompletedStockAdjustment, SaleDraft, SaleKhqr, CreatedSaleTrade, CompletedSale, completedSaleFromTrade, paywayImageSource, PurchaseDevice, newPurchaseDevice, canRestockExisting, localDateValue, roundPawnAmount, pawnAmountText, pawnEquivalentAmountText, money, riel, saleAmountText, inventorySalePrice, inventoryNativeSalePriceText } from './operationDomain'
 import './operation-modals.css'
 import './pawn-guide.css'
@@ -1429,8 +1431,9 @@ export default function OperationModalBridge() {
       notes: String(form.get('notes') || ''),
     }
     try {
-      const result = await api<{ pawn: CreatedPawn }>('/pawns', { method: 'POST', body: JSON.stringify(payload) })
-      setPawnCreated({ pawnNo: result.pawn.pawnNo, principal: result.pawn.principal, currency: result.pawn.currency })
+      const result = await api<{ pawn: Pawn }>('/pawns', { method: 'POST', body: JSON.stringify(payload) })
+      setPawnCreated({ pawnNo: result.pawn.pawnNo, principal: result.pawn.principal, currency: result.pawn.currency || pawnCurrency })
+      notifyPawnCreated(result.pawn)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to create pawn contract')
     } finally {
