@@ -886,13 +886,12 @@
     padding: 8px 12px max(10px, env(safe-area-inset-bottom, 0px));
   }
 
-  .pawn-detail-modal .detail-modal-footer-main,
-  .pawn-detail-modal .detail-modal-action-group,
-  .pawn-detail-modal .detail-modal-footer-secondary {
+  .pawn-detail-modal .detail-modal-footer-content,
+  .pawn-detail-modal .detail-modal-action-group {
     gap: 6px;
   }
 
-  .pawn-detail-modal .detail-modal-footer-secondary {
+  .pawn-detail-modal .detail-modal-danger-group {
     padding-top: 5px;
   }
 

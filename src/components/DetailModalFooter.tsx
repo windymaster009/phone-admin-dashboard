@@ -25,37 +25,29 @@ export default function DetailModalFooter({
     <footer className={`detail-modal-footer ${className}`.trim()}>
       {banner && <div className="detail-modal-footer-banner">{banner}</div>}
       {children ?? (
-        <>
-          {(utilityActions || transactionActions || secondaryActions) && (
-            <div className="detail-modal-footer-main">
-              {utilityActions && (
-                <div className="detail-modal-action-group detail-modal-utility-group">
-                  {utilityActions}
-                </div>
-              )}
-              {(transactionActions || secondaryActions) && (
-                <div className="detail-modal-action-group detail-modal-transaction-group">
-                  {secondaryActions}
-                  {transactionActions}
-                </div>
-              )}
+        <div className="detail-modal-footer-content">
+          {utilityActions && (
+            <div className="detail-modal-action-group detail-modal-utility-group">
+              {utilityActions}
             </div>
           )}
-          {(destructiveAction || dismissAction) && (
-            <div className="detail-modal-footer-secondary">
-              {destructiveAction && (
-                <div className="detail-modal-action-group detail-modal-danger-group">
-                  {destructiveAction}
-                </div>
-              )}
-              {dismissAction && (
-                <div className="detail-modal-action-group detail-modal-dismiss-group">
-                  {dismissAction}
-                </div>
-              )}
+          {destructiveAction && (
+            <div className="detail-modal-action-group detail-modal-danger-group">
+              {destructiveAction}
             </div>
           )}
-        </>
+          {(transactionActions || secondaryActions) && (
+            <div className="detail-modal-action-group detail-modal-transaction-group">
+              {secondaryActions}
+              {transactionActions}
+            </div>
+          )}
+          {dismissAction && (
+            <div className="detail-modal-action-group detail-modal-dismiss-group">
+              {dismissAction}
+            </div>
+          )}
+        </div>
       )}
     </footer>
   )

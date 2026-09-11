@@ -144,22 +144,22 @@ describe('DetailModal reusable component suite', () => {
 
       const utilityBtn = screen.getByRole('button', { name: 'Documents' })
       expect(utilityBtn.closest('.detail-modal-utility-group')).toBeInTheDocument()
-      expect(utilityBtn.closest('.detail-modal-footer-main')).toBeInTheDocument()
+      expect(utilityBtn.closest('.detail-modal-footer-content')).toBeInTheDocument()
 
       const payBtn = screen.getByRole('button', { name: 'Pay' })
       const viewAllBtn = screen.getByRole('button', { name: 'View All' })
       expect(payBtn.closest('.detail-modal-transaction-group')).toBeInTheDocument()
       expect(viewAllBtn.closest('.detail-modal-transaction-group')).toBeInTheDocument()
-      expect(payBtn.closest('.detail-modal-footer-main')).toBeInTheDocument()
+      expect(payBtn.closest('.detail-modal-footer-content')).toBeInTheDocument()
 
       const deleteBtn = screen.getByRole('button', { name: 'Delete' })
       expect(deleteBtn.closest('.detail-modal-danger-group')).toBeInTheDocument()
-      expect(deleteBtn.closest('.detail-modal-footer-secondary')).toBeInTheDocument()
+      expect(deleteBtn.closest('.detail-modal-footer-content')).toBeInTheDocument()
       expect(deleteBtn.closest('.detail-modal-utility-group')).toBeNull()
 
       const closeBtn = screen.getByRole('button', { name: 'Close' })
       expect(closeBtn.closest('.detail-modal-dismiss-group')).toBeInTheDocument()
-      expect(closeBtn.closest('.detail-modal-footer-secondary')).toBeInTheDocument()
+      expect(closeBtn.closest('.detail-modal-footer-content')).toBeInTheDocument()
       expect(closeBtn.closest('.detail-modal-transaction-group')).toBeNull()
     })
 
@@ -173,7 +173,7 @@ describe('DetailModal reusable component suite', () => {
       const customBtn = screen.getByRole('button', { name: 'Custom Direct Action' })
       expect(customBtn).toBeInTheDocument()
       expect(customBtn.closest('.detail-modal-footer')).toBeInTheDocument()
-      expect(document.querySelector('.detail-modal-footer-main')).toBeNull()
+      expect(document.querySelector('.detail-modal-footer-content')).toBeNull()
     })
   })
 })
