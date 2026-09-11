@@ -29,6 +29,8 @@ const loanSchema = new Schema(
     amountPaid: { type: Number, min: 0, default: 0 },
     remainingBalance: { type: Number, min: 0, required: true },
     currency: { type: String, enum: ['USD', 'KHR'], default: 'USD', index: true },
+    exchangeRate: { type: Number, min: 0 },
+    exchangeRateEstimated: { type: Boolean, default: false },
     loanDate: { type: Date, required: true, default: Date.now, index: true },
     dueDate: { type: Date, required: true, index: true },
     reminderDays: { type: Number, min: 0, max: 30, default: 3 },

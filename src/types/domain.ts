@@ -414,11 +414,15 @@ export type PurchaseReportData = {
 
 export type OperationalReportKind = 'inventory' | 'pawns' | 'loans' | 'payments' | 'services' | 'activity'
 
+export type ReportCurrencyFilter = 'ALL' | 'USD' | 'KHR'
+
 export type OperationalReportData = {
   title: string
   description: string
   meta: {
     currency?: 'USD' | 'KHR'
+    currencyFilter?: ReportCurrencyFilter
+    normalized?: boolean
     period?: { key: string; label: string; from: string; to: string }
     totalRecords: number
     limited: boolean

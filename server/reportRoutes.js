@@ -5,10 +5,10 @@ import { ActivityLog, InventoryItem, Pawn, Trade, User } from './models.js'
 import { Loan, LoanPayment } from './loanModels.js'
 import { refreshLoanStatuses } from './loanDashboardRoutes.js'
 import { ServiceCharge } from './serviceModels.js'
+import { convertToUsd, roundMoney } from './reportCurrency.js'
 
 const router = Router()
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
-const roundMoney = (value) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100
 const reportRoles = ['OWNER', 'MANAGER']
 const staffRoles = ['OWNER', 'MANAGER', 'CASHIER', 'STOCK']
 const cambodiaOffsetMs = 7 * 60 * 60 * 1000
@@ -201,11 +201,11 @@ router.get('/inventory', requireAuth, allowRoles(...reportRoles), asyncRoute(asy
 router.get('/pawns', requireAuth, allowRoles(...reportRoles), asyncRoute(async (req, res) => {
   await refreshReportPawnStatuses()
   const period = resolvePeriod(req.query, 'all_time')
-  const currency = validChoice(req.query.currency || 'USD', ['USD', 'KHR'], 'currency')
+  const currency = validChoice(req.query.currency || 'ALL', ['ALL', 'USD', 'KHR'], 'currency')
   const status = validChoice(req.query.status, ['ALL', 'ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED', 'REDEEMED', 'FORFEITED', 'CANCELLED'], 'pawn status')
   const staff = staffFilter(req.query.staff)
   const match = {
-    currency,
+    ...(currency !== 'ALL' ? { currency } : {}),
     issueDate: { $gte: period.from, $lt: period.to },
     ...(status !== 'ALL' ? { status } : {}),
     ...(staff ? { createdBy: staff } : {}),
@@ -215,9 +215,16 @@ router.get('/pawns', requireAuth, allowRoles(...reportRoles), asyncRoute(async (
     .populate('createdBy', 'name email role')
     .sort({ issueDate: -1, createdAt: -1 })
     .lean()
-  const originalPrincipal = roundMoney(pawns.reduce((sum, pawn) => sum + Number(pawn.originalPrincipal || 0), 0))
-  const outstanding = roundMoney(pawns.reduce((sum, pawn) => sum + Number(pawn.remainingPrincipal || 0), 0))
-  const collected = roundMoney(pawns.reduce((sum, pawn) => sum + Number(pawn.amountPaid || 0), 0))
+
+  const isAll = currency === 'ALL'
+  const reportingCurrency = isAll ? 'USD' : currency
+  const pawnPrincipalAmount = (pawn) => isAll ? convertToUsd(pawn.originalPrincipal, pawn.currency, pawn.exchangeRate).amountUsd : Number(pawn.originalPrincipal || 0)
+  const pawnOutstandingAmount = (pawn) => isAll ? convertToUsd(pawn.remainingPrincipal, pawn.currency, pawn.exchangeRate).amountUsd : Number(pawn.remainingPrincipal || 0)
+  const pawnPaidAmount = (pawn) => isAll ? convertToUsd(pawn.amountPaid, pawn.currency, pawn.exchangeRate).amountUsd : Number(pawn.amountPaid || 0)
+
+  const originalPrincipal = roundMoney(pawns.reduce((sum, pawn) => sum + pawnPrincipalAmount(pawn), 0))
+  const outstanding = roundMoney(pawns.reduce((sum, pawn) => sum + pawnOutstandingAmount(pawn), 0))
+  const collected = roundMoney(pawns.reduce((sum, pawn) => sum + pawnPaidAmount(pawn), 0))
   const overdue = pawns.filter((pawn) => pawn.status === 'OVERDUE').length
   const redeemed = pawns.filter((pawn) => pawn.status === 'REDEEMED').length
   const forfeited = pawns.filter((pawn) => pawn.status === 'FORFEITED').length
@@ -225,12 +232,19 @@ router.get('/pawns', requireAuth, allowRoles(...reportRoles), asyncRoute(async (
   res.json({
     title: 'Pawn Report',
     description: 'Principal, repayments, overdue exposure, redemptions, and claimed collateral.',
-    meta: { currency, period, totalRecords: pawns.length, limited: pawns.length > 500 },
+    meta: {
+      currency: reportingCurrency,
+      currencyFilter: currency,
+      normalized: isAll,
+      period,
+      totalRecords: pawns.length,
+      limited: pawns.length > 500,
+    },
     filters: { currency, status, staff: staff ? String(staff) : 'ALL' },
     staff: await reportStaff(),
     summary: [
       { label: 'Contracts', value: pawns.length, format: 'number', detail: period.label, tone: 'violet' },
-      { label: 'Principal Lent', value: originalPrincipal, format: 'currency', detail: `Recorded in ${currency}`, tone: 'blue' },
+      { label: 'Principal Lent', value: originalPrincipal, format: 'currency', detail: isAll ? 'USD equivalent across USD and KHR' : `Recorded in ${currency}`, tone: 'blue' },
       { label: 'Outstanding', value: outstanding, format: 'currency', detail: 'Remaining principal', tone: 'rose' },
       { label: 'Collected', value: collected, format: 'currency', detail: 'All recorded payments', tone: 'blue' },
       { label: 'Overdue', value: overdue, format: 'number', detail: 'Contracts needing action', tone: 'rose' },
@@ -238,17 +252,19 @@ router.get('/pawns', requireAuth, allowRoles(...reportRoles), asyncRoute(async (
     ],
     breakdowns: [
       { title: 'Contracts by Status', description: 'Contract count across the pawn lifecycle.', format: 'number', rows: breakdown(pawns, (pawn) => pawn.status) },
-      { title: 'Principal by Condition', description: 'Original principal grouped by collateral condition.', format: 'currency', rows: breakdown(pawns, (pawn) => pawn.itemSnapshot?.condition || 'UNKNOWN', (pawn) => pawn.originalPrincipal) },
+      { title: 'Principal by Condition', description: 'Original principal grouped by collateral condition.', format: 'currency', rows: breakdown(pawns, (pawn) => pawn.itemSnapshot?.condition || 'UNKNOWN', (pawn) => pawnPrincipalAmount(pawn)) },
     ],
     columns: [
       { key: 'date', label: 'Date', format: 'date' }, { key: 'reference', label: 'Pawn #' }, { key: 'party', label: 'Customer' },
-      { key: 'item', label: 'Collateral' }, { key: 'principal', label: 'Principal', format: 'currency' },
+      { key: 'item', label: 'Collateral' }, { key: 'currency', label: 'Currency', format: 'status' },
+      { key: 'principal', label: 'Principal', format: 'currency' },
       { key: 'outstanding', label: 'Outstanding', format: 'currency' }, { key: 'paid', label: 'Paid', format: 'currency' },
       { key: 'dueDate', label: 'Due Date', format: 'date' }, { key: 'staff', label: 'Staff' }, { key: 'status', label: 'Status', format: 'status' },
     ],
     rows: pawns.slice(0, 500).map((pawn) => ({
       id: pawn._id, date: pawn.issueDate || pawn.createdAt, reference: pawn.pawnNo,
       party: pawn.customer?.name || 'Unknown customer', item: pawn.itemSnapshot?.name || 'Collateral',
+      currency: pawn.currency,
       principal: pawn.originalPrincipal, outstanding: pawn.remainingPrincipal, paid: pawn.amountPaid,
       dueDate: pawn.dueDate, staff: publicStaff(pawn.createdBy), status: pawn.status,
     })),
@@ -258,31 +274,58 @@ router.get('/pawns', requireAuth, allowRoles(...reportRoles), asyncRoute(async (
 router.get('/loans', requireAuth, allowRoles(...reportRoles), asyncRoute(async (req, res) => {
   await refreshLoanStatuses()
   const period = resolvePeriod(req.query, 'all_time')
-  const currency = validChoice(req.query.currency || 'USD', ['USD', 'KHR'], 'currency')
+  const currency = validChoice(req.query.currency || 'ALL', ['ALL', 'USD', 'KHR'], 'currency')
   const status = validChoice(req.query.status, ['ALL', 'ACTIVE', 'DUE_SOON', 'OVERDUE', 'PARTIALLY_PAID', 'PAID', 'CANCELLED'], 'loan status')
   const staff = staffFilter(req.query.staff)
   const match = {
-    currency,
+    ...(currency !== 'ALL' ? { currency } : {}),
     loanDate: { $gte: period.from, $lt: period.to },
     ...(status !== 'ALL' ? { status } : {}),
     ...(staff ? { createdBy: staff } : {}),
   }
   const loans = await Loan.find(match).populate('createdBy', 'name email role').sort({ loanDate: -1, createdAt: -1 }).lean()
-  const principal = roundMoney(loans.reduce((sum, loan) => sum + Number(loan.principal || 0), 0))
-  const expected = roundMoney(loans.reduce((sum, loan) => sum + Number(loan.totalDue || 0), 0))
-  const paid = roundMoney(loans.reduce((sum, loan) => sum + Number(loan.amountPaid || 0), 0))
-  const outstanding = roundMoney(loans.reduce((sum, loan) => sum + Number(loan.remainingBalance || 0), 0))
+
+  const isAll = currency === 'ALL'
+  const reportingCurrency = isAll ? 'USD' : currency
+  let hasEstimatedKhrRate = false
+
+  const loanPrincipalAmount = (loan) => {
+    if (!isAll) return Number(loan.principal || 0)
+    const conv = convertToUsd(loan.principal, loan.currency, loan.exchangeRate)
+    if (loan.currency === 'KHR' && (conv.isFallback || loan.exchangeRateEstimated)) hasEstimatedKhrRate = true
+    return conv.amountUsd
+  }
+  const loanExpectedAmount = (loan) => isAll ? convertToUsd(loan.totalDue, loan.currency, loan.exchangeRate).amountUsd : Number(loan.totalDue || 0)
+  const loanPaidAmount = (loan) => isAll ? convertToUsd(loan.amountPaid, loan.currency, loan.exchangeRate).amountUsd : Number(loan.amountPaid || 0)
+  const loanOutstandingAmount = (loan) => isAll ? convertToUsd(loan.remainingBalance, loan.currency, loan.exchangeRate).amountUsd : Number(loan.remainingBalance || 0)
+
+  const principal = roundMoney(loans.reduce((sum, loan) => sum + loanPrincipalAmount(loan), 0))
+  const expected = roundMoney(loans.reduce((sum, loan) => sum + loanExpectedAmount(loan), 0))
+  const paid = roundMoney(loans.reduce((sum, loan) => sum + loanPaidAmount(loan), 0))
+  const outstanding = roundMoney(loans.reduce((sum, loan) => sum + loanOutstandingAmount(loan), 0))
   const overdue = loans.filter((loan) => loan.status === 'OVERDUE').length
+
+  const notes = []
+  if (isAll && hasEstimatedKhrRate) {
+    notes.push('Some KHR loan totals contain estimated USD equivalents calculated with the fallback exchange rate.')
+  }
 
   res.json({
     title: 'Loans Report',
     description: 'Money lent, expected repayment, collected payments, and overdue balances.',
-    meta: { currency, period, totalRecords: loans.length, limited: loans.length > 500 },
+    meta: {
+      currency: reportingCurrency,
+      currencyFilter: currency,
+      normalized: isAll,
+      period,
+      totalRecords: loans.length,
+      limited: loans.length > 500,
+    },
     filters: { currency, status, staff: staff ? String(staff) : 'ALL' },
     staff: await reportStaff(),
     summary: [
       { label: 'Loans', value: loans.length, format: 'number', detail: period.label, tone: 'violet' },
-      { label: 'Principal Lent', value: principal, format: 'currency', detail: `Recorded in ${currency}`, tone: 'blue' },
+      { label: 'Principal Lent', value: principal, format: 'currency', detail: isAll ? 'USD equivalent across USD and KHR' : `Recorded in ${currency}`, tone: 'blue' },
       { label: 'Expected', value: expected, format: 'currency', detail: 'Principal plus interest', tone: 'orange' },
       { label: 'Collected', value: paid, format: 'currency', detail: 'Repayments recorded', tone: 'blue' },
       { label: 'Outstanding', value: outstanding, format: 'currency', detail: 'Balance still due', tone: 'rose' },
@@ -290,66 +333,107 @@ router.get('/loans', requireAuth, allowRoles(...reportRoles), asyncRoute(async (
     ],
     breakdowns: [
       { title: 'Loans by Status', description: 'Loan count across the repayment lifecycle.', format: 'number', rows: breakdown(loans, (loan) => loan.status) },
-      { title: 'Outstanding by Reason', description: 'Remaining balance grouped by lending reason.', format: 'currency', rows: breakdown(loans, (loan) => loan.reason || 'NOT_RECORDED', (loan) => loan.remainingBalance).slice(0, 8) },
+      { title: 'Outstanding by Reason', description: 'Remaining balance grouped by lending reason.', format: 'currency', rows: breakdown(loans, (loan) => loan.reason || 'NOT_RECORDED', (loan) => loanOutstandingAmount(loan)).slice(0, 8) },
     ],
     columns: [
       { key: 'date', label: 'Date', format: 'date' }, { key: 'reference', label: 'Loan #' }, { key: 'party', label: 'Borrower' },
+      { key: 'currency', label: 'Currency', format: 'status' },
       { key: 'principal', label: 'Principal', format: 'currency' }, { key: 'expected', label: 'Expected', format: 'currency' },
       { key: 'paid', label: 'Paid', format: 'currency' }, { key: 'outstanding', label: 'Outstanding', format: 'currency' },
       { key: 'dueDate', label: 'Due Date', format: 'date' }, { key: 'staff', label: 'Staff' }, { key: 'status', label: 'Status', format: 'status' },
     ],
     rows: loans.slice(0, 500).map((loan) => ({
       id: loan._id, date: loan.loanDate || loan.createdAt, reference: loan.loanNo, party: loan.borrower?.name || 'Unknown borrower',
+      currency: loan.currency,
       principal: loan.principal, expected: loan.totalDue, paid: loan.amountPaid, outstanding: loan.remainingBalance,
       dueDate: loan.dueDate, staff: publicStaff(loan.createdBy), status: loan.status,
     })),
+    notes,
   })
 }))
 
 router.get('/payments', requireAuth, allowRoles(...reportRoles), asyncRoute(async (req, res) => {
   const period = resolvePeriod(req.query, 'this_month')
-  const currency = validChoice(req.query.currency || 'USD', ['USD', 'KHR'], 'currency')
+  const currency = validChoice(req.query.currency || 'ALL', ['ALL', 'USD', 'KHR'], 'currency')
   const method = validChoice(req.query.method, ['ALL', 'CASH', 'KHQR', 'BANK', 'CARD', 'OTHER'], 'payment method')
   const direction = validChoice(req.query.direction, ['ALL', 'IN', 'OUT'], 'payment direction')
   const methodMatch = method === 'ALL' ? {} : { paymentMethod: method }
-  const tradeDateBranches = [
-    { type: 'BUY', currency, purchaseDate: { $gte: period.from, $lt: period.to } },
-    { type: 'BUY', currency, purchaseDate: null, createdAt: { $gte: period.from, $lt: period.to } },
-  ]
-  tradeDateBranches.unshift(currency === 'KHR'
-    ? { type: 'SELL', currency: 'KHR', createdAt: { $gte: period.from, $lt: period.to } }
-    : { type: 'SELL', currency: { $ne: 'KHR' }, createdAt: { $gte: period.from, $lt: period.to } })
-  const saleCurrencyMatch = currency === 'KHR' ? { currency: 'KHR' } : { currency: { $ne: 'KHR' } }
+  const isAll = currency === 'ALL'
+  const reportingCurrency = isAll ? 'USD' : currency
+
+  const tradeDateBranches = isAll
+    ? [
+        { type: 'BUY', purchaseDate: { $gte: period.from, $lt: period.to } },
+        { type: 'BUY', purchaseDate: null, createdAt: { $gte: period.from, $lt: period.to } },
+        { type: 'SELL', createdAt: { $gte: period.from, $lt: period.to } },
+      ]
+    : [
+        { type: 'BUY', currency, purchaseDate: { $gte: period.from, $lt: period.to } },
+        { type: 'BUY', currency, purchaseDate: null, createdAt: { $gte: period.from, $lt: period.to } },
+      ]
+  if (!isAll) {
+    tradeDateBranches.unshift(currency === 'KHR'
+      ? { type: 'SELL', currency: 'KHR', createdAt: { $gte: period.from, $lt: period.to } }
+      : { type: 'SELL', currency: { $ne: 'KHR' }, createdAt: { $gte: period.from, $lt: period.to } })
+  }
+
+  const tradeReturnedMatch = isAll
+    ? {
+        status: 'RETURNED',
+        type: 'SELL',
+        $or: [
+          { createdAt: { $gte: period.from, $lt: period.to } },
+          { 'refund.refundedAt': { $gte: period.from, $lt: period.to } },
+        ],
+      }
+    : {
+        status: 'RETURNED',
+        type: 'SELL',
+        ...(currency === 'KHR' ? { currency: 'KHR' } : { currency: { $ne: 'KHR' } }),
+        $or: [
+          { createdAt: { $gte: period.from, $lt: period.to } },
+          { 'refund.refundedAt': { $gte: period.from, $lt: period.to } },
+        ],
+      }
+
+  const pawnMatch = {
+    ...(isAll ? {} : { currency }),
+    'payments.paidAt': { $gte: period.from, $lt: period.to },
+  }
+
   const [trades, loanPayments, pawnRecords] = await Promise.all([
     Trade.find({
       ...methodMatch,
       $or: [
         { status: 'COMPLETED', $or: tradeDateBranches },
-        {
-          status: 'RETURNED',
-          type: 'SELL',
-          ...saleCurrencyMatch,
-          $or: [
-            { createdAt: { $gte: period.from, $lt: period.to } },
-            { 'refund.refundedAt': { $gte: period.from, $lt: period.to } },
-          ],
-        },
+        tradeReturnedMatch,
       ],
     }).populate('customer', 'name').populate('supplier', 'name').populate('createdBy', 'name').populate('refund.refundedBy', 'name').lean(),
     LoanPayment.find({ paidAt: { $gte: period.from, $lt: period.to }, ...methodMatch })
-      .populate({ path: 'loan', select: 'loanNo borrower currency' }).populate('receivedBy', 'name').lean(),
+      .populate({ path: 'loan', select: 'loanNo borrower currency exchangeRate exchangeRateEstimated' }).populate('receivedBy', 'name').lean(),
     method === 'ALL' || method === 'OTHER'
-      ? Pawn.find({ currency, 'payments.paidAt': { $gte: period.from, $lt: period.to } })
+      ? Pawn.find(pawnMatch)
         .populate('customer', 'name').populate('payments.receivedBy', 'name').lean()
       : [],
   ])
 
   const entries = []
+  let hasEstimatedKhrRate = false
+  const normalizeAmount = (amount, sourceCurrency, exchangeRate, exchangeRateEstimated = false) => {
+    const conversion = convertToUsd(amount, sourceCurrency, exchangeRate)
+    if (isAll && sourceCurrency === 'KHR' && (conversion.isFallback || exchangeRateEstimated)) {
+      hasEstimatedKhrRate = true
+    }
+    return conversion.amountUsd
+  }
   for (const trade of trades) {
     const isPurchase = trade.type === 'BUY'
-    const amount = currency === 'KHR'
-      ? Number(trade.transactionAmountPaid || 0)
+    const tradeCurrency = trade.currency === 'KHR' ? 'KHR' : 'USD'
+    const amount = tradeCurrency === 'KHR'
+      ? Number(trade.transactionAmountPaid ?? trade.amountPaid ?? 0)
       : Number(trade.amountPaid || 0)
+    const normalizedAmount = normalizeAmount(amount, tradeCurrency, trade.exchangeRate)
+
     const transactionDate = new Date(trade.purchaseDate || trade.createdAt)
     const transactionInPeriod = transactionDate >= period.from && transactionDate < period.to
     const party = isPurchase ? trade.supplier?.name || trade.sellerSnapshot?.name || trade.customer?.name || 'Walk-in seller' : trade.customer?.name || 'Walk-in customer'
@@ -357,59 +441,89 @@ router.get('/payments', requireAuth, allowRoles(...reportRoles), asyncRoute(asyn
       entries.push({
         id: trade._id, date: transactionDate, reference: trade.tradeNo,
         party, source: isPurchase ? 'PURCHASE' : 'SALE', direction: isPurchase ? 'OUT' : 'IN', method: trade.paymentMethod,
-        amount, staff: publicStaff(trade.createdBy), status: 'COMPLETED',
+        currency: tradeCurrency,
+        amount,
+        normalizedAmount,
+        staff: publicStaff(trade.createdBy), status: 'COMPLETED',
       })
     }
     if (trade.status === 'RETURNED' && trade.refund?.refundedAt) {
       const refundedAt = new Date(trade.refund.refundedAt)
       if (refundedAt >= period.from && refundedAt < period.to) {
+        const refundAmount = Number(trade.refund.amount || 0)
+        const refundNormalizedAmount = normalizeAmount(refundAmount, tradeCurrency, trade.exchangeRate)
         entries.push({
           id: `${trade._id}-refund`, date: refundedAt, reference: trade.tradeNo,
           party, source: 'REFUND', direction: 'OUT', method: trade.paymentMethod,
-          amount: Number(trade.refund.amount || 0), staff: publicStaff(trade.refund.refundedBy), status: 'RETURNED',
+          currency: tradeCurrency,
+          amount: refundAmount,
+          normalizedAmount: refundNormalizedAmount,
+          staff: publicStaff(trade.refund.refundedBy), status: 'RETURNED',
         })
       }
     }
   }
   for (const payment of loanPayments) {
-    if (!payment.loan || payment.loan.currency !== currency) continue
+    if (!payment.loan) continue
+    const loanCurrency = payment.loan.currency === 'KHR' ? 'KHR' : 'USD'
+    if (!isAll && loanCurrency !== currency) continue
+    const amount = Number(payment.amount || 0)
+    const normalizedAmount = normalizeAmount(amount, loanCurrency, payment.loan.exchangeRate, payment.loan.exchangeRateEstimated)
     entries.push({
       id: payment._id, date: payment.paidAt, reference: payment.paymentNo,
       party: payment.loan.borrower?.name || 'Loan borrower', source: 'LOAN', direction: 'IN', method: payment.paymentMethod,
-      amount: payment.amount, staff: publicStaff(payment.receivedBy), status: 'COMPLETED',
+      currency: loanCurrency,
+      amount,
+      normalizedAmount,
+      staff: publicStaff(payment.receivedBy), status: 'COMPLETED',
     })
   }
   for (const pawn of pawnRecords) {
+    const pawnCurrency = pawn.currency === 'KHR' ? 'KHR' : 'USD'
     for (const payment of pawn.payments || []) {
       const paidAt = new Date(payment.paidAt)
       if (paidAt < period.from || paidAt >= period.to) continue
+      const amount = Number(payment.amount || 0)
+      const normalizedAmount = normalizeAmount(amount, pawnCurrency, pawn.exchangeRate)
       entries.push({
         id: payment._id, date: payment.paidAt, reference: pawn.pawnNo,
         party: pawn.customer?.name || 'Pawn customer', source: 'PAWN', direction: 'IN', method: 'OTHER',
-        amount: payment.amount, staff: publicStaff(payment.receivedBy), status: payment.type,
+        currency: pawnCurrency,
+        amount,
+        normalizedAmount,
+        staff: publicStaff(payment.receivedBy), status: payment.type,
       })
     }
   }
   const filtered = entries
     .filter((entry) => direction === 'ALL' || entry.direction === direction)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  const inflow = roundMoney(filtered.filter((entry) => entry.direction === 'IN').reduce((sum, entry) => sum + Number(entry.amount || 0), 0))
-  const outflow = roundMoney(filtered.filter((entry) => entry.direction === 'OUT').reduce((sum, entry) => sum + Number(entry.amount || 0), 0))
-  const methodRows = breakdown(filtered, (entry) => entry.method, (entry) => entry.amount)
-  const sourceRows = breakdown(filtered, (entry) => entry.source, (entry) => entry.direction === 'OUT' ? -entry.amount : entry.amount)
+
+  const entryVal = (entry) => isAll ? entry.normalizedAmount : entry.amount
+  const inflow = roundMoney(filtered.filter((entry) => entry.direction === 'IN').reduce((sum, entry) => sum + entryVal(entry), 0))
+  const outflow = roundMoney(filtered.filter((entry) => entry.direction === 'OUT').reduce((sum, entry) => sum + entryVal(entry), 0))
+  const methodRows = breakdown(filtered, (entry) => entry.method, (entry) => entryVal(entry))
+  const sourceRows = breakdown(filtered, (entry) => entry.source, (entry) => entry.direction === 'OUT' ? -entryVal(entry) : entryVal(entry))
 
   res.json({
     title: 'Payments Report',
     description: 'Cash, KHQR, bank, card, and recorded daily money movement.',
-    meta: { currency, period, totalRecords: filtered.length, limited: filtered.length > 500 },
+    meta: {
+      currency: reportingCurrency,
+      currencyFilter: currency,
+      normalized: isAll,
+      period,
+      totalRecords: filtered.length,
+      limited: filtered.length > 500,
+    },
     filters: { currency, method, direction },
     summary: [
-      { label: 'Money In', value: inflow, format: 'currency', detail: period.label, tone: 'blue' },
-      { label: 'Money Out', value: outflow, format: 'currency', detail: 'Purchases and refunds', tone: 'orange' },
-      { label: 'Net Movement', value: roundMoney(inflow - outflow), format: 'currency', detail: 'Money in minus money out', tone: 'violet' },
+      { label: 'Money In', value: inflow, format: 'currency', detail: isAll ? 'USD equivalent across USD and KHR' : period.label, tone: 'blue' },
+      { label: 'Money Out', value: outflow, format: 'currency', detail: isAll ? 'USD equivalent across USD and KHR' : 'Purchases and refunds', tone: 'orange' },
+      { label: 'Net Movement', value: roundMoney(inflow - outflow), format: 'currency', detail: isAll ? 'USD equivalent across USD and KHR' : 'Money in minus money out', tone: 'violet' },
       { label: 'Payments', value: filtered.length, format: 'number', detail: 'Recorded entries', tone: 'blue' },
-      { label: 'Cash Volume', value: roundMoney(filtered.filter((entry) => entry.method === 'CASH').reduce((sum, entry) => sum + Number(entry.amount || 0), 0)), format: 'currency', detail: 'Cash handled', tone: 'violet' },
-      { label: 'KHQR Volume', value: roundMoney(filtered.filter((entry) => entry.method === 'KHQR').reduce((sum, entry) => sum + Number(entry.amount || 0), 0)), format: 'currency', detail: 'KHQR handled', tone: 'rose' },
+      { label: 'Cash Volume', value: roundMoney(filtered.filter((entry) => entry.method === 'CASH').reduce((sum, entry) => sum + entryVal(entry), 0)), format: 'currency', detail: isAll ? 'USD equivalent across USD and KHR' : 'Cash handled', tone: 'violet' },
+      { label: 'KHQR Volume', value: roundMoney(filtered.filter((entry) => entry.method === 'KHQR').reduce((sum, entry) => sum + entryVal(entry), 0)), format: 'currency', detail: isAll ? 'USD equivalent across USD and KHR' : 'KHQR handled', tone: 'rose' },
     ],
     breakdowns: [
       { title: 'Volume by Method', description: 'Total payment volume by recorded method.', format: 'currency', rows: methodRows },
@@ -418,23 +532,35 @@ router.get('/payments', requireAuth, allowRoles(...reportRoles), asyncRoute(asyn
     columns: [
       { key: 'date', label: 'Date', format: 'dateTime' }, { key: 'reference', label: 'Reference' }, { key: 'party', label: 'Customer / Seller' },
       { key: 'source', label: 'Source', format: 'status' }, { key: 'direction', label: 'Direction', format: 'status' },
-      { key: 'method', label: 'Method', format: 'status' }, { key: 'amount', label: 'Amount', format: 'currency' },
+      { key: 'method', label: 'Method', format: 'status' }, { key: 'currency', label: 'Currency', format: 'status' },
+      { key: 'amount', label: 'Amount', format: 'currency' },
       { key: 'staff', label: 'Staff' }, { key: 'status', label: 'Status', format: 'status' },
     ],
-    rows: filtered.slice(0, 500),
-    notes: ['Pawn payments do not currently store a payment method, so they are reported as Other.'],
+    rows: filtered.slice(0, 500).map((entry) => ({
+      id: entry.id, date: entry.date, reference: entry.reference, party: entry.party,
+      source: entry.source, direction: entry.direction, method: entry.method,
+      currency: entry.currency, amount: entry.amount, staff: entry.staff, status: entry.status,
+    })),
+    notes: [
+      'Pawn payments do not currently store a payment method, so they are reported as Other.',
+      ...(isAll && hasEstimatedKhrRate
+        ? ['Some KHR payment totals contain estimated USD equivalents calculated with the fallback exchange rate.']
+        : []),
+    ],
   })
 }))
 
 router.get('/services', requireAuth, allowRoles(...reportRoles), asyncRoute(async (req, res) => {
   const period = resolvePeriod(req.query, 'this_month')
-  const currency = validChoice(req.query.currency || 'USD', ['USD', 'KHR'], 'currency')
+  const currency = validChoice(req.query.currency || 'ALL', ['ALL', 'USD', 'KHR'], 'currency')
   const status = validChoice(req.query.status || 'COMPLETED', ['ALL', 'COMPLETED', 'CANCELLED'], 'service status')
   const category = validChoice(req.query.category, ['ALL', 'ACCOUNT_SETUP', 'DEVICE_SETUP', 'DATA_TRANSFER', 'SOFTWARE', 'OTHER'], 'service category')
   const method = validChoice(req.query.method, ['ALL', 'CASH', 'KHQR', 'BANK', 'CARD', 'OTHER'], 'payment method')
   const staff = staffFilter(req.query.staff)
+  const isAll = currency === 'ALL'
+  const reportingCurrency = isAll ? 'USD' : currency
   const match = {
-    currency,
+    ...(isAll ? {} : { currency }),
     completedAt: { $gte: period.from, $lt: period.to },
     ...(status !== 'ALL' ? { status } : {}),
     ...(category !== 'ALL' ? { 'serviceSnapshot.category': category } : {}),
@@ -447,32 +573,54 @@ router.get('/services', requireAuth, allowRoles(...reportRoles), asyncRoute(asyn
     .sort({ completedAt: -1, createdAt: -1 })
     .lean()
   const completed = charges.filter((charge) => charge.status === 'COMPLETED')
-  const revenue = roundMoney(completed.reduce((sum, charge) => sum + Number(charge.total || 0), 0))
-  const discounts = roundMoney(completed.reduce((sum, charge) => sum + Number(charge.discount || 0), 0))
+
+  let hasEstimatedKhrRate = false
+  const normalizedChargeAmount = (amount, charge) => {
+    const conversion = convertToUsd(amount, charge.currency, charge.exchangeRate)
+    if (charge.currency === 'KHR' && conversion.isFallback) hasEstimatedKhrRate = true
+    return conversion.amountUsd
+  }
+  const chargeTotalAmount = (charge) => isAll
+    ? normalizedChargeAmount(charge.total, charge)
+    : Number(charge.total || 0)
+  const chargeDiscountAmount = (charge) => isAll
+    ? normalizedChargeAmount(charge.discount, charge)
+    : Number(charge.discount || 0)
+
+  const revenue = roundMoney(completed.reduce((sum, charge) => sum + chargeTotalAmount(charge), 0))
+  const discounts = roundMoney(completed.reduce((sum, charge) => sum + chargeDiscountAmount(charge), 0))
   const jobs = completed.reduce((sum, charge) => sum + Number(charge.quantity || 1), 0)
 
   res.json({
     title: 'Service Charges Report',
     description: 'Paid account setup, device assistance, data transfer, and other service work.',
-    meta: { currency, period, totalRecords: charges.length, limited: charges.length > 500 },
+    meta: {
+      currency: reportingCurrency,
+      currencyFilter: currency,
+      normalized: isAll,
+      period,
+      totalRecords: charges.length,
+      limited: charges.length > 500,
+    },
     filters: { currency, status, category, method, staff: staff ? String(staff) : 'ALL' },
     staff: await reportStaff(),
     summary: [
-      { label: 'Service Revenue', value: revenue, format: 'currency', detail: `Recorded in ${currency}`, tone: 'violet' },
+      { label: 'Service Revenue', value: revenue, format: 'currency', detail: isAll ? 'USD equivalent across USD and KHR' : `Recorded in ${currency}`, tone: 'violet' },
       { label: 'Completed Jobs', value: jobs, format: 'number', detail: period.label, tone: 'blue' },
       { label: 'Transactions', value: completed.length, format: 'number', detail: 'Completed charges', tone: 'blue' },
-      { label: 'Discounts', value: discounts, format: 'currency', detail: 'Given to customers', tone: 'orange' },
-      { label: 'Average Charge', value: completed.length ? roundMoney(revenue / completed.length) : 0, format: 'currency', detail: 'Per completed transaction', tone: 'violet' },
+      { label: 'Discounts', value: discounts, format: 'currency', detail: isAll ? 'USD equivalent across USD and KHR' : 'Given to customers', tone: 'orange' },
+      { label: 'Average Charge', value: completed.length ? roundMoney(revenue / completed.length) : 0, format: 'currency', detail: isAll ? 'USD equivalent across USD and KHR' : 'Per completed transaction', tone: 'violet' },
       { label: 'Cancelled', value: charges.filter((charge) => charge.status === 'CANCELLED').length, format: 'number', detail: 'Excluded from revenue', tone: 'rose' },
     ],
     breakdowns: [
-      { title: 'Revenue by Service', description: 'Completed service revenue by service type.', format: 'currency', rows: breakdown(completed, (charge) => charge.serviceSnapshot?.name, (charge) => charge.total) },
-      { title: 'Revenue by Payment', description: 'Completed service revenue by payment method.', format: 'currency', rows: breakdown(completed, (charge) => charge.paymentMethod, (charge) => charge.total) },
+      { title: 'Revenue by Service', description: 'Completed service revenue by service type.', format: 'currency', rows: breakdown(completed, (charge) => charge.serviceSnapshot?.name, (charge) => chargeTotalAmount(charge)) },
+      { title: 'Revenue by Payment', description: 'Completed service revenue by payment method.', format: 'currency', rows: breakdown(completed, (charge) => charge.paymentMethod, (charge) => chargeTotalAmount(charge)) },
     ],
     columns: [
       { key: 'date', label: 'Date', format: 'dateTime' }, { key: 'reference', label: 'Service #' },
       { key: 'service', label: 'Service' }, { key: 'category', label: 'Category', format: 'status' },
       { key: 'party', label: 'Customer' }, { key: 'quantity', label: 'Qty', format: 'number' },
+      { key: 'currency', label: 'Currency', format: 'status' },
       { key: 'total', label: 'Total', format: 'currency' }, { key: 'paymentMethod', label: 'Payment', format: 'status' },
       { key: 'staff', label: 'Staff' }, { key: 'status', label: 'Status', format: 'status' },
     ],
@@ -480,9 +628,15 @@ router.get('/services', requireAuth, allowRoles(...reportRoles), asyncRoute(asyn
       id: charge._id, date: charge.completedAt || charge.createdAt, reference: charge.serviceNo,
       service: charge.serviceSnapshot?.name || 'Service', category: charge.serviceSnapshot?.category || 'OTHER',
       party: charge.customer?.name || charge.customerSnapshot?.name || 'Walk-in customer', quantity: charge.quantity,
+      currency: charge.currency,
       total: charge.total, paymentMethod: charge.paymentMethod, staff: publicStaff(charge.createdBy), status: charge.status,
     })),
-    notes: ['Service notes must never contain customer passwords, one-time codes, or recovery codes.'],
+    notes: [
+      'Service notes must never contain customer passwords, one-time codes, or recovery codes.',
+      ...(isAll && hasEstimatedKhrRate
+        ? ['Some KHR service totals contain estimated USD equivalents calculated with the fallback exchange rate.']
+        : []),
+    ],
   })
 }))
 

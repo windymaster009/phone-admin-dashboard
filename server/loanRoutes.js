@@ -3,6 +3,7 @@ import mongoose from 'mongoose'
 import { allowRoles, requireAuth, writeActivity } from './auth.js'
 import { Loan, LoanPayment } from './loanModels.js'
 import { Receipt } from './receiptModels.js'
+import { resolveKhrExchangeRate } from './reportCurrency.js'
 
 const router = Router()
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
@@ -212,6 +213,9 @@ router.post('/', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (
   const interest = calculateInterest(principal, req.body.interestType, req.body.interestValue, currency)
   const totalDue = roundCurrency(principal + interest.amount, currency)
   const reminderDays = Math.min(30, Math.max(0, Number(req.body.reminderDays ?? 3)))
+  const exchangeRateResolution = currency === 'KHR'
+    ? resolveKhrExchangeRate(req.body.exchangeRate)
+    : { rate: 1, isFallback: false }
   const draft = {
     status: 'ACTIVE',
     dueDate,
@@ -232,6 +236,8 @@ router.post('/', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (
     amountPaid: 0,
     remainingBalance: totalDue,
     currency,
+    exchangeRate: exchangeRateResolution.rate,
+    exchangeRateEstimated: exchangeRateResolution.isFallback,
     loanDate,
     dueDate,
     reminderDays,
@@ -252,6 +258,8 @@ router.post('/', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (
       principal: loan.principal,
       totalDue: loan.totalDue,
       currency: loan.currency,
+      exchangeRate: loan.exchangeRate,
+      exchangeRateEstimated: loan.exchangeRateEstimated,
       dueDate: loan.dueDate,
     },
   })
@@ -274,7 +282,7 @@ router.patch('/:id', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(asy
   if (req.body.reason !== undefined) loan.reason = clean(req.body.reason)
   if (req.body.notes !== undefined) loan.notes = clean(req.body.notes)
 
-  const financialKeys = ['principal', 'interestType', 'interestValue', 'currency']
+  const financialKeys = ['principal', 'interestType', 'interestValue', 'currency', 'exchangeRate']
   if (financialKeys.some((key) => req.body[key] !== undefined)) {
     if (loan.amountPaid > 0) throw requestError(409, 'Financial terms cannot be changed after a repayment')
     const currency = req.body.currency === undefined ? loan.currency : currencyCode(req.body.currency)
@@ -292,6 +300,17 @@ router.patch('/:id', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(asy
     loan.totalDue = roundCurrency(principal + interest.amount, currency)
     loan.remainingBalance = loan.totalDue
     loan.currency = currency
+    if (currency === 'KHR') {
+      const hasExplicitRate = req.body.exchangeRate !== undefined
+      const rateResolution = resolveKhrExchangeRate(hasExplicitRate ? req.body.exchangeRate : loan.exchangeRate)
+      loan.exchangeRate = rateResolution.rate
+      loan.exchangeRateEstimated = hasExplicitRate
+        ? rateResolution.isFallback
+        : Boolean(loan.exchangeRateEstimated || rateResolution.isFallback)
+    } else {
+      loan.exchangeRate = 1
+      loan.exchangeRateEstimated = false
+    }
   }
 
   loan.status = statusForLoan(loan)

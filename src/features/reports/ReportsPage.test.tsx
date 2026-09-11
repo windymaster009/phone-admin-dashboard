@@ -314,3 +314,289 @@ describe('Customer and Supplier Report Modals (DetailModal migration)', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })
+
+describe('Operational Reports Mixed-Currency Visibility & Controls', () => {
+  const mockPawnData = {
+    title: 'Pawn Contracts',
+    description: 'Pawn collateral and principal tracking.',
+    meta: {
+      currency: 'USD',
+      currencyFilter: 'ALL',
+      normalized: true,
+      totalRecords: 2,
+      limited: false,
+      period: { key: 'all_time', label: 'All history', from: '2026-01-01', to: '2026-03-31' },
+    },
+    filters: { currency: 'ALL', period: 'all_time' },
+    summary: [
+      { label: 'Principal Lent', value: 250, format: 'currency', detail: 'USD equivalent across USD and KHR', tone: 'violet' },
+    ],
+    breakdowns: [],
+    columns: [
+      { key: 'date', label: 'Date', format: 'date' },
+      { key: 'reference', label: 'Pawn #' },
+      { key: 'party', label: 'Customer' },
+      { key: 'item', label: 'Collateral' },
+      { key: 'currency', label: 'Currency', format: 'status' },
+      { key: 'principal', label: 'Principal', format: 'currency' },
+      { key: 'outstanding', label: 'Outstanding', format: 'currency' },
+      { key: 'paid', label: 'Paid', format: 'currency' },
+      { key: 'dueDate', label: 'Due Date', format: 'date' },
+      { key: 'status', label: 'Status', format: 'status' },
+    ],
+    rows: [
+      { id: '1', reference: 'PW-001', party: 'Sokha', item: 'iPhone', currency: 'USD', principal: 100, outstanding: 75, paid: 25, dueDate: '2026-03-20', status: 'ACTIVE' },
+      { id: '2', reference: 'PW-002', party: 'Dara', item: 'Samsung', currency: 'KHR', principal: 615000, outstanding: 410000, paid: 205000, dueDate: '2026-03-21', status: 'ACTIVE' },
+    ],
+    staff: [],
+  }
+
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('Pawn report defaults to ALL, provides 3 options, sends currency=ALL, and handles currency/period independence', async () => {
+    const requestedUrls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      requestedUrls.push(url)
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => mockPawnData,
+      } as Response
+    })
+
+    window.history.pushState({}, '', '/reports/pawns')
+    const user = userEvent.setup()
+
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    // Wait for report to load
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 2, name: /Pawn Contracts/i })).toBeInTheDocument()
+    })
+
+    // 1. Check default request has currency=ALL
+    expect(requestedUrls[0]).toContain('/reports/pawns?')
+    expect(requestedUrls[0]).toContain('currency=ALL')
+    expect(requestedUrls[0]).toContain('period=all_time')
+
+    // 2. Check currency selector and options
+    const currencySelect = screen.getByLabelText(/Currency/i) as HTMLSelectElement
+    expect(currencySelect.value).toBe('ALL')
+    const options = Array.from(currencySelect.options).map((o) => ({ value: o.value, text: o.text }))
+    expect(options).toEqual([
+      { value: 'ALL', text: 'All currencies — totals in USD' },
+      { value: 'USD', text: 'USD — US Dollar' },
+      { value: 'KHR', text: 'KHR — Cambodian Riel' },
+    ])
+
+    // 3. Switch currency to USD -> sends currency=USD and retains period=all_time
+    await user.selectOptions(currencySelect, 'USD')
+    await waitFor(() => {
+      const lastUrl = requestedUrls[requestedUrls.length - 1]
+      expect(lastUrl).toContain('currency=USD')
+      expect(lastUrl).toContain('period=all_time')
+    })
+
+    // 4. Switch period to 'this_month' -> sends period=this_month and retains currency=USD
+    const periodSelect = screen.getByLabelText(/Period/i) as HTMLSelectElement
+    await user.selectOptions(periodSelect, 'this_month')
+    await waitFor(() => {
+      const lastUrl = requestedUrls[requestedUrls.length - 1]
+      expect(lastUrl).toContain('period=this_month')
+      expect(lastUrl).toContain('currency=USD')
+    })
+
+    // 5. Switch currency to KHR -> sends currency=KHR and retains period=this_month
+    await user.selectOptions(currencySelect, 'KHR')
+    await waitFor(() => {
+      const lastUrl = requestedUrls[requestedUrls.length - 1]
+      expect(lastUrl).toContain('currency=KHR')
+      expect(lastUrl).toContain('period=this_month')
+    })
+  })
+
+  it('Mixed rows display their original currencies and correct formatting', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => mockPawnData,
+      } as Response
+    })
+
+    window.history.pushState({}, '', '/reports/pawns')
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getAllByText('PW-001').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('PW-002').length).toBeGreaterThan(0)
+    })
+
+    // Summary uses reporting currency ($250)
+    expect(screen.getByText('$250')).toBeInTheDocument()
+
+    const mobileList = document.querySelector('.operational-report-mobile-list')
+    expect(mobileList).not.toBeNull()
+    const mobile = within(mobileList as HTMLElement)
+
+    // Mobile cards must retain the important financial fields, not only the first six API columns.
+    expect(mobile.getByText('$100')).toBeInTheDocument()
+    expect(mobile.getByText('615,000 KHR')).toBeInTheDocument()
+    expect(mobile.getByText('$75')).toBeInTheDocument()
+    expect(mobile.getByText('410,000 KHR')).toBeInTheDocument()
+    expect(mobile.getAllByText('Paid')).toHaveLength(2)
+  })
+
+  it('Loans, Payments, and Services also default to ALL with currency options', async () => {
+    const requestedUrls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      requestedUrls.push(String(input))
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({
+          title: 'Test Operational Report',
+          description: 'Testing operational report currency.',
+          meta: { currency: 'USD', totalRecords: 0, limited: false },
+          filters: {},
+          summary: [],
+          breakdowns: [],
+          columns: [{ key: 'id', label: 'ID' }],
+          rows: [],
+        }),
+      } as Response
+    })
+
+    // Test loans
+    window.history.pushState({}, '', '/reports/loans')
+    const { unmount: unmountLoans } = render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+    await waitFor(() => {
+      expect(requestedUrls.some((u) => u.includes('/reports/loans?') && u.includes('currency=ALL'))).toBe(true)
+    })
+    unmountLoans()
+
+    // Test payments
+    window.history.pushState({}, '', '/reports/payments')
+    const { unmount: unmountPayments } = render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+    await waitFor(() => {
+      expect(requestedUrls.some((u) => u.includes('/reports/payments?') && u.includes('currency=ALL'))).toBe(true)
+    })
+    unmountPayments()
+
+    // Test services
+    window.history.pushState({}, '', '/reports/services')
+    const { unmount: unmountServices } = render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+    await waitFor(() => {
+      expect(requestedUrls.some((u) => u.includes('/reports/services?') && u.includes('currency=ALL'))).toBe(true)
+    })
+    unmountServices()
+  })
+
+  it('Service report mobile cards keep the charge total and payment method visible', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({
+        title: 'Service Charges Report',
+        description: 'Service work.',
+        meta: { currency: 'USD', currencyFilter: 'ALL', normalized: true, totalRecords: 1, limited: false },
+        filters: { currency: 'ALL' },
+        summary: [],
+        breakdowns: [],
+        columns: [
+          { key: 'date', label: 'Date', format: 'dateTime' },
+          { key: 'reference', label: 'Service #' },
+          { key: 'service', label: 'Service' },
+          { key: 'category', label: 'Category', format: 'status' },
+          { key: 'party', label: 'Customer' },
+          { key: 'quantity', label: 'Qty', format: 'number' },
+          { key: 'currency', label: 'Currency', format: 'status' },
+          { key: 'total', label: 'Total', format: 'currency' },
+          { key: 'paymentMethod', label: 'Payment', format: 'status' },
+          { key: 'status', label: 'Status', format: 'status' },
+        ],
+        rows: [{
+          id: 'service-1', reference: 'SV-001', service: 'Data transfer', category: 'DATA_TRANSFER',
+          party: 'Dara', quantity: 1, currency: 'KHR', total: 123000, paymentMethod: 'CASH', status: 'COMPLETED',
+        }],
+      }),
+    } as Response)
+
+    window.history.pushState({}, '', '/reports/services')
+    render(<RouterProvider><ReportsPage /></RouterProvider>)
+
+    await screen.findByRole('heading', { level: 2, name: 'Service Charges Report' })
+    const mobileList = document.querySelector('.operational-report-mobile-list')
+    expect(mobileList).not.toBeNull()
+    const mobile = within(mobileList as HTMLElement)
+    expect(mobile.getByText('123,000 KHR')).toBeInTheDocument()
+    expect(mobile.getByText('Cash')).toBeInTheDocument()
+  })
+
+  it('Inventory report does not render currency selector and does not send currency parameter', async () => {
+    const requestedUrls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      requestedUrls.push(String(input))
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({
+          title: 'Inventory Report',
+          description: 'Testing inventory.',
+          meta: { currency: 'USD', totalRecords: 0, limited: false },
+          filters: {},
+          summary: [],
+          breakdowns: [],
+          columns: [{ key: 'id', label: 'ID' }],
+          rows: [],
+        }),
+      } as Response
+    })
+
+    window.history.pushState({}, '', '/reports/inventory')
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(requestedUrls.some((u) => u.includes('/reports/inventory?'))).toBe(true)
+    })
+
+    // Must NOT have currency param
+    const inventoryUrl = requestedUrls.find((u) => u.includes('/reports/inventory?'))!
+    expect(inventoryUrl).not.toContain('currency=')
+
+    // Must NOT render currency selector
+    expect(screen.queryByLabelText(/Currency/i)).not.toBeInTheDocument()
+  })
+})

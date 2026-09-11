@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArrowLeft, ArrowUpRight, BadgeCheck, Banknote, BarChart3, Building2, Boxes, Calculator, CalendarRange, ChevronDown, CircleDollarSign, FileText, HandCoins, Package, RefreshCcw, Search, ShoppingCart, Users, WalletCards, Wrench, X, type LucideIcon } from 'lucide-react'
 import { api } from '../../lib/api'
-import type { Customer, Supplier, DirectoryReportPeriodKey, CustomerActivityReport, SupplierActivityReport, Pawn, BusinessOverviewPeriod, BusinessOverviewData, SalesReportData, PurchaseReportData, OperationalReportKind, OperationalReportData } from '../../types/domain'
+import type { Customer, Supplier, DirectoryReportPeriodKey, CustomerActivityReport, SupplierActivityReport, Pawn, BusinessOverviewPeriod, BusinessOverviewData, SalesReportData, PurchaseReportData, OperationalReportKind, OperationalReportData, ReportCurrencyFilter } from '../../types/domain'
 import { currency, money, tradePartyName, purchaseSourceLabel, tradeTransactionMoney, pawnMoney, dateText, titleStatus } from '../../lib/presentation'
 import LoadingState from '../../components/LoadingState'
 import SectionHeader from '../../components/SectionHeader'
@@ -620,10 +620,11 @@ const operationalReportIcons: LucideIcon[] = [Boxes, Banknote, WalletCards, Pack
 function OperationalReportView({ kind, navigate }: { kind: OperationalReportKind; navigate: (path: string) => void }) {
   const now = new Date()
   const todayInput = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+  const isMultiCurrency = ['pawns', 'loans', 'payments', 'services'].includes(kind)
   const [period, setPeriod] = useState<BusinessOverviewPeriod | 'all_time'>(['pawns', 'loans'].includes(kind) ? 'all_time' : 'this_month')
   const [customFrom, setCustomFrom] = useState(`${todayInput.slice(0, 8)}01`)
   const [customTo, setCustomTo] = useState(todayInput)
-  const [currencyCode, setCurrencyCode] = useState<'USD' | 'KHR'>('USD')
+  const [currencyCode, setCurrencyCode] = useState<ReportCurrencyFilter>(isMultiCurrency ? 'ALL' : 'USD')
   const [status, setStatus] = useState('ALL')
   const [staff, setStaff] = useState('ALL')
   const [category, setCategory] = useState('ALL')
@@ -694,17 +695,47 @@ function OperationalReportView({ kind, navigate }: { kind: OperationalReportKind
     loans: ['ALL', 'ACTIVE', 'DUE_SOON', 'OVERDUE', 'PARTIALLY_PAID', 'PAID', 'CANCELLED'],
     services: ['ALL', 'COMPLETED', 'CANCELLED'],
   }
+  const reportingCurrency = data?.meta.currency || 'USD'
+  const mobileColumnKeys: Record<OperationalReportKind, string[]> = {
+    inventory: ['category', 'quantity', 'reorderLevel', 'buyPrice', 'sellPrice', 'source'],
+    pawns: ['party', 'item', 'principal', 'paid', 'outstanding', 'dueDate'],
+    loans: ['party', 'principal', 'expected', 'paid', 'outstanding', 'dueDate'],
+    payments: ['date', 'party', 'source', 'direction', 'method', 'amount'],
+    services: ['service', 'category', 'party', 'quantity', 'total', 'paymentMethod'],
+    activity: ['date', 'action', 'entity', 'staff', 'role'],
+  }
+  const columnsByKey = new Map((data?.columns || []).map((column) => [column.key, column]))
+  const mobileColumns = mobileColumnKeys[kind]
+    .map((key) => columnsByKey.get(key))
+    .filter((column): column is OperationalReportData['columns'][number] => Boolean(column))
   const valueText = (value: number, format: 'currency' | 'number') => format === 'currency'
-    ? pawnMoney(value, data?.meta.currency || 'USD')
+    ? pawnMoney(value, reportingCurrency)
     : Number(value || 0).toLocaleString()
+
   const cellContent = (row: Record<string, string | number | null | undefined>, column: OperationalReportData['columns'][number]) => {
     const value = row[column.key]
     if (column.format === 'status') return <StatusBadge status={String(value || 'Unknown')} />
-    if (column.format === 'currency') return <strong>{pawnMoney(Number(value || 0), data?.meta.currency || 'USD')}</strong>
+    if (column.format === 'currency') {
+      const rowCurrency = (row.currency === 'USD' || row.currency === 'KHR')
+        ? row.currency
+        : (data?.meta.currency || 'USD')
+      return <strong>{pawnMoney(Number(value || 0), rowCurrency)}</strong>
+    }
     if (column.format === 'number') return Number(value || 0).toLocaleString()
     if (column.format === 'dateTime') return value ? new Date(String(value)).toLocaleString() : '—'
     if (column.format === 'date') return value ? dateText(String(value)) : '—'
     return String(value ?? '—')
+  }
+
+  const getEmptyMessage = () => {
+    const currencyPrefix = currencyCode === 'ALL' ? '' : `${currencyCode} `
+    if (kind === 'pawns') return `No ${currencyPrefix}pawn contracts match these filters.`
+    if (kind === 'loans') return `No ${currencyPrefix}loan records match these filters.`
+    if (kind === 'services') return `No ${currencyPrefix}service charges match these filters.`
+    if (kind === 'payments') return `No ${currencyPrefix}payment records match the selected period and filters.`
+    if (kind === 'inventory') return 'No inventory items match these filters.'
+    if (kind === 'activity') return 'No activity logs match these filters.'
+    return 'No records match these filters.'
   }
 
   if (loading && !data) {
@@ -724,7 +755,19 @@ function OperationalReportView({ kind, navigate }: { kind: OperationalReportKind
           <label><span>Source</span><select value={source} onChange={(event) => setSource(event.target.value)}>{['ALL', 'SUPPLIER', 'CUSTOMER', 'PAWN_FORFEIT', 'OTHER'].map((value) => <option key={value} value={value}>{value === 'ALL' ? 'All sources' : titleStatus(value)}</option>)}</select></label>
           <label><span>Stock level</span><select value={stock} onChange={(event) => setStock(event.target.value)}><option value="ALL">All stock levels</option><option value="AVAILABLE">Available</option><option value="LOW">Low stock</option><option value="OUT">Out of stock</option></select></label>
         </>}
-        {['pawns', 'loans', 'payments', 'services'].includes(kind) && <label><span>Currency</span><select value={currencyCode} onChange={(event) => setCurrencyCode(event.target.value as 'USD' | 'KHR')}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Cambodian Riel</option></select></label>}
+        {isMultiCurrency && (
+          <label>
+            <span>Currency</span>
+            <select
+              value={currencyCode}
+              onChange={(event) => setCurrencyCode(event.target.value as ReportCurrencyFilter)}
+            >
+              <option value="ALL">All currencies — totals in USD</option>
+              <option value="USD">USD — US Dollar</option>
+              <option value="KHR">KHR — Cambodian Riel</option>
+            </select>
+          </label>
+        )}
         {['pawns', 'loans'].includes(kind) && <>
           <label><span>Status</span><select value={status} onChange={(event) => setStatus(event.target.value)}>{statusOptions[kind as 'pawns' | 'loans'].map((value) => <option key={value} value={value}>{value === 'ALL' ? 'All statuses' : titleStatus(value)}</option>)}</select></label>
           <label><span>Staff</span><select value={staff} onChange={(event) => setStaff(event.target.value)}><option value="ALL">All staff</option>{(data?.staff || []).map((person) => <option key={person._id} value={person._id}>{person.name}</option>)}</select></label>
@@ -773,8 +816,8 @@ function OperationalReportView({ kind, navigate }: { kind: OperationalReportKind
 
       <section className="surface-card table-card operational-report-table-card">
         <div className="card-heading table-heading"><div><span className="eyebrow">Report detail</span><h3>{data?.title || 'Report'} Records</h3><p>{data?.meta.limited ? `Showing the latest 500 of ${data.meta.totalRecords} records.` : `${data?.meta.totalRecords || 0} matching records.`}</p></div></div>
-        <div className="table-scroll operational-report-desktop-table"><table><thead><tr>{(data?.columns || []).map((column) => <th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{(data?.rows || []).map((row, rowIndex) => <tr key={String(row.id || rowIndex)}>{data?.columns.map((column) => <td key={column.key}>{cellContent(row, column)}</td>)}</tr>)}{data?.rows.length === 0 && <tr><td colSpan={data?.columns.length || 1}>No records match these filters.</td></tr>}</tbody></table></div>
-        <div className="operational-report-mobile-list">{(data?.rows || []).map((row, rowIndex) => <article key={String(row.id || rowIndex)}><header><strong>{String(row.reference || row.name || row.sku || `Record ${rowIndex + 1}`)}</strong>{row.status && <StatusBadge status={String(row.status)} />}</header><div>{data?.columns.slice(0, 6).map((column) => <span key={column.key}>{column.label}<strong>{cellContent(row, column)}</strong></span>)}</div></article>)}{data?.rows.length === 0 && <p className="mobile-record-empty">No records match these filters.</p>}</div>
+        <div className="table-scroll operational-report-desktop-table"><table><thead><tr>{(data?.columns || []).map((column) => <th key={column.key}>{column.label}</th>)}</tr></thead><tbody>{(data?.rows || []).map((row, rowIndex) => <tr key={String(row.id || rowIndex)}>{data?.columns.map((column) => <td key={column.key}>{cellContent(row, column)}</td>)}</tr>)}{data?.rows.length === 0 && <tr><td colSpan={data?.columns.length || 1}>{getEmptyMessage()}</td></tr>}</tbody></table></div>
+        <div className="operational-report-mobile-list">{(data?.rows || []).map((row, rowIndex) => <article key={String(row.id || rowIndex)}><header><strong>{String(row.reference || row.name || row.sku || `Record ${rowIndex + 1}`)}</strong>{row.status && <StatusBadge status={String(row.status)} />}</header><div>{mobileColumns.map((column) => <span key={column.key}>{column.label}<strong>{cellContent(row, column)}</strong></span>)}</div></article>)}{data?.rows.length === 0 && <p className="mobile-record-empty">{getEmptyMessage()}</p>}</div>
       </section>
       {(data?.notes || []).map((note) => <p className="report-hub-note" key={note}><AlertTriangle size={15} />{note}</p>)}
     </div>
@@ -813,4 +856,3 @@ export default function ReportsView() {
   if (slug && reportSections.some((item) => item.slug === slug)) return <UpcomingReportView slug={slug} navigate={navigate} />
   return <ReportLanding navigate={navigate} />
 }
-

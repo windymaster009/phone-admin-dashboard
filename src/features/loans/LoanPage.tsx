@@ -29,6 +29,7 @@ import OperationWorkflowFooter from '../../components/OperationWorkflowFooter'
 import OperationSectionCard from '../../components/OperationSectionCard'
 import SegmentedControl from '../../components/SegmentedControl'
 import KeyValueSummary from '../../components/KeyValueSummary'
+import { useExchangeRate } from '../../lib/presentation'
 
 type Currency = 'USD' | 'KHR'
 type LoanStatus = 'ACTIVE' | 'DUE_SOON' | 'OVERDUE' | 'PARTIALLY_PAID' | 'PAID' | 'CANCELLED'
@@ -54,6 +55,8 @@ type Loan = {
   amountPaid: number
   remainingBalance: number
   currency: Currency
+  exchangeRate?: number
+  exchangeRateEstimated?: boolean
   loanDate: string
   dueDate: string
   reminderDays: number
@@ -914,6 +917,7 @@ export interface LoanPageProps {
 }
 
 export default function LoanPage({ summary: externalSummary, onSummary }: LoanPageProps = {}) {
+  const exchangeRate = useExchangeRate()
   const [internalSummary, setInternalSummary] = useState<LoanSummary>(emptySummary)
   const summary = externalSummary || internalSummary
   const [loans, setLoans] = useState<Loan[]>([])
@@ -958,6 +962,7 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
   async function createLoan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = new FormData(event.currentTarget)
+    const loanCurrency = form.get('currency') === 'KHR' ? 'KHR' : 'USD'
     setBusy(true)
     setModalError('')
     try {
@@ -969,7 +974,8 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
           address: String(form.get('address') || '').trim(),
         },
         principal: Number(form.get('principal') || 0),
-        currency: form.get('currency'),
+        currency: loanCurrency,
+        exchangeRate: loanCurrency === 'KHR' ? exchangeRate?.usdKhr : 1,
         interestType: form.get('interestType'),
         interestValue: Number(form.get('interestValue') || 0),
         loanDate: form.get('loanDate'),
