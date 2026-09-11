@@ -3,28 +3,48 @@
  * Core tokens, shell layout, scrollable body, and responsive action bar.
  */
 
-.detail-modal-backdrop {
+.detail-modal-backdrop,
+.modal-backdrop:has(.detail-modal) {
+  --modal-desktop-top-space: max(20px, env(safe-area-inset-top, 0px));
+  --modal-desktop-bottom-space: max(20px, env(safe-area-inset-bottom, 0px));
   --modal-mobile-top-space: max(16px, env(safe-area-inset-top, 0px));
-  --modal-mobile-bottom-space: max(16px, env(safe-area-inset-bottom, 0px));
+  --modal-mobile-bottom-space: max(100px, calc(env(safe-area-inset-bottom, 0px) + 72px));
   position: fixed;
-  inset: 0;
+  top: var(--modal-viewport-top, 0px);
+  left: var(--modal-viewport-left, 0px);
+  width: var(--modal-viewport-width, 100vw);
+  height: var(--modal-viewport-height, var(--operation-viewport-height, 100dvh));
   z-index: var(--z-modal, 1000);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px 16px;
+  padding:
+    var(--modal-desktop-top-space)
+    max(16px, env(safe-area-inset-right, 0px))
+    var(--modal-desktop-bottom-space)
+    max(16px, env(safe-area-inset-left, 0px));
   background: rgba(3, 7, 18, 0.76);
   backdrop-filter: blur(10px);
   overflow-y: auto;
   overscroll-behavior: contain;
+  box-sizing: border-box;
 }
 
 .detail-modal {
   width: min(800px, 100%);
-  max-height: min(860px, calc(var(--modal-viewport-height, var(--operation-viewport-height, 100dvh)) - 48px));
+  max-height: min(
+    860px,
+    calc(
+      var(--modal-viewport-height, var(--operation-viewport-height, 100dvh))
+      - var(--modal-desktop-top-space, 20px)
+      - var(--modal-desktop-bottom-space, 20px)
+    )
+  );
+  margin-block: auto;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  box-sizing: border-box;
   border: 1px solid var(--border);
   border-radius: var(--radius-2xl, 20px);
   background: var(--surface-solid);
@@ -33,7 +53,14 @@
 
 .detail-modal-compact {
   width: min(480px, 100%);
-  max-height: min(520px, calc(var(--modal-viewport-height, var(--operation-viewport-height, 100dvh)) - 48px));
+  max-height: min(
+    520px,
+    calc(
+      var(--modal-viewport-height, var(--operation-viewport-height, 100dvh))
+      - var(--modal-desktop-top-space, 20px)
+      - var(--modal-desktop-bottom-space, 20px)
+    )
+  );
 }
 
 /* Header */
@@ -220,8 +247,9 @@
 
 /* Mobile Layout (<= 640px) */
 @media (max-width: 640px) {
-  .detail-modal-backdrop {
-    align-items: end;
+  .detail-modal-backdrop,
+  .modal-backdrop:has(.detail-modal) {
+    align-items: flex-end;
     padding:
       var(--modal-mobile-top-space)
       max(12px, env(safe-area-inset-right, 0px))
@@ -236,12 +264,22 @@
       - var(--modal-mobile-top-space)
       - var(--modal-mobile-bottom-space)
     );
+    margin-block: 0;
     border-radius: 20px 20px 0 0;
   }
 
   .detail-modal-compact {
     border-radius: 16px;
+    margin-block: auto;
     align-self: center;
+    max-height: min(
+      520px,
+      calc(
+        var(--modal-viewport-height, var(--operation-viewport-height, 100dvh))
+        - var(--modal-mobile-top-space)
+        - var(--modal-mobile-bottom-space)
+      )
+    );
   }
 
   .detail-modal-header {

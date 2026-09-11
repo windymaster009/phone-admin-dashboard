@@ -167,7 +167,7 @@
   .chart-shell:not(.daily-chart) .chart-column span { width: 12px; }
   .modal-backdrop { padding: 12px; align-items: end; }
   .detail-grid, .detail-sections { grid-template-columns: 1fr; }
-  .detail-modal { max-height: calc(100vh - 24px); }
+  .detail-modal { max-height: calc(var(--modal-viewport-height, var(--operation-viewport-height, 100dvh)) - 24px); }
   .detail-modal:not(.pawn-detail-modal) .detail-modal-footer { flex-wrap: wrap; }
 }
 

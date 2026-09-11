@@ -53,7 +53,7 @@
 
 .pawn-delete-modal {
   width: min(460px, 100%);
-  max-height: min(480px, calc(100vh - 48px));
+  max-height: min(480px, calc(var(--modal-viewport-height, var(--operation-viewport-height, 100dvh)) - 48px));
   overflow: hidden;
 }
 
@@ -693,15 +693,9 @@
   /* Hallmark · component: pawn contract detail · genre: modern-minimal
    * Mobile action-first sheet: the money action stays ahead of supporting contract data.
    */
-  .modal-backdrop:has(.pawn-detail-modal),
-  .modal-backdrop:has(.pawn-delete-modal) {
-    align-items: center;
-    padding: max(12px, env(safe-area-inset-top, 0px)) 12px max(76px, calc(env(safe-area-inset-bottom, 0px) + 64px));
-  }
-
   .pawn-delete-modal {
     width: min(100%, 430px);
-    max-height: min(68dvh, 520px);
+    max-height: min(520px, calc(var(--modal-viewport-height, var(--operation-viewport-height, 100dvh)) - 32px));
   }
 
   .pawn-delete-content {
@@ -721,8 +715,6 @@
 
   .pawn-detail-modal {
     width: min(100%, 500px);
-    height: min(84dvh, 730px);
-    max-height: calc(100dvh - 64px);
     border-radius: 16px;
   }
 

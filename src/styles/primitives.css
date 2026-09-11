@@ -968,7 +968,7 @@ td strong {
 
 .detail-modal {
   width: min(760px, 100%);
-  max-height: min(760px, calc(100vh - 48px));
+  max-height: min(760px, calc(var(--modal-viewport-height, var(--operation-viewport-height, 100dvh)) - 48px));
   overflow: auto;
   scrollbar-width: none;
   border: 1px solid var(--border);

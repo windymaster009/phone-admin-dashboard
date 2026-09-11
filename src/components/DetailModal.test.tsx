@@ -77,6 +77,54 @@ describe('DetailModal reusable component suite', () => {
       const backdrop = document.querySelector('.detail-modal-backdrop') as HTMLElement
       expect(backdrop.style.getPropertyValue('--modal-viewport-height')).toBeTruthy()
       expect(backdrop.style.getPropertyValue('--operation-viewport-height')).toBeTruthy()
+      expect(backdrop.style.getPropertyValue('--modal-viewport-top')).toBeTruthy()
+      expect(backdrop.style.getPropertyValue('--modal-viewport-width')).toBeTruthy()
+    })
+
+    it('adapts CSS variables across various desktop, tablet, mobile, and zoomed viewports', () => {
+      const viewports = [
+        { width: 1440, height: 900, top: 0 },
+        { width: 1366, height: 768, top: 0 },
+        { width: 1024, height: 600, top: 0 },
+        { width: 768, height: 1024, top: 0 },
+        { width: 390, height: 844, top: 0 },
+        { width: 375, height: 667, top: 0 },
+        { width: 1309, height: 818, top: 10 }, // Zoom 110%
+        { width: 1152, height: 720, top: 15 }, // Zoom 125%
+      ]
+
+      const { unmount } = render(
+        <DetailModalShell onClose={vi.fn()}>
+          <div>Viewport Test Content</div>
+        </DetailModalShell>,
+      )
+
+      const backdrop = document.querySelector('.detail-modal-backdrop') as HTMLElement
+
+      for (const vp of viewports) {
+        window.visualViewport = {
+          width: vp.width,
+          height: vp.height,
+          offsetTop: vp.top,
+          offsetLeft: 0,
+          pageTop: 0,
+          pageLeft: 0,
+          scale: 1,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+          onresize: null,
+          onscroll: null,
+        } as unknown as VisualViewport
+
+        window.dispatchEvent(new Event('resize'))
+
+        expect(backdrop.style.getPropertyValue('--modal-viewport-height')).toBe(`${vp.height}px`)
+        expect(backdrop.style.getPropertyValue('--modal-viewport-width')).toBe(`${vp.width}px`)
+        expect(backdrop.style.getPropertyValue('--modal-viewport-top')).toBe(`${vp.top}px`)
+      }
+
+      unmount()
     })
   })
 
