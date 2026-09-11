@@ -3317,10 +3317,149 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
   res.status(201).json({ trade })
 }))
 
-router.get('/activity-logs', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (_req, res) => {
+const ACTIVITY_ENTITY_GROUPS = {
+  TRADE: ['TRADE'],
+  PAWN: ['PAWN'],
+  LOAN: ['LOAN', 'LOAN_PAYMENT'],
+  INVENTORY: ['INVENTORY'],
+  CUSTOMER: ['CUSTOMER'],
+  SUPPLIER: ['SUPPLIER'],
+  SERVICE: ['SERVICE_OFFERING', 'SERVICE_CHARGE'],
+  CUSTOMER_DOCUMENT: ['CUSTOMER_DOCUMENT'],
+  RECEIPT: ['RECEIPT'],
+  BACKUP: ['BACKUP'],
+  USER: ['USER'],
+  AUTH_SESSION: ['AUTH_SESSION'],
+}
+
+
+router.get('/activity-logs', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
   await refreshPawnStatuses()
-  const logs = await ActivityLog.find().populate('user', 'name email role').sort({ createdAt: -1 }).limit(300)
-  res.json({ logs })
+
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 30))
+  const entityParam = String(req.query.entity || 'ALL').toUpperCase()
+  const actionParam = String(req.query.action || 'ALL').toUpperCase()
+  const search = String(req.query.search || req.query.q || '').trim()
+  const since = req.query.since ? new Date(req.query.since) : null
+
+  const match = {}
+
+  if (entityParam !== 'ALL') {
+    if (ACTIVITY_ENTITY_GROUPS[entityParam]) {
+      match.entity = { $in: ACTIVITY_ENTITY_GROUPS[entityParam] }
+    } else {
+      match.entity = entityParam
+    }
+  }
+
+  if (actionParam !== 'ALL') {
+    match.action = actionParam
+  }
+
+  if (since && !Number.isNaN(since.getTime())) {
+    match.createdAt = { $gt: since }
+  }
+
+  if (search) {
+    const term = escapeRegex(search)
+    const regex = new RegExp(term, 'i')
+
+    const matchingUsers = await User.find({
+      $or: [{ name: regex }, { email: regex }],
+    }).select('_id').lean()
+    const userIds = matchingUsers.map((u) => u._id)
+
+    match.$or = [
+      { action: regex },
+      { entity: regex },
+      { ipAddress: regex },
+      { 'details.tradeNo': regex },
+      { 'details.pawnNo': regex },
+      { 'details.loanNo': regex },
+      { 'details.paymentNo': regex },
+      { 'details.sku': regex },
+      { 'details.customerName': regex },
+      { 'details.name': regex },
+      { 'details.phone': regex },
+      { 'details.note': regex },
+      ...(userIds.length > 0 ? [{ user: { $in: userIds } }] : []),
+    ]
+  }
+
+  let cursorFilter = {}
+  if (req.query.cursor) {
+    try {
+      const parsed = JSON.parse(Buffer.from(req.query.cursor, 'base64').toString('utf8'))
+      if (parsed.createdAt && parsed.id) {
+        cursorFilter = {
+          $or: [
+            { createdAt: { $lt: new Date(parsed.createdAt) } },
+            { createdAt: new Date(parsed.createdAt), _id: { $lt: parsed.id } },
+          ],
+        }
+      }
+    } catch {
+      const cursorDate = new Date(req.query.cursor)
+      if (!Number.isNaN(cursorDate.getTime())) {
+        cursorFilter = { createdAt: { $lt: cursorDate } }
+      }
+    }
+  }
+
+  const query = { ...match, ...cursorFilter }
+  const items = await ActivityLog.find(query)
+    .populate('user', 'name email role')
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(limit + 1)
+    .lean()
+
+  const hasMore = items.length > limit
+  const logs = hasMore ? items.slice(0, limit) : items
+
+  let nextCursor = null
+  if (hasMore && logs.length > 0) {
+    const last = logs[logs.length - 1]
+    nextCursor = Buffer.from(JSON.stringify({ createdAt: last.createdAt, id: last._id })).toString('base64')
+  }
+
+  const [totalCount, distinctActions, distinctEntities] = await Promise.all([
+    ActivityLog.countDocuments(match),
+    ActivityLog.distinct('action'),
+    ActivityLog.distinct('entity'),
+  ])
+
+  res.json({
+    logs,
+    nextCursor,
+    hasMore,
+    totalCount,
+    filterOptions: {
+      groups: Object.keys(ACTIVITY_ENTITY_GROUPS),
+      actions: distinctActions.sort(),
+      entities: distinctEntities.sort(),
+    },
+  })
+}))
+
+router.post('/settings/purge-expired-activity', requireAuth, allowRoles('OWNER'), asyncRoute(async (req, res) => {
+  const now = new Date()
+  const result = await ActivityLog.deleteMany({ expiresAt: { $lte: now } })
+  const purgedCount = result.deletedCount || 0
+
+  await writeActivity(req, {
+    action: 'DELETE',
+    entity: 'SYSTEM',
+    details: {
+      type: 'PURGE_EXPIRED_ACTIVITY',
+      purgedCount,
+      purgedAt: now.toISOString(),
+    },
+  })
+
+  res.json({
+    purgedCount,
+    message: `${purgedCount} expired activity record${purgedCount === 1 ? '' : 's'} purged successfully.`,
+  })
 }))
 
 export default router

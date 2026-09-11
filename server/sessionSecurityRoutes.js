@@ -406,14 +406,60 @@ router.post('/security/sessions/revoke-all', requireAuth, asyncRoute(async (req,
 }))
 
 router.get('/security/events', requireAuth, asyncRoute(async (req, res) => {
-  const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20))
-  const events = await ActivityLog.find({ user: req.user._id, entity: 'AUTH_SESSION' })
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20))
+  const filter = String(req.query.filter || 'ALL').toUpperCase()
+  const baseMatch = { user: req.user._id, entity: 'AUTH_SESSION' }
+
+  if (filter === 'SIGN_IN') {
+    baseMatch.action = { $in: ['LOGIN', 'ANDROID_PAIRED'] }
+  } else if (filter === 'FAILED_SIGN_IN') {
+    baseMatch.action = 'LOGIN_FAILED'
+  } else if (filter === 'SIGN_OUT') {
+    baseMatch.action = { $in: ['LOGOUT', 'SESSION_REVOKED', 'OTHER_SESSIONS_REVOKED', 'ALL_SESSIONS_REVOKED'] }
+  } else if (filter === 'TWO_FACTOR') {
+    baseMatch.action = { $regex: '^TWO_FACTOR' }
+  }
+
+  let cursorFilter = {}
+  if (req.query.cursor) {
+    try {
+      const parsed = JSON.parse(Buffer.from(req.query.cursor, 'base64').toString('utf8'))
+      if (parsed.createdAt && parsed.id) {
+        cursorFilter = {
+          $or: [
+            { createdAt: { $lt: new Date(parsed.createdAt) } },
+            { createdAt: new Date(parsed.createdAt), _id: { $lt: parsed.id } },
+          ],
+        }
+      }
+    } catch {
+      const cursorDate = new Date(req.query.cursor)
+      if (!Number.isNaN(cursorDate.getTime())) {
+        cursorFilter = { createdAt: { $lt: cursorDate } }
+      }
+    }
+  }
+
+  const query = { ...baseMatch, ...cursorFilter }
+  const items = await ActivityLog.find(query)
     .select('action details ipAddress createdAt')
-    .sort({ createdAt: -1 })
-    .limit(limit)
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(limit + 1)
     .lean()
+
+  const hasMore = items.length > limit
+  const events = hasMore ? items.slice(0, limit) : items
+
+  let nextCursor = null
+  if (hasMore && events.length > 0) {
+    const last = events[events.length - 1]
+    nextCursor = Buffer.from(JSON.stringify({ createdAt: last.createdAt, id: last._id })).toString('base64')
+  }
+
+  const totalCount = await ActivityLog.countDocuments(baseMatch)
+
   res.setHeader('Cache-Control', 'private, no-store')
-  res.json({ events })
+  res.json({ events, nextCursor, hasMore, totalCount })
 }))
 
 export default router

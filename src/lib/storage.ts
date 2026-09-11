@@ -90,6 +90,21 @@ export const safeStorage = {
     inMemoryStores[storageType].delete(key)
   },
 
+  clear(storageType: StorageType = 'local'): void {
+    const storage = getNativeStorage(storageType)
+    if (storage) {
+      try {
+        storage.clear()
+      } catch (error) {
+        reportFrontendError(error, {
+          operation: 'storage_clear_error',
+          context: { storageType },
+        })
+      }
+    }
+    inMemoryStores[storageType].clear()
+  },
+
   getJSON<T>(
     key: string,
     fallback: T,
@@ -213,4 +228,16 @@ export function setStoredValuations(valuations: unknown[]): void {
 
 export function clearStoredValuations(): void {
   safeStorage.removeItem(STORAGE_KEYS.VALUATIONS)
+}
+
+export function getActivityLastSeenKey(userId?: string): string {
+  return userId ? `phoneflow_activity_last_seen_${userId}` : 'phoneflow_activity_last_seen'
+}
+
+export function getActivityClearedKey(userId?: string): string {
+  return userId ? `phoneflow_activity_cleared_at_${userId}` : 'phoneflow_activity_cleared_at'
+}
+
+export function getSecurityClearedKey(userId?: string): string {
+  return userId ? `phoneflow_security_cleared_at_${userId}` : 'phoneflow_security_cleared_at'
 }

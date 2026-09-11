@@ -289,3 +289,145 @@ describe('SecurityWorkspacePage delete and revocation flows', () => {
     expect(screen.queryByText('Staff account deleted successfully.')).not.toBeInTheDocument()
   })
 })
+
+describe('SecurityWorkspacePage security activity feed and filters', () => {
+  const mockSecurityEvents = [
+    {
+      id: 'sec-1',
+      _id: 'sec-1',
+      action: 'LOGIN',
+      entity: 'AUTH_SESSION',
+      user: 'Owner User',
+      createdAt: new Date(Date.now() - 5000).toISOString(),
+      details: { deviceName: 'Chrome on Mac' },
+      ipAddress: '127.0.0.1',
+    },
+    {
+      id: 'sec-2',
+      _id: 'sec-2',
+      action: 'LOGIN_FAILED',
+      entity: 'AUTH_SESSION',
+      user: 'Unknown',
+      createdAt: new Date(Date.now() - 15000).toISOString(),
+      details: { email: 'bad@attempt.com' },
+      ipAddress: '::1',
+    },
+  ]
+
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    localStorage.clear()
+    sessionStorage.clear()
+    setStoredSessionUser(mockOwnerUser)
+  })
+
+  it('renders security activity with formatted local device and supports category filtering', async () => {
+    const user = userEvent.setup()
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/security/events')) {
+        const urlObj = new URL(url, 'http://localhost')
+        const cat = urlObj.searchParams.get('filter') || urlObj.searchParams.get('category')
+        const list = cat === 'FAILED_SIGN_IN'
+          ? [mockSecurityEvents[1]]
+          : mockSecurityEvents
+
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ events: list, nextCursor: null, hasMore: false }),
+        } as Response
+      }
+      if (url.includes('/api/security/sessions')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ sessions: mockSessions }) } as Response
+      }
+      if (url.includes('/api/users')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ users: mockStaffUsers }) } as Response
+      }
+      if (url.includes('/api/security/two-factor')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ enabled: false }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    render(<SecurityWorkspacePage />)
+
+    // Verify events render with natural labels
+    expect(await screen.findByText('Signed in')).toBeInTheDocument()
+    expect(screen.getByText('Failed sign-in')).toBeInTheDocument()
+
+    // 127.0.0.1 and ::1 are formatted as Local device
+    const localDeviceElements = screen.getAllByText(/Local device/i)
+    expect(localDeviceElements.length).toBeGreaterThanOrEqual(1)
+
+    // Click "Failed" filter chip
+    const failedChip = screen.getByRole('button', { name: /^Failed$/i })
+    await user.click(failedChip)
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining('filter=FAILED_SIGN_IN'),
+        expect.anything()
+      )
+    })
+
+    expect(screen.getByText('Failed sign-in')).toBeInTheDocument()
+    expect(screen.queryByText('Signed in')).not.toBeInTheDocument()
+  })
+
+  it('supports Clear from view without deleting database records, and supports Undo', async () => {
+    const user = userEvent.setup()
+    let deleteCalled = false
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const method = (init?.method || 'GET').toUpperCase()
+      if (method === 'DELETE') deleteCalled = true
+
+      const url = String(input)
+      if (url.includes('/api/security/events')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ events: mockSecurityEvents, nextCursor: null, hasMore: false }),
+        } as Response
+      }
+      if (url.includes('/api/security/sessions')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ sessions: mockSessions }) } as Response
+      }
+      if (url.includes('/api/users')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ users: mockStaffUsers }) } as Response
+      }
+      if (url.includes('/api/security/two-factor')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ enabled: false }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    render(<SecurityWorkspacePage />)
+
+    expect(await screen.findByText('Signed in')).toBeInTheDocument()
+
+    // Click Clear from view
+    const clearBtn = screen.getByRole('button', { name: /Clear from view/i })
+    await user.click(clearBtn)
+
+    // Must NOT call DELETE on database
+    expect(deleteCalled).toBe(false)
+
+    // Explanatory banner appears
+    expect(await screen.findByText(/Audit records are retained/i)).toBeInTheDocument()
+
+    // Events are hidden from view
+    expect(screen.queryByText('Signed in')).not.toBeInTheDocument()
+
+    // Click Undo
+    const undoBtn = screen.getByRole('button', { name: /Undo/i })
+    await user.click(undoBtn)
+
+    // Events reappear
+    expect(await screen.findByText('Signed in')).toBeInTheDocument()
+  })
+})
+

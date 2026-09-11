@@ -65,6 +65,7 @@
 .settings-icon.violet { color: var(--primary); background: var(--primary-soft); }
 .settings-icon.blue   { color: var(--blue); background: color-mix(in srgb, var(--blue) 12%, transparent); }
 .settings-icon.orange { color: var(--orange); background: color-mix(in srgb, var(--orange) 12%, transparent); }
+.settings-icon.rose   { color: var(--rose); background: color-mix(in srgb, var(--rose) 12%, transparent); }
 
 .account-status,
 .service-state {

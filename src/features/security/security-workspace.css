@@ -494,6 +494,130 @@
   font-size: 13px;
 }
 
+.security-event-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.security-event-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.security-filter-chip {
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--bg-soft);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.security-filter-chip:hover {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.security-filter-chip.active {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+}
+
+.security-clear-view-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 9px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.security-clear-view-btn:hover {
+  border-color: color-mix(in srgb, var(--rose) 35%, transparent);
+  color: var(--rose);
+  background: color-mix(in srgb, var(--rose) 8%, transparent);
+}
+
+.security-cleared-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px dashed color-mix(in srgb, var(--primary) 35%, var(--border));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--primary-soft) 40%, transparent);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.security-cleared-banner strong {
+  color: var(--text);
+}
+
+.security-cleared-banner.is-showing-all {
+  border-color: color-mix(in srgb, var(--blue) 35%, var(--border));
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
+}
+
+.security-cleared-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.security-banner-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  color: var(--text);
+  background: var(--surface-solid);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.security-banner-btn:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.security-events-pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.security-load-more {
+  min-height: 34px;
+  font-size: 11px;
+}
+
 .security-event-list {
   gap: 0;
   overflow: hidden;

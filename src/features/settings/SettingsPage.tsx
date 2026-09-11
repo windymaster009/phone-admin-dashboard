@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BadgeCheck, Calculator, Database, LogOut, Settings, Smartphone, Server, Trash2, Type, UserRound } from 'lucide-react'
+import { BadgeCheck, Calculator, Database, LogOut, Settings, Smartphone, Server, ShieldAlert, Trash2, Type, UserRound } from 'lucide-react'
 import { api, type SessionUser } from '../../lib/api'
 import { titleStatus } from '../../lib/presentation'
 import SectionHeader from '../../components/SectionHeader'
@@ -21,6 +21,28 @@ export default function SettingsView({
 }) {
   const [savedValuations, setSavedValuations] = useState<unknown[]>(getStoredValuations)
   const [toastMessage, setToastMessage] = useState('')
+  const [purgingActivity, setPurgingActivity] = useState(false)
+
+  const handlePurgeExpiredActivity = async () => {
+    if (!window.confirm('Are you sure you want to purge expired activity records? Only records older than their configured retention threshold (expiresAt <= now) will be removed.')) {
+      return
+    }
+
+    try {
+      setPurgingActivity(true)
+      const result = await api<{ success: boolean; deletedCount: number; message: string }>(
+        '/settings/purge-expired-activity',
+        { method: 'POST' }
+      )
+      setToastMessage(result.message || 'Expired activity records purged successfully.')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to purge expired activity'
+      setToastMessage(message)
+    } finally {
+      setPurgingActivity(false)
+    }
+  }
+
   const fontSizeOptions: Array<{
     value: AppFontSize
     label: string
@@ -133,6 +155,46 @@ export default function SettingsView({
             </div>
           </div>
         </article>
+
+        {user.role === 'OWNER' && (
+          <article className="surface-card settings-card retention-settings-card">
+            <div className="settings-card-heading">
+              <span className="settings-icon rose"><ShieldAlert size={20} /></span>
+              <div>
+                <h3>Activity log retention</h3>
+                <p>Configured database retention and maintenance policies.</p>
+              </div>
+            </div>
+            <div className="environment-list">
+              <div>
+                <p>
+                  <strong>Operational activity</strong>
+                  <small>Auto-expires after 90 days (configurable via env)</small>
+                </p>
+                <span className="service-state"><i />90 days</span>
+              </div>
+              <div>
+                <p>
+                  <strong>Security & auth sessions</strong>
+                  <small>Auto-expires after 180 days (configurable via env)</small>
+                </p>
+                <span className="service-state"><i />180 days</span>
+              </div>
+            </div>
+            <div className="settings-card-footer">
+              <p>Purging only removes audit records older than their retention threshold.</p>
+              <button
+                type="button"
+                className="ghost-button danger-button"
+                disabled={purgingActivity}
+                onClick={() => void handlePurgeExpiredActivity()}
+              >
+                <Trash2 size={15} />
+                {purgingActivity ? 'Purging…' : 'Purge expired records'}
+              </button>
+            </div>
+          </article>
+        )}
 
         <article className="surface-card settings-card valuation-settings-card">
           <div className="settings-card-heading">

@@ -322,6 +322,19 @@ const paywayIntentSchema = new Schema(
   baseOptions,
 )
 
+export function computeActivityLogExpiresAt(entity, createdAt = new Date()) {
+  const isSecurity = entity === 'AUTH_SESSION'
+  const envDays = isSecurity
+    ? process.env.SECURITY_EVENT_RETENTION_DAYS
+    : process.env.ACTIVITY_LOG_RETENTION_DAYS
+  const defaultDays = isSecurity ? 180 : 90
+  const parsed = Number(envDays)
+  const retentionDays = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : defaultDays
+  const expiresAt = new Date(createdAt)
+  expiresAt.setDate(expiresAt.getDate() + retentionDays)
+  return expiresAt
+}
+
 const activityLogSchema = new Schema(
   {
     user: { type: Schema.Types.ObjectId, ref: 'User' },
@@ -330,9 +343,22 @@ const activityLogSchema = new Schema(
     entityId: Schema.Types.ObjectId,
     details: Schema.Types.Mixed,
     ipAddress: String,
+    expiresAt: Date,
   },
   { ...baseOptions, updatedAt: false },
 )
+
+activityLogSchema.index({ createdAt: -1 })
+activityLogSchema.index({ entity: 1, createdAt: -1 })
+activityLogSchema.index({ user: 1, entity: 1, createdAt: -1 })
+activityLogSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 })
+
+activityLogSchema.pre('validate', function computeExpiration(next) {
+  if (!this.expiresAt) {
+    this.expiresAt = computeActivityLogExpiresAt(this.entity, this.createdAt || new Date())
+  }
+  next()
+})
 
 export const User = model('User', userSchema)
 export const Customer = model('Customer', customerSchema)

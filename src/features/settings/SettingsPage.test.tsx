@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import SettingsPage from './SettingsPage'
-import { mockOwnerUser } from '../../test/testUtils'
+import { mockOwnerUser, mockManagerUser } from '../../test/testUtils'
 import { setStoredValuations } from '../../lib/storage'
 import type { AppFontSize } from '../../app/types'
 
@@ -89,5 +89,59 @@ describe('SettingsPage component', () => {
     expect(screen.getByText('0')).toBeInTheDocument()
     expect(clearButton).toBeDisabled()
     expect(screen.getByRole('status')).toHaveTextContent('Saved valuations cleared successfully.')
+  })
+
+  it('renders Activity log retention section for OWNER and purges expired records on confirmation', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/settings/purge-expired-activity') && init?.method === 'POST') {
+        return new Response(JSON.stringify({
+          success: true,
+          deletedCount: 14,
+          message: 'Purged 14 expired activity records.',
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      }
+      return new Response('{}', { status: 200 })
+    })
+
+    render(
+      <SettingsPage
+        user={mockOwnerUser}
+        onLogout={vi.fn()}
+        fontSize="default"
+        onFontSizeChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByText('Activity log retention')).toBeInTheDocument()
+    expect(screen.getByText('90 days')).toBeInTheDocument()
+    expect(screen.getByText('180 days')).toBeInTheDocument()
+
+    const purgeButton = screen.getByRole('button', { name: /Purge expired records/i })
+    expect(purgeButton).toBeInTheDocument()
+
+    await user.click(purgeButton)
+    expect(window.confirm).toHaveBeenCalled()
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining('/settings/purge-expired-activity'),
+      expect.objectContaining({ method: 'POST' })
+    )
+    expect(screen.getByRole('status')).toHaveTextContent('Purged 14 expired activity records.')
+  })
+
+  it('does not render Activity log retention section for non-OWNER roles', () => {
+    render(
+      <SettingsPage
+        user={mockManagerUser}
+        onLogout={vi.fn()}
+        fontSize="default"
+        onFontSizeChange={vi.fn()}
+      />,
+    )
+
+    expect(screen.queryByText('Activity log retention')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Purge expired records/i })).not.toBeInTheDocument()
   })
 })

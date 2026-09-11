@@ -11,12 +11,15 @@ import {
   ChevronUp,
   Clock3,
   Copy,
+  Eye,
+  EyeOff,
   KeyRound,
   LockKeyhole,
   LogIn,
   LogOut,
   Monitor,
   RefreshCcw,
+  RotateCcw,
   ShieldCheck,
   Smartphone,
   Trash2,
@@ -26,6 +29,7 @@ import {
   Users,
 } from 'lucide-react'
 import { api, getSessionUser } from '../../lib/api'
+import { getSecurityClearedKey, safeStorage } from '../../lib/storage'
 import LoadingState from '../../components/LoadingState'
 import SummaryStats from '../../components/SummaryStats'
 
@@ -152,8 +156,8 @@ function eventContext(event: SecurityEvent) {
   const details = event.details || {}
   const deviceName = typeof details.deviceName === 'string' ? details.deviceName.trim() : ''
   const kind = details.kind === 'ANDROID' ? 'PhoneFlow Android' : details.kind === 'WEB' ? 'Web session' : ''
-  const localAddress = !event.ipAddress || event.ipAddress === '::1' || event.ipAddress === '127.0.0.1'
-  const context = [deviceName || kind, localAddress ? 'This device' : `IP ${event.ipAddress}`].filter(Boolean)
+  const localAddress = !event.ipAddress || event.ipAddress === '::1' || event.ipAddress === '127.0.0.1' || event.ipAddress === '::ffff:127.0.0.1'
+  const context = [deviceName || kind, localAddress ? 'Local device' : `IP ${event.ipAddress}`].filter(Boolean)
   if (details.twoFactor === true) context.push('Two-factor verified')
   return context.join(' · ')
 }
@@ -165,10 +169,22 @@ function eventGroupKey(event: SecurityEvent) {
   return [event.action, day, event.ipAddress || '', details.deviceName || '', details.kind || ''].join('|')
 }
 
+export type SecurityEventFilter = 'ALL' | 'SIGN_IN' | 'FAILED_SIGN_IN' | 'SIGN_OUT' | 'TWO_FACTOR'
+
 export default function SecurityWorkspacePage() {
   const user = getSessionUser()
+  const currentUserId = user?.id || 'default'
+  const securityClearedKey = getSecurityClearedKey(currentUserId)
+
   const [sessions, setSessions] = useState<AuthSession[]>([])
   const [events, setEvents] = useState<SecurityEvent[]>([])
+  const [eventFilter, setEventFilter] = useState<SecurityEventFilter>('ALL')
+  const [nextEventCursor, setNextEventCursor] = useState<string | null>(null)
+  const [hasMoreEvents, setHasMoreEvents] = useState(false)
+  const [loadingOlderEvents, setLoadingOlderEvents] = useState(false)
+  const [showClearedSecurity, setShowClearedSecurity] = useState(false)
+  const [securityClearedAt, setSecurityClearedAt] = useState<string | null>(() => safeStorage.getItem(securityClearedKey))
+
   const [staffUsers, setStaffUsers] = useState<SecurityUser[] | null>(null)
   const [eventsExpanded, setEventsExpanded] = useState(false)
   const [showUserForm, setShowUserForm] = useState(false)
@@ -195,12 +211,14 @@ export default function SecurityWorkspacePage() {
         : Promise.resolve(null)
       const [sessionResult, eventResult, twoFactorResult, staffResult] = await Promise.all([
         api<{ sessions: AuthSession[] }>('/security/sessions'),
-        api<{ events: SecurityEvent[] }>('/security/events?limit=30'),
+        api<{ events: SecurityEvent[]; nextCursor?: string | null; hasMore?: boolean }>(`/security/events?limit=20&filter=${eventFilter}`),
         api<TwoFactorStatus>('/security/two-factor'),
         staffResultPromise,
       ])
       setSessions(sessionResult.sessions)
       setEvents(eventResult.events)
+      setNextEventCursor(eventResult.nextCursor ?? null)
+      setHasMoreEvents(Boolean(eventResult.hasMore))
       setTwoFactorStatus(twoFactorResult)
       setStaffUsers(staffResult?.users ?? null)
     } catch (reason) {
@@ -208,7 +226,54 @@ export default function SecurityWorkspacePage() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [eventFilter, user?.role])
+
+  const changeEventFilter = async (filter: SecurityEventFilter) => {
+    setEventFilter(filter)
+    try {
+      const result = await api<{ events: SecurityEvent[]; nextCursor?: string | null; hasMore?: boolean }>(
+        `/security/events?limit=20&filter=${filter}`,
+      )
+      setEvents(result.events)
+      setNextEventCursor(result.nextCursor ?? null)
+      setHasMoreEvents(Boolean(result.hasMore))
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to filter security events')
+    }
+  }
+
+  const loadOlderSecurityEvents = async () => {
+    if (!nextEventCursor || loadingOlderEvents) return
+    setLoadingOlderEvents(true)
+    try {
+      const result = await api<{ events: SecurityEvent[]; nextCursor?: string | null; hasMore?: boolean }>(
+        `/security/events?limit=20&filter=${eventFilter}&cursor=${encodeURIComponent(nextEventCursor)}`,
+      )
+      setEvents((current) => {
+        const existingKeys = new Set(current.map((e) => e.createdAt + e.action))
+        const uniqueOlder = result.events.filter((e) => !existingKeys.has(e.createdAt + e.action))
+        return [...current, ...uniqueOlder]
+      })
+      setNextEventCursor(result.nextCursor ?? null)
+      setHasMoreEvents(Boolean(result.hasMore))
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Unable to load older events')
+    } finally {
+      setLoadingOlderEvents(false)
+    }
+  }
+
+  const clearSecurityFromView = () => {
+    const nowIso = new Date().toISOString()
+    safeStorage.setItem(securityClearedKey, nowIso)
+    setSecurityClearedAt(nowIso)
+    setShowClearedSecurity(false)
+  }
+
+  const undoClearSecurity = () => {
+    safeStorage.removeItem(securityClearedKey)
+    setSecurityClearedAt(null)
+  }
 
   useEffect(() => { void load() }, [load])
   useEffect(() => {
@@ -223,7 +288,14 @@ export default function SecurityWorkspacePage() {
   const pairingExpired = Boolean(pairing && pairingSeconds <= 0)
   const activeSessions = useMemo(() => sessions.filter((session) => !session.revokedAt), [sessions])
   const otherSessions = activeSessions.filter((session) => !session.current)
-  const eventGroups = useMemo(() => events.reduce<SecurityEventGroup[]>((groups, event) => {
+
+  const visibleEvents = useMemo(() => {
+    if (!securityClearedAt || showClearedSecurity) return events
+    const clearedTimestamp = new Date(securityClearedAt).getTime()
+    return events.filter((event) => new Date(event.createdAt).getTime() > clearedTimestamp)
+  }, [events, securityClearedAt, showClearedSecurity])
+
+  const eventGroups = useMemo(() => visibleEvents.reduce<SecurityEventGroup[]>((groups, event) => {
     const key = eventGroupKey(event)
     const previous = groups.at(-1)
     if (previous?.key === key) {
@@ -232,7 +304,8 @@ export default function SecurityWorkspacePage() {
     }
     groups.push({ key, latest: event, count: 1 })
     return groups
-  }, []), [events])
+  }, []), [visibleEvents])
+
   const visibleEventGroups = eventsExpanded ? eventGroups : eventGroups.slice(0, 4)
   const activeStaffUsers = staffUsers?.filter((staffUser) => staffUser.active).length ?? 0
 
@@ -544,19 +617,157 @@ export default function SecurityWorkspacePage() {
           </section>
 
           <section className="card security-panel security-events-panel">
-            <div className="security-panel-title"><div><h2>Recent security activity</h2><p>Account sign-ins and security changes. Repeated sign-ins from the same device are grouped together.</p></div>{eventGroups.length > 4 && <button type="button" className="security-events-toggle" onClick={() => setEventsExpanded((current) => !current)} aria-expanded={eventsExpanded}>{eventsExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}{eventsExpanded ? 'Show less' : `Show all (${eventGroups.length})`}</button>}</div>
+            <div className="security-panel-title">
+              <div>
+                <h2>Recent security activity</h2>
+                <p>Account sign-ins and security changes. Repeated sign-ins from the same device are grouped together.</p>
+              </div>
+              {eventGroups.length > 4 && (
+                <button
+                  type="button"
+                  className="security-events-toggle"
+                  onClick={() => setEventsExpanded((current) => !current)}
+                  aria-expanded={eventsExpanded}
+                >
+                  {eventsExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                  {eventsExpanded ? 'Show less' : `Show all (${eventGroups.length})`}
+                </button>
+              )}
+            </div>
+
+            <div className="security-event-controls">
+              <div className="security-event-filters" role="group" aria-label="Filter security activity">
+                <button
+                  type="button"
+                  className={`security-filter-chip ${eventFilter === 'ALL' ? 'active' : ''}`}
+                  onClick={() => void changeEventFilter('ALL')}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  className={`security-filter-chip ${eventFilter === 'SIGN_IN' ? 'active' : ''}`}
+                  onClick={() => void changeEventFilter('SIGN_IN')}
+                >
+                  Sign-ins
+                </button>
+                <button
+                  type="button"
+                  className={`security-filter-chip ${eventFilter === 'FAILED_SIGN_IN' ? 'active' : ''}`}
+                  onClick={() => void changeEventFilter('FAILED_SIGN_IN')}
+                >
+                  Failed
+                </button>
+                <button
+                  type="button"
+                  className={`security-filter-chip ${eventFilter === 'SIGN_OUT' ? 'active' : ''}`}
+                  onClick={() => void changeEventFilter('SIGN_OUT')}
+                >
+                  Sign-outs
+                </button>
+                <button
+                  type="button"
+                  className={`security-filter-chip ${eventFilter === 'TWO_FACTOR' ? 'active' : ''}`}
+                  onClick={() => void changeEventFilter('TWO_FACTOR')}
+                >
+                  2FA
+                </button>
+              </div>
+              <button
+                type="button"
+                className="security-clear-view-btn"
+                onClick={clearSecurityFromView}
+                title="Clear current events from view (audit records are safely retained)"
+              >
+                <Trash2 size={13} />
+                <span>Clear from view</span>
+              </button>
+            </div>
+
+            {securityClearedAt && !showClearedSecurity && events.length > visibleEvents.length && (
+              <div className="security-cleared-banner" role="status">
+                <span>Security activity cleared from view. <strong>Audit records are retained.</strong></span>
+                <div className="security-cleared-banner-actions">
+                  <button type="button" className="security-banner-btn" onClick={undoClearSecurity}>
+                    <RotateCcw size={12} /> Undo
+                  </button>
+                  <button
+                    type="button"
+                    className="security-banner-btn"
+                    onClick={() => setShowClearedSecurity(true)}
+                  >
+                    <Eye size={12} /> Show all
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {showClearedSecurity && securityClearedAt && (
+              <div className="security-cleared-banner is-showing-all" role="status">
+                <span>Showing complete security audit history.</span>
+                <button
+                  type="button"
+                  className="security-banner-btn"
+                  onClick={() => setShowClearedSecurity(false)}
+                >
+                  <EyeOff size={12} /> Hide cleared
+                </button>
+              </div>
+            )}
+
             <div className="security-event-list">
               {visibleEventGroups.map((group) => {
                 const event = group.latest
                 const EventIcon = eventIcon(event.action)
-                return <article key={group.key}>
-                  <span className={`security-event-icon ${eventTone(event.action)}`}><EventIcon size={16} aria-hidden="true" /></span>
-                  <div className="security-event-content"><div><strong>{eventLabel(event.action)}</strong>{group.count > 1 && <span className="security-event-count">{group.count} times</span>}</div><span>{eventContext(event)}</span></div>
-                  <div className="security-event-timing"><time dateTime={event.createdAt}>{relativeTime(event.createdAt)}</time><small>{dateTime(event.createdAt)}</small></div>
-                </article>
+                return (
+                  <article key={group.key}>
+                    <span className={`security-event-icon ${eventTone(event.action)}`}>
+                      <EventIcon size={16} aria-hidden="true" />
+                    </span>
+                    <div className="security-event-content">
+                      <div>
+                        <strong>{eventLabel(event.action)}</strong>
+                        {group.count > 1 && (
+                          <span className="security-event-count">{group.count} events</span>
+                        )}
+                      </div>
+                      <span>{eventContext(event)}</span>
+                    </div>
+                    <div className="security-event-timing">
+                      <time dateTime={event.createdAt}>{relativeTime(event.createdAt)}</time>
+                      <small>{dateTime(event.createdAt)}</small>
+                    </div>
+                  </article>
+                )
               })}
-              {events.length === 0 && <div className="security-empty">No security activity has been recorded yet.</div>}
+              {visibleEvents.length === 0 && (
+                <div className="security-empty">
+                  {securityClearedAt && !showClearedSecurity
+                    ? 'All security activity has been cleared from view. Click "Show all" to inspect retained audit records.'
+                    : 'No security activity has been recorded yet.'}
+                </div>
+              )}
             </div>
+
+            {hasMoreEvents && (
+              <div className="security-events-pagination">
+                <button
+                  type="button"
+                  className="secondary-button security-load-more"
+                  onClick={() => void loadOlderSecurityEvents()}
+                  disabled={loadingOlderEvents}
+                >
+                  {loadingOlderEvents ? (
+                    <>
+                      <RefreshCcw size={14} className="activity-spin" />
+                      <span>Loading older activity…</span>
+                    </>
+                  ) : (
+                    'Load older activity'
+                  )}
+                </button>
+              </div>
+            )}
           </section>
         </div>
 

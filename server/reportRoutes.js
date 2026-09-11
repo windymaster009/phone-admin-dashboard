@@ -507,7 +507,7 @@ router.get('/activity', requireAuth, allowRoles(...reportRoles), asyncRoute(asyn
 
   res.json({
     title: 'Activity Report',
-    description: 'Staff actions and immutable audit history across shop operations.',
+    description: 'Staff actions and tamper-resistant audit history retained according to the configured retention policy.',
     meta: { period, totalRecords: logs.length, limited: logs.length > 500 },
     filters: { action, entity, staff: staff ? String(staff) : 'ALL' },
     staff: await reportStaff(),

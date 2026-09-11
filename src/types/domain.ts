@@ -249,12 +249,17 @@ export type ExchangeRateData = {
 
 export type ActivityLog = {
   _id: string
+  id?: string
   action: string
   entity: string
   entityId?: string
   createdAt: string
-  user?: { name: string; email: string; role: string }
+  user?: { name: string; email?: string; role?: string }
+  summary?: string
+  reference?: string
   details?: Record<string, unknown>
+  ipAddress?: string
+  expiresAt?: string
 }
 
 export type OverviewCurrencyTotals = { USD: number; KHR: number }
