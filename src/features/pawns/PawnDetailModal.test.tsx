@@ -421,4 +421,84 @@ describe('PawnDetailModal component', () => {
     expect(screen.getByRole('button', { name: /Due payment/i })).toBeEnabled()
     expect(screen.getByRole('button', { name: /Extend pawn/i })).toBeDisabled()
   })
+
+  it('generates an idempotency key on renewal preparation, reuses it on retry, and generates a new key after cancel', async () => {
+    let callCount = 0
+    const capturedPayloads: Array<Record<string, unknown>> = []
+    const handleAction = vi.fn().mockImplementation(async (action, payload) => {
+      callCount++
+      capturedPayloads.push({ ...payload })
+      if (callCount === 1) {
+        throw new Error('Network timeout: please retry')
+      }
+      return undefined
+    })
+
+    const user = userEvent.setup()
+    const dailyZeroFeePawn: Pawn = {
+      ...mockPawnRecord,
+      feeModel: 'DAILY_SIMPLE',
+      termDays: 7,
+      accruedInterest: 0,
+      fees: 0,
+      feeSummary: {
+        feeModel: 'DAILY_SIMPLE',
+        termDays: 7,
+        accruedDays: 0,
+        accruedFee: 0,
+        dailyFeeAmount: 1,
+        dailyFeeRate: 0.2,
+        contractLengthDays: 7,
+        feeAtDueDate: 7,
+        totalAtDueDate: 107,
+        redemptionTotal: 100,
+        remainingPrincipal: 100,
+      },
+    }
+
+    render(
+      <PawnDetailModal
+        pawn={dailyZeroFeePawn}
+        onClose={vi.fn()}
+        onAction={handleAction}
+      />,
+    )
+
+    // 1. Open renewal form
+    await user.click(screen.getByRole('button', { name: /Extend pawn/i }))
+    expect(screen.getByRole('button', { name: /Confirm extension/i })).toBeInTheDocument()
+
+    // 2. Submit initial renewal (fails on first attempt)
+    await user.click(screen.getByRole('button', { name: /Confirm extension/i }))
+    await waitFor(() => {
+      expect(handleAction).toHaveBeenCalledTimes(1)
+      expect(screen.getByText(/Network timeout: please retry/i)).toBeInTheDocument()
+    })
+
+    const initialKey = capturedPayloads[0].idempotencyKey
+    expect(typeof initialKey).toBe('string')
+    expect((initialKey as string).length).toBeGreaterThan(5)
+
+    // 3. Retry the same submission: MUST reuse the exact same idempotency key
+    await user.click(screen.getByRole('button', { name: /Confirm extension/i }))
+    await waitFor(() => {
+      expect(handleAction).toHaveBeenCalledTimes(2)
+    })
+
+    const retryKey = capturedPayloads[1].idempotencyKey
+    expect(retryKey).toBe(initialKey)
+
+    // After success, modal form closes
+    expect(screen.queryByRole('button', { name: /Confirm extension/i })).not.toBeInTheDocument()
+
+    // 4. Open extension a second time for a genuinely new renewal -> must get a new key
+    await user.click(screen.getByRole('button', { name: /Extend pawn/i }))
+    await user.click(screen.getByRole('button', { name: /Confirm extension/i }))
+    await waitFor(() => {
+      expect(handleAction).toHaveBeenCalledTimes(3)
+    })
+
+    const secondRenewalKey = capturedPayloads[2].idempotencyKey
+    expect(secondRenewalKey).not.toBe(initialKey)
+  })
 })

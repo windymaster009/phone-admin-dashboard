@@ -130,6 +130,7 @@ const paymentSchema = new Schema(
 
 const renewalSchema = new Schema(
   {
+    idempotencyKey: { type: String, trim: true, sparse: true, index: true },
     previousDueDate: { type: Date, required: true },
     newDueDate: { type: Date, required: true },
     paymentAmount: { type: Number, min: 0, required: true },

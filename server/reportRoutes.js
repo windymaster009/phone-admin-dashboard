@@ -289,15 +289,18 @@ router.get('/loans', requireAuth, allowRoles(...reportRoles), asyncRoute(async (
   const reportingCurrency = isAll ? 'USD' : currency
   let hasEstimatedKhrRate = false
 
+  const isCancelled = (loan) => loan.status === 'CANCELLED'
+
   const loanPrincipalAmount = (loan) => {
+    if (isCancelled(loan)) return 0
     if (!isAll) return Number(loan.principal || 0)
     const conv = convertToUsd(loan.principal, loan.currency, loan.exchangeRate)
     if (loan.currency === 'KHR' && (conv.isFallback || loan.exchangeRateEstimated)) hasEstimatedKhrRate = true
     return conv.amountUsd
   }
-  const loanExpectedAmount = (loan) => isAll ? convertToUsd(loan.totalDue, loan.currency, loan.exchangeRate).amountUsd : Number(loan.totalDue || 0)
-  const loanPaidAmount = (loan) => isAll ? convertToUsd(loan.amountPaid, loan.currency, loan.exchangeRate).amountUsd : Number(loan.amountPaid || 0)
-  const loanOutstandingAmount = (loan) => isAll ? convertToUsd(loan.remainingBalance, loan.currency, loan.exchangeRate).amountUsd : Number(loan.remainingBalance || 0)
+  const loanExpectedAmount = (loan) => isCancelled(loan) ? 0 : (isAll ? convertToUsd(loan.totalDue, loan.currency, loan.exchangeRate).amountUsd : Number(loan.totalDue || 0))
+  const loanPaidAmount = (loan) => isCancelled(loan) ? 0 : (isAll ? convertToUsd(loan.amountPaid, loan.currency, loan.exchangeRate).amountUsd : Number(loan.amountPaid || 0))
+  const loanOutstandingAmount = (loan) => isCancelled(loan) ? 0 : (isAll ? convertToUsd(loan.remainingBalance, loan.currency, loan.exchangeRate).amountUsd : Number(loan.remainingBalance || 0))
 
   const principal = roundMoney(loans.reduce((sum, loan) => sum + loanPrincipalAmount(loan), 0))
   const expected = roundMoney(loans.reduce((sum, loan) => sum + loanExpectedAmount(loan), 0))
@@ -309,10 +312,11 @@ router.get('/loans', requireAuth, allowRoles(...reportRoles), asyncRoute(async (
   if (isAll && hasEstimatedKhrRate) {
     notes.push('Some KHR loan totals contain estimated USD equivalents calculated with the fallback exchange rate.')
   }
+  notes.push('Financial summary totals exclude cancelled loans.')
 
   res.json({
     title: 'Loans Report',
-    description: 'Money lent, expected repayment, collected payments, and overdue balances.',
+    description: 'Money lent, expected repayment, collected payments, and overdue balances. Financial summary totals exclude cancelled loans.',
     meta: {
       currency: reportingCurrency,
       currencyFilter: currency,
@@ -326,14 +330,14 @@ router.get('/loans', requireAuth, allowRoles(...reportRoles), asyncRoute(async (
     summary: [
       { label: 'Loans', value: loans.length, format: 'number', detail: period.label, tone: 'violet' },
       { label: 'Principal Lent', value: principal, format: 'currency', detail: isAll ? 'USD equivalent across USD and KHR' : `Recorded in ${currency}`, tone: 'blue' },
-      { label: 'Expected', value: expected, format: 'currency', detail: 'Principal plus interest', tone: 'orange' },
-      { label: 'Collected', value: paid, format: 'currency', detail: 'Repayments recorded', tone: 'blue' },
-      { label: 'Outstanding', value: outstanding, format: 'currency', detail: 'Balance still due', tone: 'rose' },
+      { label: 'Expected', value: expected, format: 'currency', detail: 'Principal plus interest (excludes cancelled)', tone: 'orange' },
+      { label: 'Collected', value: paid, format: 'currency', detail: 'Repayments recorded (excludes cancelled)', tone: 'blue' },
+      { label: 'Outstanding', value: outstanding, format: 'currency', detail: 'Balance still due (excludes cancelled)', tone: 'rose' },
       { label: 'Overdue', value: overdue, format: 'number', detail: 'Loans needing action', tone: 'rose' },
     ],
     breakdowns: [
       { title: 'Loans by Status', description: 'Loan count across the repayment lifecycle.', format: 'number', rows: breakdown(loans, (loan) => loan.status) },
-      { title: 'Outstanding by Reason', description: 'Remaining balance grouped by lending reason.', format: 'currency', rows: breakdown(loans, (loan) => loan.reason || 'NOT_RECORDED', (loan) => loanOutstandingAmount(loan)).slice(0, 8) },
+      { title: 'Outstanding by Reason', description: 'Remaining balance grouped by lending reason.', format: 'currency', rows: breakdown(loans.filter((loan) => !isCancelled(loan)), (loan) => loan.reason || 'NOT_RECORDED', (loan) => loanOutstandingAmount(loan)).slice(0, 8) },
     ],
     columns: [
       { key: 'date', label: 'Date', format: 'date' }, { key: 'reference', label: 'Loan #' }, { key: 'party', label: 'Borrower' },

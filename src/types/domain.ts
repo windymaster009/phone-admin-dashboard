@@ -145,6 +145,7 @@ export type Pawn = {
   exchangeRate?: number
   renewals?: Array<{
     _id?: string
+    idempotencyKey?: string
     previousDueDate: string
     newDueDate: string
     paymentAmount: number

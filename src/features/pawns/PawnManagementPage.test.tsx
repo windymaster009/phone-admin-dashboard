@@ -45,6 +45,28 @@ function mockPawnFetch(options?: { deleteError?: string; pawns?: typeof mockPawn
       } as Response
     }
 
+    if (url.includes('/pawns') && method === 'POST') {
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({
+          pawn: {
+            ...mockPawnRecord,
+            renewals: [
+              {
+                _id: 'renewal-1',
+                previousDueDate: '2026-09-08',
+                newDueDate: '2026-09-15',
+                paymentAmount: 0,
+                renewedAt: new Date().toISOString(),
+              },
+            ],
+          },
+        }),
+      } as Response
+    }
+
     return {
       ok: true,
       status: 200,
@@ -347,5 +369,68 @@ describe('PawnManagementPage feature integration', () => {
 
     // No success toast is shown
     expect(screen.queryByText('Pawn contract deleted successfully.')).not.toBeInTheDocument()
+  })
+
+  it('submits pawn renewal with idempotency key in request body and Idempotency-Key header', async () => {
+    const renewablePawn = {
+      ...mockPawnRecord,
+      feeModel: 'DAILY_SIMPLE' as const,
+      termDays: 7,
+      accruedInterest: 0,
+      fees: 0,
+      feeSummary: {
+        feeModel: 'DAILY_SIMPLE' as const,
+        termDays: 7,
+        accruedDays: 0,
+        accruedFee: 0,
+        dailyFeeAmount: 1,
+        dailyFeeRate: 0.2,
+        contractLengthDays: 7,
+        feeAtDueDate: 7,
+        totalAtDueDate: 607,
+        redemptionTotal: 600,
+        remainingPrincipal: 600,
+      },
+    }
+    const fetchSpy = mockPawnFetch({ pawns: [renewablePawn] })
+    const user = userEvent.setup()
+    render(<PawnManagementPage user={mockOwnerUser} />)
+
+    await waitFor(() => {
+      expect(screen.getAllByText(mockPawnRecord.pawnNo).length).toBeGreaterThan(0)
+    })
+
+    // Open detail modal
+    const openButtons = screen.getAllByRole('button', { name: new RegExp(`View.*${mockPawnRecord.pawnNo}`, 'i') })
+    await user.click(openButtons[0])
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // Open renew form and submit
+    await user.click(screen.getByRole('button', { name: /Extend pawn/i }))
+    await user.click(screen.getByRole('button', { name: /Confirm extension/i }))
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(
+        expect.stringContaining(`/pawns/${mockPawnRecord._id}/renew`),
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringMatching(/"idempotencyKey":\s*"/),
+        }),
+      )
+    })
+
+    // Assert that the Idempotency-Key header was attached
+    const renewCall = fetchSpy.mock.calls.find(([url, init]) =>
+      String(url).includes('/renew') && init?.method === 'POST',
+    )
+    expect(renewCall).toBeDefined()
+    const requestHeaders = renewCall![1]?.headers
+    // performRequest converts headers into a Headers object or passes object
+    const key = requestHeaders instanceof Headers ? requestHeaders.get('Idempotency-Key') : (requestHeaders as Record<string, string>)?.['Idempotency-Key']
+    expect(typeof key).toBe('string')
+    expect(key!.length).toBeGreaterThan(5)
   })
 })

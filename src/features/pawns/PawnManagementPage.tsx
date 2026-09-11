@@ -64,8 +64,13 @@ export default function PawnView({ user }: { user: SessionUser }) {
 
   async function updatePawn(action: PawnAction, payload: Record<string, unknown>) {
     if (!selectedPawn) return
+    const headers: Record<string, string> = {}
+    if (typeof payload.idempotencyKey === 'string' && payload.idempotencyKey) {
+      headers['Idempotency-Key'] = payload.idempotencyKey
+    }
     const result = await api<{ pawn: Pawn }>(`/pawns/${selectedPawn._id}/${action}`, {
       method: 'POST',
+      headers,
       body: JSON.stringify(payload),
     })
     const updatedPawn: Pawn = {

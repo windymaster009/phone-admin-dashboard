@@ -46,6 +46,7 @@ export default function PawnDetailModal({
   const [deleteConfirmation, setDeleteConfirmation] = useState(false)
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  const [renewalIdempotencyKey, setRenewalIdempotencyKey] = useState('')
 
   const outstanding = pawnOutstanding(pawn)
   const pawnCurrency: PawnCurrency = pawn.currency === 'KHR' ? 'KHR' : 'USD'
@@ -126,6 +127,14 @@ export default function PawnDetailModal({
     setNewDueDate('')
     const initialRenewalTermDays = pawn.termDays || 7
     setRenewalTermDays(String(initialRenewalTermDays))
+    if (nextAction === 'renew') {
+      const key = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `renew-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+      setRenewalIdempotencyKey(key)
+    } else {
+      setRenewalIdempotencyKey('')
+    }
     const suggestedAmount = nextAction === 'redeem'
       ? outstanding
       : nextAction === 'renew'
@@ -145,12 +154,14 @@ export default function PawnDetailModal({
       const payload: Record<string, unknown> = { note }
       if (action !== 'forfeit' && !(action === 'renew' && pawn.feeModel === 'DAILY_SIMPLE')) payload.amount = Number(amount)
       if (action === 'renew') {
+        payload.idempotencyKey = renewalIdempotencyKey
         if (pawn.feeModel === 'DAILY_SIMPLE') payload.termDays = Number(renewalTermDays)
         else payload.newDueDate = newDueDate
       }
       if (action === 'forfeit' && amount) payload.sellPrice = Number(amount)
       await onAction(action, payload)
       setAction(null)
+      setRenewalIdempotencyKey('')
     } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : 'Unable to update pawn contract')
     } finally {
@@ -416,7 +427,7 @@ export default function PawnDetailModal({
               )}
 
               <div className="pawn-action-buttons">
-                <button type="button" className="ghost-button" onClick={() => setAction(null)}>Cancel</button>
+                <button type="button" className="ghost-button" onClick={() => { setAction(null); setRenewalIdempotencyKey('') }}>Cancel</button>
                 <button
                   type="submit"
                   className={`primary-button ${action === 'forfeit' ? 'danger-button' : ''}`}

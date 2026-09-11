@@ -25,6 +25,7 @@ import { CustomerDocument } from './documentModels.js'
 import { AndroidPairing, AuthSession } from './authSessionModels.js'
 import { TwoFactorChallenge, TwoFactorCredential, TwoFactorSetup } from './twoFactorModels.js'
 import { Loan } from './loanModels.js'
+import { ServiceCharge } from './serviceModels.js'
 import { refreshLoanStatuses } from './loanDashboardRoutes.js'
 import { preventCustomerDeletionWithDocuments } from './documentGuards.js'
 import { normalizeSaleWarrantyDays, normalizeTradeRefundRequest, restoreReturnedInventory } from './tradeRefundService.js'
@@ -1929,11 +1930,12 @@ router.patch('/customers/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASH
 }))
 
 router.delete('/customers/:id', requireAuth, allowRoles('OWNER', 'MANAGER'), preventCustomerDeletionWithDocuments, asyncRoute(async (req, res) => {
-  const [pawnExists, tradeExists] = await Promise.all([
+  const [pawnExists, tradeExists, serviceChargeExists] = await Promise.all([
     Pawn.exists({ customer: req.params.id }),
     Trade.exists({ customer: req.params.id }),
+    ServiceCharge.exists({ customer: req.params.id }),
   ])
-  if (pawnExists || tradeExists) {
+  if (pawnExists || tradeExists || serviceChargeExists) {
     return res.status(409).json({ message: 'This customer is linked to transaction history. Deactivate them instead.' })
   }
   const customer = await Customer.findByIdAndDelete(req.params.id)
@@ -2029,6 +2031,10 @@ router.patch('/suppliers/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOC
 }))
 
 router.delete('/suppliers/:id', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
+  const tradeExists = await Trade.exists({ supplier: req.params.id })
+  if (tradeExists) {
+    return res.status(409).json({ message: 'This supplier is linked to transaction history. Deactivate them instead.' })
+  }
   const supplier = await Supplier.findByIdAndDelete(req.params.id)
   if (!supplier) return res.status(404).json({ message: 'Supplier not found' })
   await writeActivity(req, {
@@ -2457,18 +2463,22 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
 }))
 
 router.post('/pawns/:id/payment', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
-  const pawn = await Pawn.findById(req.params.id)
-  if (!pawn) return res.status(404).json({ message: 'Pawn contract not found' })
-  if (!openPawnStatuses.includes(pawn.status)) return res.status(409).json({ message: 'This pawn contract is closed' })
-  const paymentAt = new Date()
-  const summary = pawnFeeSummary(pawn, paymentAt)
-  const currency = pawnCurrencyCode(pawn.currency)
-  const duePayment = roundPawnCurrency(summary.accruedFee + Math.max(0, Number(pawn.fees) || 0), currency)
-  if (duePayment <= pawnCurrencyTolerance(currency)) throw requestError(400, 'No pawn fee is due today')
-  const allocation = applyPawnPayment(pawn, duePayment, {
-    type: 'INTEREST', userId: req.user._id, note: req.body.note, paidAt: paymentAt,
+  let pawn
+  let allocation
+  await mongoose.connection.transaction(async (session) => {
+    pawn = await Pawn.findById(req.params.id).session(session)
+    if (!pawn) throw requestError(404, 'Pawn contract not found')
+    if (!openPawnStatuses.includes(pawn.status)) throw requestError(409, 'This pawn contract is closed')
+    const paymentAt = new Date()
+    const summary = pawnFeeSummary(pawn, paymentAt)
+    const currency = pawnCurrencyCode(pawn.currency)
+    const duePayment = roundPawnCurrency(summary.accruedFee + Math.max(0, Number(pawn.fees) || 0), currency)
+    if (duePayment <= pawnCurrencyTolerance(currency)) throw requestError(400, 'No pawn fee is due today')
+    allocation = applyPawnPayment(pawn, duePayment, {
+      type: 'INTEREST', userId: req.user._id, note: req.body.note, paidAt: paymentAt,
+    })
+    await pawn.save({ session })
   })
-  await pawn.save()
   await writeActivity(req, { action: 'PAYMENT', entity: 'PAWN', entityId: pawn._id, details: { ...allocation, currency: pawn.currency } })
   const customerFields = req.user.role === 'CASHIER' ? 'name phone' : 'name phone nationalIdNumber'
   await pawn.populate('customer', customerFields)
@@ -2477,78 +2487,132 @@ router.post('/pawns/:id/payment', requireAuth, allowRoles('OWNER', 'MANAGER', 'C
 }))
 
 router.post('/pawns/:id/renew', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
-  const pawn = await Pawn.findById(req.params.id)
-  if (!pawn) return res.status(404).json({ message: 'Pawn contract not found' })
-  if (!openPawnStatuses.includes(pawn.status)) return res.status(409).json({ message: 'This pawn contract is closed' })
-  const currency = pawnCurrencyCode(pawn.currency)
-  if (isDailyPawn(pawn)) {
-    const extensionAt = new Date()
-    const selectedTermDays = validatePawnTermDays(req.body.termDays)
-    materializeDailyPawnFee(pawn, extensionAt)
-    const extensionQuote = calculatePawnExtensionQuote(pawn, selectedTermDays, extensionAt)
-    const unpaidFees = extensionQuote.outstandingFeeBalance
-    if (unpaidFees > pawnCurrencyTolerance(currency)) {
-      throw requestError(409, `Pay the current due fee of ${unpaidFees} ${currency} before extending this pawn`)
+  const rawKey = req.body?.idempotencyKey || req.get('idempotency-key') || req.get('x-idempotency-key')
+  const idempotencyKey = clean(rawKey)
+  if (!idempotencyKey || typeof idempotencyKey !== 'string') {
+    throw requestError(400, 'An idempotency key is required to renew this pawn contract')
+  }
+  if (idempotencyKey.length > 128) {
+    throw requestError(400, 'Idempotency key cannot exceed 128 characters')
+  }
+
+  let pawn
+  let auditDetails
+  let isReplay = false
+
+  await mongoose.connection.transaction(async (session) => {
+    isReplay = false
+    auditDetails = undefined
+    pawn = await Pawn.findById(req.params.id).session(session)
+    if (!pawn) throw requestError(404, 'Pawn contract not found')
+    if (!openPawnStatuses.includes(pawn.status)) throw requestError(409, 'This pawn contract is closed')
+    const currency = pawnCurrencyCode(pawn.currency)
+
+    // Check if this idempotencyKey was already processed on this contract
+    const existingRenewal = pawn.renewals?.find((r) => r.idempotencyKey && r.idempotencyKey === idempotencyKey)
+    if (existingRenewal) {
+      if (isDailyPawn(pawn)) {
+        const selectedTermDays = validatePawnTermDays(req.body.termDays)
+        if (existingRenewal.termDays !== selectedTermDays) {
+          throw requestError(409, 'Idempotency key has already been used with different renewal terms')
+        }
+      } else {
+        const newDueDate = parsePawnDueDate(req.body.newDueDate)
+        const paymentAmount = pawnCurrencyAmount(req.body.amount ?? 0, currency, 'Renewal payment', true)
+        if (
+          new Date(existingRenewal.newDueDate).getTime() !== newDueDate.getTime() ||
+          Math.abs((existingRenewal.paymentAmount || 0) - paymentAmount) > pawnCurrencyTolerance(currency)
+        ) {
+          throw requestError(409, 'Idempotency key has already been used with different renewal terms')
+        }
+      }
+      isReplay = true
+      return
     }
 
+    // Verify the key is not already used across another pawn contract
+    const existsQuery = Pawn.exists({
+      _id: { $ne: pawn._id },
+      'renewals.idempotencyKey': idempotencyKey,
+    })
+    const otherPawnWithKey = await (typeof existsQuery?.session === 'function' ? existsQuery.session(session) : existsQuery)
+    if (otherPawnWithKey) {
+      throw requestError(409, 'Idempotency key has already been used on another contract')
+    }
+
+    if (isDailyPawn(pawn)) {
+      const extensionAt = new Date()
+      const selectedTermDays = validatePawnTermDays(req.body.termDays)
+      materializeDailyPawnFee(pawn, extensionAt)
+      const extensionQuote = calculatePawnExtensionQuote(pawn, selectedTermDays, extensionAt)
+      const unpaidFees = extensionQuote.outstandingFeeBalance
+      if (unpaidFees > pawnCurrencyTolerance(currency)) {
+        throw requestError(409, `Pay the current due fee of ${unpaidFees} ${currency} before extending this pawn`)
+      }
+
+      const previousDueDate = pawn.dueDate
+      const newDueDate = extensionQuote.newDueDate
+      pawn.termDays = selectedTermDays
+      pawn.currentTermStartDate = extensionQuote.extensionStartsAt
+      pawn.feeAccrualStartedAt = extensionQuote.extensionStartsAt
+      pawn.accruedPawnFee = 0
+      pawn.dueDate = newDueDate
+      pawn.gracePeriodDays = PAWN_GRACE_PERIOD_DAYS
+      pawn.graceEndsAt = pawnGraceEnd(newDueDate, PAWN_GRACE_PERIOD_DAYS)
+      pawn.dueReminderFor = undefined
+      pawn.dueReminderSentAt = undefined
+      pawn.status = 'ACTIVE'
+      pawn.renewals.push({
+        idempotencyKey,
+        previousDueDate, newDueDate, paymentAmount: 0, interestCharged: 0, feePaid: 0,
+        principalRemaining: pawn.remainingPrincipal, termDays: selectedTermDays,
+        contractLengthDays: extensionQuote.contractLengthDays,
+        dailyFeeRate: extensionQuote.dailyFeeRate,
+        dailyFeeAmount: extensionQuote.dailyFeeAmount,
+        ticketPart: pawn.renewals.length + 2,
+        renewedAt: extensionAt, renewedBy: req.user._id, note: clean(req.body.note),
+      })
+      await pawn.save({ session })
+      auditDetails = { pawnNo: pawn.pawnNo, termDays: selectedTermDays, previousDueDate, newDueDate, currency, paymentRecorded: false, idempotencyKey }
+      return
+    }
+
+    const newDueDate = parsePawnDueDate(req.body.newDueDate)
+    if (newDueDate <= new Date(pawn.dueDate) || newDueDate <= new Date()) {
+      throw requestError(400, 'New due date must be later than the current due date')
+    }
+    const requiredInterestAndFees = roundPawnCurrency((Number(pawn.accruedInterest) || 0) + (Number(pawn.fees) || 0), currency)
+    const paymentAmount = pawnCurrencyAmount(req.body.amount ?? 0, currency, 'Renewal payment', true)
+    if (paymentAmount + pawnCurrencyTolerance(currency) < requiredInterestAndFees) {
+      throw requestError(400, `Renewal requires at least ${requiredInterestAndFees} ${currency} to clear interest and fees`)
+    }
     const previousDueDate = pawn.dueDate
-    const newDueDate = extensionQuote.newDueDate
-    pawn.termDays = selectedTermDays
-    pawn.currentTermStartDate = extensionQuote.extensionStartsAt
-    pawn.feeAccrualStartedAt = extensionQuote.extensionStartsAt
-    pawn.accruedPawnFee = 0
+    const allocation = paymentAmount > 0
+      ? applyPawnPayment(pawn, paymentAmount, { type: 'RENEWAL', userId: req.user._id, note: req.body.note })
+      : { amount: 0, feesApplied: 0, interestApplied: 0, principalApplied: 0, balanceAfter: pawnAmountDue(pawn) }
+    const nextInterest = roundPawnCurrency((Number(pawn.remainingPrincipal) || 0) * (Number(pawn.interestRate) || 0) / 100, currency)
+    pawn.accruedInterest = nextInterest
     pawn.dueDate = newDueDate
     pawn.gracePeriodDays = PAWN_GRACE_PERIOD_DAYS
     pawn.graceEndsAt = pawnGraceEnd(newDueDate, PAWN_GRACE_PERIOD_DAYS)
-    pawn.dueReminderFor = undefined
-    pawn.dueReminderSentAt = undefined
     pawn.status = 'ACTIVE'
     pawn.renewals.push({
-      previousDueDate, newDueDate, paymentAmount: 0, interestCharged: 0, feePaid: 0,
-      principalRemaining: pawn.remainingPrincipal, termDays: selectedTermDays,
-      contractLengthDays: extensionQuote.contractLengthDays,
-      dailyFeeRate: extensionQuote.dailyFeeRate,
-      dailyFeeAmount: extensionQuote.dailyFeeAmount,
-      ticketPart: pawn.renewals.length + 2,
-      renewedAt: extensionAt, renewedBy: req.user._id, note: clean(req.body.note),
+      idempotencyKey,
+      previousDueDate, newDueDate, paymentAmount, interestCharged: nextInterest,
+      renewedBy: req.user._id, note: clean(req.body.note),
     })
-    await pawn.save()
-    await writeActivity(req, { action: 'RENEW', entity: 'PAWN', entityId: pawn._id, details: { pawnNo: pawn.pawnNo, termDays: selectedTermDays, previousDueDate, newDueDate, currency, paymentRecorded: false } })
-    const customerFields = req.user.role === 'CASHIER' ? 'name phone' : 'name phone nationalIdNumber'
-    await pawn.populate('customer', customerFields)
-    await pawn.populate('renewals.renewedBy', 'name role')
-    return res.json({ pawn: pawnResponse(pawn, extensionAt) })
-  }
-
-  const newDueDate = parsePawnDueDate(req.body.newDueDate)
-  if (newDueDate <= new Date(pawn.dueDate) || newDueDate <= new Date()) {
-    throw requestError(400, 'New due date must be later than the current due date')
-  }
-  const requiredInterestAndFees = roundPawnCurrency((Number(pawn.accruedInterest) || 0) + (Number(pawn.fees) || 0), currency)
-  const paymentAmount = pawnCurrencyAmount(req.body.amount, currency, 'Renewal payment', true)
-  if (paymentAmount + pawnCurrencyTolerance(currency) < requiredInterestAndFees) {
-    throw requestError(400, `Renewal requires at least ${requiredInterestAndFees} ${currency} to clear interest and fees`)
-  }
-  const previousDueDate = pawn.dueDate
-  const allocation = paymentAmount > 0
-    ? applyPawnPayment(pawn, paymentAmount, { type: 'RENEWAL', userId: req.user._id, note: req.body.note })
-    : { amount: 0, feesApplied: 0, interestApplied: 0, principalApplied: 0, balanceAfter: pawnAmountDue(pawn) }
-  const nextInterest = roundPawnCurrency((Number(pawn.remainingPrincipal) || 0) * (Number(pawn.interestRate) || 0) / 100, currency)
-  pawn.accruedInterest = nextInterest
-  pawn.dueDate = newDueDate
-  pawn.gracePeriodDays = PAWN_GRACE_PERIOD_DAYS
-  pawn.graceEndsAt = pawnGraceEnd(newDueDate, PAWN_GRACE_PERIOD_DAYS)
-  pawn.status = 'ACTIVE'
-  pawn.renewals.push({
-    previousDueDate, newDueDate, paymentAmount, interestCharged: nextInterest,
-    renewedBy: req.user._id, note: clean(req.body.note),
+    if (paymentAmount > 0 && pawn.payments.length) pawn.payments[pawn.payments.length - 1].balanceAfter = pawnAmountDue(pawn)
+    await pawn.save({ session })
+    auditDetails = { ...allocation, newDueDate, nextInterest, currency, idempotencyKey }
   })
-  if (paymentAmount > 0 && pawn.payments.length) pawn.payments[pawn.payments.length - 1].balanceAfter = pawnAmountDue(pawn)
-  await pawn.save()
-  await writeActivity(req, { action: 'RENEW', entity: 'PAWN', entityId: pawn._id, details: { ...allocation, newDueDate, nextInterest, currency } })
+
+  if (!isReplay) {
+    await writeActivity(req, { action: 'RENEW', entity: 'PAWN', entityId: pawn._id, details: auditDetails })
+  }
   const customerFields = req.user.role === 'CASHIER' ? 'name phone' : 'name phone nationalIdNumber'
   await pawn.populate('customer', customerFields)
   await pawn.populate('renewals.renewedBy', 'name role')
+  // Replays return current balances without changing the recorded renewal.
   res.json({ pawn: pawnResponse(pawn) })
 }))
 
