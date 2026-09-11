@@ -1,12 +1,25 @@
 import { useEffect, useState } from 'react'
-import { ArrowDownRight, ArrowUpRight, Banknote, ChevronDown, FileText, MoreHorizontal, Plus, RefreshCcw, ShoppingCart, Type, WalletCards, X } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, Banknote, ChevronDown, FileText, MoreHorizontal, Plus, RefreshCcw, ShoppingCart, WalletCards } from 'lucide-react'
 import { api } from '../../lib/api'
-import type { Customer, Trade } from '../../types/domain'
+import type { Trade } from '../../types/domain'
 import { money, tradePartyName, tradePartyPhone, tradeTransactionMoney, dateText, titleStatus, comingNext } from '../../lib/presentation'
 import LoadingState from '../../components/LoadingState'
 import SectionHeader from '../../components/SectionHeader'
 import StatusBadge from '../../components/StatusBadge'
+import DetailModalShell from '../../components/DetailModalShell'
+import DetailModalHeader from '../../components/DetailModalHeader'
+import DetailModalBody from '../../components/DetailModalBody'
+import DetailModalFooter from '../../components/DetailModalFooter'
 import './trade-page.css'
+
+function tradeSignedTotal(trade: Trade) {
+  const amount = trade.transactionTotal ?? trade.total ?? 0
+  const formatted = tradeTransactionMoney(trade, trade.transactionTotal, trade.total)
+  if (Number(amount) === 0 || formatted === '$0' || formatted === '$0.00' || formatted === '0 KHR') {
+    return formatted.replace(/^[+-]/, '')
+  }
+  return `${trade.type === 'SELL' ? '+' : '-'}${formatted}`
+}
 
 export default function TradeView() {
   const [trades, setTrades] = useState<Trade[]>([])
@@ -85,7 +98,7 @@ export default function TradeView() {
               <span className={`transaction-icon ${transaction.type === 'SELL' ? 'sale' : 'purchase'}`}>{transaction.type === 'SELL' ? <ArrowUpRight /> : <ArrowDownRight />}</span>
               <p><strong>{transaction.items.map((item) => `${item.name} x${item.quantity}`).join(', ')}</strong><small>{transaction.tradeNo} - {tradePartyName(transaction)} - {dateText(transaction.purchaseDate || transaction.createdAt)}</small></p>
               <StatusBadge status={transaction.type === 'SELL' ? 'Sale' : 'Purchase'} />
-              <strong className={transaction.type === 'SELL' ? 'money-in' : 'money-out'}>{transaction.type === 'SELL' ? '+' : '-'}{tradeTransactionMoney(transaction, transaction.transactionTotal, transaction.total)}</strong>
+              <strong className={transaction.type === 'SELL' ? 'money-in' : 'money-out'}>{tradeSignedTotal(transaction)}</strong>
               <button className="icon-button" onClick={() => setSelectedTrade(transaction)} aria-label={`View ${transaction.tradeNo}`}><MoreHorizontal size={18} /></button>
             </div>
           ))}
@@ -94,17 +107,21 @@ export default function TradeView() {
         </div>}
       </article>
       {selectedTrade && (
-        <div className="modal-backdrop" role="presentation">
-          <section className="detail-modal trade-detail-modal surface-card" role="dialog" aria-modal="true" aria-labelledby="trade-detail-title" onClick={(event) => event.stopPropagation()}>
-            <header className="detail-modal-header">
-              <div>
-                <span className="eyebrow">{selectedTrade.type === 'SELL' ? 'Sale transaction' : 'Purchase transaction'}</span>
-                <h3 id="trade-detail-title">{selectedTrade.tradeNo}</h3>
-                <p>{tradePartyName(selectedTrade)} - {dateText(selectedTrade.purchaseDate || selectedTrade.createdAt)}</p>
-              </div>
-              <button className="icon-button" onClick={() => setSelectedTrade(null)} aria-label="Close details"><X size={18} /></button>
-            </header>
+        <DetailModalShell
+          onClose={() => setSelectedTrade(null)}
+          titleId="trade-detail-title"
+          className="trade-detail-modal"
+        >
+          <DetailModalHeader
+            eyebrow={selectedTrade.type === 'SELL' ? 'Sale transaction' : 'Purchase transaction'}
+            title={selectedTrade.tradeNo}
+            titleId="trade-detail-title"
+            description={`${tradePartyName(selectedTrade)} - ${dateText(selectedTrade.purchaseDate || selectedTrade.createdAt)}`}
+            onClose={() => setSelectedTrade(null)}
+            closeLabel="Close details"
+          />
 
+          <DetailModalBody className="trade-detail-body">
             <div className="detail-grid">
               <div><span>Type</span><strong>{selectedTrade.type === 'SELL' ? 'Sale' : 'Purchase'}</strong></div>
               <div><span>{selectedTrade.type === 'BUY' ? 'Payment status' : 'Status'}</span><strong><StatusBadge status={selectedTrade.type === 'BUY' ? selectedTrade.paymentStatus || selectedTrade.status : selectedTrade.status} /></strong></div>
@@ -124,7 +141,7 @@ export default function TradeView() {
               </article>
               <article>
                 <span className="eyebrow">Total</span>
-                <p><strong>{selectedTrade.type === 'SELL' ? '+' : '-'}{tradeTransactionMoney(selectedTrade, selectedTrade.transactionTotal, selectedTrade.total)}</strong></p>
+                <p><strong>{tradeSignedTotal(selectedTrade)}</strong></p>
                 <p>{selectedTrade.items.length} line item{selectedTrade.items.length === 1 ? '' : 's'}</p>
               </article>
             </div>
@@ -152,12 +169,16 @@ export default function TradeView() {
                 <div><strong>Refund recorded</strong><small>{tradeTransactionMoney(selectedTrade, selectedTrade.refund.amount, selectedTrade.refund.amount)} · {selectedTrade.refund.inventoryDisposition === 'RESTOCK' ? 'Items restored to stock' : 'Items not returned to saleable stock'}</small><p>{selectedTrade.refund.reason}</p></div>
               </div>
             )}
+          </DetailModalBody>
 
-            <footer className="detail-modal-footer">
-              <button className="ghost-button" onClick={() => setSelectedTrade(null)}>Close</button>
-            </footer>
-          </section>
-        </div>
+          <DetailModalFooter
+            dismissAction={
+              <button type="button" className="ghost-button" onClick={() => setSelectedTrade(null)}>
+                Close
+              </button>
+            }
+          />
+        </DetailModalShell>
       )}
     </>
   )
