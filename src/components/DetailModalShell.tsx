@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 
 export type DetailModalShellProps = {
   onClose: () => void
@@ -100,7 +101,7 @@ export default function DetailModalShell({
     }
   }, [compact])
 
-  return (
+  const content = (
     <div
       ref={backdropRef}
       className="modal-backdrop detail-modal-backdrop"
@@ -121,4 +122,6 @@ export default function DetailModalShell({
       </section>
     </div>
   )
+
+  return typeof document !== 'undefined' ? createPortal(content, document.body) : content
 }
