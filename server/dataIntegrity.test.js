@@ -4,9 +4,10 @@ import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
 import mainRouter from './routes.js'
 import reportRouter from './reportRoutes.js'
+import serviceRouter from './serviceRoutes.js'
 import { Customer, Pawn, Supplier, Trade, User, ActivityLog } from './models.js'
 import { AuthSession } from './authSessionModels.js'
-import { ServiceCharge } from './serviceModels.js'
+import { ServiceCharge, ServiceOffering } from './serviceModels.js'
 import { CustomerDocument } from './documentModels.js'
 import { Loan } from './loanModels.js'
 
@@ -83,7 +84,7 @@ async function callAppRoute(method, path, body = {}, query = {}, customHeaders =
   })
 }
 
-async function callReportRoute(path, query = {}) {
+async function callReportRoute(path, query = {}, customHeaders = {}) {
   return new Promise((resolve) => {
     let settled = false
     const finish = (result) => {
@@ -95,17 +96,30 @@ async function callReportRoute(path, query = {}) {
     let responseData = null
     let responseStatus = 200
 
+    const authHeader = Object.prototype.hasOwnProperty.call(customHeaders, 'authorization')
+      ? customHeaders.authorization
+      : `Bearer ${createTestToken()}`
+
+    const headers = {
+      'content-type': 'application/json',
+      ...customHeaders,
+    }
+    if (authHeader) {
+      headers.authorization = authHeader
+    } else {
+      delete headers.authorization
+    }
+
     const req = {
       method: 'GET',
       url: path + (Object.keys(query).length ? '?' + new URLSearchParams(query).toString() : ''),
       params: {},
       query,
-      headers: {
-        authorization: `Bearer ${createTestToken()}`,
-        'content-type': 'application/json',
-      },
+      headers,
       get(header) {
-        return this.headers[header.toLowerCase()]
+        const lower = header.toLowerCase()
+        const entry = Object.entries(this.headers).find(([k]) => k.toLowerCase() === lower)
+        return entry ? entry[1] : undefined
       },
       ip: '127.0.0.1',
     }
@@ -132,6 +146,79 @@ async function callReportRoute(path, query = {}) {
     }
 
     reportRouter.handle(req, res, (err) => {
+      if (err) {
+        const status = err.status || err.statusCode || 500
+        finish({ status, body: { message: err.message } })
+      } else {
+        finish({ status: responseStatus, body: responseData })
+      }
+    })
+  })
+}
+
+async function callServiceRoute(method, path, body = {}, query = {}, customHeaders = {}) {
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (result) => {
+      if (settled) return
+      settled = true
+      resolve(result)
+    }
+
+    let responseData = null
+    let responseStatus = 200
+
+    const authHeader = Object.prototype.hasOwnProperty.call(customHeaders, 'authorization')
+      ? customHeaders.authorization
+      : `Bearer ${createTestToken()}`
+
+    const headers = {
+      'content-type': 'application/json',
+      ...customHeaders,
+    }
+    if (authHeader) {
+      headers.authorization = authHeader
+    } else {
+      delete headers.authorization
+    }
+
+    const req = {
+      method,
+      url: path + (Object.keys(query).length ? '?' + new URLSearchParams(query).toString() : ''),
+      params: {},
+      query,
+      body,
+      headers,
+      get(header) {
+        const lower = header.toLowerCase()
+        const entry = Object.entries(this.headers).find(([k]) => k.toLowerCase() === lower)
+        return entry ? entry[1] : undefined
+      },
+      ip: '127.0.0.1',
+    }
+
+    const res = {
+      status(code) {
+        responseStatus = code
+        return this
+      },
+      json(data) {
+        responseData = data
+        finish({ status: responseStatus, body: data })
+        return this
+      },
+      send(data) {
+        responseData = data
+        finish({ status: responseStatus, body: data })
+        return this
+      },
+      cookie() { return this },
+      clearCookie() { return this },
+      setHeader() { return this },
+      getHeader() { return undefined },
+    }
+
+    serviceRouter.handle(req, res, (err) => {
       if (err) {
         const status = err.status || err.statusCode || 500
         finish({ status, body: { message: err.message } })
@@ -1273,5 +1360,299 @@ test('Supplier deletion: concurrency race analysis where reference is created af
   } finally {
     Trade.exists = origTradeExists
     Supplier.findByIdAndDelete = origFindByIdAndDelete
+  }
+})
+
+test('Service Charges: server permissions enforcement (unauthenticated, STOCK, CASHIER, MANAGER)', async () => {
+  const origUserFindById = User.findById
+  const origUserFind = User.find
+  const origServiceOfferingUpdateOne = ServiceOffering.updateOne
+  const origServiceOfferingFind = ServiceOffering.find
+  const origServiceChargeFind = ServiceCharge.find
+  const origServiceOfferingFindById = ServiceOffering.findById
+  const origServiceOfferingFindByIdAndUpdate = ServiceOffering.findByIdAndUpdate
+
+  User.find = () => ({ select: () => ({ sort: () => ({ lean: async () => [] }) }) })
+  ServiceOffering.updateOne = async () => ({ acknowledged: true })
+  ServiceOffering.find = () => ({ sort: () => ({ lean: async () => [] }) })
+  ServiceCharge.find = () => ({
+    populate: () => ({
+      populate: () => ({
+        sort: () => ({
+          lean: async () => [],
+          limit: () => ({ lean: async () => [] }),
+        }),
+      }),
+    }),
+  })
+
+  try {
+    // 1. Unauthenticated requests must return 401
+    const unauthCatalog = await callServiceRoute('GET', '/catalog', {}, {}, { authorization: '' })
+    assert.equal(unauthCatalog.status, 401)
+
+    const unauthCharges = await callServiceRoute('GET', '/charges', {}, {}, { authorization: '' })
+    assert.equal(unauthCharges.status, 401)
+
+    const unauthPost = await callServiceRoute('POST', '/charges', {}, {}, { authorization: '' })
+    assert.equal(unauthPost.status, 401)
+
+    const unauthReport = await callReportRoute('/services', {}, { authorization: '' })
+    assert.equal(unauthReport.status, 401)
+
+    // 2. STOCK role: 403 Forbidden across service endpoints
+    User.findById = () => ({
+      select: () => Promise.resolve({
+        _id: testUserId,
+        name: 'Stock User',
+        role: 'STOCK',
+        active: true,
+      }),
+    })
+
+    const stockCatalog = await callServiceRoute('GET', '/catalog')
+    assert.equal(stockCatalog.status, 403)
+
+    const stockCharges = await callServiceRoute('GET', '/charges')
+    assert.equal(stockCharges.status, 403)
+
+    const stockPost = await callServiceRoute('POST', '/charges', {})
+    assert.equal(stockPost.status, 403)
+
+    const stockReport = await callReportRoute('/services')
+    assert.equal(stockReport.status, 403)
+
+    // 3. CASHIER role: 200 on catalog and charges, but 403 on price editing and reports
+    User.findById = () => ({
+      select: () => Promise.resolve({
+        _id: testUserId,
+        name: 'Cashier User',
+        role: 'CASHIER',
+        active: true,
+      }),
+    })
+
+    const cashierCatalog = await callServiceRoute('GET', '/catalog')
+    assert.equal(cashierCatalog.status, 200)
+
+    const cashierCharges = await callServiceRoute('GET', '/charges')
+    assert.equal(cashierCharges.status, 200)
+
+    const cashierPatch = await callServiceRoute('PATCH', `/catalog/${new mongoose.Types.ObjectId()}`, { price: 10 })
+    assert.equal(cashierPatch.status, 403)
+
+    const cashierReport = await callReportRoute('/services')
+    assert.equal(cashierReport.status, 403)
+
+    // 4. MANAGER role: allowed on pricing and reports
+    User.findById = () => ({
+      select: () => Promise.resolve({
+        _id: testUserId,
+        name: 'Manager User',
+        role: 'MANAGER',
+        active: true,
+      }),
+    })
+
+    const dummyOfferingId = new mongoose.Types.ObjectId()
+    ServiceOffering.findById = async (id) => ({
+      _id: id,
+      code: 'GMAIL_SETUP',
+      name: 'Gmail setup',
+      price: 5,
+      currency: 'USD',
+      active: true,
+    })
+    ServiceOffering.findByIdAndUpdate = async (id, update) => ({
+      _id: id,
+      code: 'GMAIL_SETUP',
+      name: 'Gmail setup',
+      ...update.$set,
+    })
+
+    const managerPatch = await callServiceRoute('PATCH', `/catalog/${dummyOfferingId}`, { price: 8 })
+    assert.equal(managerPatch.status, 200)
+    assert.equal(managerPatch.body.service.price, 8)
+
+    const managerReport = await callReportRoute('/services')
+    assert.equal(managerReport.status, 200)
+  } finally {
+    User.findById = origUserFindById
+    User.find = origUserFind
+    ServiceOffering.updateOne = origServiceOfferingUpdateOne
+    ServiceOffering.find = origServiceOfferingFind
+    ServiceCharge.find = origServiceChargeFind
+    ServiceOffering.findById = origServiceOfferingFindById
+    ServiceOffering.findByIdAndUpdate = origServiceOfferingFindByIdAndUpdate
+  }
+})
+
+test('Service Charges: charge creation validation, unpriced protection, and customer vs walk-in snapshots', async () => {
+  const origUserFindById = User.findById
+  const origOfferingFindById = ServiceOffering.findById
+  const origCustomerFindById = Customer.findById
+  const origChargeCreate = ServiceCharge.create
+
+  User.findById = () => ({
+    select: () => Promise.resolve({
+      _id: testUserId,
+      name: 'Cashier User',
+      role: 'CASHIER',
+      active: true,
+    }),
+  })
+
+  const unpricedId = new mongoose.Types.ObjectId()
+  const unpricedOffering = {
+    _id: unpricedId,
+    code: 'UNPRICED_WORK',
+    name: 'Unpriced Work',
+    category: 'OTHER',
+    currency: 'USD',
+    price: 0,
+    active: true,
+  }
+
+  const pricedId = new mongoose.Types.ObjectId()
+  const pricedOffering = {
+    _id: pricedId,
+    code: 'PHONE_SETUP',
+    name: 'New phone setup',
+    category: 'DEVICE_SETUP',
+    currency: 'USD',
+    price: 10,
+    priceUsd: 10,
+    priceKhr: 41000,
+    pricingExchangeRate: 4100,
+    active: true,
+  }
+
+  const customerId = new mongoose.Types.ObjectId()
+  const customerDoc = {
+    _id: customerId,
+    name: 'Sokha Chan',
+    phone: '012345678',
+    active: true,
+  }
+
+  ServiceOffering.findById = async (id) => {
+    if (String(id) === String(unpricedId)) return unpricedOffering
+    if (String(id) === String(pricedId)) return pricedOffering
+    return null
+  }
+
+  Customer.findById = (id) => ({
+    select: async () => (String(id) === String(customerId) ? customerDoc : null),
+  })
+
+  let createdChargeDoc = null
+  ServiceCharge.create = async (payload) => {
+    createdChargeDoc = {
+      ...payload,
+      _id: new mongoose.Types.ObjectId(),
+      populate: async () => ({
+        ...payload,
+        _id: new mongoose.Types.ObjectId(),
+        customer: payload.customer ? customerDoc : undefined,
+        createdBy: { _id: testUserId, name: 'Cashier User', role: 'CASHIER' },
+      }),
+    }
+    return createdChargeDoc
+  }
+
+  try {
+    // 1. Unpriced service rejection (409)
+    const resUnpriced = await callServiceRoute('POST', '/charges', {
+      offeringId: unpricedId.toString(),
+      currency: 'USD',
+      quantity: 1,
+    })
+    assert.equal(resUnpriced.status, 409)
+    assert.ok(resUnpriced.body.message.includes('Set a price for this service before charging the customer'))
+
+    // 2. Invalid currency (400)
+    const resCur = await callServiceRoute('POST', '/charges', {
+      offeringId: pricedId.toString(),
+      currency: 'EUR',
+      quantity: 1,
+    })
+    assert.equal(resCur.status, 400)
+    assert.ok(resCur.body.message.includes('Service charge currency must be USD or KHR'))
+
+    // 3. Invalid quantity bounds (400)
+    const resZeroQty = await callServiceRoute('POST', '/charges', {
+      offeringId: pricedId.toString(),
+      quantity: 0,
+    })
+    assert.equal(resZeroQty.status, 400)
+    assert.ok(resZeroQty.body.message.includes('Quantity must be between 1 and 1,000'))
+
+    const resOverQty = await callServiceRoute('POST', '/charges', {
+      offeringId: pricedId.toString(),
+      quantity: 1001,
+    })
+    assert.equal(resOverQty.status, 400)
+    assert.ok(resOverQty.body.message.includes('Quantity must be between 1 and 1,000'))
+
+    // 4. Discount exceeding subtotal (400)
+    const resOverDiscount = await callServiceRoute('POST', '/charges', {
+      offeringId: pricedId.toString(),
+      currency: 'USD',
+      quantity: 1,
+      discount: 15, // subtotal is 10
+    })
+    assert.equal(resOverDiscount.status, 400)
+    assert.ok(resOverDiscount.body.message.includes('Discount cannot exceed the service subtotal'))
+
+    // 5. KHR discount not in whole 100 increments (400)
+    const resKhrDiscount = await callServiceRoute('POST', '/charges', {
+      offeringId: pricedId.toString(),
+      currency: 'KHR',
+      quantity: 1,
+      discount: 250, // not divisible by 100
+    })
+    assert.equal(resKhrDiscount.status, 400)
+    assert.ok(resKhrDiscount.body.message.includes('whole 100 KHR increments'))
+
+    // 6. Successful charge with existing customer profile snapshot
+    const resCustomer = await callServiceRoute('POST', '/charges', {
+      offeringId: pricedId.toString(),
+      customerId: customerId.toString(),
+      currency: 'USD',
+      quantity: 2,
+      discount: 2,
+      paymentMethod: 'CASH',
+      notes: 'Configured security settings',
+    })
+    assert.equal(resCustomer.status, 201)
+    assert.equal(createdChargeDoc.customer.toString(), customerId.toString())
+    assert.equal(createdChargeDoc.customerSnapshot.name, 'Sokha Chan')
+    assert.equal(createdChargeDoc.customerSnapshot.phone, '012345678')
+    assert.equal(createdChargeDoc.quantity, 2)
+    assert.equal(createdChargeDoc.subtotal, 20)
+    assert.equal(createdChargeDoc.discount, 2)
+    assert.equal(createdChargeDoc.total, 18)
+    assert.equal(createdChargeDoc.currency, 'USD')
+
+    // 7. Successful charge with walk-in customer snapshot
+    const resWalkIn = await callServiceRoute('POST', '/charges', {
+      offeringId: pricedId.toString(),
+      customerName: 'Walk-in VIP',
+      currency: 'KHR',
+      quantity: 1,
+      paymentMethod: 'KHQR',
+    })
+    assert.equal(resWalkIn.status, 201)
+    assert.equal(createdChargeDoc.customer, undefined)
+    assert.equal(createdChargeDoc.customerSnapshot.name, 'Walk-in VIP')
+    assert.equal(createdChargeDoc.currency, 'KHR')
+    assert.equal(createdChargeDoc.subtotal, 41000)
+    assert.equal(createdChargeDoc.total, 41000)
+    assert.equal(createdChargeDoc.paymentMethod, 'KHQR')
+  } finally {
+    User.findById = origUserFindById
+    ServiceOffering.findById = origOfferingFindById
+    Customer.findById = origCustomerFindById
+    ServiceCharge.create = origChargeCreate
   }
 })

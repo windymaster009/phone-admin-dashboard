@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { useRouter } from '../../app/routing'
 import {
   AlertTriangle,
@@ -113,6 +113,7 @@ export default function ServiceWorkspace() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const submittingRef = useRef(false)
 
   async function load() {
     setLoading(true)
@@ -220,7 +221,8 @@ export default function ServiceWorkspace() {
 
   async function savePrice(event: FormEvent) {
     event.preventDefault()
-    if (!pricing) return
+    if (submittingRef.current || busy || !pricing) return
+    submittingRef.current = true
     setBusy(true)
     setError('')
     try {
@@ -241,13 +243,15 @@ export default function ServiceWorkspace() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to save the service price')
     } finally {
+      submittingRef.current = false
       setBusy(false)
     }
   }
 
   async function recordCharge(event: FormEvent) {
     event.preventDefault()
-    if (!selected || !(selected.price > 0)) return
+    if (submittingRef.current || busy || !selected || !(selected.price > 0)) return
+    submittingRef.current = true
     setBusy(true)
     setError('')
     try {
@@ -280,6 +284,7 @@ export default function ServiceWorkspace() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to record this service')
     } finally {
+      submittingRef.current = false
       setBusy(false)
     }
   }
@@ -310,7 +315,7 @@ export default function ServiceWorkspace() {
       </div>
     </header>
 
-    {error && <div className="service-alert" role="alert"><AlertTriangle size={17} /><span>{error}</span><button type="button" onClick={() => setError('')} aria-label="Dismiss message"><X size={15} /></button></div>}
+    {error && !chargeOpen && !pricing && <div className="service-alert" role="alert"><AlertTriangle size={17} /><span>{error}</span><button type="button" onClick={() => setError('')} aria-label="Dismiss message"><X size={15} /></button></div>}
 
     <div className="service-layout">
       <main className="service-catalogue">
@@ -362,6 +367,7 @@ export default function ServiceWorkspace() {
       {chargeOpen && <div className="service-modal-backdrop service-charge-backdrop">
       <section className="surface-card service-charge-panel" role="dialog" aria-modal="true" aria-labelledby="service-charge-title">
         <header><span className="service-panel-icon"><CircleDollarSign size={21} /></span><div><span className="eyebrow">Service checkout</span><h3 id="service-charge-title">Record service charge</h3><p>{selected ? `${selected.name} · ${money(unitPrice, chargeCurrency)}` : 'Choose a priced service to begin.'}</p></div><button className="icon-button" type="button" onClick={closeCharge} disabled={busy} aria-label="Close service checkout"><X size={18} /></button></header>
+        {error && <div className="service-alert" role="alert"><AlertTriangle size={17} /><span>{error}</span><button type="button" onClick={() => setError('')} aria-label="Dismiss message"><X size={15} /></button></div>}
         {selected ? <form onSubmit={recordCharge}>
           <label><span>Customer</span><select value={customerId} onChange={(event) => setCustomerId(event.target.value)}><option value="">Walk-in customer</option>{customers.map((customer) => <option value={customer._id} key={customer._id}>{customer.name}{customer.phone ? ` · ${customer.phone}` : ''}</option>)}</select></label>
           {!customerId && <label><span>Customer name <small>Optional</small></span><input value={walkInName} onChange={(event) => setWalkInName(event.target.value)} placeholder="Walk-in customer" /></label>}
@@ -388,6 +394,7 @@ export default function ServiceWorkspace() {
     {pricing && <div className="service-modal-backdrop">
       <section className="surface-card service-price-modal" role="dialog" aria-modal="true" aria-labelledby="service-price-title">
         <header><span className="service-panel-icon"><Banknote size={20} /></span><div><span className="eyebrow">Catalogue pricing</span><h3 id="service-price-title">Set service price</h3><p>{pricing.name}</p></div><button className="icon-button" type="button" onClick={() => setPricing(null)} aria-label="Close pricing"><X size={18} /></button></header>
+        {error && <div className="service-alert" role="alert"><AlertTriangle size={17} /><span>{error}</span><button type="button" onClick={() => setError('')} aria-label="Dismiss message"><X size={15} /></button></div>}
         <form onSubmit={savePrice}>
           <div className="service-price-heading"><div><span className="eyebrow">Two-currency price</span><p>Enter either amount; the matching price updates automatically.</p></div><small>1 USD = {serviceExchangeRate.toLocaleString('en-US')} KHR</small></div>
           <div className="service-price-columns">

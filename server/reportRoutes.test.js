@@ -629,6 +629,194 @@ test('Service Charges Report: exact USD and KHR modes keep original totals', asy
   }
 })
 
+test('Service Charges Report: period=all_time removes only date restriction while preserving other active filters', async () => {
+  const origServiceFind = ServiceCharge.find
+  const origUserFind = User.find
+
+  let capturedMatch = null
+  User.find = () => ({ select: () => ({ sort: () => ({ lean: async () => [] }) }) })
+  ServiceCharge.find = (match) => {
+    capturedMatch = match
+    return { populate: () => ({ populate: () => ({ sort: () => ({ lean: async () => [] }) }) }) }
+  }
+
+  try {
+    // With period=all_time and other filters active
+    const res = await callReportRoute('/services', {
+      period: 'all_time',
+      category: 'DEVICE_SETUP',
+      method: 'CASH',
+      currency: 'USD',
+      status: 'COMPLETED',
+    })
+    assert.equal(res.status, 200)
+    // completedAt must NOT be in the match query
+    assert.equal(capturedMatch.completedAt, undefined)
+    // Other active filters MUST be preserved in the match query
+    assert.equal(capturedMatch['serviceSnapshot.category'], 'DEVICE_SETUP')
+    assert.equal(capturedMatch.paymentMethod, 'CASH')
+    assert.equal(capturedMatch.currency, 'USD')
+    assert.equal(capturedMatch.status, 'COMPLETED')
+
+    // Contrast with period=this_month where completedAt must be present
+    await callReportRoute('/services', {
+      period: 'this_month',
+      category: 'DEVICE_SETUP',
+    })
+    assert.ok(capturedMatch.completedAt)
+    assert.ok(capturedMatch.completedAt.$gte instanceof Date)
+    assert.ok(capturedMatch.completedAt.$lt instanceof Date)
+    assert.equal(capturedMatch['serviceSnapshot.category'], 'DEVICE_SETUP')
+  } finally {
+    ServiceCharge.find = origServiceFind
+    User.find = origUserFind
+  }
+})
+
+test('Service Charges Report: combined-currency conversion rules, fallback exchange rate disclosure, and breakdown agreement', async () => {
+  const origServiceFind = ServiceCharge.find
+  const origUserFind = User.find
+  let capturedMatch = null
+
+  const sampleCharges = [
+    {
+      _id: 'sc-usd-1',
+      serviceNo: 'SC-USD-1',
+      serviceSnapshot: { name: 'Account Setup', category: 'ACCOUNT_SETUP' },
+      customerSnapshot: { name: 'Client A' },
+      currency: 'USD',
+      exchangeRate: 1,
+      total: 20,
+      discount: 5,
+      quantity: 2,
+      paymentMethod: 'CASH',
+      status: 'COMPLETED',
+      completedAt: new Date('2026-03-01T00:00:00Z'),
+    },
+    {
+      _id: 'sc-khr-explicit',
+      serviceNo: 'SC-KHR-1',
+      serviceSnapshot: { name: 'Data Transfer', category: 'DATA_TRANSFER' },
+      customerSnapshot: { name: 'Client B' },
+      currency: 'KHR',
+      exchangeRate: 4100,
+      total: 82000, // 82,000 / 4100 = 20 USD
+      discount: 4100, // 4,100 / 4100 = 1 USD
+      quantity: 1,
+      paymentMethod: 'KHQR',
+      status: 'COMPLETED',
+      completedAt: new Date('2026-03-02T00:00:00Z'),
+    },
+    {
+      _id: 'sc-khr-fallback',
+      serviceNo: 'SC-KHR-2',
+      serviceSnapshot: { name: 'Device Setup', category: 'DEVICE_SETUP' },
+      customerSnapshot: { name: 'Client C' },
+      currency: 'KHR',
+      exchangeRate: 0, // Missing/zero rate triggers fallback 4100 -> 41,000 / 4100 = 10 USD
+      total: 41000,
+      discount: 0,
+      quantity: 1,
+      paymentMethod: 'BANK',
+      status: 'COMPLETED',
+      completedAt: new Date('2026-03-03T00:00:00Z'),
+    },
+    {
+      _id: 'sc-cancelled',
+      serviceNo: 'SC-CANCEL-1',
+      serviceSnapshot: { name: 'Software Installation', category: 'SOFTWARE' },
+      customerSnapshot: { name: 'Client D' },
+      currency: 'USD',
+      exchangeRate: 1,
+      total: 100,
+      discount: 0,
+      quantity: 1,
+      paymentMethod: 'CARD',
+      status: 'CANCELLED',
+      completedAt: new Date('2026-03-04T00:00:00Z'),
+    },
+  ]
+
+  User.find = () => ({ select: () => ({ sort: () => ({ lean: async () => [] }) }) })
+  ServiceCharge.find = (match) => {
+    capturedMatch = match
+    return {
+      populate: () => ({
+        populate: () => ({
+          sort: () => ({
+            lean: async () => sampleCharges,
+          }),
+        }),
+      }),
+    }
+  }
+
+  try {
+    const res = await callReportRoute('/services', { period: 'all_time', currency: 'ALL' })
+    assert.equal(res.status, 200)
+    // Returning cancelled fixtures alone cannot prove the database query includes them.
+    assert.ok(capturedMatch)
+    assert.equal(Object.hasOwn(capturedMatch, 'status'), false, 'Omitting status must not restrict the query to completed charges')
+    assert.equal(res.body.meta.currency, 'USD')
+    assert.equal(res.body.meta.normalized, true)
+    assert.equal(res.body.meta.totalRecords, 4)
+    assert.equal(res.body.rows.length, 4)
+
+    // Summary calculations:
+    // Revenue: 20 (USD) + 20 (KHR explicit) + 10 (KHR fallback) = 50 USD (cancelled 100 USD excluded)
+    const revenueSummary = res.body.summary.find((s) => s.label === 'Service Revenue')
+    assert.equal(revenueSummary.value, 50)
+    assert.equal(revenueSummary.detail, 'USD equivalent across USD and KHR')
+
+    // Discounts: 5 (USD) + 1 (KHR explicit) + 0 = 6 USD
+    const discountSummary = res.body.summary.find((s) => s.label === 'Discounts')
+    assert.equal(discountSummary.value, 6)
+
+    // Completed Jobs: 2 + 1 + 1 = 4
+    const jobsSummary = res.body.summary.find((s) => s.label === 'Completed Jobs')
+    assert.equal(jobsSummary.value, 4)
+
+    // Completed Transactions: 3
+    const txSummary = res.body.summary.find((s) => s.label === 'Transactions')
+    assert.equal(txSummary.value, 3)
+
+    // Cancelled: 1
+    const cancelSummary = res.body.summary.find((s) => s.label === 'Cancelled')
+    assert.equal(cancelSummary.value, 1)
+
+    // Fallback disclosure note MUST be present because sc-khr-fallback had no stored rate
+    assert.ok(
+      res.body.notes.some((n) => n.includes('estimated USD equivalents calculated with the fallback exchange rate')),
+    )
+
+    // Cancelled charge remains in history rows with original status and total
+    const cancelledRow = res.body.rows.find((r) => r.reference === 'SC-CANCEL-1')
+    assert.ok(cancelledRow)
+    assert.equal(cancelledRow.status, 'CANCELLED')
+    assert.equal(cancelledRow.total, 100)
+
+    // Totals and breakdowns agree with matching records:
+    // 1. Revenue by Service breakdown sum matches total revenue
+    const serviceBreakdown = res.body.breakdowns.find((b) => b.title === 'Revenue by Service')
+    assert.ok(serviceBreakdown)
+    const serviceBreakdownTotal = serviceBreakdown.rows.reduce((sum, r) => sum + r.value, 0)
+    const serviceBreakdownCount = serviceBreakdown.rows.reduce((sum, r) => sum + r.count, 0)
+    assert.equal(Math.round(serviceBreakdownTotal * 100) / 100, 50)
+    assert.equal(serviceBreakdownCount, 3)
+
+    // 2. Revenue by Payment breakdown sum matches total revenue
+    const paymentBreakdown = res.body.breakdowns.find((b) => b.title === 'Revenue by Payment')
+    assert.ok(paymentBreakdown)
+    const paymentBreakdownTotal = paymentBreakdown.rows.reduce((sum, r) => sum + r.value, 0)
+    const paymentBreakdownCount = paymentBreakdown.rows.reduce((sum, r) => sum + r.count, 0)
+    assert.equal(Math.round(paymentBreakdownTotal * 100) / 100, 50)
+    assert.equal(paymentBreakdownCount, 3)
+  } finally {
+    ServiceCharge.find = origServiceFind
+    User.find = origUserFind
+  }
+})
+
 test('Report totals are calculated from the complete filtered result before limiting to 500 rows', async () => {
   const origFind = Pawn.find
   const origUpdateMany = Pawn.updateMany

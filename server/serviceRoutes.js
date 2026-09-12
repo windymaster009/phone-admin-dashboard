@@ -168,7 +168,7 @@ router.post('/charges', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), 
     if (!customer || customer.active === false) throw requestError(404, 'Customer was not found')
   }
   const walkInName = clean(req.body.customerName) || 'Walk-in customer'
-  const quantity = Number(req.body.quantity || 1)
+  const quantity = req.body.quantity === undefined ? 1 : Number(req.body.quantity)
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 1000) throw requestError(400, 'Quantity must be between 1 and 1,000')
   const subtotal = serviceCurrencyAmount(unitPrice * quantity, currency)
   const discountType = clean(req.body.discountType || 'AMOUNT').toUpperCase()

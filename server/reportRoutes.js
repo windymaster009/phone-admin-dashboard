@@ -557,7 +557,7 @@ router.get('/payments', requireAuth, allowRoles(...reportRoles), asyncRoute(asyn
 router.get('/services', requireAuth, allowRoles(...reportRoles), asyncRoute(async (req, res) => {
   const period = resolvePeriod(req.query, 'this_month')
   const currency = validChoice(req.query.currency || 'ALL', ['ALL', 'USD', 'KHR'], 'currency')
-  const status = validChoice(req.query.status || 'COMPLETED', ['ALL', 'COMPLETED', 'CANCELLED'], 'service status')
+  const status = validChoice(req.query.status, ['ALL', 'COMPLETED', 'CANCELLED'], 'service status')
   const category = validChoice(req.query.category, ['ALL', 'ACCOUNT_SETUP', 'DEVICE_SETUP', 'DATA_TRANSFER', 'SOFTWARE', 'OTHER'], 'service category')
   const method = validChoice(req.query.method, ['ALL', 'CASH', 'KHQR', 'BANK', 'CARD', 'OTHER'], 'payment method')
   const staff = staffFilter(req.query.staff)
@@ -565,7 +565,7 @@ router.get('/services', requireAuth, allowRoles(...reportRoles), asyncRoute(asyn
   const reportingCurrency = isAll ? 'USD' : currency
   const match = {
     ...(isAll ? {} : { currency }),
-    completedAt: { $gte: period.from, $lt: period.to },
+    ...(period.key !== 'all_time' ? { completedAt: { $gte: period.from, $lt: period.to } } : {}),
     ...(status !== 'ALL' ? { status } : {}),
     ...(category !== 'ALL' ? { 'serviceSnapshot.category': category } : {}),
     ...(method !== 'ALL' ? { paymentMethod: method } : {}),
