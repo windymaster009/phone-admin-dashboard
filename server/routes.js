@@ -1923,6 +1923,13 @@ router.patch('/customers/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASH
     ? ['name', 'phone']
     : ['name', 'phone', 'nationalIdNumber', 'nationalIdFrontUrl', 'nationalIdBackUrl', 'address', 'notes', 'active']
   const update = Object.fromEntries(Object.entries(req.body).filter(([key]) => allowed.includes(key)))
+  if (update.name !== undefined) {
+    update.name = clean(update.name)
+    if (!update.name) return res.status(400).json({ message: 'Customer name is required' })
+  }
+  for (const field of ['phone', 'nationalIdNumber', 'nationalIdFrontUrl', 'nationalIdBackUrl', 'address', 'notes']) {
+    if (update[field] !== undefined) update[field] = clean(update[field])
+  }
   const customer = await Customer.findByIdAndUpdate(req.params.id, update, { new: true, runValidators: true })
   if (!customer) return res.status(404).json({ message: 'Customer not found' })
   await writeActivity(req, { action: 'UPDATE', entity: 'CUSTOMER', entityId: customer._id, details: update })

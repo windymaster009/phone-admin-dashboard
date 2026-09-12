@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ButtonHTMLAttributes, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type FormEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, BadgeCheck, Building2, CheckCircle2, Pencil, Phone, Plus, Power, Search, Trash2, X } from 'lucide-react'
 import { api } from '../../lib/api'
@@ -163,6 +163,7 @@ export default function SupplierWorkspace() {
   const [editing, setEditing] = useState<Supplier | null>(null)
   const [deleting, setDeleting] = useState<Supplier | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
+  const submittingRef = useRef(false)
 
   const loadSuppliers = useCallback(async () => {
     setLoading(true)
@@ -188,6 +189,8 @@ export default function SupplierWorkspace() {
 
   async function saveSupplier(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (submittingRef.current) return
+    submittingRef.current = true
     setBusy(true)
     setModalError('')
     const form = new FormData(event.currentTarget)
@@ -208,12 +211,15 @@ export default function SupplierWorkspace() {
     } catch (reason) {
       setModalError(reason instanceof Error ? reason.message : 'Unable to save supplier')
     } finally {
+      submittingRef.current = false
       setBusy(false)
     }
   }
 
   async function toggleSupplier(supplier: Supplier) {
+    if (submittingRef.current) return
     if (supplier.active && !window.confirm(`Deactivate ${supplier.name}? They will no longer appear in New Purchase.`)) return
+    submittingRef.current = true
     setBusy(true)
     setError('')
     try {
@@ -223,12 +229,14 @@ export default function SupplierWorkspace() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to update supplier')
     } finally {
+      submittingRef.current = false
       setBusy(false)
     }
   }
 
   async function deleteSupplier() {
-    if (!deleting) return
+    if (submittingRef.current || !deleting) return
+    submittingRef.current = true
     const supplier = deleting
     setBusy(true)
     setDeleteError('')
@@ -241,6 +249,7 @@ export default function SupplierWorkspace() {
     } catch (reason) {
       setDeleteError(reason instanceof Error ? reason.message : 'Unable to delete supplier')
     } finally {
+      submittingRef.current = false
       setBusy(false)
     }
   }

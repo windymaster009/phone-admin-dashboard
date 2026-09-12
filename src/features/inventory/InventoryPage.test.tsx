@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import InventoryPage from './InventoryPage'
@@ -452,5 +452,577 @@ describe('InventoryPage feature integration', () => {
     await user.click(printButton)
 
     expect(printSpy).toHaveBeenCalledWith(expect.objectContaining({ _id: item._id }))
+  })
+
+  it('displays error inside the dialog and preserves input when client-side price validation fails', async () => {
+    const item = {
+      ...mockInventoryItem,
+      _id: 'item-invalid-price',
+      name: 'Phone for Client Validation',
+      sellPrice: 100,
+      minimumSellPrice: 80,
+      khrSellPrice: 410000,
+      khrMinimumSellPrice: 328000,
+      quantity: 5,
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({ items: [item] }),
+    } as Response)
+
+    const user = userEvent.setup()
+
+    render(
+      <RouterProvider>
+        <InventoryPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(item.name)).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: new RegExp(item.name, 'i') }))
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toBeInTheDocument()
+
+    // Open price editor
+    await user.click(within(dialog).getByRole('button', { name: 'Change price' }))
+
+    // Type a KHR value that does not end in whole 100 KHR increments (e.g. 410055 > 328000)
+    const khrPriceInput = within(dialog).getByLabelText('Regular selling price in Cambodian riel')
+    await user.clear(khrPriceInput)
+    await user.type(khrPriceInput, '410055')
+
+    // Click Save prices
+    const saveButton = within(dialog).getByRole('button', { name: 'Save prices' })
+    expect(saveButton).not.toBeDisabled()
+    await user.click(saveButton)
+
+    // Error must be visible INSIDE the dialog with role="alert"
+    const alert = within(dialog).getByRole('alert')
+    expect(alert).toHaveTextContent('KHR prices must use whole 100 KHR increments')
+
+    // Input must be preserved
+    expect(khrPriceInput).toHaveValue('410,055')
+    // Stock quantity in state remains unchanged
+    expect(within(dialog).getByText('5')).toBeInTheDocument()
+  })
+
+  it('displays error inside the dialog and preserves input when server rejects price update', async () => {
+    const item = {
+      ...mockInventoryItem,
+      _id: 'item-server-err',
+      name: 'Phone for Server Validation',
+      sellPrice: 200,
+      minimumSellPrice: 150,
+      khrSellPrice: 820000,
+      khrMinimumSellPrice: 615000,
+      quantity: 3,
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      const method = init?.method || 'GET'
+
+      if (url.includes(`/inventory/${item._id}`) && method === 'PATCH') {
+        return {
+          ok: false,
+          status: 400,
+          headers: new Headers(),
+          json: async () => ({ message: 'Server price rejection' }),
+        } as Response
+      }
+
+      if (url.includes('/inventory') && method === 'GET') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ items: [item] }),
+        } as Response
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({}),
+      } as Response
+    })
+
+    const user = userEvent.setup()
+
+    render(
+      <RouterProvider>
+        <InventoryPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(item.name)).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: new RegExp(item.name, 'i') }))
+    const dialog = screen.getByRole('dialog')
+
+    await user.click(within(dialog).getByRole('button', { name: 'Change price' }))
+    const usdPriceInput = within(dialog).getByLabelText('Regular selling price in US dollars')
+    await user.clear(usdPriceInput)
+    await user.type(usdPriceInput, '250')
+    const usdMinInput = within(dialog).getByLabelText('Minimum selling price in US dollars')
+    await user.clear(usdMinInput)
+    await user.type(usdMinInput, '180')
+
+    const saveButton = within(dialog).getByRole('button', { name: 'Save prices' })
+    expect(saveButton).not.toBeDisabled()
+    await user.click(saveButton)
+
+    // Error must be visible inside the dialog
+    await waitFor(() => {
+      expect(within(dialog).getByRole('alert')).toHaveTextContent('Server price rejection')
+    })
+
+    // Input preserved
+    expect(usdPriceInput).toHaveValue('250')
+    expect(usdMinInput).toHaveValue('180')
+    // Price editor remains open
+    expect(within(dialog).getByRole('heading', { level: 4, name: 'Set selling prices' })).toBeInTheDocument()
+    // Stock quantity is still 3
+    expect(within(dialog).getByText('3')).toBeInTheDocument()
+  })
+
+  it('prevents duplicate submissions while price save is in flight', async () => {
+    const item = {
+      ...mockInventoryItem,
+      _id: 'item-dup-test',
+      name: 'Phone for Duplicate Test',
+      sellPrice: 300,
+      minimumSellPrice: 200,
+      khrSellPrice: 1230000,
+      khrMinimumSellPrice: 820000,
+    }
+    let patchCalls = 0
+    let resolvePatch: (value: Response) => void = () => {}
+    const patchPromise = new Promise<Response>((resolve) => {
+      resolvePatch = resolve
+    })
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      const method = init?.method || 'GET'
+
+      if (url.includes(`/inventory/${item._id}`) && method === 'PATCH') {
+        patchCalls++
+        return patchPromise
+      }
+
+      if (url.includes('/inventory') && method === 'GET') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ items: [item] }),
+        } as Response
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({}),
+      } as Response
+    })
+
+    const user = userEvent.setup()
+
+    render(
+      <RouterProvider>
+        <InventoryPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(item.name)).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: new RegExp(item.name, 'i') }))
+    const dialog = screen.getByRole('dialog')
+
+    await user.click(within(dialog).getByRole('button', { name: 'Change price' }))
+    const saveButton = within(dialog).getByRole('button', { name: 'Save prices' })
+
+    // Both events run before React can commit the disabled-button state.
+    act(() => {
+      saveButton.click()
+      saveButton.click()
+    })
+    expect(patchCalls).toBe(1)
+    expect(saveButton).toBeDisabled()
+
+    // Attempt second click while pending
+    await user.click(saveButton)
+    expect(patchCalls).toBe(1)
+
+    // Complete the patch
+    resolvePatch({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({
+        item: { ...item, sellPrice: 350, minimumSellPrice: 250, quantity: item.quantity },
+      }),
+    } as Response)
+
+    await waitFor(() => {
+      expect(within(dialog).queryByRole('heading', { level: 4, name: 'Set selling prices' })).not.toBeInTheDocument()
+    })
+
+    // Exactly 1 network request was sent
+    expect(patchCalls).toBe(1)
+  })
+
+  it('updates the UI immediately upon successful price change without page reload and preserves stock quantity', async () => {
+    const item = {
+      ...mockInventoryItem,
+      _id: 'item-price-ui-update',
+      name: 'Phone for UI Update Test',
+      sellPrice: 100,
+      minimumSellPrice: 80,
+      khrSellPrice: 410000,
+      khrMinimumSellPrice: 328000,
+      quantity: 7,
+    }
+    const updatedItem = {
+      ...item,
+      sellPrice: 150,
+      minimumSellPrice: 120,
+      khrSellPrice: 615000,
+      khrMinimumSellPrice: 492000,
+      quantity: 7, // Quantity untouched
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      const method = init?.method || 'GET'
+
+      if (url.includes(`/inventory/${item._id}`) && method === 'PATCH') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ item: updatedItem }),
+        } as Response
+      }
+
+      if (url.includes('/inventory') && method === 'GET') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ items: [item] }),
+        } as Response
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({}),
+      } as Response
+    })
+
+    const user = userEvent.setup()
+
+    render(
+      <RouterProvider>
+        <InventoryPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(item.name)).toBeInTheDocument()
+    })
+
+    // Open detail modal
+    await user.click(screen.getByRole('button', { name: new RegExp(item.name, 'i') }))
+    const dialog = screen.getByRole('dialog')
+
+    // Initial price shown in modal
+    expect(within(dialog).getByText('$100 · 410,000 KHR')).toBeInTheDocument()
+    // Stock is 7
+    expect(within(dialog).getByText('7')).toBeInTheDocument()
+
+    // Open price editor and save new prices
+    await user.click(within(dialog).getByRole('button', { name: 'Change price' }))
+    const usdPriceInput = within(dialog).getByLabelText('Regular selling price in US dollars')
+    await user.clear(usdPriceInput)
+    await user.type(usdPriceInput, '150')
+    const usdMinInput = within(dialog).getByLabelText('Minimum selling price in US dollars')
+    await user.clear(usdMinInput)
+    await user.type(usdMinInput, '120')
+
+    await user.click(within(dialog).getByRole('button', { name: 'Save prices' }))
+
+    // Dialog updates immediately without refreshing
+    await waitFor(() => {
+      expect(within(dialog).getByText('$150 · 615,000 KHR')).toBeInTheDocument()
+    })
+    // Stock quantity is still 7
+    expect(within(dialog).getByText('7')).toBeInTheDocument()
+
+    // Close modal and verify catalog card is also updated in background
+    await user.click(within(dialog).getByRole('button', { name: 'Close details' }))
+    expect(screen.getByText('$150')).toBeInTheDocument()
+    expect(screen.getByText('7 in stock')).toBeInTheDocument()
+  })
+
+  it('filters items by category, status, and renders No matching inventory when no items match', async () => {
+    const phone = { ...mockInventoryItem, _id: 'item-p1', name: 'iPhone 15 Pro', category: 'PHONE' as const, status: 'IN_STOCK' as const, quantity: 2 }
+    const accessory = { ...mockInventoryItem, _id: 'item-a1', name: 'USB-C Cable', category: 'ACCESSORY' as const, status: 'SOLD' as const, quantity: 0 }
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({ items: [phone, accessory] }),
+    } as Response)
+
+    const user = userEvent.setup()
+
+    render(
+      <RouterProvider>
+        <InventoryPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('iPhone 15 Pro')).toBeInTheDocument()
+      expect(screen.getByText('USB-C Cable')).toBeInTheDocument()
+    })
+
+    // Filter by category: ACCESSORY
+    const categorySelect = screen.getByLabelText('Filter inventory category')
+    await user.selectOptions(categorySelect, 'ACCESSORY')
+
+    expect(screen.queryByText('iPhone 15 Pro')).not.toBeInTheDocument()
+    expect(screen.getByText('USB-C Cable')).toBeInTheDocument()
+
+    // Filter by status: IN_STOCK (accessory is SOLD, so 0 items match)
+    const statusSelect = screen.getByLabelText('Filter stock status')
+    await user.selectOptions(statusSelect, 'IN_STOCK')
+
+    expect(screen.queryByText('USB-C Cable')).not.toBeInTheDocument()
+    expect(screen.getByText('No matching inventory.')).toBeInTheDocument()
+  })
+
+  it('displays distinct details for quantity-based accessories without phone serialized fields', async () => {
+    const accessoryItem = {
+      ...mockInventoryItem,
+      _id: 'acc-case-1',
+      name: 'Silicone Case',
+      sku: 'CASE-IPH-15',
+      category: 'ACCESSORY' as const,
+      quantity: 25,
+      reorderLevel: 5,
+      buyPrice: 3,
+      sellPrice: 10,
+      minimumSellPrice: 8,
+      khrSellPrice: 41000,
+      khrMinimumSellPrice: 32800,
+      compatibleModels: ['iPhone 15', 'iPhone 15 Pro'],
+      oemQuality: 'Original Grade A',
+      accessoriesIncluded: ['CASE' as const],
+      imei1: undefined,
+      imei2: undefined,
+      serialNumber: undefined,
+      batteryHealth: undefined,
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({ items: [accessoryItem] }),
+    } as Response)
+
+    const user = userEvent.setup()
+
+    render(
+      <RouterProvider>
+        <InventoryPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(accessoryItem.name)).toBeInTheDocument()
+      expect(screen.getByText('25 in stock')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: new RegExp(accessoryItem.name, 'i') }))
+    const dialog = screen.getByRole('dialog')
+
+    // Verifies quantity-based attributes
+    expect(within(dialog).getByText('25')).toBeInTheDocument()
+    expect(within(dialog).getByText('iPhone 15, iPhone 15 Pro')).toBeInTheDocument()
+    expect(within(dialog).getByText('Original Grade A')).toBeInTheDocument()
+    expect(within(dialog).getByText('No IMEI 1')).toBeInTheDocument()
+  })
+
+  it.each(['upload', 'remove'] as const)('blocks same-render %s duplicates and releases the photo guard after failure', async (operation) => {
+    const item = { ...mockInventoryItem, imageUrl: 'https://example.com/old.webp' }
+    let resolveRequest: (response: Response) => void = () => {}
+    const pending = new Promise<Response>((resolve) => { resolveRequest = resolve })
+    const mutations: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const method = init?.method || 'GET'
+      if (method !== 'GET') {
+        mutations.push(method)
+        if (mutations.length === 1) return pending
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ item }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [item] }) } as Response
+    })
+    const user = userEvent.setup()
+    render(<RouterProvider><InventoryPage /></RouterProvider>)
+    await user.click(await screen.findByRole('button', { name: new RegExp(item.name, 'i') }))
+    const dialog = screen.getByRole('dialog')
+    const input = dialog.querySelector<HTMLInputElement>('input[type="file"]')!
+    const remove = within(dialog).getByRole('button', { name: 'Remove photo' })
+    const reads = vi.spyOn(FileReader.prototype, 'readAsDataURL')
+    Object.defineProperty(input, 'files', { configurable: true, value: [new File(['photo'], 'photo.png', { type: 'image/png' })] })
+    const upload = () => input.dispatchEvent(new Event('change', { bubbles: true }))
+
+    act(() => {
+      if (operation === 'upload') {
+        upload()
+        upload()
+        remove.click()
+      } else {
+        remove.click()
+        remove.click()
+        upload()
+      }
+    })
+    await waitFor(() => expect(mutations).toEqual([operation === 'upload' ? 'POST' : 'DELETE']))
+    expect(reads).toHaveBeenCalledTimes(operation === 'upload' ? 1 : 0)
+    expect(input).toBeDisabled()
+    expect(remove).toBeDisabled()
+
+    await act(async () => {
+      resolveRequest({ ok: false, status: 400, headers: new Headers(), json: async () => ({ message: 'Photo request failed' }) } as Response)
+    })
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Photo request failed')
+    expect(input).not.toBeDisabled()
+    expect(remove).not.toBeDisabled()
+    await user.click(remove)
+    await waitFor(() => expect(mutations).toHaveLength(2))
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('uploads product photo, updates preview, and preserves stock quantity', async () => {
+    const item = { ...mockInventoryItem, _id: 'item-photo-upload-test', imageUrl: '', quantity: 12 }
+    const updatedWithPhoto = { ...item, imageUrl: 'https://example.com/photos/newly-uploaded.webp', quantity: 12 }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      const method = init?.method || 'GET'
+
+      if (url.includes(`/inventory/${item._id}/photo`) && method === 'POST') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ item: updatedWithPhoto }),
+        } as Response
+      }
+
+      if (url.includes('/inventory') && method === 'GET') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ items: [item] }),
+        } as Response
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({}),
+      } as Response
+    })
+
+    const user = userEvent.setup()
+
+    render(
+      <RouterProvider>
+        <InventoryPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(item.name)).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: new RegExp(item.name, 'i') }))
+    const dialog = screen.getByRole('dialog')
+
+    // Initial state: No product photo
+    expect(within(dialog).getByText('No product photo')).toBeInTheDocument()
+    expect(within(dialog).getByText('12')).toBeInTheDocument()
+
+    // Upload file
+    const file = new File(['fake-image-bytes'], 'phone.png', { type: 'image/png' })
+    const fileInput = dialog.querySelector('input[type="file"]') as HTMLInputElement
+    expect(fileInput).toBeInTheDocument()
+    await user.upload(fileInput, file)
+
+    // Modal updates to show product photo added and stock is still 12
+    await waitFor(() => {
+      expect(within(dialog).getByText('Product photo added')).toBeInTheDocument()
+    })
+    expect(within(dialog).getByText('12')).toBeInTheDocument()
+  })
+
+  it('selects and opens item when phoneflow:open-stock-item event is fired', async () => {
+    const item1 = { ...mockInventoryItem, _id: 'item-open-1', name: 'First Item' }
+    const scannedItem = { ...mockInventoryItem, _id: 'item-scanned-2', name: 'Scanned Super Phone', quantity: 1 }
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({ items: [item1] }),
+    } as Response)
+
+    render(
+      <RouterProvider>
+        <InventoryPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(item1.name)).toBeInTheDocument()
+    })
+
+    // Dispatch the custom scan event
+    act(() => {
+      window.dispatchEvent(
+        new CustomEvent('phoneflow:open-stock-item', {
+          detail: { item: scannedItem },
+        }),
+      )
+    })
+
+    // Modal opens automatically displaying scanned item
+    await waitFor(() => {
+      const dialog = screen.getByRole('dialog')
+      expect(within(dialog).getByText(scannedItem.name)).toBeInTheDocument()
+    })
   })
 })

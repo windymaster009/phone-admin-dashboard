@@ -349,6 +349,28 @@
   scrollbar-color: var(--border-strong) transparent;
 }
 
+.inventory-dialog-error {
+  margin: 16px 20px 0;
+  padding: 11px 13px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border: 1px solid rgba(251, 113, 133, 0.24);
+  border-radius: 11px;
+  color: #fda4af;
+  background: rgba(251, 113, 133, 0.09);
+  font-size: 12px;
+  line-height: 1.45;
+  min-width: 0;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+.inventory-dialog-error > svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
 .inventory-detail-group {
   min-width: 0;
 }

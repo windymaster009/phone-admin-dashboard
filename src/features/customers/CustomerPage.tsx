@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ButtonHTMLAttributes, type FormEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type FormEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import './customer-workspace.css'
 import {
@@ -194,6 +194,7 @@ export default function CustomerPage() {
   const [showModal, setShowModal] = useState(false)
   const [editing, setEditing] = useState<Customer | null>(null)
   const [deleting, setDeleting] = useState<Customer | null>(null)
+  const submittingRef = useRef(false)
 
   const loadCustomers = useCallback(async () => {
     setLoading(true)
@@ -228,6 +229,8 @@ export default function CustomerPage() {
 
   async function saveCustomer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (submittingRef.current) return
+    submittingRef.current = true
     const formElement = event.currentTarget
     setBusy(true)
     setModalError('')
@@ -252,12 +255,14 @@ export default function CustomerPage() {
     } catch (reason) {
       setModalError(reason instanceof Error ? reason.message : 'Unable to save customer')
     } finally {
+      submittingRef.current = false
       setBusy(false)
     }
   }
 
   async function deleteCustomer() {
-    if (!deleting) return
+    if (submittingRef.current || !deleting) return
+    submittingRef.current = true
     const customer = deleting
     setBusy(true)
     setDeleteError('')
@@ -270,6 +275,7 @@ export default function CustomerPage() {
     } catch (reason) {
       setDeleteError(reason instanceof Error ? reason.message : 'Unable to delete customer')
     } finally {
+      submittingRef.current = false
       setBusy(false)
     }
   }

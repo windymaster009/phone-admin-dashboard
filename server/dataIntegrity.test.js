@@ -1656,3 +1656,215 @@ test('Service Charges: charge creation validation, unpriced protection, and cust
     ServiceCharge.create = origChargeCreate
   }
 })
+
+test('Customer and Supplier routes: enforce authentication, role permissions, field restrictions, and validations', async () => {
+  const origUserFindById = User.findById
+  const origCustomerFind = Customer.find
+  const origCustomerCreate = Customer.create
+  const origCustomerFindByIdAndUpdate = Customer.findByIdAndUpdate
+  const origCustomerFindByIdAndDelete = Customer.findByIdAndDelete
+  const origSupplierFind = Supplier.find
+  const origSupplierCreate = Supplier.create
+  const origSupplierFindByIdAndUpdate = Supplier.findByIdAndUpdate
+  const origSupplierFindByIdAndDelete = Supplier.findByIdAndDelete
+  const origTradeExists = Trade.exists
+
+  const mockCustomerId = new mongoose.Types.ObjectId()
+  const mockSupplierId = new mongoose.Types.ObjectId()
+
+  try {
+    // 1. Direct unauthorized requests (missing auth token)
+    const resNoAuthGetCust = await callAppRoute('GET', '/customers', {}, {}, { authorization: '' })
+    assert.equal(resNoAuthGetCust.status, 401)
+
+    const resNoAuthGetSup = await callAppRoute('GET', '/suppliers', {}, {}, { authorization: '' })
+    assert.equal(resNoAuthGetSup.status, 401)
+
+    const resNoAuthPostCust = await callAppRoute('POST', '/customers', { name: 'Unauthorized Customer' }, {}, { authorization: '' })
+    assert.equal(resNoAuthPostCust.status, 401)
+
+    const resNoAuthPostSup = await callAppRoute('POST', '/suppliers', { name: 'Unauthorized Supplier' }, {}, { authorization: '' })
+    assert.equal(resNoAuthPostSup.status, 401)
+
+    // 2. STOCK role enforcement
+    User.findById = () => ({
+      select: () => Promise.resolve({
+        _id: testUserId,
+        name: 'Stock User',
+        email: 'stock@phoneflow.test',
+        role: 'STOCK',
+        active: true,
+      }),
+    })
+
+    // STOCK cannot access customers
+    const resStockGetCust = await callAppRoute('GET', '/customers')
+    assert.equal(resStockGetCust.status, 403)
+    const resStockPostCust = await callAppRoute('POST', '/customers', { name: 'Stock Customer' })
+    assert.equal(resStockPostCust.status, 403)
+    const resStockPatchCust = await callAppRoute('PATCH', `/customers/${mockCustomerId}`, { name: 'Stock Update' })
+    assert.equal(resStockPatchCust.status, 403)
+    const resStockDeleteCust = await callAppRoute('DELETE', `/customers/${mockCustomerId}`)
+    assert.equal(resStockDeleteCust.status, 403)
+
+    // STOCK can read, create, and patch suppliers, but CANNOT delete suppliers
+    Supplier.find = () => ({
+      sort: () => ({
+        limit: () => Promise.resolve([{ _id: mockSupplierId, name: 'Stock Accessible Supplier' }]),
+      }),
+    })
+    const resStockGetSup = await callAppRoute('GET', '/suppliers')
+    assert.equal(resStockGetSup.status, 200)
+
+    let createdSupplier = null
+    Supplier.create = async (doc) => {
+      createdSupplier = doc
+      return { _id: mockSupplierId, ...doc }
+    }
+    const resStockPostSup = await callAppRoute('POST', '/suppliers', { name: 'New Stock Supplier', phone: '012345678' })
+    assert.equal(resStockPostSup.status, 201)
+    assert.equal(createdSupplier.name, 'New Stock Supplier')
+
+    let patchedSupplierUpdate = null
+    Supplier.findByIdAndUpdate = async (id, update) => {
+      patchedSupplierUpdate = update
+      return { _id: id, ...update }
+    }
+    const resStockPatchSup = await callAppRoute('PATCH', `/suppliers/${mockSupplierId}`, { phone: '099888777' })
+    assert.equal(resStockPatchSup.status, 200)
+    assert.equal(patchedSupplierUpdate.phone, '099888777')
+
+    const resStockDeleteSup = await callAppRoute('DELETE', `/suppliers/${mockSupplierId}`)
+    assert.equal(resStockDeleteSup.status, 403)
+
+    // 3. CASHIER role enforcement & restricted field stripping
+    User.findById = () => ({
+      select: () => Promise.resolve({
+        _id: testUserId,
+        name: 'Cashier User',
+        email: 'cashier@phoneflow.test',
+        role: 'CASHIER',
+        active: true,
+      }),
+    })
+
+    // CASHIER cannot access suppliers at all
+    const resCashierGetSup = await callAppRoute('GET', '/suppliers')
+    assert.equal(resCashierGetSup.status, 403)
+    const resCashierPostSup = await callAppRoute('POST', '/suppliers', { name: 'Any Supplier' })
+    assert.equal(resCashierPostSup.status, 403)
+    const resCashierPatchSup = await callAppRoute('PATCH', `/suppliers/${mockSupplierId}`, { name: 'Any Supplier' })
+    assert.equal(resCashierPatchSup.status, 403)
+    const resCashierDeleteSup = await callAppRoute('DELETE', `/suppliers/${mockSupplierId}`)
+    assert.equal(resCashierDeleteSup.status, 403)
+
+    // CASHIER cannot delete customers
+    const resCashierDeleteCust = await callAppRoute('DELETE', `/customers/${mockCustomerId}`)
+    assert.equal(resCashierDeleteCust.status, 403)
+
+    // CASHIER GET /customers selects only safe fields
+    let selectFieldsCalled = null
+    Customer.find = () => {
+      const q = {
+        sort: () => q,
+        limit: () => q,
+        select: (fields) => {
+          selectFieldsCalled = fields
+          return q
+        },
+        then: (resolve) => resolve([{ _id: mockCustomerId, name: 'Safe View Customer' }]),
+      }
+      return q
+    }
+    const resCashierGetCust = await callAppRoute('GET', '/customers')
+    assert.equal(resCashierGetCust.status, 200)
+    assert.equal(selectFieldsCalled, 'name phone active createdAt updatedAt')
+
+    // CASHIER POST /customers: strips sensitive fields (nationalIdNumber, address, notes)
+    let createdCustomerDoc = null
+    Customer.create = async (doc) => {
+      createdCustomerDoc = doc
+      return { _id: mockCustomerId, ...doc }
+    }
+    const resCashierPostCust = await callAppRoute('POST', '/customers', {
+      name: 'Cashier Customer',
+      phone: '012345678',
+      nationalIdNumber: 'ID-SECRET',
+      address: 'Private Address',
+      notes: 'Private notes',
+    })
+    assert.equal(resCashierPostCust.status, 201)
+    assert.equal(createdCustomerDoc.name, 'Cashier Customer')
+    assert.equal(createdCustomerDoc.phone, '012345678')
+    assert.equal(createdCustomerDoc.nationalIdNumber, undefined)
+    assert.equal(createdCustomerDoc.address, undefined)
+    assert.equal(createdCustomerDoc.notes, undefined)
+
+    // CASHIER PATCH /customers/:id: only allows name and phone, ignores notes and address
+    let patchedCustomerDoc = null
+    Customer.findByIdAndUpdate = async (id, update) => {
+      patchedCustomerDoc = update
+      return { _id: id, ...update }
+    }
+    const resCashierPatchCust = await callAppRoute('PATCH', `/customers/${mockCustomerId}`, {
+      phone: '099111222',
+      address: 'Hacked Address',
+      notes: 'Hacked Notes',
+    })
+    assert.equal(resCashierPatchCust.status, 200)
+    assert.equal(patchedCustomerDoc.phone, '099111222')
+    assert.equal(patchedCustomerDoc.address, undefined)
+    assert.equal(patchedCustomerDoc.notes, undefined)
+
+    // 4. MANAGER role: validates empty names on PATCH and preserves unrelated fields
+    User.findById = () => ({
+      select: () => Promise.resolve({
+        _id: testUserId,
+        name: 'Manager User',
+        email: 'manager@phoneflow.test',
+        role: 'MANAGER',
+        active: true,
+      }),
+    })
+
+    // Supplier PATCH empty name validation
+    const resPatchEmptySupplier = await callAppRoute('PATCH', `/suppliers/${mockSupplierId}`, { name: '   ' })
+    assert.equal(resPatchEmptySupplier.status, 400)
+    assert.equal(resPatchEmptySupplier.body.message, 'Supplier name is required')
+
+    // Customer PATCH empty name validation
+    const resPatchEmptyCustomer = await callAppRoute('PATCH', `/customers/${mockCustomerId}`, { name: '   ' })
+    assert.equal(resPatchEmptyCustomer.status, 400)
+    assert.equal(resPatchEmptyCustomer.body.message, 'Customer name is required')
+
+    // Preserving unrelated fields on PATCH
+    let customerPatchedKeys = null
+    Customer.findByIdAndUpdate = async (id, update) => {
+      customerPatchedKeys = Object.keys(update)
+      return { _id: id, name: 'Sokha Chan', phone: update.phone, address: 'Phnom Penh' }
+    }
+    const resPatchCustPreserve = await callAppRoute('PATCH', `/customers/${mockCustomerId}`, { phone: '088776655' })
+    assert.equal(resPatchCustPreserve.status, 200)
+    assert.deepEqual(customerPatchedKeys, ['phone'])
+
+    let supplierPatchedKeys = null
+    Supplier.findByIdAndUpdate = async (id, update) => {
+      supplierPatchedKeys = Object.keys(update)
+      return { _id: id, name: 'Angkor Tech', phone: update.phone, notes: 'Original notes' }
+    }
+    const resPatchSupPreserve = await callAppRoute('PATCH', `/suppliers/${mockSupplierId}`, { phone: '088776655' })
+    assert.equal(resPatchSupPreserve.status, 200)
+    assert.deepEqual(supplierPatchedKeys, ['phone'])
+  } finally {
+    User.findById = origUserFindById
+    Customer.find = origCustomerFind
+    Customer.create = origCustomerCreate
+    Customer.findByIdAndUpdate = origCustomerFindByIdAndUpdate
+    Customer.findByIdAndDelete = origCustomerFindByIdAndDelete
+    Supplier.find = origSupplierFind
+    Supplier.create = origSupplierCreate
+    Supplier.findByIdAndUpdate = origSupplierFindByIdAndUpdate
+    Supplier.findByIdAndDelete = origSupplierFindByIdAndDelete
+    Trade.exists = origTradeExists
+  }
+})

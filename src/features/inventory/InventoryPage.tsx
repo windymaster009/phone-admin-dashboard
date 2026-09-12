@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Barcode, Grid2X2, List, MoreHorizontal, Package, Plus, ScanLine, Search, Smartphone, Wrench, type LucideIcon } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { AlertTriangle, Barcode, Grid2X2, List, MoreHorizontal, Package, Plus, ScanLine, Search, Smartphone, Wrench, type LucideIcon } from 'lucide-react'
 import { api } from '../../lib/api'
 import type { InventoryItem, Pawn } from '../../types/domain'
 import { currency, money, riel, inventoryPriceCurrency, inventoryPriceText, inventoryDualPriceText, useExchangeRate, dateText, titleStatus, comingNext } from '../../lib/presentation'
@@ -61,11 +61,14 @@ export default function InventoryView() {
   const [priceCurrency, setPriceCurrency] = useState<'USD' | 'KHR'>('USD')
   const [savingPrice, setSavingPrice] = useState(false)
   const [savingPhoto, setSavingPhoto] = useState(false)
+  const savingPriceRef = useRef(false)
+  const savingPhotoRef = useRef(false)
   const [toastMessage, setToastMessage] = useState('')
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('ALL')
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [inventoryView, setInventoryView] = useState<'large' | 'details'>(getStoredInventoryView)
+  const [catalogError, setCatalogError] = useState('')
   const [error, setError] = useState('')
   const exchangeRate = useExchangeRate()
   const usdKhrRate = Number(exchangeRate?.usdKhr) > 0 ? Number(exchangeRate?.usdKhr) : 4100
@@ -73,7 +76,7 @@ export default function InventoryView() {
   useEffect(() => {
     api<{ items: InventoryItem[] }>('/inventory')
       .then((result) => setItems(Array.isArray(result?.items) ? result.items : []))
-      .catch((reason: Error) => setError(reason.message))
+      .catch((reason: Error) => setCatalogError(reason.message))
       .finally(() => setLoading(false))
   }, [])
 
@@ -196,7 +199,7 @@ export default function InventoryView() {
   }
 
   async function saveSellingPrice() {
-    if (!selectedItem) return
+    if (!selectedItem || savingPriceRef.current) return
     const usdSellingPrice = Number(usdSellingPriceDraft || 0)
     const usdMinimumPrice = Number(usdMinimumPriceDraft || 0)
     const khrSellingPrice = Number(khrSellingPriceDraft || 0)
@@ -213,6 +216,7 @@ export default function InventoryView() {
       setError('KHR prices must use whole 100 KHR increments')
       return
     }
+    savingPriceRef.current = true
     setSavingPrice(true)
     setError('')
     try {
@@ -233,6 +237,7 @@ export default function InventoryView() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to update selling price')
     } finally {
+      savingPriceRef.current = false
       setSavingPrice(false)
     }
   }
@@ -243,7 +248,7 @@ export default function InventoryView() {
   }
 
   async function uploadPhoto(file: File | undefined) {
-    if (!selectedItem || !file) return
+    if (!selectedItem || !file || savingPhotoRef.current) return
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
       setError('Upload a JPEG, PNG, or WebP image')
       return
@@ -252,6 +257,7 @@ export default function InventoryView() {
       setError('Image must be 4MB or smaller')
       return
     }
+    savingPhotoRef.current = true
     setSavingPhoto(true)
     setError('')
     try {
@@ -269,12 +275,14 @@ export default function InventoryView() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to upload product photo')
     } finally {
+      savingPhotoRef.current = false
       setSavingPhoto(false)
     }
   }
 
   async function removePhoto() {
-    if (!selectedItem) return
+    if (!selectedItem || savingPhotoRef.current) return
+    savingPhotoRef.current = true
     setSavingPhoto(true)
     setError('')
     try {
@@ -284,6 +292,7 @@ export default function InventoryView() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to remove product photo')
     } finally {
+      savingPhotoRef.current = false
       setSavingPhoto(false)
     }
   }
@@ -300,7 +309,7 @@ export default function InventoryView() {
         <SectionHeader
           eyebrow="Stock control"
           title="Stock information"
-          description={error || 'Manage serialized phones and quantity-based tablets, accessories, spare parts, and other stock.'}
+          description={catalogError || 'Manage serialized phones and quantity-based tablets, accessories, spare parts, and other stock.'}
           action={<div className="section-header-actions">
             <ScannerTriggerButton label="Scan product" onClick={openProductScanner} />
             <button className="primary-button" onClick={() => comingNext('Adjust stock')}><Plus size={17} /> Adjust stock</button>
@@ -421,6 +430,12 @@ export default function InventoryView() {
           />
 
           <DetailModalBody className="inventory-detail-body">
+            {error && (
+              <div className="operation-modal-error inventory-dialog-error" role="alert">
+                <AlertTriangle size={16} />
+                <span>{error}</span>
+              </div>
+            )}
             <section className="inventory-detail-group inventory-summary-group" aria-labelledby="inventory-summary-title">
               <div className="inventory-detail-section-heading">
                 <div><span className="eyebrow">Overview</span><h4 id="inventory-summary-title">Stock and pricing</h4></div>
