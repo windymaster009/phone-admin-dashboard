@@ -186,7 +186,7 @@ export default function OperationModalShell({
             </button>
           )}
         </header>
-        {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
+        {error && <div className="operation-modal-error" role="alert"><AlertTriangle size={17} /> {error}</div>}
         {children}
       </section>
     </div>

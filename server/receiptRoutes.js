@@ -772,7 +772,7 @@ router.get('/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), async
   res.json({ receipt })
 }))
 
-router.post('/:id/printed', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
+router.post(['/:id/printed', '/:id/print'], requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
   const current = await Receipt.findById(req.params.id).select('printCount')
   if (!current) throw requestError(404, 'Receipt not found')
   const now = new Date()

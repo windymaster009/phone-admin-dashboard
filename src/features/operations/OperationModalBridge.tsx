@@ -159,6 +159,8 @@ export default function OperationModalBridge() {
   const [imeiScanDeviceId, setImeiScanDeviceId] = useState<string | null>(null)
   const [imeiScanError, setImeiScanError] = useState('')
   const imeiInputs = useRef(new Map<string, HTMLInputElement>())
+  const submittingPurchaseRef = useRef(false)
+  const submittingSaleRef = useRef(false)
 
   useEffect(() => {
     const syncPreference = (event: Event) => setPawnAutoCalculate((event as CustomEvent<boolean>).detail)
@@ -1083,6 +1085,7 @@ export default function OperationModalBridge() {
 
   async function submitPurchase(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (submittingPurchaseRef.current || busy) return
     setPurchaseAttempted(true)
     if (!purchaseSellerValid) {
       setPurchaseStep(1)
@@ -1104,6 +1107,7 @@ export default function OperationModalBridge() {
               : 'Complete the highlighted item fields')
       return
     }
+    submittingPurchaseRef.current = true
     setBusy(true)
     setError('')
     const payload = {
@@ -1122,6 +1126,11 @@ export default function OperationModalBridge() {
     }
     try {
       const result = await api<{ trade?: { items?: { inventoryItem?: InventoryItem }[] } }>('/trades', { method: 'POST', body: JSON.stringify(payload) })
+      if (sellerType === 'NEW_CUSTOMER') {
+        window.dispatchEvent(new CustomEvent('phoneflow:customers-updated'))
+      } else if (sellerType === 'NEW_SUPPLIER') {
+        window.dispatchEvent(new CustomEvent('phoneflow:suppliers-updated'))
+      }
       const purchasedItems = Array.isArray(result?.trade?.items)
         ? (result.trade.items.map((item) => item?.inventoryItem).filter(Boolean) as InventoryItem[])
         : []
@@ -1134,17 +1143,17 @@ export default function OperationModalBridge() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to save purchase')
     } finally {
+      submittingPurchaseRef.current = false
       setBusy(false)
     }
   }
 
   async function submitSale(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setBusy(true)
+    if (submittingSaleRef.current || busy) return
     setError('')
     const selected = inventory.find((item) => item._id === saleItemId)
     if (!selected) {
-      setBusy(false)
       setError('Select an available inventory item')
       return
     }
@@ -1162,13 +1171,11 @@ export default function OperationModalBridge() {
         : 0
     const maximumDiscount = Math.max(0, quantity * (unitPrice - minimumUnitPrice))
     if (!Number.isInteger(quantity) || quantity < 1 || quantity > selected.quantity) {
-      setBusy(false)
       setError(`Quantity must be between 1 and ${selected.quantity}`)
       return
     }
     const invalidKhrAmount = saleCurrency === 'KHR' && (!Number.isInteger(unitPrice) || unitPrice % 100 !== 0 || !Number.isInteger(discount) || discount % 100 !== 0)
     if (!Number.isFinite(unitPrice) || unitPrice <= 0 || minimumUnitPrice > unitPrice || !Number.isFinite(discount) || discount < 0 || discount > maximumDiscount || invalidKhrAmount) {
-      setBusy(false)
       setError(minimumUnitPrice > unitPrice
         ? 'Fix this product\'s minimum selling price in Stock Information before completing the sale'
         : discount > maximumDiscount
@@ -1180,7 +1187,6 @@ export default function OperationModalBridge() {
     }
     const amountReceived = salePaymentMethod === 'KHQR' ? total : saleAmountPaid === '' ? total : Number(saleAmountPaid)
     if (!Number.isFinite(amountReceived) || amountReceived < 0 || (saleCurrency === 'KHR' && (!Number.isInteger(amountReceived) || amountReceived % 100 !== 0))) {
-      setBusy(false)
       setError(saleCurrency === 'KHR' ? 'Amount received must use whole 100 KHR increments' : 'Enter a valid amount received')
       return
     }
@@ -1198,6 +1204,8 @@ export default function OperationModalBridge() {
       warrantyDays: saleWarrantyDayCount,
       notes: saleNotes,
     }
+    submittingSaleRef.current = true
+    setBusy(true)
     try {
       if (salePaymentMethod === 'KHQR') {
         if (!paywayAvailable) throw new Error('ABA PayWay sandbox is not available. Check the server configuration.')
@@ -1231,6 +1239,7 @@ export default function OperationModalBridge() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to complete sale')
     } finally {
+      submittingSaleRef.current = false
       setBusy(false)
     }
   }

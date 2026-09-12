@@ -98,6 +98,7 @@ function ViewerModal({ viewer, onClose }: { viewer: ViewerState; onClose: () => 
   const [layout, setLayout] = useState<ReceiptLayout>(viewer.initialLayout || 'A4')
   const [receipt, setReceipt] = useState(viewer.receipt)
   const [busy, setBusy] = useState(false)
+  const printingRef = useRef(false)
   const [error, setError] = useState('')
   const previewRef = useRef<HTMLDivElement>(null)
   const paperRef = useRef<HTMLDivElement>(null)
@@ -108,12 +109,14 @@ function ViewerModal({ viewer, onClose }: { viewer: ViewerState; onClose: () => 
   }, [viewer])
 
   const printReceipt = async () => {
+    if (printingRef.current) return
     const printNode = paperRef.current
     if (!printNode) return
+    printingRef.current = true
     setBusy(true)
     setError('')
     try {
-      const updated = await api<{ receipt: ReceiptRecord }>(`/receipts/${receipt._id}/print`, {
+      const updated = await api<{ receipt: ReceiptRecord }>(`/receipts/${receipt._id}/printed`, {
         method: 'POST',
         body: JSON.stringify({ layout }),
       })
@@ -142,13 +145,14 @@ function ViewerModal({ viewer, onClose }: { viewer: ViewerState; onClose: () => 
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to print receipt')
     } finally {
+      printingRef.current = false
       setBusy(false)
     }
   }
 
   return (
     <Modal title={receipt.receiptNo} description={`${documentLabel(receipt.documentType)} · ${receipt.partyName || 'Walk-in customer'}`} onClose={onClose} wide className="receipt-viewer-modal">
-      {error && <div className="receipt-error"><AlertTriangle size={16} /> {error}</div>}
+      {error && <div className="receipt-error" role="alert"><AlertTriangle size={16} /> {error}</div>}
       <div className="receipt-viewer-toolbar">
         <div className="receipt-layout-switch">
           <button type="button" className={layout === 'A4' ? 'active' : ''} aria-pressed={layout === 'A4'} onClick={() => setLayout('A4')}>A4 invoice</button>
@@ -233,7 +237,7 @@ export default function ReceiptCenterPage() {
         </button>
       </div>
 
-      {error && <div className="receipt-error"><AlertTriangle size={16} /> {error}</div>}
+      {error && <div className="receipt-error" role="alert"><AlertTriangle size={16} /> {error}</div>}
 
       <SummaryStats
         label="Receipt statistics"

@@ -391,5 +391,6 @@ describe('ActivityReportDropdown component', () => {
     })
 
     expect(pollCount).toBeGreaterThanOrEqual(1)
+    vi.useRealTimers()
   })
 })

@@ -73,6 +73,7 @@ export default function SecureDocumentsPage() {
   const [loading, setLoading] = useState(true)
   const [documentsLoading, setDocumentsLoading] = useState(false)
   const [busy, setBusy] = useState(false)
+  const mutationRef = useRef(false)
   const [error, setError] = useState('')
   const [customerDirectoryOpen, setCustomerDirectoryOpen] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<CustomerDocument | null>(null)
@@ -123,9 +124,10 @@ export default function SecureDocumentsPage() {
 
   async function uploadDocument(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!selectedCustomer || !file) return
+    if (!selectedCustomer || !file || mutationRef.current) return
     if (!status?.configured) { setError('Configure DOCUMENT_ENCRYPTION_KEY on the server before uploading sensitive files.'); return }
     if (file.size > status.maximumBytes) { setError(`The selected file exceeds the ${bytes(status.maximumBytes)} limit.`); return }
+    mutationRef.current = true
     setBusy(true); setError('')
     try {
       await api(`/customer-documents/customers/${selectedCustomer._id}`, { method: 'POST', body: JSON.stringify({
@@ -135,7 +137,7 @@ export default function SecureDocumentsPage() {
       if (fileInputRef.current) fileInputRef.current.value = ''
       await Promise.all([loadDocuments(selectedCustomer._id), loadSummary()])
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to encrypt and save the document') }
-    finally { setBusy(false) }
+    finally { mutationRef.current = false; setBusy(false) }
   }
   async function viewDocument(document: CustomerDocument) {
     const popup = window.open('', '_blank')
@@ -150,12 +152,21 @@ export default function SecureDocumentsPage() {
   async function downloadDocument(document: CustomerDocument) {
     setError('')
     try {
-      const result = await apiBlob(`/customer-documents/${document._id}/file?download=1`); const url = URL.createObjectURL(result.blob)
-      const anchor = window.document.createElement('a'); anchor.href = url; anchor.download = document.originalName; anchor.click(); URL.revokeObjectURL(url)
+      const result = await apiBlob(`/customer-documents/${document._id}/file?download=1`)
+      const url = URL.createObjectURL(result.blob)
+      try {
+        const anchor = window.document.createElement('a')
+        anchor.href = url
+        anchor.download = document.originalName
+        anchor.click()
+      } finally {
+        URL.revokeObjectURL(url)
+      }
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to download the secure document') }
   }
   async function confirmDelete() {
-    if (!canDelete || !pendingDelete) return
+    if (!canDelete || !pendingDelete || mutationRef.current) return
+    mutationRef.current = true
     const document = pendingDelete; setBusy(true); setError('')
     try {
       await api(`/customer-documents/${document._id}`, { method: 'DELETE' });
@@ -164,7 +175,7 @@ export default function SecureDocumentsPage() {
       setToastMessage('Secure document deleted successfully.')
     }
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to delete the secure document') }
-    finally { setBusy(false) }
+    finally { mutationRef.current = false; setBusy(false) }
   }
 
   return <div className="secure-documents-workspace">

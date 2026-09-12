@@ -600,3 +600,465 @@ describe('Operational Reports Mixed-Currency Visibility & Controls', () => {
     expect(screen.queryByLabelText(/Currency/i)).not.toBeInTheDocument()
   })
 })
+
+describe('Sales Report View', () => {
+  const mockSalesReportData = {
+    period: { key: 'this_month', label: 'This Month', from: '2026-09-01', to: '2026-09-30' },
+    filters: { paymentMethod: 'ALL', status: 'COMPLETED', staff: 'ALL' },
+    summary: {
+      salesRevenue: 5400,
+      cogs: 3200,
+      grossProfit: 2200,
+      itemsSold: 6,
+      transactions: 3,
+      averageSale: 1800,
+    },
+    chart: [
+      { key: '2026-09-01', label: '1 Sep', sales: 5400, cogs: 3200, grossProfit: 2200 },
+    ],
+    products: [
+      { name: 'iPhone 13 128GB', quantity: 4, revenue: 3600, cogs: 2200, grossProfit: 1400 },
+      { name: 'AirPods Pro 2', quantity: 2, revenue: 1800, cogs: 1000, grossProfit: 800 },
+    ],
+    payments: [
+      { method: 'CASH', amount: 3600, transactions: 2 },
+      { method: 'KHQR', amount: 1800, transactions: 1 },
+    ],
+    staff: [
+      { _id: 'staff-1', name: 'Sophea Staff' },
+    ],
+    transactions: [
+      {
+        _id: 'sale-1',
+        tradeNo: 'INV-2026-0001',
+        type: 'SELL',
+        customer: { name: 'Sokha Chan' },
+        items: [{ name: 'iPhone 13 128GB', quantity: 2, price: 900 }],
+        subtotal: 1800,
+        discount: 0,
+        total: 1800,
+        reportTotal: 1800,
+        reportCost: 1100,
+        reportGrossProfit: 700,
+        paymentMethod: 'CASH',
+        status: 'COMPLETED',
+        createdAt: '2026-09-02T10:00:00.000Z',
+        createdBy: { name: 'Sophea Staff' },
+      },
+    ],
+    totalRecords: 1,
+    limited: false,
+  }
+
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('renders sales summary cards, products breakdown, payments breakdown, and transactions agreeing with filters', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => mockSalesReportData,
+      } as Response
+    })
+
+    window.history.pushState({}, '', '/reports/sales')
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    // Wait for report to load
+    const summaryElement = await screen.findByLabelText('Sales report summary')
+    const summary = within(summaryElement)
+    expect(summary.getByText('$5,400')).toBeInTheDocument() // Sales Revenue
+    expect(summary.getByText('$3,200')).toBeInTheDocument() // COGS
+    expect(summary.getByText('$2,200')).toBeInTheDocument() // Gross Profit
+    expect(summary.getByText('6')).toBeInTheDocument() // Items Sold
+    expect(summary.getByText('3')).toBeInTheDocument() // Transactions
+    expect(summary.getByText('$1,800')).toBeInTheDocument() // Average Sale
+
+    // Top Products breakdown agreements
+    expect(screen.getByText('iPhone 13 128GB')).toBeInTheDocument()
+    expect(screen.getAllByText('$3,600')).toHaveLength(2) // iPhone revenue + Cash payment amount
+    expect(screen.getByText('AirPods Pro 2')).toBeInTheDocument()
+
+    // Payment methods breakdown agreement ($3,600 Cash + $1,800 KHQR = $5,400)
+    expect(screen.getAllByText('Cash').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Khqr').length).toBeGreaterThan(0)
+
+    // Transaction rows (desktop + mobile)
+    expect(screen.getAllByText('INV-2026-0001').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Sokha Chan').length).toBeGreaterThan(0)
+  })
+
+  it('filters by payment method and triggers API with paymentMethod query parameter', async () => {
+    const requestedUrls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      requestedUrls.push(url)
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => mockSalesReportData,
+      } as Response
+    })
+
+    window.history.pushState({}, '', '/reports/sales')
+    const user = userEvent.setup()
+
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await screen.findByLabelText('Sales report summary')
+
+    const methodSelect = screen.getByLabelText(/Payment method/i) as HTMLSelectElement
+    await user.selectOptions(methodSelect, 'KHQR')
+
+    await waitFor(() => {
+      const lastUrl = requestedUrls[requestedUrls.length - 1]
+      expect(lastUrl).toContain('paymentMethod=KHQR')
+    })
+  })
+
+  it('discards stale response when sales filter changes rapidly', async () => {
+    let resolveCash: (val: Response) => void
+    const cashPromise = new Promise<Response>((res) => {
+      resolveCash = res
+    })
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('paymentMethod=CASH')) {
+        return cashPromise
+      }
+      if (url.includes('paymentMethod=KHQR')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            ...mockSalesReportData,
+            summary: { ...mockSalesReportData.summary, salesRevenue: 9999 },
+          }),
+        } as Response
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => mockSalesReportData,
+      } as Response
+    })
+
+    window.history.pushState({}, '', '/reports/sales')
+    const user = userEvent.setup()
+
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      const summary = within(screen.getByLabelText('Sales report summary'))
+      expect(summary.getByText('$5,400')).toBeInTheDocument()
+    })
+
+    const methodSelect = screen.getByLabelText(/Payment method/i) as HTMLSelectElement
+
+    // Select CASH (slow)
+    await user.selectOptions(methodSelect, 'CASH')
+
+    // Immediately select KHQR (fast)
+    await user.selectOptions(methodSelect, 'KHQR')
+
+    await waitFor(() => {
+      const summary = within(screen.getByLabelText('Sales report summary'))
+      expect(summary.getByText('$9,999')).toBeInTheDocument()
+    })
+
+    // Now CASH resolves with 3333
+    resolveCash!({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({
+        ...mockSalesReportData,
+        summary: { ...mockSalesReportData.summary, salesRevenue: 3333 },
+      }),
+    } as Response)
+
+    // Wait and verify $9,999 is retained and $3,333 is ignored
+    await new Promise((r) => setTimeout(r, 50))
+    const finalSummary = within(screen.getByLabelText('Sales report summary'))
+    expect(finalSummary.getByText('$9,999')).toBeInTheDocument()
+    expect(finalSummary.queryByText('$3,333')).not.toBeInTheDocument()
+  })
+
+  it('renders error alert with role="alert" when sales report API fails', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 500,
+      headers: new Headers({ 'X-Request-ID': 'req-sales-err' }),
+      json: async () => ({ message: 'Failed to aggregate sales metrics', requestId: 'req-sales-err' }),
+    } as Response)
+
+    window.history.pushState({}, '', '/reports/sales')
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      const alert = screen.getByRole('alert')
+      expect(alert).toBeInTheDocument()
+      expect(alert).toHaveTextContent(/Failed to aggregate sales metrics/i)
+    })
+  })
+})
+
+describe('Purchases Report View', () => {
+  const mockPurchaseReportData = {
+    period: { key: 'this_month', label: 'This Month', from: '2026-09-01', to: '2026-09-30' },
+    filters: { source: 'ALL', paymentMethod: 'ALL', paymentStatus: 'ALL', status: 'COMPLETED', staff: 'ALL' },
+    summary: {
+      totalPurchases: 4500,
+      amountPaid: 3500,
+      outstandingBalance: 1000,
+      itemsPurchased: 8,
+      transactions: 2,
+      averagePurchase: 2250,
+    },
+    chart: [
+      { key: '2026-09-01', label: '1 Sep', total: 4500, paid: 3500, balance: 1000 },
+    ],
+    products: [
+      { name: 'iPhone 14 Pro 128GB', quantity: 3, totalCost: 2400, averageUnitCost: 800, transactions: 1 },
+    ],
+    sources: [
+      { source: 'SUPPLIER', amount: 3000, transactions: 1 },
+      { source: 'WALK_IN', amount: 1500, transactions: 1 },
+    ],
+    payments: [
+      { method: 'BANK', amount: 3500, transactions: 2 },
+    ],
+    staff: [
+      { _id: 'staff-1', name: 'Sophea Staff' },
+    ],
+    transactions: [
+      {
+        _id: 'po-1',
+        tradeNo: 'PO-2026-0001',
+        type: 'BUY',
+        sellerType: 'SUPPLIER',
+        supplier: { name: 'Mega Tech' },
+        items: [{ name: 'iPhone 14 Pro 128GB', quantity: 3, cost: 800 }],
+        total: 2400,
+        amountPaid: 2400,
+        balance: 0,
+        reportTotal: 2400,
+        reportPaid: 2400,
+        reportBalance: 0,
+        currency: 'USD',
+        paymentMethod: 'BANK',
+        paymentStatus: 'PAID',
+        status: 'COMPLETED',
+        createdAt: '2026-09-03T11:00:00.000Z',
+        createdBy: { name: 'Sophea Staff' },
+      },
+    ],
+    totalRecords: 1,
+    limited: false,
+  }
+
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('renders purchase summary cards, sources breakdown, products, and transactions agreeing with filters', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => mockPurchaseReportData,
+      } as Response
+    })
+
+    window.history.pushState({}, '', '/reports/purchases')
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    // Wait for report to load
+    const summaryElement = await screen.findByLabelText('Purchases report summary')
+    const summary = within(summaryElement)
+    expect(summary.getByText('$4,500')).toBeInTheDocument() // Total Purchases
+    expect(summary.getByText('$3,500')).toBeInTheDocument() // Amount Paid
+    expect(summary.getByText('$1,000')).toBeInTheDocument() // Outstanding
+    expect(summary.getByText('8')).toBeInTheDocument() // Items Purchased
+    expect(summary.getByText('2')).toBeInTheDocument() // Transactions
+    expect(summary.getByText('$2,250')).toBeInTheDocument() // Average Purchase
+
+    // Products breakdown
+    expect(screen.getByText('iPhone 14 Pro 128GB')).toBeInTheDocument()
+
+    // Sources breakdown agreement ($3,000 Supplier + $1,500 Walk In = $4,500)
+    expect(screen.getAllByText('Supplier').length).toBeGreaterThan(0)
+    expect(screen.getByText('Walk In')).toBeInTheDocument()
+
+    // Transactions table (desktop + mobile)
+    expect(screen.getAllByText('PO-2026-0001').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Mega Tech').length).toBeGreaterThan(0)
+  })
+
+  it('filters by seller source and payment status triggering API query parameters', async () => {
+    const requestedUrls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      requestedUrls.push(url)
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => mockPurchaseReportData,
+      } as Response
+    })
+
+    window.history.pushState({}, '', '/reports/purchases')
+    const user = userEvent.setup()
+
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await screen.findByLabelText('Purchases report summary')
+
+    const sourceSelect = screen.getByLabelText(/Seller source/i) as HTMLSelectElement
+    await user.selectOptions(sourceSelect, 'SUPPLIER')
+
+    await waitFor(() => {
+      const lastUrl = requestedUrls[requestedUrls.length - 1]
+      expect(lastUrl).toContain('source=SUPPLIER')
+    })
+
+    const paymentStatusSelect = screen.getByLabelText(/Payment status/i) as HTMLSelectElement
+    await user.selectOptions(paymentStatusSelect, 'PAID')
+
+    await waitFor(() => {
+      const lastUrl = requestedUrls[requestedUrls.length - 1]
+      expect(lastUrl).toContain('source=SUPPLIER')
+      expect(lastUrl).toContain('paymentStatus=PAID')
+    })
+  })
+
+  it('discards stale response when purchase filter changes rapidly', async () => {
+    let resolveSupplier: (val: Response) => void
+    const supplierPromise = new Promise<Response>((res) => {
+      resolveSupplier = res
+    })
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('source=SUPPLIER')) {
+        return supplierPromise
+      }
+      if (url.includes('source=CUSTOMER')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            ...mockPurchaseReportData,
+            summary: { ...mockPurchaseReportData.summary, totalPurchases: 8888 },
+          }),
+        } as Response
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => mockPurchaseReportData,
+      } as Response
+    })
+
+    window.history.pushState({}, '', '/reports/purchases')
+    const user = userEvent.setup()
+
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      const summary = within(screen.getByLabelText('Purchases report summary'))
+      expect(summary.getByText('$4,500')).toBeInTheDocument()
+    })
+
+    const sourceSelect = screen.getByLabelText(/Seller source/i) as HTMLSelectElement
+
+    // Select SUPPLIER (slow)
+    await user.selectOptions(sourceSelect, 'SUPPLIER')
+
+    // Immediately select CUSTOMER (fast)
+    await user.selectOptions(sourceSelect, 'CUSTOMER')
+
+    await waitFor(() => {
+      const summary = within(screen.getByLabelText('Purchases report summary'))
+      expect(summary.getByText('$8,888')).toBeInTheDocument()
+    })
+
+    // Now SUPPLIER resolves with 2222
+    resolveSupplier!({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({
+        ...mockPurchaseReportData,
+        summary: { ...mockPurchaseReportData.summary, totalPurchases: 2222 },
+      }),
+    } as Response)
+
+    // Wait and verify $8,888 is retained and $2,222 is ignored
+    await new Promise((r) => setTimeout(r, 50))
+    const finalSummary = within(screen.getByLabelText('Purchases report summary'))
+    expect(finalSummary.getByText('$8,888')).toBeInTheDocument()
+    expect(finalSummary.queryByText('$2,222')).not.toBeInTheDocument()
+  })
+
+  it('renders error alert with role="alert" when purchase report API fails', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 500,
+      headers: new Headers({ 'X-Request-ID': 'req-purch-err' }),
+      json: async () => ({ message: 'Failed to aggregate purchase metrics', requestId: 'req-purch-err' }),
+    } as Response)
+
+    window.history.pushState({}, '', '/reports/purchases')
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      const alert = screen.getByRole('alert')
+      expect(alert).toBeInTheDocument()
+      expect(alert).toHaveTextContent(/Failed to aggregate purchase metrics/i)
+    })
+  })
+})

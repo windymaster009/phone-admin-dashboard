@@ -1641,4 +1641,431 @@ describe('OperationModalBridge component', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
   })
+
+  it('prevents duplicate in-flight submissions when Complete purchase is clicked rapidly', async () => {
+    let purchasePostCount = 0
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/suppliers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ suppliers: [] }) } as Response
+      }
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      if (url.includes('/trades') && init?.method === 'POST') {
+        purchasePostCount += 1
+        // Simulate network delay
+        await new Promise((resolve) => setTimeout(resolve, 80))
+        return {
+          ok: true,
+          status: 201,
+          headers: new Headers(),
+          json: async () => ({
+            trade: {
+              _id: 'trade-buy-1',
+              tradeNo: 'BY-2026-0001',
+              type: 'BUY',
+              items: [{ inventoryItem: { _id: 'item-1', name: 'Apple iPhone 13 128GB', barcode: 'PF-001' } }],
+            },
+          }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'purchase' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByText(/New purchase/i)).toBeInTheDocument()
+    })
+
+    // Step 1: Walk-in seller
+    const sellerInput = screen.getByPlaceholderText(/Customer name/i)
+    fireEvent.change(sellerInput, { target: { value: 'Walk-in Alice' } })
+
+    // Advance to Step 2
+    fireEvent.click(screen.getByRole('button', { name: /Continue to items/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Inventory items/i)).toBeInTheDocument()
+    })
+
+    // Fill device fields
+    fireEvent.change(screen.getByPlaceholderText(/Apple/i), { target: { value: 'Apple' } })
+    fireEvent.change(screen.getByPlaceholderText(/iPhone 13 Pro/i), { target: { value: 'iPhone 13' } })
+    fireEvent.change(screen.getByPlaceholderText(/^128$/), { target: { value: '128' } })
+    fireEvent.change(screen.getByPlaceholderText(/Blue/i), { target: { value: 'Midnight' } })
+    fireEvent.change(screen.getByPlaceholderText(/15-digit IMEI/i), { target: { value: '123456789012345' } })
+    fireEvent.change(screen.getAllByPlaceholderText(/0\.00/i)[0], { target: { value: '450' } })
+
+    // Settle amount paid
+    fireEvent.change(screen.getByLabelText(/Amount paid/i), { target: { value: '450' } })
+
+    const form = screen.getByRole('dialog').querySelector('form')!
+
+    // Rapid double-submission
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Purchase completed/i)).toBeInTheDocument()
+    })
+
+    // Must have only sent 1 POST request
+    expect(purchasePostCount).toBe(1)
+  })
+
+  it('prevents duplicate in-flight submissions when Complete sale is clicked rapidly', async () => {
+    let salePostCount = 0
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [mockInventoryItem] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      if (url.includes('/payway/config')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ enabled: false, configured: false }) } as Response
+      }
+      if (url.includes('/trades') && init?.method === 'POST') {
+        salePostCount += 1
+        // Simulate network delay
+        await new Promise((resolve) => setTimeout(resolve, 80))
+        return {
+          ok: true,
+          status: 201,
+          headers: new Headers(),
+          json: async () => ({
+            trade: {
+              _id: 'trade-sale-dup',
+              tradeNo: 'SL-2026-0099',
+              type: 'SELL',
+              status: 'COMPLETED',
+              total: 1150,
+              amountPaid: 1150,
+              balance: 0,
+              currency: 'USD',
+              items: [{ name: 'iPhone 15 Pro Max', quantity: 1, unitPrice: 1150 }],
+              paymentMethod: 'CASH',
+            },
+          }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: /iPhone 15 Pro Max/i })).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByLabelText(/Inventory item/i), { target: { value: 'inv-item-1' } })
+    fireEvent.change(screen.getByPlaceholderText(/Enter days/i), { target: { value: '0' } })
+
+    const form = screen.getByRole('dialog').querySelector('form')!
+
+    // Rapid double-submission
+    fireEvent.submit(form)
+    fireEvent.submit(form)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Payment successful/i)).toBeInTheDocument()
+    })
+
+    // Must have only sent 1 POST request
+    expect(salePostCount).toBe(1)
+  })
+
+  it('failed purchase save preserves entered form data, shows error inside dialog, and allows retry', async () => {
+    let attempt = 0
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/suppliers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ suppliers: [] }) } as Response
+      }
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      if (url.includes('/trades') && init?.method === 'POST') {
+        attempt += 1
+        if (attempt === 1) {
+          return {
+            ok: false,
+            status: 409,
+            headers: new Headers(),
+            json: async () => ({ message: 'IMEI 123456789012345 already exists in inventory' }),
+          } as Response
+        }
+        return {
+          ok: true,
+          status: 201,
+          headers: new Headers(),
+          json: async () => ({
+            trade: {
+              _id: 'trade-buy-retry',
+              tradeNo: 'BY-2026-0002',
+              type: 'BUY',
+              items: [{ inventoryItem: { _id: 'item-2', name: 'Apple iPhone 14 128GB', barcode: 'PF-002' } }],
+            },
+          }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'purchase' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // Step 1: Walk-in seller
+    const sellerInput = screen.getByPlaceholderText(/Customer name/i)
+    fireEvent.change(sellerInput, { target: { value: 'Bob Seller' } })
+
+    fireEvent.click(screen.getByRole('button', { name: /Continue to items/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Inventory items/i)).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByPlaceholderText(/Apple/i), { target: { value: 'Apple' } })
+    fireEvent.change(screen.getByPlaceholderText(/iPhone 13 Pro/i), { target: { value: 'iPhone 14' } })
+    fireEvent.change(screen.getByPlaceholderText(/^128$/), { target: { value: '128' } })
+    fireEvent.change(screen.getByPlaceholderText(/Blue/i), { target: { value: 'Blue' } })
+    const imeiInput = screen.getByPlaceholderText(/15-digit IMEI/i)
+    fireEvent.change(imeiInput, { target: { value: '123456789012345' } })
+    fireEvent.change(screen.getAllByPlaceholderText(/0\.00/i)[0], { target: { value: '600' } })
+    fireEvent.change(screen.getByLabelText(/Amount paid/i), { target: { value: '600' } })
+
+    const form = screen.getByRole('dialog').querySelector('form')!
+    fireEvent.submit(form)
+
+    // First attempt fails: Error displayed inside dialog
+    await waitFor(() => {
+      expect(screen.getByText(/IMEI 123456789012345 already exists in inventory/i)).toBeInTheDocument()
+    })
+
+    // Dialog must remain open
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toBeInTheDocument()
+
+    // Form inputs must be preserved!
+    expect(screen.getByPlaceholderText(/iPhone 13 Pro/i)).toHaveValue('iPhone 14')
+    expect(screen.getByPlaceholderText(/15-digit IMEI/i)).toHaveValue('123456789012345')
+
+    // Correct the conflicting IMEI
+    fireEvent.change(screen.getByPlaceholderText(/15-digit IMEI/i), { target: { value: '123456789012346' } })
+
+    // Retry submission
+    fireEvent.submit(form)
+
+    // Second attempt succeeds and transitions to label view
+    await waitFor(() => {
+      expect(screen.getByText(/Purchase completed/i)).toBeInTheDocument()
+    })
+  })
+
+  it('failed sale save preserves entered form data, shows error inside dialog, and allows retry', async () => {
+    let attempt = 0
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [mockInventoryItem] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      if (url.includes('/payway/config')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ enabled: false, configured: false }) } as Response
+      }
+      if (url.includes('/trades') && init?.method === 'POST') {
+        attempt += 1
+        if (attempt === 1) {
+          return {
+            ok: false,
+            status: 409,
+            headers: new Headers(),
+            json: async () => ({ message: 'This item is no longer available in stock' }),
+          } as Response
+        }
+        return {
+          ok: true,
+          status: 201,
+          headers: new Headers(),
+          json: async () => ({
+            trade: {
+              _id: 'trade-sale-retry',
+              tradeNo: 'SL-2026-0100',
+              type: 'SELL',
+              status: 'COMPLETED',
+              total: 1100,
+              amountPaid: 1100,
+              balance: 0,
+              currency: 'USD',
+              items: [{ name: 'iPhone 15 Pro Max', quantity: 1, unitPrice: 1150 }],
+              paymentMethod: 'CASH',
+            },
+          }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByRole('option', { name: /iPhone 15 Pro Max/i })).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByLabelText(/Inventory item/i), { target: { value: 'inv-item-1' } })
+    fireEvent.change(screen.getByPlaceholderText(/Enter days/i), { target: { value: '30' } })
+    fireEvent.change(screen.getByLabelText(/Discount/i), { target: { value: '50' } })
+
+    const form = screen.getByRole('dialog').querySelector('form')!
+    fireEvent.submit(form)
+
+    // First attempt fails: Error displayed inside dialog
+    await waitFor(() => {
+      expect(screen.getByText(/This item is no longer available in stock/i)).toBeInTheDocument()
+    })
+
+    // Dialog remains open
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    // Form inputs preserved
+    expect(screen.getByPlaceholderText(/Enter days/i)).toHaveValue(30)
+    expect(screen.getByLabelText(/Discount/i)).toHaveValue('50')
+
+    // Retry submission
+    fireEvent.submit(form)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Payment successful/i)).toBeInTheDocument()
+    })
+  })
+
+  it('dispatches customer and supplier updated events when new profiles are created during purchase', async () => {
+    const customerUpdatedHandler = vi.fn()
+    const supplierUpdatedHandler = vi.fn()
+    window.addEventListener('phoneflow:customers-updated', customerUpdatedHandler)
+    window.addEventListener('phoneflow:suppliers-updated', supplierUpdatedHandler)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/suppliers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ suppliers: [] }) } as Response
+      }
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      if (url.includes('/trades') && init?.method === 'POST') {
+        return {
+          ok: true,
+          status: 201,
+          headers: new Headers(),
+          json: async () => ({
+            trade: {
+              _id: 'trade-buy-newcust',
+              tradeNo: 'BY-2026-0003',
+              type: 'BUY',
+              items: [{ inventoryItem: { _id: 'item-3', name: 'Apple iPhone 12 64GB', barcode: 'PF-003' } }],
+            },
+          }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'purchase' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // Step 1: Select NEW_CUSTOMER seller
+    fireEvent.click(screen.getByRole('tab', { name: /New customer/i }))
+    fireEvent.change(screen.getByPlaceholderText(/Customer name/i), { target: { value: 'New Customer Dara' } })
+    fireEvent.change(screen.getByPlaceholderText(/012 345 678/i), { target: { value: '012987654' } })
+
+    fireEvent.click(screen.getByRole('button', { name: /Continue to items/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Inventory items/i)).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByPlaceholderText(/Apple/i), { target: { value: 'Apple' } })
+    fireEvent.change(screen.getByPlaceholderText(/iPhone 13 Pro/i), { target: { value: 'iPhone 12' } })
+    fireEvent.change(screen.getByPlaceholderText(/^128$/), { target: { value: '64' } })
+    fireEvent.change(screen.getByPlaceholderText(/Blue/i), { target: { value: 'Black' } })
+    fireEvent.change(screen.getByPlaceholderText(/15-digit IMEI/i), { target: { value: '987654321098765' } })
+    fireEvent.change(screen.getAllByPlaceholderText(/0\.00/i)[0], { target: { value: '300' } })
+    fireEvent.change(screen.getByLabelText(/Amount paid/i), { target: { value: '300' } })
+
+    const form = screen.getByRole('dialog').querySelector('form')!
+    fireEvent.submit(form)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Purchase completed/i)).toBeInTheDocument()
+    })
+
+    // phoneflow:customers-updated must have been dispatched
+    expect(customerUpdatedHandler).toHaveBeenCalled()
+
+    window.removeEventListener('phoneflow:customers-updated', customerUpdatedHandler)
+    window.removeEventListener('phoneflow:suppliers-updated', supplierUpdatedHandler)
+  })
 })

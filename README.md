@@ -2,6 +2,24 @@
 
 An internal full-stack phone shop system for pawn contracts, buying and selling, IMEI-level phone stock, quantity-based accessories and spare parts, customer identity records, depreciation, staff permissions, and audit logs.
 
+## Test coverage
+
+Run `npm run test:coverage` and open `coverage/index.html` after the command exits.
+The runner uses a unique OS temporary directory for Vitest's coverage collection
+and cleanup, then copies successful reports to `coverage/`. This avoids the
+Windows cleanup hang observed when collecting directly in the report directory.
+It does not skip tests, change coverage calculations, or force a successful exit.
+Failed runs leave the previous report in place; do not mistake it for a new result.
+Old pages for removed source files may remain on disk but are not linked from the
+new report index. Generated reports are ignored by Git.
+
+Test filters can be forwarded, for example
+`npm run test:coverage -- src/lib/storage.test.ts`. A filtered run replaces the
+report with coverage for that run. Coverage/watch overrides are intentionally
+rejected by this one-shot command; use `npm run test:client:watch` for watch mode.
+Run `npm run test:coverage:runner` to test the runner's publication, failure, and
+temporary-file cleanup behavior.
+
 ## Stack
 
 - React 19 + TypeScript + Vite

@@ -190,6 +190,8 @@ export default function SecurityWorkspacePage() {
   const [showUserForm, setShowUserForm] = useState(false)
   const [userForm, setUserForm] = useState(emptyUserForm)
   const [userBusy, setUserBusy] = useState('')
+  const userMutationRef = useRef(false)
+  const securityMutationRef = useRef(false)
   const [twoFactorStatus, setTwoFactorStatus] = useState<TwoFactorStatus | null>(null)
   const [twoFactorSetup, setTwoFactorSetup] = useState<TwoFactorSetup | null>(null)
   const [twoFactorCode, setTwoFactorCode] = useState('')
@@ -198,6 +200,8 @@ export default function SecurityWorkspacePage() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [userFormError, setUserFormError] = useState('')
+  const [twoFactorError, setTwoFactorError] = useState('')
   const [toastMessage, setToastMessage] = useState('')
   const [copied, setCopied] = useState('')
   const [clock, setClock] = useState(Date.now())
@@ -205,6 +209,8 @@ export default function SecurityWorkspacePage() {
   const load = useCallback(async () => {
     setLoading(true)
     setError('')
+    setUserFormError('')
+    setTwoFactorError('')
     try {
       const staffResultPromise = user?.role === 'OWNER' || user?.role === 'MANAGER'
         ? api<{ users: SecurityUser[] }>('/users')
@@ -311,8 +317,11 @@ export default function SecurityWorkspacePage() {
 
   const createStaffUser = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (userMutationRef.current) return
+    userMutationRef.current = true
     setUserBusy('create')
     setError('')
+    setUserFormError('')
     try {
       await api('/users', {
         method: 'POST',
@@ -322,16 +331,20 @@ export default function SecurityWorkspacePage() {
       setShowUserForm(false)
       await load()
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to create the user account')
+      const message = reason instanceof Error ? reason.message : 'Unable to create the user account'
+      setError(message)
+      setUserFormError(message)
     } finally {
+      userMutationRef.current = false
       setUserBusy('')
     }
   }
 
   const updateStaffUser = async (staffUser: SecurityUser, changes: Partial<Pick<SecurityUser, 'role' | 'active'>>) => {
     const userId = staffUser.id || staffUser._id
-    if (!userId) return
+    if (!userId || userMutationRef.current) return
     if (changes.active === false && !window.confirm(`Deactivate ${staffUser.name}? They will be signed out on their next request.`)) return
+    userMutationRef.current = true
     setUserBusy(userId)
     setError('')
     try {
@@ -343,14 +356,16 @@ export default function SecurityWorkspacePage() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to update the user account')
     } finally {
+      userMutationRef.current = false
       setUserBusy('')
     }
   }
 
   const deleteStaffUser = async (staffUser: SecurityUser) => {
     const userId = staffUser.id || staffUser._id
-    if (!userId || staffUser.active) return
+    if (!userId || staffUser.active || userMutationRef.current) return
     if (!window.confirm(`Permanently delete ${staffUser.name}? This cannot be undone.`)) return
+    userMutationRef.current = true
     setUserBusy(userId)
     setError('')
     try {
@@ -360,6 +375,7 @@ export default function SecurityWorkspacePage() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to delete the user account')
     } finally {
+      userMutationRef.current = false
       setUserBusy('')
     }
   }
@@ -379,6 +395,8 @@ export default function SecurityWorkspacePage() {
   }
 
   const generatePairing = async () => {
+    if (securityMutationRef.current) return
+    securityMutationRef.current = true
     setBusy(true)
     setError('')
     try {
@@ -389,13 +407,15 @@ export default function SecurityWorkspacePage() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to create Android pairing code')
     } finally {
+      securityMutationRef.current = false
       setBusy(false)
     }
   }
 
   const revokeSession = async (session: AuthSession) => {
-    if (session.current || session.revokedAt) return
+    if (session.current || session.revokedAt || securityMutationRef.current) return
     if (!window.confirm(`Sign out ${session.deviceName}?`)) return
+    securityMutationRef.current = true
     setBusy(true)
     setError('')
     try {
@@ -405,13 +425,15 @@ export default function SecurityWorkspacePage() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to revoke the session')
     } finally {
+      securityMutationRef.current = false
       setBusy(false)
     }
   }
 
   const revokeOthers = async () => {
-    if (otherSessions.length === 0) return
+    if (otherSessions.length === 0 || securityMutationRef.current) return
     if (!window.confirm(`Sign out ${otherSessions.length} other active device${otherSessions.length === 1 ? '' : 's'}?`)) return
+    securityMutationRef.current = true
     setBusy(true)
     setError('')
     try {
@@ -420,13 +442,17 @@ export default function SecurityWorkspacePage() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to sign out other devices')
     } finally {
+      securityMutationRef.current = false
       setBusy(false)
     }
   }
 
   const startTwoFactorSetup = async () => {
+    if (securityMutationRef.current) return
+    securityMutationRef.current = true
     setBusy(true)
     setError('')
+    setTwoFactorError('')
     setRecoveryCodes([])
     try {
       const result = await api<TwoFactorSetup>('/security/two-factor/setup', { method: 'POST' })
@@ -434,16 +460,21 @@ export default function SecurityWorkspacePage() {
       setTwoFactorCode('')
       await load()
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to start two-factor setup')
+      const message = reason instanceof Error ? reason.message : 'Unable to start two-factor setup'
+      setError(message)
+      setTwoFactorError(message)
     } finally {
+      securityMutationRef.current = false
       setBusy(false)
     }
   }
 
   const enableTwoFactor = async () => {
-    if (!twoFactorSetup || !twoFactorCode.trim()) return
+    if (!twoFactorSetup || !twoFactorCode.trim() || securityMutationRef.current) return
+    securityMutationRef.current = true
     setBusy(true)
     setError('')
+    setTwoFactorError('')
     try {
       const result = await api<{ recoveryCodes: string[] }>('/security/two-factor/enable', {
         method: 'POST',
@@ -454,18 +485,26 @@ export default function SecurityWorkspacePage() {
       setTwoFactorCode('')
       await load()
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to enable two-factor authentication')
+      const message = reason instanceof Error ? reason.message : 'Unable to enable two-factor authentication'
+      setError(message)
+      setTwoFactorError(message)
     } finally {
+      securityMutationRef.current = false
       setBusy(false)
     }
   }
 
   const regenerateRecovery = async () => {
+    if (securityMutationRef.current) return
+    setTwoFactorError('')
     if (!twoFactorCode.trim()) {
-      setError('Enter a current authenticator or recovery code first.')
+      const message = 'Enter a current authenticator or recovery code first.'
+      setError(message)
+      setTwoFactorError(message)
       return
     }
     if (!window.confirm('Replace all existing recovery codes? Any previously saved recovery codes will stop working.')) return
+    securityMutationRef.current = true
     setBusy(true)
     setError('')
     try {
@@ -477,18 +516,26 @@ export default function SecurityWorkspacePage() {
       setTwoFactorCode('')
       await load()
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to regenerate recovery codes')
+      const message = reason instanceof Error ? reason.message : 'Unable to regenerate recovery codes'
+      setError(message)
+      setTwoFactorError(message)
     } finally {
+      securityMutationRef.current = false
       setBusy(false)
     }
   }
 
   const turnOffTwoFactor = async () => {
+    if (securityMutationRef.current) return
+    setTwoFactorError('')
     if (!twoFactorCode.trim()) {
-      setError('Enter a current authenticator or recovery code before disabling 2FA.')
+      const message = 'Enter a current authenticator or recovery code before disabling 2FA.'
+      setError(message)
+      setTwoFactorError(message)
       return
     }
     if (!window.confirm('Disable two-factor authentication for this account? Other signed-in devices will be revoked.')) return
+    securityMutationRef.current = true
     setBusy(true)
     setError('')
     try {
@@ -501,8 +548,11 @@ export default function SecurityWorkspacePage() {
       setTwoFactorSetup(null)
       await load()
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to disable two-factor authentication')
+      const message = reason instanceof Error ? reason.message : 'Unable to disable two-factor authentication'
+      setError(message)
+      setTwoFactorError(message)
     } finally {
+      securityMutationRef.current = false
       setBusy(false)
     }
   }
@@ -520,7 +570,7 @@ export default function SecurityWorkspacePage() {
         <button type="button" className="secondary-button" onClick={() => void load()} disabled={busy}><RefreshCcw size={16} /> Refresh</button>
       </header>
 
-      {error && <div className="security-error"><AlertTriangle size={17} /><span>{error}</span></div>}
+      {error && <div className="security-error" role="alert"><AlertTriangle size={17} /><span>{error}</span></div>}
 
       <SummaryStats
         label="Security workspace summary"
@@ -573,6 +623,7 @@ export default function SecurityWorkspacePage() {
         </div>
 
         {showUserForm && <form className="security-user-form" onSubmit={(event) => void createStaffUser(event)}>
+          {userFormError && <div className="security-error security-form-error" role="alert"><AlertTriangle size={15} /><span>{userFormError}</span></div>}
           <label>Name<input required value={userForm.name} onChange={(event) => setUserForm((current) => ({ ...current, name: event.target.value }))} placeholder="Staff name" /></label>
           <label>Email<input required type="email" value={userForm.email} onChange={(event) => setUserForm((current) => ({ ...current, email: event.target.value }))} placeholder="staff@example.com" /></label>
           <label>Temporary password<input required minLength={8} type="password" value={userForm.password} onChange={(event) => setUserForm((current) => ({ ...current, password: event.target.value }))} placeholder="Minimum 8 characters" autoComplete="new-password" /></label>
@@ -774,6 +825,7 @@ export default function SecurityWorkspacePage() {
         <div className="security-side-stack">
           <section className="card security-panel security-two-factor-panel">
             <div className="security-panel-title"><div><h2>Two-factor authentication</h2><p>Require an authenticator or recovery code after the password.</p></div><LockKeyhole size={21} /></div>
+            {twoFactorError && <div className="security-error security-2fa-error" role="alert"><AlertTriangle size={15} /><span>{twoFactorError}</span></div>}
 
             {!twoFactorStatus?.eligible ? (
               <div className="security-pairing-empty"><LockKeyhole size={28} /><strong>Not required for this role</strong><span>PhoneFlow currently offers 2FA to Owner and Manager accounts.</span></div>

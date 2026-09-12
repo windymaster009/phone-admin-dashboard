@@ -79,7 +79,7 @@ function Modal({ title, description, onClose, children, wide = false, className 
 
 function OptionPicker({ response, busy, pendingOptionKey, error, onSelect, onClose }: { response: ReceiptOptionResponse; busy: boolean; pendingOptionKey: string | null; error: string; onSelect: (option: ReceiptOption) => void; onClose: () => void }) {
   return <Modal className="receipt-option-picker-modal" title={response.referenceNo} description="Choose the historical document to preview or print." onClose={onClose}>
-    {error && <div className="receipt-error"><AlertTriangle size={16} /> {error}</div>}
+    {error && <div className="receipt-error" role="alert"><AlertTriangle size={16} /> {error}</div>}
     <div className="receipt-option-list">
       {response.options.map((option) => {
         const optionKey = `${option.documentType}-${option.sourceSubId}`
@@ -103,18 +103,21 @@ function Viewer({ initialReceipt, initialLayout = 'A4', onClose, onUpdated }: { 
   const [error, setError] = useState('')
   const paperRef = useRef<HTMLDivElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
+  const printingRef = useRef(false)
 
   useEffect(() => {
-    previewRef.current?.scrollTo({ top: 0, left: 0 })
+    previewRef.current?.scrollTo?.({ top: 0, left: 0 })
   }, [layout])
 
   async function printReceipt() {
+    if (printingRef.current) return
     const popup = window.open('', '_blank', 'width=980,height=760')
     if (!popup) {
       setError(`The browser blocked the print window. Allow pop-ups for ${receipt.snapshot?.shop.name || 'this shop'} and try again.`)
       return
     }
 
+    printingRef.current = true
     setBusy(true)
     setError('')
     try {
@@ -139,12 +142,13 @@ function Viewer({ initialReceipt, initialLayout = 'A4', onClose, onUpdated }: { 
       popup.close()
       setError(reason instanceof Error ? reason.message : 'Unable to print receipt')
     } finally {
+      printingRef.current = false
       setBusy(false)
     }
   }
 
   return <Modal title={receipt.receiptNo} description={`${documentLabel(receipt.documentType)} · ${receipt.referenceNo}`} onClose={onClose} wide>
-    {error && <div className="receipt-error"><AlertTriangle size={16} /> {error}</div>}
+    {error && <div className="receipt-error" role="alert"><AlertTriangle size={16} /> {error}</div>}
     <div className="receipt-viewer-toolbar">
       <div className="receipt-layout-switch"><button type="button" className={layout === 'A4' ? 'active' : ''} aria-pressed={layout === 'A4'} onClick={() => setLayout('A4')}>A4 invoice</button><button type="button" className={layout === 'THERMAL' ? 'active' : ''} aria-pressed={layout === 'THERMAL'} onClick={() => setLayout('THERMAL')}>80mm thermal</button></div>
       <div className="receipt-print-meta"><span>{receipt.printCount ? `${receipt.printCount} print${receipt.printCount === 1 ? '' : 's'}` : 'Not printed yet'}</span>{receipt.lastPrintedAt && <small>Last: {dateText(receipt.lastPrintedAt, true)}</small>}</div>
@@ -347,6 +351,6 @@ export default function ReceiptCenterBridge() {
     {actionTarget && context && createPortal(<button className="secondary-button receipt-detail-action" onClick={() => void openDocuments()} disabled={busy}><Printer size={15} /> {busy ? 'Loading...' : context.sourceType === 'TRADE' ? 'Print receipt' : 'Documents'}</button>, actionTarget)}
     {picker && context && <OptionPicker response={picker} busy={busy} pendingOptionKey={pendingOptionKey} error={error} onSelect={(option) => void generate(context, option)} onClose={closePicker} />}
     {viewer && <Viewer key={viewer.receipt._id} initialReceipt={viewer.receipt} initialLayout={viewer.initialLayout} onClose={closeViewer} onUpdated={(receipt) => { setViewer((current) => current ? { ...current, receipt } : null); setVersion((value) => value + 1) }} />}
-    {!picker && !viewer && error && createPortal(<div className="receipt-toast"><AlertTriangle size={16} /> {error}<button onClick={() => setError('')}><X size={14} /></button></div>, document.body)}
+    {!picker && !viewer && error && createPortal(<div className="receipt-toast" role="alert"><AlertTriangle size={16} /> {error}<button onClick={() => setError('')}><X size={14} /></button></div>, document.body)}
   </>
 }

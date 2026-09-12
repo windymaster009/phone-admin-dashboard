@@ -2885,6 +2885,8 @@ async function createMultiDevicePurchase(req, res) {
   }
   if (transactionPaid > transactionTotal + 0.000001) throw requestError(400, 'Amount paid cannot exceed the total amount')
   const transactionBalance = Math.max(0, transactionTotal - transactionPaid)
+  // Preserve unit-cost precision: rounding before multiplying quantities loses
+  // inventory value. Presentation and report totals round at their boundaries.
   const toUsd = (amount) => currency === 'KHR' ? amount / usdKhrRate : amount
 
   const session = await mongoose.startSession()

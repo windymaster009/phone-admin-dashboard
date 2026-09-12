@@ -92,6 +92,8 @@ export default function BackupStatusCard() {
   const [managerOpen, setManagerOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [downloadBusy, setDownloadBusy] = useState('')
+  const backupRunRef = useRef(false)
+  const backupDownloadRef = useRef(false)
   const [deleteBusy, setDeleteBusy] = useState('')
   const [selectedBackups, setSelectedBackups] = useState<Set<string>>(() => new Set())
   const [bulkDeleteBusy, setBulkDeleteBusy] = useState(false)
@@ -149,10 +151,12 @@ export default function BackupStatusCard() {
     return () => document.removeEventListener('keydown', closeOnEscape)
   }, [bulkDeleteBusy, deleteBusy, deleteConfirmation, managerOpen, restoreBusy, restoreCandidate, restoreSuccess])
 
-  async function refreshStatus() {
+  async function refreshStatus(options: { preserveError?: boolean } = {}) {
     const result = await api<BackupStatus>('/backups/status')
     setStatus(result)
-    setError('')
+    if (!options.preserveError) {
+      setError('')
+    }
     return result
   }
 
@@ -179,7 +183,8 @@ export default function BackupStatusCard() {
   }
 
   async function runNow() {
-    if (!status?.canRun || busy || status.running) return
+    if (!status?.canRun || backupRunRef.current || status.running) return
+    backupRunRef.current = true
     setBusy(true)
     setError('')
     setStatus((current) => current ? { ...current, running: true } : current)
@@ -188,18 +193,22 @@ export default function BackupStatusCard() {
       await api('/backups/run', { method: 'POST' })
       await Promise.all([refreshStatus(), refreshList()])
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Backup failed')
+      const backupError = reason instanceof Error ? reason.message : 'Backup failed'
+      setError(backupError)
       try {
-        await refreshStatus()
+        await refreshStatus({ preserveError: true })
       } catch {
         // Keep the original backup error visible.
       }
     } finally {
+      backupRunRef.current = false
       setBusy(false)
     }
   }
 
   async function downloadBackup(backup: BackupMetadata) {
+    if (backupDownloadRef.current) return
+    backupDownloadRef.current = true
     setDownloadBusy(backup.filename)
     setError('')
     try {
@@ -223,6 +232,7 @@ export default function BackupStatusCard() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to download backup')
     } finally {
+      backupDownloadRef.current = false
       setDownloadBusy('')
     }
   }
@@ -453,7 +463,7 @@ export default function BackupStatusCard() {
               </div>
             </header>
 
-            {error && <div className="backup-manager-error"><AlertTriangle size={16} />{error}</div>}
+            {error && <div className="backup-manager-error" role="alert"><AlertTriangle size={16} />{error}</div>}
 
             <div className="backup-manager-summary">
               <div><span>Schedule</span><strong>{status?.enabled ? `${status.schedule} · ${status.timezone}` : 'Disabled'}</strong></div>
@@ -633,7 +643,7 @@ export default function BackupStatusCard() {
               <div><strong>{restoreAge.label}</strong>{restoreAge.detail && <small>{restoreAge.detail}</small>}</div>
             </div>
 
-            {restoreError && <div className="backup-restore-error"><AlertTriangle size={16} />{restoreError}</div>}
+            {restoreError && <div className="backup-restore-error" role="alert"><AlertTriangle size={16} />{restoreError}</div>}
 
             <label className="backup-restore-confirmation-field">
               <span>Type <strong>RESTORE</strong> to confirm</span>

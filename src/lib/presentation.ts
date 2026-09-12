@@ -108,9 +108,10 @@ export function khrText(amount: number, exchangeRate: ExchangeRateData | null) {
 }
 export const dateText = (value: string) => new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(new Date(value))
 export const titleStatus = (status: string) => {
+  if (!status) return ''
   if (status === 'FORFEITED') return 'Claimed'
   if (status === 'PAWN_FORFEIT') return 'Pawn claim'
-  return status.replaceAll('_', ' ').toLowerCase().replace(/(^|\s)\S/g, (letter) => letter.toUpperCase())
+  return String(status).replaceAll('_', ' ').toLowerCase().replace(/(^|\s)\S/g, (letter) => letter.toUpperCase())
 }
 export const openOperationModal = (kindOrLabel: string) => {
   const value = kindOrLabel.toLowerCase()

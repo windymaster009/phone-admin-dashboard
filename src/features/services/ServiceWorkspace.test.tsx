@@ -488,4 +488,176 @@ describe('ServiceWorkspace', () => {
     expect(payload?.customerId).toBe('cust-2')
     expect(payload?.customerName).toBeUndefined()
   })
+
+  it('6. Service charges do not mutate inventory or call inventory endpoints', async () => {
+    const user = userEvent.setup()
+    const inventoryCalls: string[] = []
+
+    setupFetchMock({
+      '/api/inventory': async () => {
+        inventoryCalls.push('/api/inventory')
+        return { items: [] }
+      },
+      '/api/services/charges': async (init) => {
+        if (init.method === 'POST') {
+          return {
+            charge: {
+              _id: 'sc-iso-1',
+              serviceNo: 'SV-20260312-ISO1',
+              serviceSnapshot: { name: 'Gmail account setup', category: 'ACCOUNT_SETUP' },
+              customerSnapshot: { name: 'Walk-in customer' },
+              currency: 'USD',
+              total: 5,
+              paymentMethod: 'CASH',
+              status: 'COMPLETED',
+              completedAt: new Date().toISOString(),
+            },
+          }
+        }
+        return { charges: sampleCharges }
+      },
+    })
+
+    render(
+      <RouterProvider>
+        <ServiceWorkspace />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Gmail account setup').length).toBeGreaterThanOrEqual(1)
+    })
+
+    const chargeButtons = screen.getAllByRole('button', { name: /^charge/i })
+    await user.click(chargeButtons[0])
+
+    const dialog = screen.getByRole('dialog', { name: /record service charge/i })
+    await user.click(within(dialog).getByRole('button', { name: /record charge/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Service charge saved/i)).toBeInTheDocument()
+    })
+
+    // Assert that inventory endpoints were never queried or mutated during service charging
+    expect(inventoryCalls).toHaveLength(0)
+  })
+
+  it('7. Handles discount boundaries (100% discount, zero total, KHR increments)', async () => {
+    const user = userEvent.setup()
+    let recordedBody: Record<string, unknown> | null = null
+
+    setupFetchMock({
+      '/api/services/charges': async (init) => {
+        if (init.method === 'POST') {
+          recordedBody = JSON.parse(String(init.body))
+          return {
+            charge: {
+              _id: 'sc-disc-1',
+              serviceNo: 'SV-20260312-DISC',
+              serviceSnapshot: { name: 'New phone setup', category: 'DEVICE_SETUP' },
+              customerSnapshot: { name: 'Walk-in customer' },
+              currency: 'KHR',
+              total: 0,
+              discount: 41000,
+              paymentMethod: 'CASH',
+              status: 'COMPLETED',
+              completedAt: new Date().toISOString(),
+            },
+          }
+        }
+        return { charges: sampleCharges }
+      },
+    })
+
+    render(
+      <RouterProvider>
+        <ServiceWorkspace />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getAllByText('New phone setup').length).toBeGreaterThanOrEqual(1)
+    })
+
+    // Open checkout for KHR service (41,000 KHR)
+    const chargeButtons = screen.getAllByRole('button', { name: /^charge/i })
+    await user.click(chargeButtons[1])
+
+    const dialog = screen.getByRole('dialog', { name: /record service charge/i })
+    const discountInput = within(dialog).getByRole('textbox', { name: /discount/i })
+
+    // Enter 100% discount matching subtotal: 41000 KHR
+    await user.clear(discountInput)
+    await user.type(discountInput, '41000')
+
+    // Expect Total to show 0 KHR
+    expect(within(dialog).getByText('0 KHR')).toBeInTheDocument()
+
+    // Submit charge
+    await user.click(within(dialog).getByRole('button', { name: /record charge/i }))
+
+    await waitFor(() => {
+      expect(recordedBody).not.toBeNull()
+    })
+
+    const payload = recordedBody as Record<string, unknown> | null
+    expect(payload?.currency).toBe('KHR')
+    expect(payload?.discount).toBe(41000)
+  })
+
+  it('8. Prevents duplicate in-flight submissions when Record charge is clicked rapidly', async () => {
+    const user = userEvent.setup()
+    let postCount = 0
+
+    setupFetchMock({
+      '/api/services/charges': async (init) => {
+        if (init.method === 'POST') {
+          postCount += 1
+          await new Promise((resolve) => setTimeout(resolve, 80))
+          return {
+            charge: {
+              _id: 'sc-dup-1',
+              serviceNo: 'SV-20260312-DUP',
+              serviceSnapshot: { name: 'Gmail account setup', category: 'ACCOUNT_SETUP' },
+              customerSnapshot: { name: 'Walk-in customer' },
+              currency: 'USD',
+              total: 5,
+              paymentMethod: 'CASH',
+              status: 'COMPLETED',
+              completedAt: new Date().toISOString(),
+            },
+          }
+        }
+        return { charges: sampleCharges }
+      },
+    })
+
+    render(
+      <RouterProvider>
+        <ServiceWorkspace />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Gmail account setup').length).toBeGreaterThanOrEqual(1)
+    })
+
+    const chargeButtons = screen.getAllByRole('button', { name: /^charge/i })
+    await user.click(chargeButtons[0])
+
+    const dialog = screen.getByRole('dialog', { name: /record service charge/i })
+    const submitBtn = within(dialog).getByRole('button', { name: /record charge/i })
+
+    // Click submit rapidly twice
+    await Promise.all([
+      user.click(submitBtn),
+      user.click(submitBtn),
+    ])
+
+    await waitFor(() => {
+      expect(screen.getByText(/Service charge saved/i)).toBeInTheDocument()
+    })
+
+    expect(postCount).toBe(1)
+  })
 })

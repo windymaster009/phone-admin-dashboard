@@ -5,7 +5,7 @@ import { ApiError, api, setToken, type SessionUser, type ShopProfile } from '../
 import { safeStorage } from '../lib/storage'
 
 function ErrorNotice({ message }: { message: string }) {
-  return <div className="error-notice"><AlertTriangle size={16} /> {message}</div>
+  return <div className="error-notice" role="alert"><AlertTriangle size={16} /> {message}</div>
 }
 
 type RestoreSuccessNotice = {
@@ -129,6 +129,7 @@ export default function AuthScreen({
   const [twoFactor, setTwoFactor] = useState<TwoFactorChallenge | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const submittingRef = useRef(false)
   const [restoreNotice] = useState<RestoreSuccessNotice | null>(readRestoreSuccessNotice)
 
   useEffect(() => {
@@ -139,11 +140,12 @@ export default function AuthScreen({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (submittingRef.current) return
+    submittingRef.current = true
     setBusy(true)
     setError('')
-    const form = new FormData(event.currentTarget)
-
     try {
+      const form = new FormData(event.currentTarget)
       if (twoFactor) {
         const result = await api<{ user: SessionUser }>('/auth/2fa/verify-login', {
           method: 'POST',
@@ -205,6 +207,7 @@ export default function AuthScreen({
           : reason instanceof Error ? reason.message : 'Unable to sign in')
       }
     } finally {
+      submittingRef.current = false
       setBusy(false)
     }
   }

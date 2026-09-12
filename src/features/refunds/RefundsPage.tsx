@@ -104,6 +104,7 @@ export default function RefundsView({ user }: { user: SessionUser }) {
   const [confirmation, setConfirmation] = useState('')
   const [actionError, setActionError] = useState('')
   const [actionBusy, setActionBusy] = useState(false)
+  const refundSubmittingRef = useRef(false)
   const [completedTradeNo, setCompletedTradeNo] = useState('')
   const [refundSuccess, setRefundSuccess] = useState<Trade | null>(null)
   const [scannerOpen, setScannerOpen] = useState(false)
@@ -177,7 +178,8 @@ export default function RefundsView({ user }: { user: SessionUser }) {
 
   async function recordRefund(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!selectedTrade || !canSubmit) return
+    if (!selectedTrade || !canSubmit || refundSubmittingRef.current) return
+    refundSubmittingRef.current = true
     setActionBusy(true)
     setActionError('')
     try {
@@ -199,6 +201,7 @@ export default function RefundsView({ user }: { user: SessionUser }) {
     } catch (error) {
       setActionError(error instanceof Error ? error.message : 'The refund was not recorded. Review the sale and try again.')
     } finally {
+      refundSubmittingRef.current = false
       setActionBusy(false)
     }
   }

@@ -121,6 +121,7 @@ describe('DepreciationPage feature integration', () => {
     expect(stored[0].id).toBe(`VAL-${controlledTime.getTime()}`)
     expect(stored[0].createdAt).toBe('2028-02-29T14:30:00.000Z')
     expect(stored[0].marketPrice).toBe(0)
+    vi.useRealTimers()
   })
 
   it('converts amounts between USD and KHR following 100-KHR rounding rules', async () => {

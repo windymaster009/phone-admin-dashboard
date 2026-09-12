@@ -113,6 +113,8 @@ import { clearInFlightRequests } from '../lib/api'
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  vi.clearAllTimers()
+  vi.useRealTimers()
   localStorage.clear()
   sessionStorage.clear()
   clearInFlightRequests()

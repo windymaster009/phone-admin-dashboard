@@ -405,6 +405,7 @@ function SalesReportView({ navigate }: { navigate: (path: string) => void }) {
   const [error, setError] = useState('')
 
   useEffect(() => {
+    let active = true
     if (period === 'custom' && (!customFrom || !customTo || customFrom > customTo)) return
     const query = new URLSearchParams({ period, paymentMethod, status, staff })
     if (period === 'custom') {
@@ -414,9 +415,18 @@ function SalesReportView({ navigate }: { navigate: (path: string) => void }) {
     setLoading(true)
     setError('')
     api<SalesReportData>(`/reports/sales?${query.toString()}`)
-      .then(setData)
-      .catch((reason: Error) => setError(reason.message))
-      .finally(() => setLoading(false))
+      .then((result) => {
+        if (active) setData(result)
+      })
+      .catch((reason: Error) => {
+        if (active) setError(reason.message)
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
   }, [period, customFrom, customTo, paymentMethod, status, staff])
 
   const periodOptions: Array<{ value: BusinessOverviewPeriod; label: string }> = [
@@ -462,7 +472,7 @@ function SalesReportView({ navigate }: { navigate: (path: string) => void }) {
         <label><span>Staff</span><select value={staff} onChange={(event) => setStaff(event.target.value)}><option value="ALL">All staff</option>{(data?.staff || []).map((person) => <option key={person._id} value={person._id}>{person.name}</option>)}</select></label>
         {loading && <RefreshCcw className="overview-refreshing" size={17} aria-label="Refreshing report" />}
       </section>
-      {error && <p className="overview-error"><AlertTriangle size={16} />{error}</p>}
+      {error && <p className="overview-error" role="alert"><AlertTriangle size={16} />{error}</p>}
 
       <SummaryStats
         label="Sales report summary"
@@ -515,6 +525,7 @@ function PurchasesReportView({ navigate }: { navigate: (path: string) => void })
   const [error, setError] = useState('')
 
   useEffect(() => {
+    let active = true
     if (period === 'custom' && (!customFrom || !customTo || customFrom > customTo)) return
     const query = new URLSearchParams({ period, source, paymentMethod, paymentStatus, status, staff })
     if (period === 'custom') {
@@ -524,9 +535,18 @@ function PurchasesReportView({ navigate }: { navigate: (path: string) => void })
     setLoading(true)
     setError('')
     api<PurchaseReportData>(`/reports/purchases?${query.toString()}`)
-      .then(setData)
-      .catch((reason: Error) => setError(reason.message))
-      .finally(() => setLoading(false))
+      .then((result) => {
+        if (active) setData(result)
+      })
+      .catch((reason: Error) => {
+        if (active) setError(reason.message)
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
   }, [period, customFrom, customTo, source, paymentMethod, paymentStatus, status, staff])
 
   const periodOptions: Array<{ value: BusinessOverviewPeriod; label: string }> = [
@@ -575,7 +595,7 @@ function PurchasesReportView({ navigate }: { navigate: (path: string) => void })
         <label><span>Staff</span><select value={staff} onChange={(event) => setStaff(event.target.value)}><option value="ALL">All staff</option>{(data?.staff || []).map((person) => <option key={person._id} value={person._id}>{person.name}</option>)}</select></label>
         {loading && <RefreshCcw className="overview-refreshing" size={17} aria-label="Refreshing report" />}
       </section>
-      {error && <p className="overview-error"><AlertTriangle size={16} />{error}</p>}
+      {error && <p className="overview-error" role="alert"><AlertTriangle size={16} />{error}</p>}
 
       <SummaryStats
         label="Purchases report summary"
@@ -677,10 +697,20 @@ function OperationalReportView({ kind, navigate }: { kind: OperationalReportKind
     }
     setLoading(true)
     setError('')
+    let active = true
     api<OperationalReportData>(`/reports/${kind}?${query.toString()}`)
-      .then(setData)
-      .catch((reason: Error) => setError(reason.message))
-      .finally(() => setLoading(false))
+      .then((result) => {
+        if (active) setData(result)
+      })
+      .catch((reason: Error) => {
+        if (active) setError(reason.message)
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
   }, [kind, period, customFrom, customTo, currencyCode, status, staff, category, source, stock, method, direction, action, entity])
 
   const periodOptions: Array<{ value: BusinessOverviewPeriod | 'all_time'; label: string }> = [
@@ -789,7 +819,7 @@ function OperationalReportView({ kind, navigate }: { kind: OperationalReportKind
         </>}
         {loading && <RefreshCcw className="overview-refreshing" size={17} aria-label="Refreshing report" />}
       </section>
-      {error && <p className="overview-error"><AlertTriangle size={16} />{error}</p>}
+      {error && <p className="overview-error" role="alert"><AlertTriangle size={16} />{error}</p>}
 
       <SummaryStats
         label={`${kind} report summary`}

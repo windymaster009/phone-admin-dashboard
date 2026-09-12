@@ -205,7 +205,7 @@ export default function BusinessOverviewView({ onReady }: { onReady: () => void 
           </div>
         )}
       />
-      {error && <p className="overview-error"><AlertTriangle size={16} />{error}</p>}
+      {error && <p className="overview-error" role="alert"><AlertTriangle size={16} />{error}</p>}
       <SummaryStats
         label="Business summary"
         variant="compact"
