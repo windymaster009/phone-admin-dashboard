@@ -205,4 +205,263 @@ describe('ReceiptDocument component', () => {
     render(<ReceiptDocument receipt={brokenReceipt} layout="A4" />)
     expect(screen.getByText(/Receipt snapshot is unavailable/i)).toBeInTheDocument()
   })
+
+  it('renders a PAWN_CONTRACT in 80mm THERMAL format with barcode, shop info, and warnings', () => {
+    const pawnThermalReceipt: ReceiptRecord = {
+      _id: 'rec-pawn-thermal',
+      receiptNo: 'RCP-PW-001',
+      documentType: 'PAWN_CONTRACT',
+      sourceType: 'PAWN',
+      sourceId: 'pawn-1',
+      sourceSubId: 'contract-1',
+      referenceNo: 'PW-2026-0001',
+      partyName: 'Chann Borey',
+      partyPhone: '012999888',
+      currency: 'USD',
+      total: 330,
+      issuedAt: '2026-09-10T08:00:00.000Z',
+      printCount: 0,
+      createdAt: '2026-09-10T08:00:00.000Z',
+      snapshot: {
+        schemaVersion: 1,
+        documentType: 'PAWN_CONTRACT',
+        title: 'Pawn Contract',
+        shop: {
+          name: 'PhoneFlow Pawn',
+          phone: '023888999',
+          address: 'Corner St. 271, Phnom Penh',
+        },
+        referenceNo: 'PW-2026-0001',
+        issuedAt: '2026-09-10T08:00:00.000Z',
+        startDate: '2026-09-10T08:00:00.000Z',
+        dueDate: '2026-10-10T08:00:00.000Z',
+        graceEndsAt: '2026-10-17T08:00:00.000Z',
+        ticketPart: 1,
+        feeModel: 'DAILY_SIMPLE',
+        contractLengthDays: 30,
+        principal: 300,
+        dailyFeeRate: 0.33,
+        dailyFeeAmount: 1,
+        pawnFeeAtDue: 30,
+        total: 330,
+        party: {
+          name: 'Chann Borey',
+          phone: '012999888',
+          role: 'Customer',
+        },
+        currency: 'USD',
+        items: [
+          {
+            name: 'MacBook Pro M2 14-inch',
+            quantity: 1,
+            unitPrice: 300,
+            total: 300,
+            description: 'Silver, 512GB SSD',
+            imei: 'SERIAL-MBP-9922',
+          },
+        ],
+      },
+    }
+
+    render(<ReceiptDocument receipt={pawnThermalReceipt} layout="THERMAL" />)
+
+    expect(screen.getByText('Pawn Shop PhoneFlow Pawn')).toBeInTheDocument()
+    expect(screen.getByText('Tel: 023888999')).toBeInTheDocument()
+    expect(screen.getByText(/Pawn ticket · Part 1/i)).toBeInTheDocument()
+    expect(screen.getAllByText('PW-2026-0001').length).toBeGreaterThan(0)
+    expect(screen.getByText('Receipt RCP-PW-001')).toBeInTheDocument()
+    expect(screen.getByText('Chann Borey')).toBeInTheDocument()
+    expect(screen.getByText('1 x MacBook Pro M2 14-inch')).toBeInTheDocument()
+    expect(screen.getByText('Silver, 512GB SSD')).toBeInTheDocument()
+    expect(screen.getByText('IMEI: SERIAL-MBP-9922')).toBeInTheDocument()
+    expect(screen.getByText('Customer signature / thumbprint')).toBeInTheDocument()
+    expect(screen.getByText('Shop representative')).toBeInTheDocument()
+    expect(screen.getByText(/If this pawn ticket is lost/i)).toBeInTheDocument()
+  })
+
+  it('renders PAWN_CONTRACT in A4 layout with agreement details and optional national ID status', () => {
+    const pawnA4Receipt: ReceiptRecord = {
+      _id: 'rec-pawn-a4',
+      receiptNo: 'RCP-PW-A4-002',
+      documentType: 'PAWN_CONTRACT',
+      sourceType: 'PAWN',
+      sourceId: 'pawn-2',
+      sourceSubId: 'contract-2',
+      referenceNo: 'PW-2026-0002',
+      currency: 'USD',
+      total: 500,
+      issuedAt: '2026-09-10T08:00:00.000Z',
+      printCount: 1,
+      createdAt: '2026-09-10T08:00:00.000Z',
+      snapshot: {
+        schemaVersion: 1,
+        documentType: 'PAWN_CONTRACT',
+        title: 'Pawn Agreement',
+        shop: { name: 'PhoneFlow Central' },
+        referenceNo: 'PW-2026-0002',
+        issuedAt: '2026-09-10T08:00:00.000Z',
+        party: { name: '', role: 'Customer' }, // Empty name tests Walk-in customer fallback
+        currency: 'USD',
+        principal: 500,
+        estimatedValue: 800,
+        pawnPercentage: 62.5,
+        feeModel: 'DAILY_SIMPLE',
+        dailyFeeRate: 0.25,
+        dailyFeeAmount: 1.25,
+        contractLengthDays: 15,
+        pawnFeeAtDue: 18.75,
+        total: 518.75,
+        ownershipConfirmed: true,
+        identificationVerified: false,
+        items: [
+          {
+            name: 'iPad Pro 11',
+            quantity: 1,
+            unitPrice: 500,
+            total: 500,
+            serialNumber: 'SN-IPAD-001',
+            imei2: 'IMEI2-9988',
+            accessories: ['charger', 'apple_pencil'],
+          },
+        ],
+      },
+    }
+
+    render(<ReceiptDocument receipt={pawnA4Receipt} layout="A4" />)
+
+    expect(screen.getAllByText('Walk-in customer').length).toBeGreaterThan(0)
+    expect(screen.getByText('Agreement details')).toBeInTheDocument()
+    expect(screen.getByText('Confirmed')).toBeInTheDocument()
+    expect(screen.getByText('Not provided (optional)')).toBeInTheDocument()
+    expect(screen.getByText('Serial: SN-IPAD-001')).toBeInTheDocument()
+    expect(screen.getByText('IMEI 2: IMEI2-9988')).toBeInTheDocument()
+    expect(screen.getByText(/Included: Charger, Apple Pencil/i)).toBeInTheDocument()
+  })
+
+  it('renders PAWN_PAYMENT with payment allocations and balance', () => {
+    const pawnPaymentReceipt: ReceiptRecord = {
+      _id: 'rec-pawn-pay',
+      receiptNo: 'RCP-PW-PAY-01',
+      documentType: 'PAWN_PAYMENT',
+      sourceType: 'PAWN',
+      sourceId: 'pawn-1',
+      sourceSubId: 'pay-1',
+      referenceNo: 'PW-2026-0001',
+      currency: 'USD',
+      total: 50,
+      issuedAt: '2026-09-12T10:00:00.000Z',
+      printCount: 0,
+      createdAt: '2026-09-12T10:00:00.000Z',
+      snapshot: {
+        schemaVersion: 1,
+        documentType: 'PAWN_PAYMENT',
+        title: 'Pawn Payment Receipt',
+        shop: { name: 'PhoneFlow' },
+        referenceNo: 'PW-2026-0001',
+        issuedAt: '2026-09-12T10:00:00.000Z',
+        party: { name: 'Sophea', role: 'Customer' },
+        currency: 'USD',
+        paymentType: 'INTEREST_FEE',
+        allocation: {
+          principal: 0,
+          interest: 0,
+          pawnFee: 40,
+          fees: 10,
+          additionalCollected: 5,
+        },
+        balance: 300,
+        total: 50,
+        dueDate: '2026-10-10T08:00:00.000Z',
+        items: [{ name: 'Pawn Fee Payment', quantity: 1, unitPrice: 50, total: 50 }],
+      },
+    }
+
+    render(<ReceiptDocument receipt={pawnPaymentReceipt} layout="A4" />)
+
+    expect(screen.getByText('Payment details')).toBeInTheDocument()
+    expect(screen.getByText('Interest Fee')).toBeInTheDocument()
+    expect(screen.getByText('Daily pawn fee applied')).toBeInTheDocument()
+    expect(screen.getByText('Additional amount collected')).toBeInTheDocument()
+  })
+
+  it('renders LOAN_AGREEMENT and LOAN_PAYMENT documents', () => {
+    const loanAgreementReceipt: ReceiptRecord = {
+      _id: 'rec-loan-agr',
+      receiptNo: 'RCP-LN-AGR-01',
+      documentType: 'LOAN_AGREEMENT',
+      sourceType: 'LOAN',
+      sourceId: 'loan-1',
+      sourceSubId: 'agreement',
+      referenceNo: 'LN-2026-0001',
+      currency: 'USD',
+      total: 1050,
+      issuedAt: '2026-09-01T08:00:00.000Z',
+      printCount: 0,
+      createdAt: '2026-09-01T08:00:00.000Z',
+      snapshot: {
+        schemaVersion: 1,
+        documentType: 'LOAN_AGREEMENT',
+        title: 'Loan Agreement',
+        shop: { name: 'PhoneFlow' },
+        referenceNo: 'LN-2026-0001',
+        issuedAt: '2026-09-01T08:00:00.000Z',
+        party: { name: 'Vannak', role: 'Borrower' },
+        currency: 'USD',
+        principal: 1000,
+        interestType: 'PERCENT',
+        interestValue: 5,
+        total: 1050,
+        dueDate: '2026-10-01T08:00:00.000Z',
+        status: 'ACTIVE',
+        items: [{ name: 'Loan principal disbursement', quantity: 1, unitPrice: 1000, total: 1000 }],
+      },
+    }
+
+    const { unmount } = render(<ReceiptDocument receipt={loanAgreementReceipt} layout="A4" />)
+    expect(screen.getByText('Agreement details')).toBeInTheDocument()
+    expect(screen.getByText('Borrower')).toBeInTheDocument()
+    expect(screen.getByText('Percent')).toBeInTheDocument()
+    expect(screen.getByText('5%')).toBeInTheDocument()
+    expect(screen.getByText('Active')).toBeInTheDocument()
+    unmount()
+
+    const loanPaymentReceipt: ReceiptRecord = {
+      _id: 'rec-loan-pay',
+      receiptNo: 'RCP-LN-PAY-01',
+      documentType: 'LOAN_PAYMENT',
+      sourceType: 'LOAN',
+      sourceId: 'loan-1',
+      sourceSubId: 'repay-1',
+      referenceNo: 'LN-2026-0001',
+      currency: 'USD',
+      total: 500,
+      issuedAt: '2026-09-15T08:00:00.000Z',
+      printCount: 0,
+      createdAt: '2026-09-15T08:00:00.000Z',
+      snapshot: {
+        schemaVersion: 1,
+        documentType: 'LOAN_PAYMENT',
+        title: 'Loan Repayment Receipt',
+        shop: { name: 'PhoneFlow' },
+        referenceNo: 'LN-2026-0001',
+        issuedAt: '2026-09-15T08:00:00.000Z',
+        party: { name: 'Vannak', role: 'Borrower' },
+        currency: 'USD',
+        paymentMethod: 'BANK_TRANSFER',
+        contractTotal: 1050,
+        amountPaid: 500,
+        balance: 550,
+        dueDate: '2026-10-01T08:00:00.000Z',
+        status: 'ACTIVE',
+        total: 500,
+        items: [{ name: 'Repayment installment', quantity: 1, unitPrice: 500, total: 500 }],
+      },
+    }
+
+    render(<ReceiptDocument receipt={loanPaymentReceipt} layout="A4" />)
+    expect(screen.getByText('Payment details')).toBeInTheDocument()
+    expect(screen.getAllByText('Bank Transfer').length).toBeGreaterThan(0)
+    expect(screen.getByText('$1,050')).toBeInTheDocument()
+    expect(screen.getAllByText('$550').length).toBeGreaterThan(0)
+  })
 })

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import './loan-workspace.css'
 import {
   AlertTriangle,
@@ -937,6 +937,7 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
   const [cancelConfirmation, setCancelConfirmation] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
+  const submittingRef = useRef(false)
 
   const loadLoans = useCallback(async () => {
     setLoading(true)
@@ -961,8 +962,10 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
 
   async function createLoan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (submittingRef.current || busy) return
     const form = new FormData(event.currentTarget)
     const loanCurrency = form.get('currency') === 'KHR' ? 'KHR' : 'USD'
+    submittingRef.current = true
     setBusy(true)
     setModalError('')
     try {
@@ -989,6 +992,7 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
     } catch (reason) {
       setModalError(reason instanceof Error ? reason.message : 'Unable to create loan')
     } finally {
+      submittingRef.current = false
       setBusy(false)
     }
   }
@@ -1004,10 +1008,11 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
 
   async function recordPayment(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!detail) return
+    if (submittingRef.current || busy || !detail) return
     const form = new FormData(event.currentTarget)
     const amount = Number(form.get('amount') || 0)
     const paymentMethod = String(form.get('paymentMethod') || 'CASH')
+    submittingRef.current = true
     setBusy(true)
     setModalError('')
     try {
@@ -1030,14 +1035,16 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
     } catch (reason) {
       setModalError(reason instanceof Error ? reason.message : 'Unable to record payment')
     } finally {
+      submittingRef.current = false
       setBusy(false)
     }
   }
 
   async function changeDueDate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!detail) return
+    if (submittingRef.current || busy || !detail) return
     const form = new FormData(event.currentTarget)
+    submittingRef.current = true
     setBusy(true)
     setModalError('')
     try {
@@ -1047,12 +1054,14 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
     } catch (reason) {
       setModalError(reason instanceof Error ? reason.message : 'Unable to update due date')
     } finally {
+      submittingRef.current = false
       setBusy(false)
     }
   }
 
   async function cancelLoan() {
-    if (!detail) return
+    if (submittingRef.current || busy || !detail) return
+    submittingRef.current = true
     setBusy(true)
     setModalError('')
     try {
@@ -1063,6 +1072,7 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
     } catch (reason) {
       setModalError(reason instanceof Error ? reason.message : 'Unable to cancel loan')
     } finally {
+      submittingRef.current = false
       setBusy(false)
     }
   }
@@ -1087,11 +1097,13 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
   }
 
   async function deleteLoan() {
-    if (!detail) return
+    if (submittingRef.current || busy || !detail) return
+    const loanToDelete = detail.loan
+    submittingRef.current = true
     setBusy(true)
     setModalError('')
     try {
-      await api(`/loans/${detail.loan._id}`, { method: 'DELETE' })
+      await api(`/loans/${loanToDelete._id}`, { method: 'DELETE' })
       setDetail(null)
       setDeleteConfirmation(false)
       await loadLoans()
@@ -1099,6 +1111,7 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
     } catch (reason) {
       setModalError(reason instanceof Error ? reason.message : 'Unable to delete loan')
     } finally {
+      submittingRef.current = false
       setBusy(false)
     }
   }

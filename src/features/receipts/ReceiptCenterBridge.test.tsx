@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import ReceiptCenterBridge from './ReceiptCenterBridge'
@@ -181,6 +181,37 @@ describe('ReceiptCenterBridge component', () => {
     })
   })
 
+  it.each(['print failure', 'close before print', 'close during request'])('cleans up popup print job: %s', async (scenario) => {
+    let resolveRequest!: (response: Response) => void
+    const response = { ok: true, status: 200, headers: new Headers(), json: async () => ({ receipt: mockRefundReceipt }) } as Response
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input).endsWith('/printed') && scenario === 'close during request') return new Promise<Response>((resolve) => { resolveRequest = resolve })
+      return response
+    })
+    const popup = {
+      document: { open: vi.fn(), write: vi.fn(), close: vi.fn() },
+      focus: vi.fn(), close: vi.fn(), print: vi.fn(() => { throw new Error('Printing unavailable') }),
+    }
+    vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window)
+    render(<ReceiptCenterBridge />)
+    act(() => { window.dispatchEvent(new CustomEvent('phoneflow:open-refund-receipt', { detail: { reference: 'SL-2026-0001' } })) })
+    const dialog = await screen.findByRole('dialog', { name: mockRefundReceipt.receiptNo })
+    vi.useFakeTimers()
+    await act(async () => { within(dialog).getByRole('button', { name: /Print \/ Save PDF/i }).click() })
+    if (scenario !== 'print failure') {
+      act(() => { within(dialog).getAllByRole('button', { name: 'Close' })[0].click() })
+      if (scenario === 'close during request') await act(async () => { resolveRequest(response) })
+      await act(async () => { await vi.advanceTimersByTimeAsync(1000) })
+      expect(popup.print).not.toHaveBeenCalled()
+    } else {
+      await act(async () => { await vi.advanceTimersByTimeAsync(220) })
+      expect(within(dialog).getByRole('alert')).toHaveTextContent('Printing unavailable')
+      expect(within(dialog).getByRole('button', { name: /Print \/ Save PDF/i })).toBeEnabled()
+    }
+    expect(popup.close).toHaveBeenCalled()
+    vi.useRealTimers()
+  })
+
   it('renders and dismisses error toast when options fail to load', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: false,
@@ -206,5 +237,470 @@ describe('ReceiptCenterBridge component', () => {
     await user.click(dismissBtn)
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('detects trade detail modal in DOM, mounts action button, and opens option picker when multiple options exist', async () => {
+    // Setup trade modal in DOM
+    const tradeModal = document.createElement('div')
+    tradeModal.className = 'trade-detail-modal'
+    const h3 = document.createElement('h3')
+    h3.textContent = 'SL-2026-0002'
+    tradeModal.appendChild(h3)
+    const footer = document.createElement('div')
+    footer.className = 'detail-modal-footer'
+    tradeModal.appendChild(footer)
+    document.body.appendChild(tradeModal)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/receipts/options')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            referenceNo: 'SL-2026-0002',
+            options: [
+              { documentType: 'SALE_RECEIPT', sourceSubId: 'sale-1', label: 'Sales receipt / invoice', issuedAt: new Date().toISOString(), amount: 100, currency: 'USD' },
+              { documentType: 'REFUND_RECEIPT', sourceSubId: 'refund-1', label: 'Refund receipt', issuedAt: new Date().toISOString(), amount: 50, currency: 'USD' },
+            ],
+          }),
+        } as Response
+      }
+      if (url.includes('/receipts/generate') && init?.method === 'POST') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ receipt: mockRefundReceipt }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    const user = userEvent.setup()
+    render(<ReceiptCenterBridge />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Print receipt' })).toBeInTheDocument()
+    })
+
+    // Click print receipt
+    await user.click(screen.getByRole('button', { name: 'Print receipt' }))
+
+    // Option picker modal should open
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'SL-2026-0002' })).toBeInTheDocument()
+      expect(screen.getByText('Sales receipt / invoice')).toBeInTheDocument()
+      expect(screen.getByText('Refund receipt')).toBeInTheDocument()
+    })
+
+    // Click on the refund receipt option
+    await user.click(screen.getByRole('button', { name: /Refund receipt/i }))
+
+    // Viewer modal opens
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'RR-2026-0001' })).toBeInTheDocument()
+    })
+
+    // Press Escape to close viewer modal
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    tradeModal.remove()
+  })
+
+  it('keeps the picker source independent of an underlying transaction modal', async () => {
+    const tradeModal = document.createElement('div')
+    tradeModal.className = 'trade-detail-modal'
+    tradeModal.innerHTML = '<h3>SL-OTHER</h3><footer class="detail-modal-footer"></footer>'
+    document.body.append(tradeModal)
+    let payload: unknown
+    let generateCalls = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (String(input).includes('/receipts/options')) return {
+        ok: true, status: 200, headers: new Headers(), json: async () => ({
+          referenceNo: 'PW-SELECTED', options: [
+            { documentType: 'PAWN_CONTRACT', sourceSubId: 'latest-contract', label: 'Selected pawn contract', amount: 100, currency: 'USD' },
+            { documentType: 'PAWN_PAYMENT', sourceSubId: 'payment-1', label: 'Pawn payment', amount: 10, currency: 'USD' },
+          ],
+        }),
+      } as Response
+      generateCalls += 1
+      payload = JSON.parse(String(init?.body))
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({ receipt: mockRefundReceipt }) } as Response
+    })
+    try {
+      render(<ReceiptCenterBridge />)
+      act(() => { window.dispatchEvent(new CustomEvent('phoneflow:open-documents', { detail: { sourceType: 'PAWN', reference: 'PW-SELECTED' } })) })
+      const picker = await screen.findByRole('dialog', { name: 'PW-SELECTED' })
+      const option = within(picker).getByRole('button', { name: /Selected pawn contract/ })
+      act(() => { option.click(); option.click() })
+      await screen.findByRole('dialog', { name: mockRefundReceipt.receiptNo })
+      expect(payload).toMatchObject({ sourceType: 'PAWN', reference: 'PW-SELECTED', sourceSubId: 'latest-contract' })
+      expect(generateCalls).toBe(1)
+    } finally {
+      await act(async () => { tradeModal.remove() })
+    }
+  })
+
+  it('does not reopen a picker after its cancelled generation returns late', async () => {
+    let finish!: (response: Response) => void
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input).includes('/receipts/options')) return {
+        ok: true, status: 200, headers: new Headers(), json: async () => ({
+          referenceNo: 'PW-CANCELLED', options: [
+            { documentType: 'PAWN_CONTRACT', sourceSubId: 'latest-contract', label: 'Contract', amount: 100, currency: 'USD' },
+            { documentType: 'PAWN_PAYMENT', sourceSubId: 'payment-1', label: 'Payment', amount: 10, currency: 'USD' },
+          ],
+        }),
+      } as Response
+      // Deliberately emulate a response already in progress when cancellation occurs.
+      return new Promise<Response>((resolve) => { finish = resolve })
+    })
+    render(<ReceiptCenterBridge />)
+    act(() => { window.dispatchEvent(new CustomEvent('phoneflow:open-documents', { detail: { reference: 'PW-CANCELLED' } })) })
+    const picker = await screen.findByRole('dialog', { name: 'PW-CANCELLED' })
+    act(() => { within(picker).getByRole('button', { name: /Contract/ }).click() })
+    act(() => { within(picker).getAllByRole('button', { name: 'Close' })[0].click() })
+    await act(async () => { finish({ ok: true, status: 200, headers: new Headers(), json: async () => ({ receipt: mockRefundReceipt }) } as Response) })
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('detects loan modal in DOM and mounts Documents action button', async () => {
+    const loanModal = document.createElement('div')
+    loanModal.className = 'loan-modal'
+    const h2 = document.createElement('h2')
+    h2.textContent = 'LN-2026-9999 - Borrower Alice'
+    loanModal.appendChild(h2)
+    const header = document.createElement('div')
+    header.className = 'operation-modal-header'
+    const headerContent = document.createElement('div')
+    header.appendChild(headerContent)
+    loanModal.appendChild(header)
+    document.body.appendChild(loanModal)
+
+    render(<ReceiptCenterBridge />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Documents' })).toBeInTheDocument()
+    })
+
+    loanModal.remove()
+  })
+
+  it('handles phoneflow:open-pawn-ticket and phoneflow:open-trade-receipt custom events', async () => {
+    let generatedDocType = ''
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/receipts/generate') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body))
+        generatedDocType = body.documentType
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ receipt: { ...mockRefundReceipt, documentType: generatedDocType } }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    render(<ReceiptCenterBridge />)
+
+    // Dispatch open-pawn-ticket
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-pawn-ticket', {
+        detail: { reference: 'PW-2026-0001', sourceSubId: 'ticket-1' },
+      }))
+    })
+
+    await waitFor(() => {
+      expect(generatedDocType).toBe('PAWN_CONTRACT')
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // Close modal
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    })
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    // Dispatch open-trade-receipt with KHR currency
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-trade-receipt', {
+        detail: { reference: 'SL-2026-KHR', currency: 'KHR' },
+      }))
+    })
+
+    await waitFor(() => {
+      expect(generatedDocType).toBe('SALE_RECEIPT')
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+  })
+
+  it('handles window.open throwing an exception and allows retry after error', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/receipts/generate') && init?.method === 'POST') {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ receipt: mockRefundReceipt }) } as Response
+      }
+      if (url.includes('/receipts/rec-refund-1/printed') && init?.method === 'POST') {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ receipt: { ...mockRefundReceipt, printCount: 1 } }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    // First attempt: window.open throws security error
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => {
+      throw new Error('Blocked by security policy')
+    })
+
+    const user = userEvent.setup()
+    render(<ReceiptCenterBridge />)
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-refund-receipt', {
+        detail: { reference: 'SL-2026-0001', currency: 'USD' },
+      }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'RR-2026-0001' })).toBeInTheDocument()
+    })
+
+    const printBtn = screen.getByRole('button', { name: /Print \/ Save PDF/i })
+    await user.click(printBtn)
+
+    // Should report blocked window without crashing
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/blocked the print window/i)
+    })
+
+    // Second deliberate attempt: window.open now succeeds
+    const mockDoc = {
+      write: vi.fn(),
+      close: vi.fn(),
+      open: vi.fn(),
+      body: document.createElement('body'),
+      head: document.createElement('head'),
+    }
+    openSpy.mockReturnValue({
+      document: mockDoc,
+      print: vi.fn(),
+      close: vi.fn(),
+      focus: vi.fn(),
+    } as unknown as Window)
+
+    await user.click(printBtn)
+
+    await waitFor(() => {
+      expect(screen.getByText('1 print')).toBeInTheDocument()
+    })
+  })
+
+  it('directly prepares preview when source has exactly one receipt option', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/receipts/options')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            referenceNo: 'SL-SINGLE-01',
+            options: [
+              { documentType: 'SALE_RECEIPT', sourceSubId: 'single', label: 'Sales receipt', issuedAt: new Date().toISOString(), amount: 200, currency: 'USD' },
+            ],
+          }),
+        } as Response
+      }
+      if (url.includes('/receipts/generate') && init?.method === 'POST') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ receipt: { ...mockRefundReceipt, documentType: 'SALE_RECEIPT', referenceNo: 'SL-SINGLE-01' } }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    render(<ReceiptCenterBridge />)
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-documents', {
+        detail: { sourceType: 'TRADE', reference: 'SL-SINGLE-01' },
+      }))
+    })
+
+    // Should bypass picker and directly open viewer modal
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'RR-2026-0001' })).toBeInTheDocument()
+      expect(screen.queryByRole('dialog', { name: 'SL-SINGLE-01' })).not.toBeInTheDocument()
+    })
+  })
+
+  it('allows user to dismiss option picker via Close button', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/receipts/options')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            referenceNo: 'SL-MULTI-02',
+            options: [
+              { documentType: 'SALE_RECEIPT', sourceSubId: 'opt-1', label: 'Sale 1', issuedAt: new Date().toISOString(), amount: 100, currency: 'USD' },
+              { documentType: 'SALE_RECEIPT', sourceSubId: 'opt-2', label: 'Sale 2', issuedAt: new Date().toISOString(), amount: 200, currency: 'USD' },
+            ],
+          }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    const user = userEvent.setup()
+    render(<ReceiptCenterBridge />)
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-documents', {
+        detail: { sourceType: 'TRADE', reference: 'SL-MULTI-02' },
+      }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'SL-MULTI-02' })).toBeInTheDocument()
+    })
+
+    // Click Close
+    const closeBtns = screen.getAllByRole('button', { name: 'Close' })
+    await user.click(closeBtns[0])
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+  })
+
+  it('displays timeout alert when receipt generation is aborted', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/receipts/generate') && init?.method === 'POST') {
+        const abortErr = new DOMException('The operation was aborted', 'AbortError')
+        throw abortErr
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    render(<ReceiptCenterBridge />)
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-pawn-ticket', {
+        detail: { reference: 'PW-ABORT-01' },
+      }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/took too long to prepare/i)
+    })
+  })
+
+  it('handles invalid receipt preview without _id and allows switching to A4 layout', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/receipts/generate') && init?.method === 'POST') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ receipt: { ...mockRefundReceipt, _id: '' } }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    render(<ReceiptCenterBridge />)
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-trade-receipt', {
+        detail: { reference: 'SL-NO-ID' },
+      }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent(/without a valid preview/i)
+    })
+  })
+
+  it('supports layout switching and printing in A4 layout from Bridge Viewer', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/receipts/generate') && init?.method === 'POST') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ receipt: mockRefundReceipt }),
+        } as Response
+      }
+      if (url.includes('/receipts/rec-refund-1/printed') && init?.method === 'POST') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ receipt: { ...mockRefundReceipt, printCount: 1 } }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    const mockDoc = {
+      write: vi.fn(),
+      close: vi.fn(),
+      open: vi.fn(),
+      body: document.createElement('body'),
+      head: document.createElement('head'),
+    }
+    vi.spyOn(window, 'open').mockReturnValue({
+      document: mockDoc,
+      print: vi.fn(),
+      close: vi.fn(),
+      focus: vi.fn(),
+    } as unknown as Window)
+
+    const user = userEvent.setup()
+    render(<ReceiptCenterBridge />)
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-refund-receipt', {
+        detail: { reference: 'SL-2026-0001' },
+      }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'RR-2026-0001' })).toBeInTheDocument()
+    })
+
+    // Switch to A4
+    const a4Btn = screen.getByRole('button', { name: /A4 invoice/i })
+    await user.click(a4Btn)
+    expect(a4Btn).toHaveClass('active')
+
+    // Print in A4
+    const printBtn = screen.getByRole('button', { name: /Print \/ Save PDF/i })
+    await user.click(printBtn)
+
+    await waitFor(() => {
+      expect(mockDoc.write).toHaveBeenCalledWith(expect.stringContaining('@page{size:A4;margin:0}'))
+    })
   })
 })

@@ -1062,3 +1062,1042 @@ describe('Purchases Report View', () => {
     })
   })
 })
+
+describe('Reports Hub, Navigation & Placeholder View', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    window.history.pushState({}, '', '/reports')
+  })
+
+  it('renders landing hub with category sections, export disclaimer note, and card links', async () => {
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Reports & Analytics' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: 'Financial reports' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: 'Operations & records' })).toBeInTheDocument()
+    expect(screen.getByText(/Exports will be added only after all report calculations and workflows are verified/i)).toBeInTheDocument()
+
+    // Financial report cards
+    expect(screen.getByRole('button', { name: /^Sales/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Purchases/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Payments/i })).toBeInTheDocument()
+
+    // Operational report cards
+    expect(screen.getByRole('button', { name: /^Inventory/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Pawn/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Loans/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Service charges/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Activity/i })).toBeInTheDocument()
+  })
+
+  it('navigates from hub to Sales and back to hub, updating document.title and URL', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({
+        period: { key: 'this_month', label: 'This Month' },
+        filters: {},
+        summary: { salesRevenue: 100, cogs: 50, grossProfit: 50, itemsSold: 1, transactions: 1, averageSale: 100 },
+        chart: [],
+        products: [],
+        payments: [],
+        transactions: [],
+        staff: [],
+      }),
+    } as Response)
+
+    const user = userEvent.setup()
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    const salesCard = screen.getByRole('button', { name: /Sales/i })
+    await user.click(salesCard)
+
+    await waitFor(() => {
+      expect(document.title).toContain('Sales Report · PhoneFlow')
+      expect(screen.getByRole('heading', { level: 2, name: 'Sales Report' })).toBeInTheDocument()
+    })
+
+    const backBtn = screen.getByRole('button', { name: /Back to reports/i })
+    await user.click(backBtn)
+
+    await waitFor(() => {
+      expect(document.title).toContain('Reports & Analytics · PhoneFlow')
+      expect(screen.getByRole('heading', { level: 2, name: 'Reports & Analytics' })).toBeInTheDocument()
+    })
+  })
+
+  it('handles popstate browser navigation events gracefully', async () => {
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Reports & Analytics' })).toBeInTheDocument()
+
+    // Simulate browser back/forward
+    window.history.pushState({}, '', '/reports')
+    window.dispatchEvent(new PopStateEvent('popstate'))
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Reports & Analytics' })).toBeInTheDocument()
+  })
+
+  it('renders UpcomingReportView with back button when navigating directly to an unrouted slug', async () => {
+    window.history.pushState({}, '', '/reports/customers')
+    const user = userEvent.setup()
+
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    expect(screen.getByRole('heading', { level: 3, name: 'Report not found' })).toBeInTheDocument()
+    const backBtn = screen.getByRole('button', { name: /Back to reports/i })
+    await user.click(backBtn)
+
+    expect(screen.getByRole('heading', { level: 2, name: 'Reports & Analytics' })).toBeInTheDocument()
+  })
+})
+
+describe('Sales & Purchases Report Additional States, Filters & Validation', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('Sales Report: displays LoadingState when initial data is loading', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise(() => {}))
+
+    window.history.pushState({}, '', '/reports/sales')
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    expect(screen.getByText('Loading sales report')).toBeInTheDocument()
+    expect(screen.getByText('Reading completed sales and stored item costs…')).toBeInTheDocument()
+  })
+
+  it('Sales Report: displays empty state when no transactions match and highlights negative gross profit', async () => {
+    const mockData = {
+      period: { key: 'this_month', label: 'This Month' },
+      filters: {},
+      summary: { salesRevenue: 100, cogs: 150, grossProfit: -50, itemsSold: 1, transactions: 1, averageSale: 100 },
+      chart: [],
+      products: [{ name: 'Discounted Phone', quantity: 1, revenue: 100, cogs: 150, grossProfit: -50 }],
+      payments: [],
+      staff: [{ _id: 'staff-1', name: 'Sophea Staff' }],
+      transactions: [
+        {
+          _id: 'sale-neg',
+          tradeNo: 'INV-NEG-01',
+          type: 'SELL',
+          customer: { name: 'Dara' },
+          items: [{ name: 'Discounted Phone', quantity: 1, price: 100 }],
+          subtotal: 100,
+          discount: 0,
+          total: 100,
+          reportTotal: 100,
+          reportCost: 150,
+          reportGrossProfit: -50,
+          paymentMethod: 'CASH',
+          status: 'COMPLETED',
+          createdAt: '2026-09-02T10:00:00.000Z',
+          createdBy: { name: 'Sophea Staff' },
+        },
+      ],
+      totalRecords: 1,
+      limited: false,
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => mockData,
+    } as Response)
+
+    window.history.pushState({}, '', '/reports/sales')
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getAllByText('-$50').length).toBeGreaterThan(0)
+    })
+
+    // Assert negative gross profit has report-negative styling
+    const negativeCells = document.querySelectorAll('.report-negative')
+    expect(negativeCells.length).toBeGreaterThan(0)
+  })
+
+  it('Sales Report: handles empty transaction list on both desktop and mobile views', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({
+        period: { key: 'this_month', label: 'This Month' },
+        filters: {},
+        summary: { salesRevenue: 0, cogs: 0, grossProfit: 0, itemsSold: 0, transactions: 0, averageSale: 0 },
+        chart: [],
+        products: [],
+        payments: [],
+        staff: [],
+        transactions: [],
+        totalRecords: 0,
+        limited: false,
+      }),
+    } as Response)
+
+    window.history.pushState({}, '', '/reports/sales')
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getAllByText('No sales match these filters.').length).toBeGreaterThan(0)
+    })
+  })
+
+  it('Sales Report: supports custom date range inputs, date presets, status, and staff filters', async () => {
+    const requestedUrls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      requestedUrls.push(String(input))
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({
+          period: { key: 'custom', label: 'Custom Range' },
+          filters: {},
+          summary: { salesRevenue: 0, cogs: 0, grossProfit: 0, itemsSold: 0, transactions: 0, averageSale: 0 },
+          chart: [],
+          products: [],
+          payments: [],
+          staff: [{ _id: 'staff-1', name: 'Sophea Staff' }],
+          transactions: [],
+        }),
+      } as Response
+    })
+
+    window.history.pushState({}, '', '/reports/sales')
+    const user = userEvent.setup()
+
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(requestedUrls.length).toBeGreaterThan(0)
+    })
+
+    // 1. Select custom period
+    const periodSelect = screen.getByRole('combobox', { name: /^Period$/i }) as HTMLSelectElement
+    await user.selectOptions(periodSelect, 'custom')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/From/i)).toBeInTheDocument()
+      expect(screen.getByLabelText(/To/i)).toBeInTheDocument()
+    })
+
+    // 2. Select status RETURNED
+    const statusSelect = screen.getByLabelText(/Status/i) as HTMLSelectElement
+    await user.selectOptions(statusSelect, 'RETURNED')
+
+    await waitFor(() => {
+      const lastUrl = requestedUrls[requestedUrls.length - 1]
+      expect(lastUrl).toContain('status=RETURNED')
+    })
+
+    // 3. Select staff
+    const staffSelect = screen.getByLabelText(/Staff/i) as HTMLSelectElement
+    await user.selectOptions(staffSelect, 'staff-1')
+
+    await waitFor(() => {
+      const lastUrl = requestedUrls[requestedUrls.length - 1]
+      expect(lastUrl).toContain('staff=staff-1')
+    })
+  })
+
+  it('Purchases Report: displays LoadingState when initial data is loading', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise(() => {}))
+
+    window.history.pushState({}, '', '/reports/purchases')
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    expect(screen.getByText('Loading purchases report')).toBeInTheDocument()
+    expect(screen.getByText('Reading purchase transactions and normalized currency totals…')).toBeInTheDocument()
+  })
+
+  it('Purchases Report: displays empty state and highlights positive outstanding balance', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({
+        period: { key: 'this_month', label: 'This Month' },
+        filters: {},
+        summary: { totalPurchases: 100, amountPaid: 40, outstandingBalance: 60, itemsPurchased: 1, transactions: 1, averagePurchase: 100 },
+        chart: [],
+        products: [],
+        sources: [],
+        payments: [],
+        staff: [],
+        transactions: [
+          {
+            _id: 'po-bal',
+            tradeNo: 'PO-BAL-01',
+            type: 'BUY',
+            sellerType: 'SUPPLIER',
+            total: 100,
+            amountPaid: 40,
+            balance: 60,
+            reportTotal: 100,
+            reportPaid: 40,
+            reportBalance: 60,
+            currency: 'USD',
+            paymentMethod: 'CASH',
+            paymentStatus: 'PARTIAL',
+            status: 'COMPLETED',
+            items: [{ name: 'Screen', quantity: 1, unitPrice: 100 }],
+            createdAt: '2026-09-02T10:00:00.000Z',
+          },
+        ],
+      }),
+    } as Response)
+
+    window.history.pushState({}, '', '/reports/purchases')
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getAllByText('$60').length).toBeGreaterThan(0)
+    })
+
+    const negativeCells = document.querySelectorAll('.report-negative')
+    expect(negativeCells.length).toBeGreaterThan(0)
+  })
+
+  it('Purchases Report: handles empty transaction list on both desktop and mobile views', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({
+        period: { key: 'this_month', label: 'This Month' },
+        filters: {},
+        summary: { totalPurchases: 0, amountPaid: 0, outstandingBalance: 0, itemsPurchased: 0, transactions: 0, averagePurchase: 0 },
+        chart: [],
+        products: [],
+        sources: [],
+        payments: [],
+        staff: [],
+        transactions: [],
+      }),
+    } as Response)
+
+    window.history.pushState({}, '', '/reports/purchases')
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getAllByText('No purchases match these filters.').length).toBeGreaterThan(0)
+    })
+  })
+})
+
+describe('Operational Report Views Comprehensive Coverage', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('OperationalReportView: displays LoadingState when loading without data', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise(() => {}))
+
+    window.history.pushState({}, '', '/reports/inventory')
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    expect(screen.getByText('Loading inventory report')).toBeInTheDocument()
+    expect(screen.getByText('Reading current records and audit history…')).toBeInTheDocument()
+  })
+
+  it('OperationalReportView: renders error alert when API request fails', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: false,
+      status: 500,
+      headers: new Headers({ 'X-Request-ID': 'req-op-err' }),
+      json: async () => ({ message: 'Failed to aggregate inventory metrics', requestId: 'req-op-err' }),
+    } as Response)
+
+    window.history.pushState({}, '', '/reports/inventory')
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      const alert = screen.getByRole('alert')
+      expect(alert).toBeInTheDocument()
+      expect(alert).toHaveTextContent(/Failed to aggregate inventory metrics/i)
+    })
+  })
+
+  it('OperationalReportView: race condition discards stale older response when filter changes rapidly', async () => {
+    let resolveLowStock: (val: Response) => void
+    const lowStockPromise = new Promise<Response>((res) => {
+      resolveLowStock = res
+    })
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('stock=LOW')) {
+        return lowStockPromise
+      }
+      if (url.includes('stock=OUT')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            title: 'Inventory Report',
+            description: 'Inventory metrics.',
+            meta: { currency: 'USD', totalRecords: 1, limited: false },
+            filters: { stock: 'OUT' },
+            summary: [{ label: 'Products', value: 99, format: 'number', tone: 'violet' }],
+            breakdowns: [],
+            columns: [{ key: 'sku', label: 'SKU' }],
+            rows: [{ id: 'out-1', sku: 'OUT-SKU-99' }],
+          }),
+        } as Response
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({
+          title: 'Inventory Report',
+          description: 'Inventory metrics.',
+          meta: { currency: 'USD', totalRecords: 5, limited: false },
+          filters: { stock: 'ALL' },
+          summary: [{ label: 'Products', value: 5, format: 'number', tone: 'violet' }],
+          breakdowns: [],
+          columns: [{ key: 'sku', label: 'SKU' }],
+          rows: [],
+        }),
+      } as Response
+    })
+
+    window.history.pushState({}, '', '/reports/inventory')
+    const user = userEvent.setup()
+
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('5')).toBeInTheDocument()
+    })
+
+    const stockSelect = screen.getByLabelText(/Stock level/i) as HTMLSelectElement
+
+    // 1. Select LOW (slow response)
+    await user.selectOptions(stockSelect, 'LOW')
+
+    // 2. Immediately select OUT (fast response)
+    await user.selectOptions(stockSelect, 'OUT')
+
+    await waitFor(() => {
+      expect(screen.getByText('99')).toBeInTheDocument()
+      expect(screen.getAllByText('OUT-SKU-99').length).toBeGreaterThan(0)
+    })
+
+    // 3. Now resolve the slow LOW request with 11
+    resolveLowStock!({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({
+        title: 'Inventory Report',
+        description: 'Inventory metrics.',
+        meta: { currency: 'USD', totalRecords: 1, limited: false },
+        filters: { stock: 'LOW' },
+        summary: [{ label: 'Products', value: 11, format: 'number', tone: 'violet' }],
+        breakdowns: [],
+        columns: [{ key: 'sku', label: 'SKU' }],
+        rows: [{ id: 'low-1', sku: 'LOW-SKU-11' }],
+      }),
+    } as Response)
+
+    // Wait and verify 99 is kept and 11 is discarded
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.getByText('99')).toBeInTheDocument()
+    expect(screen.queryByText('LOW-SKU-11')).not.toBeInTheDocument()
+  })
+
+  it('OperationalReportView: displays tailored empty messages across all report kinds', async () => {
+    const emptyResponse = (kind: string) => ({
+      title: `${kind} Report`,
+      description: `${kind} reporting.`,
+      meta: { currency: 'USD', currencyFilter: 'USD', totalRecords: 0, limited: false },
+      filters: {},
+      summary: [],
+      breakdowns: [],
+      columns: [{ key: 'reference', label: 'Ref' }],
+      rows: [],
+    })
+
+    const kinds = [
+      { path: '/reports/inventory', message: 'No inventory items match these filters.' },
+      { path: '/reports/pawns', message: 'No pawn contracts match these filters.' },
+      { path: '/reports/loans', message: 'No loan records match these filters.' },
+      { path: '/reports/services', message: 'No service charges match these filters.' },
+      { path: '/reports/payments', message: 'No payment records match the selected period and filters.' },
+      { path: '/reports/activity', message: 'No activity logs match these filters.' },
+    ]
+
+    for (const { path, message } of kinds) {
+      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => emptyResponse(path.slice('/reports/'.length)),
+      } as Response)
+
+      window.history.pushState({}, '', path)
+      const { unmount } = render(
+        <RouterProvider>
+          <ReportsPage />
+        </RouterProvider>,
+      )
+
+      await waitFor(() => {
+        expect(screen.getAllByText(message).length).toBeGreaterThan(0)
+      })
+
+      unmount()
+    }
+  })
+
+  it('OperationalReportView: renders column formats (status, currency, number, dateTime, date, fallback)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({
+        title: 'Formatting Test Report',
+        description: 'Testing cell formatting branches.',
+        meta: { currency: 'USD', totalRecords: 1, limited: false },
+        filters: {},
+        summary: [],
+        breakdowns: [],
+        columns: [
+          { key: 'statusCol', label: 'Status', format: 'status' },
+          { key: 'currUsd', label: 'Cost USD', format: 'currency' },
+          { key: 'currKhr', label: 'Cost KHR', format: 'currency' },
+          { key: 'numCol', label: 'Count', format: 'number' },
+          { key: 'dateTimeCol', label: 'DateTime', format: 'dateTime' },
+          { key: 'dateCol', label: 'Date', format: 'date' },
+          { key: 'textCol', label: 'Text' },
+          { key: 'nullCol', label: 'Missing' },
+        ],
+        rows: [
+          {
+            id: 'row-1',
+            statusCol: 'ACTIVE',
+            currUsd: 120,
+            currKhr: 410000,
+            currency: 'KHR',
+            numCol: 1500,
+            dateTimeCol: '2026-03-01T10:30:00.000Z',
+            dateCol: '2026-03-01',
+            textCol: 'Plain Text Value',
+            nullCol: null,
+          },
+        ],
+      }),
+    } as Response)
+
+    window.history.pushState({}, '', '/reports/activity')
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Active').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('1,500').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('410,000 KHR').length).toBeGreaterThan(0)
+      expect(screen.getByText('Plain Text Value')).toBeInTheDocument()
+      expect(screen.getAllByText('—').length).toBeGreaterThan(0)
+    })
+  })
+
+  it('OperationalReportView: renders notes array including fallback warnings and exclusions', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({
+        title: 'Loans Report',
+        description: 'Lending summary.',
+        meta: { currency: 'USD', totalRecords: 0, limited: false },
+        filters: {},
+        summary: [],
+        breakdowns: [],
+        columns: [{ key: 'id', label: 'ID' }],
+        rows: [],
+        notes: [
+          'Some KHR loan totals contain estimated USD equivalents calculated with the fallback exchange rate.',
+          'Financial summary totals exclude cancelled loans.',
+        ],
+      }),
+    } as Response)
+
+    window.history.pushState({}, '', '/reports/loans')
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText(/Some KHR loan totals contain estimated USD equivalents/i)).toBeInTheDocument()
+      expect(screen.getByText(/Financial summary totals exclude cancelled loans/i)).toBeInTheDocument()
+    })
+  })
+
+  it('OperationalReportView: supports Payments direction (IN, OUT, ALL) and method filters', async () => {
+    const requestedUrls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      requestedUrls.push(String(input))
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({
+          title: 'Payments Report',
+          description: 'Money movements.',
+          meta: { currency: 'USD', totalRecords: 0, limited: false },
+          filters: {},
+          summary: [],
+          breakdowns: [],
+          columns: [{ key: 'id', label: 'ID' }],
+          rows: [],
+        }),
+      } as Response
+    })
+
+    window.history.pushState({}, '', '/reports/payments')
+    const user = userEvent.setup()
+
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(requestedUrls.length).toBeGreaterThan(0)
+    })
+
+    const dirSelect = screen.getByLabelText(/Direction/i) as HTMLSelectElement
+    await user.selectOptions(dirSelect, 'IN')
+
+    await waitFor(() => {
+      const lastUrl = requestedUrls[requestedUrls.length - 1]
+      expect(lastUrl).toContain('direction=IN')
+    })
+
+    const methodSelect = screen.getByLabelText(/Payment method/i) as HTMLSelectElement
+    await user.selectOptions(methodSelect, 'BANK')
+
+    await waitFor(() => {
+      const lastUrl = requestedUrls[requestedUrls.length - 1]
+      expect(lastUrl).toContain('method=BANK')
+    })
+  })
+})
+
+describe('Customer & Supplier Report Modals Search, ID Filters & Errors', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    window.history.pushState({}, '', '/reports')
+  })
+
+  it('CustomerReportModal: filters customers by ID recorded vs missing and displays empty search notice', async () => {
+    const customerWithId = {
+      _id: 'c-with-id',
+      name: 'Vannak Kem',
+      phone: '099112233',
+      nationalIdNumber: '123456789',
+      address: 'Siem Reap',
+    }
+    const customerNoId = {
+      _id: 'c-no-id',
+      name: 'Chanthy Ouk',
+      phone: '088445566',
+      nationalIdNumber: '',
+      address: 'Battambang',
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({ customers: [customerWithId, customerNoId] }),
+    } as Response)
+
+    const user = userEvent.setup()
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await user.click(screen.getByRole('button', { name: /Customer report/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Vannak Kem')).toBeInTheDocument()
+      expect(screen.getByText('Chanthy Ouk')).toBeInTheDocument()
+    })
+
+    // Filter: ID recorded
+    const idFilterSelect = screen.getByLabelText(/Show/i) as HTMLSelectElement
+    await user.selectOptions(idFilterSelect, 'recorded')
+
+    expect(screen.getByText('Vannak Kem')).toBeInTheDocument()
+    expect(screen.queryByText('Chanthy Ouk')).not.toBeInTheDocument()
+
+    // Filter: Needs ID
+    await user.selectOptions(idFilterSelect, 'missing')
+    expect(screen.queryByText('Vannak Kem')).not.toBeInTheDocument()
+    expect(screen.getByText('Chanthy Ouk')).toBeInTheDocument()
+
+    // Search query with no matches
+    const searchInput = screen.getByPlaceholderText(/Name, phone, ID, or address/i)
+    await user.type(searchInput, 'NonExistentNameXYZ')
+
+    expect(screen.getByText(/No records match this search. Try a different name, phone, or filter./i)).toBeInTheDocument()
+  })
+
+  it('CustomerReportModal: displays error alerts on directory failure and activity report failure', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      headers: new Headers(),
+      json: async () => ({ message: 'Database connection failed' }),
+    } as Response)
+
+    const user = userEvent.setup()
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await user.click(screen.getByRole('button', { name: /Customer report/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Unable to load customers./i)).toBeInTheDocument()
+    })
+  })
+
+  it('SupplierReportModal: filters suppliers by ID recorded vs missing and displays empty search notice', async () => {
+    const suppWithId = {
+      _id: 's-with-id',
+      name: 'Alpha Parts',
+      phone: '012999888',
+      nationalIdNumber: '555666777',
+      notes: 'Main wholesaler',
+    }
+    const suppNoId = {
+      _id: 's-no-id',
+      name: 'Beta Displays',
+      phone: '098111222',
+      nationalIdNumber: '',
+      notes: 'Displays and batteries',
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({ suppliers: [suppWithId, suppNoId] }),
+    } as Response)
+
+    const user = userEvent.setup()
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await user.click(screen.getByRole('button', { name: /Supplier report/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Alpha Parts')).toBeInTheDocument()
+      expect(screen.getByText('Beta Displays')).toBeInTheDocument()
+    })
+
+    // Filter: ID recorded
+    const idFilterSelect = screen.getByLabelText(/Show/i) as HTMLSelectElement
+    await user.selectOptions(idFilterSelect, 'recorded')
+
+    expect(screen.getByText('Alpha Parts')).toBeInTheDocument()
+    expect(screen.queryByText('Beta Displays')).not.toBeInTheDocument()
+
+    // Filter: Needs ID
+    await user.selectOptions(idFilterSelect, 'missing')
+    expect(screen.queryByText('Alpha Parts')).not.toBeInTheDocument()
+    expect(screen.getByText('Beta Displays')).toBeInTheDocument()
+
+    // Search query with no matches
+    const searchInput = screen.getByPlaceholderText(/Name, phone, or National ID/i)
+    await user.type(searchInput, 'NonExistentSupplierXYZ')
+
+    expect(screen.getByText(/No records match this search. Try a different name, phone, or filter./i)).toBeInTheDocument()
+  })
+
+  it('SupplierReportModal: displays error alert on directory failure', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      headers: new Headers(),
+      json: async () => ({ message: 'Internal server error' }),
+    } as Response)
+
+    const user = userEvent.setup()
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await user.click(screen.getByRole('button', { name: /Supplier report/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Unable to load suppliers./i)).toBeInTheDocument()
+    })
+  })
+
+  it('OperationalReportView: renders and selects filters for Services and Activity reports, including breakdowns', async () => {
+    const requestedUrls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      requestedUrls.push(url)
+      if (url.includes('/reports/services')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            title: 'Service Charges Report',
+            description: 'Service transactions.',
+            meta: { currency: 'USD', totalRecords: 2, limited: false },
+            filters: {},
+            staff: [{ _id: 'staff-s1', name: 'Service Tech Alice' }],
+            summary: [{ label: 'Services', value: 2, format: 'number', tone: 'emerald' }],
+            breakdowns: [
+              {
+                title: 'Category Breakdown',
+                description: 'Services by category',
+                format: 'currency',
+                rows: [
+                  { label: 'DEVICE_SETUP', value: 50, count: 1 },
+                  { label: 'SOFTWARE', value: 30, count: 1 },
+                ],
+              },
+            ],
+            columns: [{ key: 'reference', label: 'Ref' }],
+            rows: [{ id: 'srv-1', reference: 'SRV-001' }],
+          }),
+        } as Response
+      }
+      if (url.includes('/reports/activity')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            title: 'Activity Report',
+            description: 'Audit log activity.',
+            meta: { currency: 'USD', totalRecords: 1, limited: false },
+            filters: {},
+            filterOptions: {
+              actions: ['CREATE_TRADE', 'UPDATE_PAWN'],
+              entities: ['TRADE', 'PAWN'],
+            },
+            staff: [{ _id: 'staff-a1', name: 'Auditor Bob' }],
+            summary: [{ label: 'Logs', value: 1, format: 'number', tone: 'sky' }],
+            breakdowns: [
+              {
+                title: 'Actions Breakdown',
+                description: 'By action',
+                format: 'number',
+                rows: [{ label: 'CREATE_TRADE', value: 1, count: 1 }],
+              },
+            ],
+            columns: [{ key: 'action', label: 'Action' }],
+            rows: [{ id: 'act-1', action: 'CREATE_TRADE' }],
+          }),
+        } as Response
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({}),
+      } as Response
+    })
+
+    const user = userEvent.setup()
+
+    // Test Services report
+    window.history.pushState({}, '', '/reports/services')
+    const { unmount } = render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Service Tech Alice')).toBeInTheDocument()
+      expect(screen.getByText('Category Breakdown')).toBeInTheDocument()
+    })
+
+    const staffSelect = screen.getByLabelText(/Staff/i) as HTMLSelectElement
+    await user.selectOptions(staffSelect, 'staff-s1')
+
+    await waitFor(() => {
+      const lastUrl = requestedUrls[requestedUrls.length - 1]
+      expect(lastUrl).toContain('staff=staff-s1')
+    })
+
+    unmount()
+
+    // Test Activity report
+    window.history.pushState({}, '', '/reports/activity')
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Auditor Bob')).toBeInTheDocument()
+      expect(screen.getByText('Actions Breakdown')).toBeInTheDocument()
+    })
+
+    const actionSelect = screen.getByLabelText(/Action/i) as HTMLSelectElement
+    await user.selectOptions(actionSelect, 'CREATE_TRADE')
+
+    const entitySelect = screen.getByLabelText(/Entity/i) as HTMLSelectElement
+    await user.selectOptions(entitySelect, 'TRADE')
+
+    await waitFor(() => {
+      const lastUrl = requestedUrls[requestedUrls.length - 1]
+      expect(lastUrl).toContain('action=CREATE_TRADE')
+      expect(lastUrl).toContain('entity=TRADE')
+    })
+  })
+
+  it('OperationalReportView: supports custom date range and populates pawns staff dropdown', async () => {
+    const requestedUrls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      requestedUrls.push(url)
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({
+          title: 'Pawn Contracts Report',
+          description: 'Pawn contract records.',
+          meta: { currency: 'USD', totalRecords: 1, limited: false },
+          filters: {},
+          staff: [{ _id: 'staff-p1', name: 'Pawnbroker Pete' }],
+          summary: [{ label: 'Contracts', value: 1, format: 'number', tone: 'amber' }],
+          breakdowns: [],
+          columns: [{ key: 'reference', label: 'Ref' }],
+          rows: [{ id: 'pawn-1', reference: 'PWN-001' }],
+        }),
+      } as Response
+    })
+
+    const user = userEvent.setup()
+    window.history.pushState({}, '', '/reports/pawns')
+
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Pawnbroker Pete')).toBeInTheDocument()
+    })
+
+    // 1. Select staff
+    const staffSelect = screen.getByLabelText(/Staff/i) as HTMLSelectElement
+    await user.selectOptions(staffSelect, 'staff-p1')
+
+    await waitFor(() => {
+      const lastUrl = requestedUrls[requestedUrls.length - 1]
+      expect(lastUrl).toContain('staff=staff-p1')
+    })
+
+    // 2. Switch to custom period
+    const periodSelect = screen.getByRole('combobox', { name: /^Period$/i }) as HTMLSelectElement
+    await user.selectOptions(periodSelect, 'custom')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/From/i)).toBeInTheDocument()
+      expect(screen.getByLabelText(/To/i)).toBeInTheDocument()
+    })
+
+    const fromInput = screen.getByLabelText(/From/i) as HTMLInputElement
+    await user.clear(fromInput)
+    await user.type(fromInput, '2026-08-01')
+
+    await waitFor(() => {
+      const lastUrl = requestedUrls[requestedUrls.length - 1]
+      expect(lastUrl).toContain('from=2026-08-01')
+      expect(lastUrl).toContain('period=custom')
+    })
+  })
+})

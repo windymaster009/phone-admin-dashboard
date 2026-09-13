@@ -161,6 +161,7 @@ export default function OperationModalBridge() {
   const imeiInputs = useRef(new Map<string, HTMLInputElement>())
   const submittingPurchaseRef = useRef(false)
   const submittingSaleRef = useRef(false)
+  const submittingPawnRef = useRef(false)
 
   useEffect(() => {
     const syncPreference = (event: Event) => setPawnAutoCalculate((event as CustomEvent<boolean>).detail)
@@ -597,6 +598,7 @@ export default function OperationModalBridge() {
     setSaleScannerError('')
     khqrFinalizing.current = false
     khqrChecking.current = false
+    submittingPawnRef.current = false
     setSellerType('WALK_IN')
     setSupplierId('')
     setSellerCustomerId('')
@@ -1360,6 +1362,7 @@ export default function OperationModalBridge() {
 
   async function submitPawn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (submittingPawnRef.current || busy) return
     setError('')
     const form = new FormData(event.currentTarget)
     const requestedPrincipal = Number(form.get('principal') || 0)
@@ -1373,6 +1376,7 @@ export default function OperationModalBridge() {
       setError(`Principal cannot exceed the approved maximum of ${pawnAmountText(maximumPawn, pawnCurrency)}.`)
       return
     }
+    submittingPawnRef.current = true
     setBusy(true)
     const brand = String(form.get('brand') || pawnBrand || '').trim()
     const model = String(form.get('model') || pawnModel || '').trim()
@@ -1446,6 +1450,7 @@ export default function OperationModalBridge() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to create pawn contract')
     } finally {
+      submittingPawnRef.current = false
       setBusy(false)
     }
   }

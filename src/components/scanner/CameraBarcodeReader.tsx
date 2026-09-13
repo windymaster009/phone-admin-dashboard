@@ -20,6 +20,7 @@ export default function CameraBarcodeReader({
   const [active, setActive] = useState(autoStart)
   const onScanRef = useRef(onScan)
   const onErrorRef = useRef(onError)
+  const cleanupRef = useRef<Promise<void>>(Promise.resolve())
 
   useEffect(() => { onScanRef.current = onScan }, [onScan])
   useEffect(() => { onErrorRef.current = onError }, [onError])
@@ -28,8 +29,12 @@ export default function CameraBarcodeReader({
     if (!active) return
     let scanner: import('html5-qrcode').Html5Qrcode | null = null
     let disposed = false
+    let scanHandled = false
 
     async function startCamera() {
+      // A previous permission request/stop may still be pending. It owns the
+      // reader element until its cleanup has completed.
+      await cleanupRef.current
       const { Html5Qrcode, Html5QrcodeSupportedFormats } = await import('html5-qrcode')
       if (disposed) return
       scanner = new Html5Qrcode(readerId, {
@@ -46,7 +51,8 @@ export default function CameraBarcodeReader({
         { facingMode: 'environment' },
         { fps: 10, qrbox: { width: scanWidth, height: Math.round(scanWidth * 0.46) } },
         (decodedText) => {
-          if (disposed) return
+          if (disposed || scanHandled) return
+          scanHandled = true
           setActive(false)
           onScanRef.current(decodedText)
         },
@@ -54,15 +60,23 @@ export default function CameraBarcodeReader({
       )
     }
 
-    void startCamera().catch((reason: Error) => {
+    const starting = startCamera().catch((reason: unknown) => {
+      if (disposed) return
       setActive(false)
-      onErrorRef.current(reason.message || 'Unable to start the camera. Check camera permission and try again.')
+      const message = reason instanceof Error ? reason.message : typeof reason === 'string' ? reason : ''
+      onErrorRef.current(message || 'Unable to start the camera. Check camera permission and try again.')
     })
 
     return () => {
       disposed = true
-      if (scanner?.isScanning) void scanner.stop().finally(() => scanner?.clear())
-      else scanner?.clear()
+      cleanupRef.current = starting.then(async () => {
+        if (scanner?.isScanning) await scanner.stop()
+        scanner?.clear()
+      }).catch((reason: unknown) => {
+        // Do not leave an unhandled rejection or send an old camera error to
+        // a new scanner dialog after this effect has been disposed.
+        console.warn('Unable to clean up barcode camera', reason)
+      })
     }
   }, [active, readerId])
 

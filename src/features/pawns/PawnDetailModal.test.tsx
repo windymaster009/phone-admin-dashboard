@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { act, render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import PawnDetailModal from './PawnDetailModal'
@@ -500,5 +500,112 @@ describe('PawnDetailModal component', () => {
 
     const secondRenewalKey = capturedPayloads[2].idempotencyKey
     expect(secondRenewalKey).not.toBe(initialKey)
+  })
+
+  it('guards onAction against rapid double clicks before React rerenders', async () => {
+    let actionCount = 0
+    let resolveAction: () => void
+    const actionPromise = new Promise<void>((resolve) => {
+      resolveAction = resolve
+    })
+    const handleAction = vi.fn().mockImplementation(() => {
+      actionCount++
+      return actionPromise
+    })
+
+    const user = userEvent.setup()
+    render(
+      <PawnDetailModal
+        pawn={mockPawnRecord}
+        onClose={vi.fn()}
+        onAction={handleAction}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /Redeem item/i }))
+    const confirmButton = screen.getByRole('button', { name: /Confirm redemption/i })
+
+    // Rapid double click in one act()
+    act(() => {
+      fireEvent.click(confirmButton)
+      fireEvent.click(confirmButton)
+    })
+
+    // Before fix, actionCount is 2. Must be 1.
+    expect(actionCount).toBe(1)
+    await act(async () => { resolveAction!() })
+  })
+
+  it('preserves entered inputs on action failure and allows retry after releasing guard', async () => {
+    let attempt = 0
+    const handleAction = vi.fn().mockImplementation(() => {
+      attempt++
+      if (attempt === 1) {
+        return Promise.reject(new Error('Network error: please try again'))
+      }
+      return Promise.resolve()
+    })
+
+    const user = userEvent.setup()
+    render(
+      <PawnDetailModal
+        pawn={mockPawnRecord}
+        onClose={vi.fn()}
+        onAction={handleAction}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /Redeem item/i }))
+    const noteInput = screen.getByPlaceholderText(/Add a reference or payment note/i)
+    await user.type(noteInput, 'Paid in cash with note')
+
+    const confirmButton = screen.getByRole('button', { name: /Confirm redemption/i })
+    await user.click(confirmButton)
+
+    await waitFor(() => {
+      expect(screen.getByText('Network error: please try again')).toBeInTheDocument()
+    })
+
+    // Input preserved
+    expect(screen.getByDisplayValue('Paid in cash with note')).toBeInTheDocument()
+
+    // Retry succeeds because guard was released
+    await user.click(confirmButton)
+    await waitFor(() => {
+      expect(handleAction).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  it('guards onDelete against rapid double clicks before React rerenders', async () => {
+    let deleteCount = 0
+    let resolveDelete: () => void
+    const deletePromise = new Promise<void>((resolve) => {
+      resolveDelete = resolve
+    })
+    const handleDelete = vi.fn().mockImplementation(() => {
+      deleteCount++
+      return deletePromise
+    })
+
+    const user = userEvent.setup()
+    render(
+      <PawnDetailModal
+        pawn={mockPawnRecord}
+        onClose={vi.fn()}
+        canDelete={true}
+        onDelete={handleDelete}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: /Delete contract/i }))
+    const confirmDeleteBtn = screen.getByRole('button', { name: /Delete permanently/i })
+
+    act(() => {
+      fireEvent.click(confirmDeleteBtn)
+      fireEvent.click(confirmDeleteBtn)
+    })
+
+    expect(deleteCount).toBe(1)
+    await act(async () => { resolveDelete!() })
   })
 })

@@ -585,3 +585,61 @@ test('GET /reports/purchases: rejects invalid source and invalid payment status 
   assert.equal(badPaymentStatusRes.status, 400)
   assert.match(badPaymentStatusRes.body.message, /valid payment status/i)
 })
+
+test('GET /reports/sales & /reports/purchases: rejects invalid custom date ranges and verifies pipeline construction', async () => {
+  // 1. Invalid custom date format in sales
+  const badDateSales = await callRoute('/reports/sales', { period: 'custom', from: 'invalid-date', to: '2026-03-10' })
+  assert.equal(badDateSales.status, 400)
+  assert.match(badDateSales.body.message, /Choose a valid From and To date/i)
+
+  // 2. Inverted dates in sales
+  const invertedSales = await callRoute('/reports/sales', { period: 'custom', from: '2026-03-25', to: '2026-03-10' })
+  assert.equal(invertedSales.status, 400)
+  assert.match(invertedSales.body.message, /From date must be before or equal to To date/i)
+
+  // 3. Inverted dates in purchases
+  const invertedPurchases = await callRoute('/reports/purchases', { period: 'custom', from: '2026-03-25', to: '2026-03-10' })
+  assert.equal(invertedPurchases.status, 400)
+  assert.match(invertedPurchases.body.message, /From date must be before or equal to To date/i)
+
+  // 4. Inspect pipeline stages passed to Trade.aggregate for sales
+  const origTradeAggregate = Trade.aggregate
+  const origTradeFind = Trade.find
+  const origUserFind = User.find
+  const capturedPipelines = []
+
+  Trade.aggregate = async (pipeline) => {
+    capturedPipelines.push(pipeline)
+    return []
+  }
+  Trade.find = () => ({
+    populate: () => ({ populate: () => ({ sort: () => ({ limit: () => ({ lean: async () => [] }) }) }) }),
+  })
+  User.find = () => ({ select: () => ({ sort: () => ({ lean: async () => [] }) }) })
+
+  try {
+    const res = await callRoute('/reports/sales', {
+      period: 'today',
+      paymentMethod: 'KHQR',
+      status: 'RETURNED',
+    })
+    assert.equal(res.status, 200)
+    assert.ok(capturedPipelines.length >= 3, 'Sales report should execute summary, chart, payments, and products aggregation pipelines')
+
+    // Inspect summary pipeline: $match stage must filter by SELL, RETURNED, and paymentMethod=KHQR
+    const summaryMatch = capturedPipelines[0][0]?.$match
+    assert.equal(summaryMatch.type, 'SELL')
+    assert.equal(summaryMatch.status, 'RETURNED')
+    assert.equal(summaryMatch.paymentMethod, 'KHQR')
+    assert.ok(summaryMatch.createdAt?.$gte instanceof Date)
+    assert.ok(summaryMatch.createdAt?.$lt instanceof Date)
+
+    // The mocked aggregation returned no results, so summary values default to zero.
+    // This assertion does not validate MongoDB's returned-sale sign calculation.
+    assert.equal(res.body.summary.salesRevenue, 0)
+  } finally {
+    Trade.aggregate = origTradeAggregate
+    Trade.find = origTradeFind
+    User.find = origUserFind
+  }
+})

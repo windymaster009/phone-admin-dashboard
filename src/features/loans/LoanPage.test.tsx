@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import LoanPage, { type LoanSummary } from './LoanPage'
@@ -812,5 +812,295 @@ describe('LoanPage component and shared component adoption', () => {
 
     // No success toast
     expect(screen.queryByText('Loan deleted successfully.')).not.toBeInTheDocument()
+  })
+
+  it('guards loan creation against rapid double submission before React rerenders', async () => {
+    let postCallCount = 0
+    let resolvePost: (value: Response) => void
+    const postPromise = new Promise<Response>((resolve) => {
+      resolvePost = resolve
+    })
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = (init?.method || 'GET').toUpperCase()
+
+      if (url.includes('/auth/me')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ user: mockOwnerUser }),
+        } as Response
+      }
+
+      if (url.includes('/loans') && method === 'POST') {
+        postCallCount++
+        return postPromise
+      }
+
+      if (url.includes('/customers')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ customers: [] }),
+        } as Response
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ loans: [mockLoanRecord], summary: mockSummary }),
+      } as Response
+    })
+
+    const user = userEvent.setup()
+    render(<LoanPage summary={mockSummary} />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /New loan/i })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /New loan/i }))
+    const createDialog = screen.getByRole('dialog', { name: /Create loan/i })
+    await user.click(within(createDialog).getByRole('tab', { name: 'New customer' }))
+
+    const nameInput = within(createDialog).getByPlaceholderText('Full name')
+    await user.type(nameInput, 'Rapid Clicker')
+    const continueButton = within(createDialog).getByRole('button', { name: /Continue/i })
+    await user.click(continueButton)
+
+    const amountInput = within(createDialog).getByLabelText(/Loan amount/i)
+    await user.clear(amountInput)
+    await user.type(amountInput, '500')
+
+    const submitButton = within(createDialog).getByRole('button', { name: /Create loan/i })
+
+    // Two rapid clicks within one act block before React rerenders
+    act(() => {
+      fireEvent.click(submitButton)
+      fireEvent.click(submitButton)
+    })
+
+    // Before submittingRef fix, postCallCount will be 2. It must be strictly 1.
+    expect(postCallCount).toBe(1)
+
+    // Resolve post request
+    resolvePost!({
+      ok: true,
+      status: 201,
+      headers: new Headers(),
+      json: async () => ({
+        loan: {
+          ...mockLoanRecord,
+          _id: 'loan-rapid-1',
+          loanNo: 'LN-2026-RAPID',
+          borrower: { name: 'Rapid Clicker' },
+        },
+      }),
+    } as Response)
+
+    await waitFor(() => {
+      expect(screen.getByText('Loan record created')).toBeInTheDocument()
+    })
+  })
+
+  it('preserves entered inputs on loan creation failure and allows retry after releasing guard', async () => {
+    let attempt = 0
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = (init?.method || 'GET').toUpperCase()
+
+      if (url.includes('/auth/me')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ user: mockOwnerUser }),
+        } as Response
+      }
+
+      if (url.includes('/loans') && method === 'POST') {
+        attempt++
+        if (attempt === 1) {
+          return {
+            ok: false,
+            status: 400,
+            headers: new Headers(),
+            json: async () => ({ message: 'Server rejected borrower credit' }),
+          } as Response
+        }
+        return {
+          ok: true,
+          status: 201,
+          headers: new Headers(),
+          json: async () => ({
+            loan: {
+              ...mockLoanRecord,
+              _id: 'loan-retry-1',
+              loanNo: 'LN-2026-RETRY',
+              borrower: { name: 'Retry Borrower' },
+            },
+          }),
+        } as Response
+      }
+
+      if (url.includes('/customers')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ customers: [] }),
+        } as Response
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ loans: [mockLoanRecord], summary: mockSummary }),
+      } as Response
+    })
+
+    const user = userEvent.setup()
+    render(<LoanPage summary={mockSummary} />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /New loan/i })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /New loan/i }))
+    const createDialog = screen.getByRole('dialog', { name: /Create loan/i })
+    await user.click(within(createDialog).getByRole('tab', { name: 'New customer' }))
+
+    await user.type(within(createDialog).getByPlaceholderText('Full name'), 'Retry Borrower')
+    await user.click(within(createDialog).getByRole('button', { name: /Continue/i }))
+
+    const amountInput = within(createDialog).getByLabelText(/Loan amount/i)
+    await user.clear(amountInput)
+    await user.type(amountInput, '750')
+
+    const submitButton = within(createDialog).getByRole('button', { name: /Create loan/i })
+    await user.click(submitButton)
+
+    // Error displayed inside active dialog
+    await waitFor(() => {
+      expect(within(createDialog).getByText('Server rejected borrower credit')).toBeInTheDocument()
+    })
+
+    // Inputs are preserved inside dialog
+    expect(within(createDialog).getAllByText('$750.00').length).toBe(2)
+
+    // Retry should work because submission guard was released
+    await user.click(submitButton)
+
+    await waitFor(() => {
+      expect(screen.getByText('Loan record created')).toBeInTheDocument()
+    })
+    expect(attempt).toBe(2)
+  })
+
+  it('guards loan repayment against rapid double submission before React rerenders', async () => {
+    let paymentPostCallCount = 0
+    let resolvePaymentPost: (value: Response) => void
+    const paymentPostPromise = new Promise<Response>((resolve) => {
+      resolvePaymentPost = resolve
+    })
+
+    const activeLoan = {
+      ...mockLoanRecord,
+      _id: 'loan-pay-guard',
+      loanNo: 'LN-PAY-001',
+      remainingBalance: 500,
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = (init?.method || 'GET').toUpperCase()
+
+      if (url.includes('/auth/me')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ user: mockOwnerUser }),
+        } as Response
+      }
+
+      if (url.includes(`/loans/${activeLoan._id}/payments`) && method === 'POST') {
+        paymentPostCallCount++
+        return paymentPostPromise
+      }
+
+      if (url.includes(`/loans/${activeLoan._id}`) && method === 'GET') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ loan: activeLoan, payments: [] }),
+        } as Response
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ loans: [activeLoan], summary: mockSummary }),
+      } as Response
+    })
+
+    const user = userEvent.setup()
+    render(<LoanPage summary={mockSummary} />)
+
+    await waitFor(() => {
+      expect(screen.getAllByText(activeLoan.loanNo).length).toBeGreaterThan(0)
+    })
+
+    const openButtons = screen.getAllByRole('button', { name: new RegExp(`View.*${activeLoan.loanNo}`, 'i') })
+    await user.click(openButtons[0])
+
+    const detailModal = await screen.findByRole('dialog', { name: new RegExp(activeLoan.loanNo, 'i') })
+    const amountInput = within(detailModal).getByRole('spinbutton', { name: /Amount/i })
+    await user.clear(amountInput)
+    await user.type(amountInput, '200')
+
+    const payButton = within(detailModal).getByRole('button', { name: /Record payment/i })
+
+    // Two rapid clicks within one act block before React rerenders
+    act(() => {
+      fireEvent.click(payButton)
+      fireEvent.click(payButton)
+    })
+
+    expect(paymentPostCallCount).toBe(1)
+
+    resolvePaymentPost!({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({
+        loan: {
+          ...activeLoan,
+          remainingBalance: 300,
+          amountPaid: 200,
+        },
+        payments: [
+          {
+            _id: 'payment-1',
+            paymentNo: 'PAY-1',
+            amount: 200,
+            paymentMethod: 'CASH',
+            paidAt: '2026-09-13T00:00:00.000Z',
+          },
+        ],
+      }),
+    } as Response)
+
+    await waitFor(() => {
+      expect(screen.getByText('Payment recorded')).toBeInTheDocument()
+    })
   })
 })

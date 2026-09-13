@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { AlertTriangle, ArrowUpRight, BadgeCheck, Clock3, HandCoins, MoreHorizontal, Plus, RefreshCcw, Search } from 'lucide-react'
 import { api, type SessionUser } from '../../lib/api'
 import type { Pawn, PawnAction } from '../../types/domain'
@@ -23,6 +23,8 @@ export default function PawnView({ user }: { user: SessionUser }) {
   const [error, setError] = useState('')
   const [successToast, setSuccessToast] = useState('')
   const exchangeRate = useExchangeRate()
+  const updatingPawnRef = useRef(false)
+  const deletingPawnRef = useRef(false)
 
   useEffect(() => {
     api<{ pawns: Pawn[] }>('/pawns')
@@ -63,39 +65,49 @@ export default function PawnView({ user }: { user: SessionUser }) {
     })
 
   async function updatePawn(action: PawnAction, payload: Record<string, unknown>) {
-    if (!selectedPawn) return
-    const headers: Record<string, string> = {}
-    if (typeof payload.idempotencyKey === 'string' && payload.idempotencyKey) {
-      headers['Idempotency-Key'] = payload.idempotencyKey
-    }
-    const result = await api<{ pawn: Pawn }>(`/pawns/${selectedPawn._id}/${action}`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(payload),
-    })
-    const updatedPawn: Pawn = {
-      ...result.pawn,
-      inventoryItem: typeof result.pawn.inventoryItem === 'object'
-        ? result.pawn.inventoryItem
-        : selectedPawn.inventoryItem,
-    }
-    setPawns((current) => current.map((pawn) => pawn._id === updatedPawn._id ? updatedPawn : pawn))
-    setSelectedPawn(updatedPawn)
-    if (action === 'renew') {
-      const latestRenewal = updatedPawn.renewals?.at(-1)
-      const sourceSubId = latestRenewal?._id ? `renewal:${latestRenewal._id}` : 'latest-contract'
-      window.dispatchEvent(new CustomEvent('phoneflow:open-pawn-ticket', {
-        detail: { reference: updatedPawn.pawnNo, sourceSubId },
-      }))
+    if (updatingPawnRef.current || !selectedPawn) return
+    updatingPawnRef.current = true
+    try {
+      const headers: Record<string, string> = {}
+      if (typeof payload.idempotencyKey === 'string' && payload.idempotencyKey) {
+        headers['Idempotency-Key'] = payload.idempotencyKey
+      }
+      const result = await api<{ pawn: Pawn }>(`/pawns/${selectedPawn._id}/${action}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(payload),
+      })
+      const updatedPawn: Pawn = {
+        ...result.pawn,
+        inventoryItem: typeof result.pawn.inventoryItem === 'object'
+          ? result.pawn.inventoryItem
+          : selectedPawn.inventoryItem,
+      }
+      setPawns((current) => current.map((pawn) => pawn._id === updatedPawn._id ? updatedPawn : pawn))
+      setSelectedPawn(updatedPawn)
+      if (action === 'renew') {
+        const latestRenewal = updatedPawn.renewals?.at(-1)
+        const sourceSubId = latestRenewal?._id ? `renewal:${latestRenewal._id}` : 'latest-contract'
+        window.dispatchEvent(new CustomEvent('phoneflow:open-pawn-ticket', {
+          detail: { reference: updatedPawn.pawnNo, sourceSubId },
+        }))
+      }
+    } finally {
+      updatingPawnRef.current = false
     }
   }
 
   async function deletePawn() {
-    if (!selectedPawn) return
-    const pawnToDelete = selectedPawn
-    await api<{ deleted: true; pawnNo: string }>(`/pawns/${pawnToDelete._id}`, { method: 'DELETE' })
-    setPawns((current) => current.filter((pawn) => pawn._id !== pawnToDelete._id))
-    setSuccessToast('Pawn contract deleted successfully.')
+    if (deletingPawnRef.current || !selectedPawn) return
+    deletingPawnRef.current = true
+    try {
+      const pawnToDelete = selectedPawn
+      await api<{ deleted: true; pawnNo: string }>(`/pawns/${pawnToDelete._id}`, { method: 'DELETE' })
+      setPawns((current) => current.filter((pawn) => pawn._id !== pawnToDelete._id))
+      setSuccessToast('Pawn contract deleted successfully.')
+    } finally {
+      deletingPawnRef.current = false
+    }
   }
 
   const openPawns = pawns.filter((pawn) => ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED'].includes(pawn.status))

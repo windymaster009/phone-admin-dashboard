@@ -99,9 +99,12 @@ function ViewerModal({ viewer, onClose }: { viewer: ViewerState; onClose: () => 
   const [receipt, setReceipt] = useState(viewer.receipt)
   const [busy, setBusy] = useState(false)
   const printingRef = useRef(false)
+  const cancelPrintRef = useRef<(() => void) | null>(null)
   const [error, setError] = useState('')
   const previewRef = useRef<HTMLDivElement>(null)
   const paperRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => () => cancelPrintRef.current?.(), [])
 
   useEffect(() => {
     setLayout(viewer.initialLayout || 'A4')
@@ -115,14 +118,32 @@ function ViewerModal({ viewer, onClose }: { viewer: ViewerState; onClose: () => 
     printingRef.current = true
     setBusy(true)
     setError('')
+    let iframe: HTMLIFrameElement | null = null
+    let cancelled = false
+    let timer: number | undefined
+    let resume = () => {}
+    const controller = new AbortController()
+    const pause = (milliseconds: number) => new Promise<void>((resolve) => {
+      resume = resolve
+      timer = window.setTimeout(resolve, milliseconds)
+    })
+    cancelPrintRef.current = () => {
+      cancelled = true
+      controller.abort()
+      window.clearTimeout(timer)
+      resume()
+      iframe?.remove()
+    }
     try {
       const updated = await api<{ receipt: ReceiptRecord }>(`/receipts/${receipt._id}/printed`, {
         method: 'POST',
         body: JSON.stringify({ layout }),
+        signal: controller.signal,
       })
+      if (cancelled) return
       setReceipt(updated.receipt)
 
-      const iframe = document.createElement('iframe')
+      iframe = document.createElement('iframe')
       iframe.style.position = 'fixed'
       iframe.style.right = '0'
       iframe.style.bottom = '0'
@@ -137,16 +158,22 @@ function ViewerModal({ viewer, onClose }: { viewer: ViewerState; onClose: () => 
       doc.write(`<!doctype html><html><head><title>${receipt.receiptNo}</title><style>${receiptPrintStyles}</style></head><body>${printNode.innerHTML}</body></html>`)
       doc.close()
 
-      window.setTimeout(() => {
-        iframe.contentWindow?.focus()
-        iframe.contentWindow?.print()
-        window.setTimeout(() => iframe.remove(), 1000)
-      }, 250)
+      await pause(250)
+      if (cancelled) return
+      const printWindow = iframe.contentWindow
+      if (!printWindow || typeof printWindow.print !== 'function') throw new Error('Printing is unavailable in this browser')
+      printWindow.focus()
+      printWindow.print()
+      // Give the browser time to consume the document before removing it.
+      await pause(1000)
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to print receipt')
+      if (!cancelled) setError(reason instanceof Error ? reason.message : 'Unable to print receipt')
     } finally {
+      window.clearTimeout(timer)
+      iframe?.remove()
+      cancelPrintRef.current = null
       printingRef.current = false
-      setBusy(false)
+      if (!cancelled) setBusy(false)
     }
   }
 

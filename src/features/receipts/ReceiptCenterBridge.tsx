@@ -104,6 +104,9 @@ function Viewer({ initialReceipt, initialLayout = 'A4', onClose, onUpdated }: { 
   const paperRef = useRef<HTMLDivElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const printingRef = useRef(false)
+  const cancelPrintRef = useRef<(() => void) | null>(null)
+
+  useEffect(() => () => cancelPrintRef.current?.(), [])
 
   useEffect(() => {
     previewRef.current?.scrollTo?.({ top: 0, left: 0 })
@@ -111,17 +114,36 @@ function Viewer({ initialReceipt, initialLayout = 'A4', onClose, onUpdated }: { 
 
   async function printReceipt() {
     if (printingRef.current) return
-    const popup = window.open('', '_blank', 'width=980,height=760')
+    printingRef.current = true
+    setBusy(true)
+    setError('')
+    let popup: Window | null = null
+    try {
+      popup = window.open('', '_blank', 'width=980,height=760')
+    } catch {
+      popup = null
+    }
     if (!popup) {
+      printingRef.current = false
+      setBusy(false)
       setError(`The browser blocked the print window. Allow pop-ups for ${receipt.snapshot?.shop.name || 'this shop'} and try again.`)
       return
     }
 
-    printingRef.current = true
-    setBusy(true)
-    setError('')
+    let cancelled = false
+    let timer: number | undefined
+    let resume = () => {}
+    const controller = new AbortController()
+    cancelPrintRef.current = () => {
+      cancelled = true
+      controller.abort()
+      window.clearTimeout(timer)
+      resume()
+      popup?.close()
+    }
     try {
-      const result = await api<{ receipt: ReceiptRecord }>(`/receipts/${receipt._id}/printed`, { method: 'POST', body: JSON.stringify({ layout }) })
+      const result = await api<{ receipt: ReceiptRecord }>(`/receipts/${receipt._id}/printed`, { method: 'POST', body: JSON.stringify({ layout }), signal: controller.signal })
+      if (cancelled) return
       setReceipt(result.receipt)
       onUpdated(result.receipt)
       const markup = paperRef.current?.innerHTML
@@ -137,13 +159,23 @@ function Viewer({ initialReceipt, initialLayout = 'A4', onClose, onUpdated }: { 
       popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${receipt.receiptNo}</title><style>${page}${receiptPrintStyles}</style></head><body>${markup}</body></html>`)
       popup.document.close()
       popup.focus()
-      window.setTimeout(() => popup.print(), 220)
+      await new Promise<void>((resolve) => {
+        resume = resolve
+        timer = window.setTimeout(resolve, 220)
+      })
+      if (cancelled) return
+      if (popup.closed || typeof popup.print !== 'function') throw new Error('The print window is unavailable. Please try again.')
+      popup.print()
     } catch (reason) {
-      popup.close()
-      setError(reason instanceof Error ? reason.message : 'Unable to print receipt')
+      if (!cancelled) {
+        popup.close()
+        setError(reason instanceof Error ? reason.message : 'Unable to print receipt')
+      }
     } finally {
+      window.clearTimeout(timer)
+      cancelPrintRef.current = null
       printingRef.current = false
-      setBusy(false)
+      if (!cancelled) setBusy(false)
     }
   }
 
@@ -162,13 +194,14 @@ function Viewer({ initialReceipt, initialLayout = 'A4', onClose, onUpdated }: { 
 export default function ReceiptCenterBridge() {
   const [actionTarget, setActionTarget] = useState<HTMLElement | null>(null)
   const [context, setContext] = useState<SourceContext | null>(null)
-  const [picker, setPicker] = useState<ReceiptOptionResponse | null>(null)
+  const [picker, setPicker] = useState<(ReceiptOptionResponse & { source: SourceContext }) | null>(null)
   const [viewer, setViewer] = useState<ViewerState | null>(null)
   const [busy, setBusy] = useState(false)
   const [pendingOptionKey, setPendingOptionKey] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [version, setVersion] = useState(0)
   const generationController = useRef<AbortController | null>(null)
+  const generationKeyRef = useRef<string | null>(null)
   const generationClosed = useRef(false)
 
   const locate = useCallback(() => {
@@ -224,9 +257,12 @@ export default function ReceiptCenterBridge() {
   }, [locate])
 
   const generate = useCallback(async (source: SourceContext, option: ReceiptOption, initialLayout: ReceiptLayout = 'A4') => {
+    const generationKey = JSON.stringify([source.sourceType, source.reference, option.documentType, option.sourceSubId])
+    if (generationKeyRef.current === generationKey && generationController.current && !generationController.current.signal.aborted) return
     generationController.current?.abort()
     const controller = new AbortController()
     generationController.current = controller
+    generationKeyRef.current = generationKey
     generationClosed.current = false
     const optionKey = `${option.documentType}-${option.sourceSubId}`
     const timeout = window.setTimeout(() => controller.abort(), 15_000)
@@ -237,9 +273,11 @@ export default function ReceiptCenterBridge() {
         body: JSON.stringify({ sourceType: source.sourceType, reference: source.reference, documentType: option.documentType, sourceSubId: option.sourceSubId }),
         signal: controller.signal,
       })
+      if (controller.signal.aborted || generationController.current !== controller) return
       if (!result.receipt?._id) throw new Error('The receipt was created without a valid preview. Please try again.')
       setViewer({ receipt: result.receipt, initialLayout }); setPicker(null); setVersion((value) => value + 1)
     } catch (reason) {
+      if (generationController.current !== controller) return
       if (reason instanceof DOMException && reason.name === 'AbortError') {
         if (!generationClosed.current) setError('The receipt preview took too long to prepare. Please try again.')
       } else {
@@ -249,6 +287,7 @@ export default function ReceiptCenterBridge() {
       window.clearTimeout(timeout)
       if (generationController.current === controller) {
         generationController.current = null
+        generationKeyRef.current = null
         setPendingOptionKey(null)
         setBusy(false)
       }
@@ -265,7 +304,7 @@ export default function ReceiptCenterBridge() {
       if (response.options.length === 1) {
         await generate(source, response.options[0])
       } else {
-        setPicker(response)
+        setPicker({ ...response, source })
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to load receipt options')
@@ -338,6 +377,7 @@ export default function ReceiptCenterBridge() {
     generationClosed.current = true
     generationController.current?.abort()
     generationController.current = null
+    generationKeyRef.current = null
     setPendingOptionKey(null)
 
     setBusy(false)
@@ -349,7 +389,7 @@ export default function ReceiptCenterBridge() {
 
   return <>
     {actionTarget && context && createPortal(<button className="secondary-button receipt-detail-action" onClick={() => void openDocuments()} disabled={busy}><Printer size={15} /> {busy ? 'Loading...' : context.sourceType === 'TRADE' ? 'Print receipt' : 'Documents'}</button>, actionTarget)}
-    {picker && context && <OptionPicker response={picker} busy={busy} pendingOptionKey={pendingOptionKey} error={error} onSelect={(option) => void generate(context, option)} onClose={closePicker} />}
+    {picker && <OptionPicker response={picker} busy={busy} pendingOptionKey={pendingOptionKey} error={error} onSelect={(option) => void generate(picker.source, option)} onClose={closePicker} />}
     {viewer && <Viewer key={viewer.receipt._id} initialReceipt={viewer.receipt} initialLayout={viewer.initialLayout} onClose={closeViewer} onUpdated={(receipt) => { setViewer((current) => current ? { ...current, receipt } : null); setVersion((value) => value + 1) }} />}
     {!picker && !viewer && error && createPortal(<div className="receipt-toast" role="alert"><AlertTriangle size={16} /> {error}<button onClick={() => setError('')}><X size={14} /></button></div>, document.body)}
   </>

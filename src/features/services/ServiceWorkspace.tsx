@@ -114,6 +114,7 @@ export default function ServiceWorkspace() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const submittingRef = useRef(false)
+  const receiptSubmittingRef = useRef(false)
 
   async function load() {
     setLoading(true)
@@ -290,8 +291,10 @@ export default function ServiceWorkspace() {
   }
 
   async function createReceipt() {
-    if (!success) return
+    if (receiptSubmittingRef.current || busy || !success) return
+    receiptSubmittingRef.current = true
     setBusy(true)
+    setError('')
     try {
       await api('/receipts/generate', {
         method: 'POST',
@@ -302,6 +305,7 @@ export default function ServiceWorkspace() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to create the service receipt')
     } finally {
+      receiptSubmittingRef.current = false
       setBusy(false)
     }
   }
@@ -315,7 +319,7 @@ export default function ServiceWorkspace() {
       </div>
     </header>
 
-    {error && !chargeOpen && !pricing && <div className="service-alert" role="alert"><AlertTriangle size={17} /><span>{error}</span><button type="button" onClick={() => setError('')} aria-label="Dismiss message"><X size={15} /></button></div>}
+    {error && !chargeOpen && !pricing && !success && <div className="service-alert" role="alert"><AlertTriangle size={17} /><span>{error}</span><button type="button" onClick={() => setError('')} aria-label="Dismiss message"><X size={15} /></button></div>}
 
     <div className="service-layout">
       <main className="service-catalogue">
@@ -415,7 +419,9 @@ export default function ServiceWorkspace() {
 
     {success && <div className="service-modal-backdrop">
       <section className="surface-card service-success-modal" role="dialog" aria-modal="true" aria-labelledby="service-success-title">
-        <span className="service-success-icon"><CheckCircle2 size={28} /></span><span className="eyebrow">Service charge saved</span><h3 id="service-success-title">{success.serviceSnapshot.name} completed</h3><p>{success.customerSnapshot.name} · {money(success.total, success.currency)}</p><div><button className="ghost-button" type="button" onClick={() => setSuccess(null)}>Done</button><button className="primary-button" type="button" disabled={busy} onClick={() => void createReceipt()}><ReceiptText size={16} /> Create receipt</button></div>
+        <span className="service-success-icon"><CheckCircle2 size={28} /></span><span className="eyebrow">Service charge saved</span><h3 id="service-success-title">{success.serviceSnapshot.name} completed</h3><p>{success.customerSnapshot.name} · {money(success.total, success.currency)}</p>
+        {error && <div className="service-alert" role="alert"><AlertTriangle size={17} /><span>{error}</span></div>}
+        <div><button className="ghost-button" type="button" disabled={busy} onClick={() => { if (!receiptSubmittingRef.current) { setError(''); setSuccess(null) } }}>Done</button><button className="primary-button" type="button" disabled={busy} onClick={() => void createReceipt()}><ReceiptText size={16} /> Create receipt</button></div>
       </section>
     </div>}
   </div>

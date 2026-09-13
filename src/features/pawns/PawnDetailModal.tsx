@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useRef, useState, type FormEvent } from 'react'
 import { AlertTriangle, ArrowUpRight, Printer, Trash2, X } from 'lucide-react'
 import type { Pawn, PawnAction, PawnCurrency } from '../../types/domain'
 import { dateText, pawnMoney } from '../../lib/presentation'
@@ -47,6 +47,8 @@ export default function PawnDetailModal({
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [deleteError, setDeleteError] = useState('')
   const [renewalIdempotencyKey, setRenewalIdempotencyKey] = useState('')
+  const actionSubmittingRef = useRef(false)
+  const deleteSubmittingRef = useRef(false)
 
   const outstanding = pawnOutstanding(pawn)
   const pawnCurrency: PawnCurrency = pawn.currency === 'KHR' ? 'KHR' : 'USD'
@@ -147,7 +149,8 @@ export default function PawnDetailModal({
 
   async function submitAction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!action || !onAction) return
+    if (actionSubmittingRef.current || actionBusy || !action || !onAction) return
+    actionSubmittingRef.current = true
     setActionBusy(true)
     setActionError('')
     try {
@@ -165,12 +168,14 @@ export default function PawnDetailModal({
     } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : 'Unable to update pawn contract')
     } finally {
+      actionSubmittingRef.current = false
       setActionBusy(false)
     }
   }
 
   async function deletePawn() {
-    if (!onDelete || deleteBusy) return
+    if (deleteSubmittingRef.current || deleteBusy || !onDelete) return
+    deleteSubmittingRef.current = true
     setDeleteBusy(true)
     setDeleteError('')
     try {
@@ -180,6 +185,7 @@ export default function PawnDetailModal({
     } catch (reason) {
       setDeleteError(reason instanceof Error ? reason.message : 'Unable to delete this pawn contract')
     } finally {
+      deleteSubmittingRef.current = false
       setDeleteBusy(false)
     }
   }

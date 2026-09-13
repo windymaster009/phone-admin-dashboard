@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
-import { Pawn, Trade, User } from './models.js'
+import { ActivityLog, InventoryItem, Pawn, Trade, User } from './models.js'
 import { AuthSession } from './authSessionModels.js'
 import { Loan, LoanPayment } from './loanModels.js'
 import { ServiceCharge } from './serviceModels.js'
@@ -19,15 +19,13 @@ const testToken = jwt.sign(
 )
 
 // Helper to simulate an Express GET request through reportRouter
-async function callReportRoute(path, query = {}) {
+async function callReportRoute(path, query = {}, token = testToken) {
   return new Promise((resolve, reject) => {
     const req = {
       method: 'GET',
       url: path + '?' + new URLSearchParams(query).toString(),
       query,
-      headers: {
-        authorization: `Bearer ${testToken}`,
-      },
+      headers: token ? { authorization: `Bearer ${token}` } : {},
       get(header) {
         return this.headers[header.toLowerCase()]
       },
@@ -51,8 +49,12 @@ async function callReportRoute(path, query = {}) {
     }
 
     reportRouter.handle(req, res, (err) => {
-      if (err) reject(err)
-      else resolve({ status: responseStatus, body: responseData })
+      if (err) {
+        if (err.status) resolve({ status: err.status, body: { message: err.message } })
+        else reject(err)
+      } else {
+        resolve({ status: responseStatus, body: responseData })
+      }
     })
   })
 }
@@ -60,8 +62,24 @@ async function callReportRoute(path, query = {}) {
 const origAuthSessionFindOne = AuthSession.findOne
 const origAuthSessionUpdateOne = AuthSession.updateOne
 const origUserFindById = User.findById
+const origUserFind = User.find
+const origPawnUpdateMany = Pawn.updateMany
+const origLoanFind = Loan.find
+
+function createMockQuery(data = []) {
+  const query = {
+    select: () => query,
+    populate: () => query,
+    sort: () => query,
+    lean: async () => data,
+  }
+  return query
+}
 
 test.beforeEach(() => {
+  Pawn.updateMany = async () => ({ modifiedCount: 0 })
+  Loan.find = () => createMockQuery([])
+  User.find = () => createMockQuery([])
   AuthSession.findOne = async () => ({
     _id: new mongoose.Types.ObjectId(),
     sessionId: testSessionId,
@@ -85,6 +103,9 @@ test.afterEach(() => {
   AuthSession.findOne = origAuthSessionFindOne
   AuthSession.updateOne = origAuthSessionUpdateOne
   User.findById = origUserFindById
+  User.find = origUserFind
+  Pawn.updateMany = origPawnUpdateMany
+  Loan.find = origLoanFind
 })
 
 test('Pawn Report: defaults to currency=ALL and normalizes mixed USD/KHR totals', async () => {
@@ -859,6 +880,387 @@ test('Report totals are calculated from the complete filtered result before limi
   } finally {
     Pawn.find = origFind
     Pawn.updateMany = origUpdateMany
+    User.find = origUserFind
+  }
+})
+
+test('RBAC: enforces OWNER and MANAGER permissions, rejecting unauthenticated (401) and CASHIER/STOCK (403)', async () => {
+  const endpoints = ['/inventory', '/pawns', '/loans', '/payments', '/services', '/activity']
+  const cashierId = new mongoose.Types.ObjectId()
+  const cashierToken = jwt.sign(
+    { sub: cashierId.toString(), sid: 'cashier-session-1' },
+    process.env.JWT_SECRET,
+    { expiresIn: 3600 },
+  )
+
+  for (const endpoint of endpoints) {
+    // 1. Unauthenticated (no token) -> 401
+    const unauthRes = await callReportRoute(endpoint, {}, null)
+    assert.equal(unauthRes.status, 401, `${endpoint} must reject unauthenticated requests with 401`)
+
+    // 2. CASHIER role -> 403
+    User.findById = () => ({
+      select: () => Promise.resolve({
+        _id: cashierId,
+        name: 'Cashier Staff',
+        email: 'cashier@phoneflow.test',
+        role: 'CASHIER',
+        active: true,
+      }),
+    })
+    const cashierRes = await callReportRoute(endpoint, {}, cashierToken)
+    assert.equal(cashierRes.status, 403, `${endpoint} must reject CASHIER role with 403`)
+
+    // 3. STOCK role -> 403
+    User.findById = () => ({
+      select: () => Promise.resolve({
+        _id: cashierId,
+        name: 'Stock Staff',
+        email: 'stock@phoneflow.test',
+        role: 'STOCK',
+        active: true,
+      }),
+    })
+    const stockRes = await callReportRoute(endpoint, {}, cashierToken)
+    assert.equal(stockRes.status, 403, `${endpoint} must reject STOCK role with 403`)
+  }
+})
+
+test('Input validation: rejects invalid filter choices, staff IDs, and date bounds with 400', async () => {
+  // 1. Inventory validations
+  const invCat = await callReportRoute('/inventory', { category: 'FRUIT' })
+  assert.equal(invCat.status, 400)
+  assert.match(invCat.body.message, /Select a valid category/i)
+
+  const invStatus = await callReportRoute('/inventory', { status: 'DESTROYED' })
+  assert.equal(invStatus.status, 400)
+  assert.match(invStatus.body.message, /Select a valid inventory status/i)
+
+  const invSource = await callReportRoute('/inventory', { source: 'ALIEN' })
+  assert.equal(invSource.status, 400)
+  assert.match(invSource.body.message, /Select a valid inventory source/i)
+
+  const invStock = await callReportRoute('/inventory', { stock: 'HUGE' })
+  assert.equal(invStock.status, 400)
+  assert.match(invStock.body.message, /Select a valid stock level/i)
+
+  // 2. Pawn validations
+  const pawnCurr = await callReportRoute('/pawns', { currency: 'EUR' })
+  assert.equal(pawnCurr.status, 400)
+  assert.match(pawnCurr.body.message, /Select a valid currency/i)
+
+  const pawnStat = await callReportRoute('/pawns', { status: 'PENDING' })
+  assert.equal(pawnStat.status, 400)
+  assert.match(pawnStat.body.message, /Select a valid pawn status/i)
+
+  const pawnStaff = await callReportRoute('/pawns', { staff: 'not-an-object-id' })
+  assert.equal(pawnStaff.status, 400)
+  assert.match(pawnStaff.body.message, /Select a valid staff member/i)
+
+  // 3. Loans validations
+  const loanCurr = await callReportRoute('/loans', { currency: 'THB' })
+  assert.equal(loanCurr.status, 400)
+  assert.match(loanCurr.body.message, /Select a valid currency/i)
+
+  const loanStat = await callReportRoute('/loans', { status: 'DEFAULTED' })
+  assert.equal(loanStat.status, 400)
+  assert.match(loanStat.body.message, /Select a valid loan status/i)
+
+  const loanStaff = await callReportRoute('/loans', { staff: 'invalid-id' })
+  assert.equal(loanStaff.status, 400)
+  assert.match(loanStaff.body.message, /Select a valid staff member/i)
+
+  // 4. Payments validations
+  const payCurr = await callReportRoute('/payments', { currency: 'GBP' })
+  assert.equal(payCurr.status, 400)
+  assert.match(payCurr.body.message, /Select a valid currency/i)
+
+  const payMethod = await callReportRoute('/payments', { method: 'CRYPTO' })
+  assert.equal(payMethod.status, 400)
+  assert.match(payMethod.body.message, /Select a valid payment method/i)
+
+  const payDir = await callReportRoute('/payments', { direction: 'SIDEWAYS' })
+  assert.equal(payDir.status, 400)
+  assert.match(payDir.body.message, /Select a valid payment direction/i)
+
+  // 5. Services validations
+  const servCurr = await callReportRoute('/services', { currency: 'JPY' })
+  assert.equal(servCurr.status, 400)
+  assert.match(servCurr.body.message, /Select a valid currency/i)
+
+  const servStat = await callReportRoute('/services', { status: 'IN_PROGRESS' })
+  assert.equal(servStat.status, 400)
+  assert.match(servStat.body.message, /Select a valid service status/i)
+
+  const servCat = await callReportRoute('/services', { category: 'FLYING' })
+  assert.equal(servCat.status, 400)
+  assert.match(servCat.body.message, /Select a valid service category/i)
+
+  const servMethod = await callReportRoute('/services', { method: 'GOLD' })
+  assert.equal(servMethod.status, 400)
+  assert.match(servMethod.body.message, /Select a valid payment method/i)
+
+  const servStaff = await callReportRoute('/services', { staff: 'bad-staff-id' })
+  assert.equal(servStaff.status, 400)
+  assert.match(servStaff.body.message, /Select a valid staff member/i)
+
+  // 6. Activity validations
+  const origDistinct = ActivityLog.distinct
+  ActivityLog.distinct = async (field) => {
+    if (field === 'action') return ['CREATE', 'UPDATE', 'DELETE']
+    if (field === 'entity') return ['TRADE', 'PAWN', 'LOAN']
+    return []
+  }
+  try {
+    const actAction = await callReportRoute('/activity', { action: 'EXPLODE' })
+    assert.equal(actAction.status, 400)
+    assert.match(actAction.body.message, /Select a valid action/i)
+
+    const actEntity = await callReportRoute('/activity', { entity: 'ROBOT' })
+    assert.equal(actEntity.status, 400)
+    assert.match(actEntity.body.message, /Select a valid entity/i)
+
+    const actStaff = await callReportRoute('/activity', { staff: 'bad-object-id' })
+    assert.equal(actStaff.status, 400)
+    assert.match(actStaff.body.message, /Select a valid staff member/i)
+  } finally {
+    ActivityLog.distinct = origDistinct
+  }
+
+  // 7. Date range validations across resolvePeriod
+  const badDateFormat = await callReportRoute('/loans', { period: 'custom', from: 'not-a-date', to: '2026-03-10' })
+  assert.equal(badDateFormat.status, 400)
+  assert.match(badDateFormat.body.message, /Choose a valid From and To date/i)
+
+  const invertedDates = await callReportRoute('/loans', { period: 'custom', from: '2026-03-25', to: '2026-03-10' })
+  assert.equal(invertedDates.status, 400)
+  assert.match(invertedDates.body.message, /From date must be before or equal to To date/i)
+
+  // 8. All Time period ignores custom date bounds safely
+  const allTimeWithBounds = await callReportRoute('/loans', {
+    period: 'all_time',
+    from: '2026-01-01',
+    to: '2026-02-01',
+  })
+  assert.equal(allTimeWithBounds.status, 200)
+  assert.equal(allTimeWithBounds.body.meta.period.key, 'all_time')
+  assert.equal(new Date(allTimeWithBounds.body.meta.period.from).getTime(), 0)
+})
+
+test('Inventory Report: builds proper match query and filters by stock levels (AVAILABLE, LOW, OUT)', async () => {
+  const origFind = InventoryItem.find
+  let capturedMatch = null
+
+  const sampleInventory = [
+    {
+      _id: 'inv-1',
+      sku: 'PH-01',
+      name: 'iPhone 13 128GB',
+      category: 'PHONE',
+      quantity: 5,
+      reorderLevel: 2,
+      buyPrice: 400,
+      sellPrice: 600,
+      source: 'SUPPLIER',
+      status: 'IN_STOCK',
+    },
+    {
+      _id: 'inv-2',
+      sku: 'PH-02',
+      name: 'Samsung S22',
+      category: 'PHONE',
+      quantity: 2,
+      reorderLevel: 2, // low stock!
+      buyPrice: 350,
+      sellPrice: 500,
+      source: 'CUSTOMER',
+      status: 'IN_STOCK',
+    },
+    {
+      _id: 'inv-3',
+      sku: 'ACC-01',
+      name: '20W USB-C Adapter',
+      category: 'ACCESSORY',
+      quantity: 0, // out of stock!
+      reorderLevel: 5,
+      buyPrice: 5,
+      sellPrice: 15,
+      source: 'SUPPLIER',
+      status: 'IN_STOCK',
+    },
+    {
+      _id: 'inv-4',
+      sku: 'TAB-01',
+      name: 'iPad Air 5',
+      category: 'TABLET',
+      quantity: 0,
+      reorderLevel: 1,
+      buyPrice: 450,
+      sellPrice: 650,
+      source: 'PAWN_FORFEIT',
+      status: 'SOLD',
+    },
+  ]
+
+  InventoryItem.find = (match) => {
+    capturedMatch = match
+    return {
+      sort: () => ({
+        lean: async () => sampleInventory,
+      }),
+    }
+  }
+
+  try {
+    // Check query construction separately: this mock does not execute MongoDB filters.
+    const filteredResponse = await callReportRoute('/inventory', {
+      category: 'PHONE',
+      status: 'IN_STOCK',
+      source: 'SUPPLIER',
+      stock: 'ALL',
+    })
+    assert.equal(filteredResponse.status, 200)
+    assert.equal(capturedMatch.category, 'PHONE')
+    assert.equal(capturedMatch.status, 'IN_STOCK')
+    assert.equal(capturedMatch.source, 'SUPPLIER')
+    // Independent totals over an unfiltered fixture, not a claim that mocked
+    // database queries enforce category/status/source filtering.
+    const resAll = await callReportRoute('/inventory', { stock: 'ALL' })
+    assert.equal(resAll.status, 200)
+    assert.equal(resAll.body.meta.currency, 'USD')
+    assert.equal(resAll.body.summary.find((s) => s.label === 'Products').value, 4)
+    assert.equal(resAll.body.summary.find((s) => s.label === 'Stock Units').value, 7) // 5 + 2 + 0 + 0
+    assert.equal(resAll.body.summary.find((s) => s.label === 'Cost Value').value, 2700) // 5*400 + 2*350 = 2700
+    assert.equal(resAll.body.summary.find((s) => s.label === 'Retail Value').value, 4000) // 5*600 + 2*500 = 4000
+    assert.equal(resAll.body.summary.find((s) => s.label === 'Potential Margin').value, 1300) // 4000 - 2700 = 1300
+    assert.equal(resAll.body.summary.find((s) => s.label === 'Low Stock').value, 2) // inv-2 (qty 2 <= reorder 2) and inv-3 (qty 0 <= reorder 5)
+
+    // 2. Filter stock=LOW
+    const resLow = await callReportRoute('/inventory', { stock: 'LOW' })
+    assert.equal(resLow.status, 200)
+    assert.equal(resLow.body.rows.length, 2)
+    assert.ok(resLow.body.rows.some((r) => r.sku === 'PH-02'))
+    assert.ok(resLow.body.rows.some((r) => r.sku === 'ACC-01'))
+
+    // 3. Filter stock=AVAILABLE
+    const resAvail = await callReportRoute('/inventory', { stock: 'AVAILABLE' })
+    assert.equal(resAvail.status, 200)
+    assert.equal(resAvail.body.rows.length, 2)
+    assert.ok(resAvail.body.rows.some((r) => r.sku === 'PH-01'))
+    assert.ok(resAvail.body.rows.some((r) => r.sku === 'PH-02'))
+
+    // 4. Filter stock=OUT
+    const resOut = await callReportRoute('/inventory', { stock: 'OUT' })
+    assert.equal(resOut.status, 200)
+    assert.equal(resOut.body.rows.length, 2)
+    assert.ok(resOut.body.rows.some((r) => r.sku === 'ACC-01'))
+    assert.ok(resOut.body.rows.some((r) => r.sku === 'TAB-01'))
+  } finally {
+    InventoryItem.find = origFind
+  }
+})
+
+test('Activity Report: queries distinct actions and entities, aggregates staff audit events, and formats details', async () => {
+  const origDistinct = ActivityLog.distinct
+  const origFind = ActivityLog.find
+  const origUserFind = User.find
+
+  const actions = ['CREATE', 'UPDATE', 'DELETE', 'LOGIN']
+  const entities = ['TRADE', 'PAWN', 'LOAN', 'CUSTOMER']
+  ActivityLog.distinct = async (field) => {
+    if (field === 'action') return actions
+    if (field === 'entity') return entities
+    return []
+  }
+
+  User.find = () => ({
+    select: () => ({ sort: () => ({ lean: async () => [{ _id: testUserId, name: 'Test Manager' }] }) }),
+  })
+
+  let capturedMatch = null
+  const sampleLogs = [
+    {
+      _id: 'act-1',
+      action: 'CREATE',
+      entity: 'TRADE',
+      details: { tradeNo: 'SL-2026-001' },
+      user: { _id: 'user-1', name: 'Alice Staff', role: 'CASHIER' },
+      createdAt: new Date('2026-03-01T10:00:00Z'),
+    },
+    {
+      _id: 'act-2',
+      action: 'UPDATE',
+      entity: 'PAWN',
+      details: { pawnNo: 'PW-2026-001' },
+      user: { _id: 'user-2', name: 'Bob Manager', role: 'MANAGER' },
+      createdAt: new Date('2026-03-01T11:00:00Z'),
+    },
+    {
+      _id: 'act-3',
+      action: 'DELETE',
+      entity: 'LOAN',
+      details: { loanNo: 'LN-2026-001' },
+      user: { _id: 'user-1', name: 'Alice Staff', role: 'CASHIER' },
+      createdAt: new Date('2026-03-01T12:00:00Z'),
+    },
+    {
+      _id: 'act-4',
+      action: 'LOGIN',
+      entity: 'CUSTOMER',
+      entityId: 'cust-uuid-1',
+      user: null, // System event
+      createdAt: new Date('2026-03-01T13:00:00Z'),
+    },
+  ]
+
+  ActivityLog.find = (match) => {
+    capturedMatch = match
+    return {
+      populate: () => ({
+        sort: () => ({
+          lean: async () => sampleLogs,
+        }),
+      }),
+    }
+  }
+
+  try {
+    const res = await callReportRoute('/activity', {
+      action: 'ALL',
+      entity: 'ALL',
+      period: 'all_time',
+    })
+    assert.equal(res.status, 200)
+    assert.equal(res.body.title, 'Activity Report')
+    assert.equal(res.body.meta.totalRecords, 4)
+
+    // Summary checks
+    const eventsSummary = res.body.summary.find((s) => s.label === 'Events')
+    assert.equal(eventsSummary.value, 4)
+
+    const activeStaffSummary = res.body.summary.find((s) => s.label === 'Active Staff')
+    // Alice (user-1), Bob (user-2), and SYSTEM (null) -> 3 distinct
+    assert.equal(activeStaffSummary.value, 3)
+
+    assert.equal(res.body.summary.find((s) => s.label === 'Created').value, 1)
+    assert.equal(res.body.summary.find((s) => s.label === 'Updated').value, 1)
+    assert.equal(res.body.summary.find((s) => s.label === 'Deleted').value, 1)
+    assert.equal(res.body.summary.find((s) => s.label === 'Other Actions').value, 1) // LOGIN
+
+    // Reference resolution in detail rows
+    assert.equal(res.body.rows[0].reference, 'SL-2026-001')
+    assert.equal(res.body.rows[1].reference, 'PW-2026-001')
+    assert.equal(res.body.rows[2].reference, 'LN-2026-001')
+    assert.equal(res.body.rows[3].reference, 'cust-uuid-1') // entityId fallback
+    assert.equal(res.body.rows[3].staff, 'System')
+    assert.equal(res.body.rows[3].role, 'SYSTEM')
+
+    // Filter options returned
+    assert.deepEqual(res.body.filterOptions.actions, actions.sort())
+    assert.deepEqual(res.body.filterOptions.entities, entities.sort())
+  } finally {
+    ActivityLog.distinct = origDistinct
+    ActivityLog.find = origFind
     User.find = origUserFind
   }
 })

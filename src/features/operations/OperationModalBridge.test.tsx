@@ -2068,4 +2068,231 @@ describe('OperationModalBridge component', () => {
     window.removeEventListener('phoneflow:customers-updated', customerUpdatedHandler)
     window.removeEventListener('phoneflow:suppliers-updated', supplierUpdatedHandler)
   })
+
+  it('guards pawn creation against rapid double submission before React rerenders', async () => {
+    let postCallCount = 0
+    let resolvePost: (value: Response) => void
+    const postPromise = new Promise<Response>((resolve) => {
+      resolvePost = resolve
+    })
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      const method = (init?.method || 'GET').toUpperCase()
+
+      if (url.includes('/pawns') && method === 'POST') {
+        postCallCount++
+        return postPromise
+      }
+
+      if (url.includes('/exchange-rates')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ usdKhr: 4100 }),
+        } as Response
+      }
+
+      if (url.includes('/customers')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ customers: [] }),
+        } as Response
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({}),
+      } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'pawn' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // Step 1: Fill customer
+    fireEvent.click(screen.getByRole('tab', { name: /New customer/i }))
+    fireEvent.change(screen.getByPlaceholderText(/Full name/i), { target: { value: 'Pawn Customer Sok' } })
+    fireEvent.change(screen.getByPlaceholderText(/012 345 678/i), { target: { value: '012334455' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: /Customer identity and collateral ownership confirmed/i }))
+
+    fireEvent.click(screen.getByRole('button', { name: /Continue to collateral/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Phone collateral/i)).toBeInTheDocument()
+    })
+
+    // Step 2: Fill collateral details
+    fireEvent.change(screen.getByPlaceholderText(/15-digit IMEI/i), { target: { value: '354321098765432' } })
+    fireEvent.change(screen.getByPlaceholderText(/Apple/i), { target: { value: 'Apple' } })
+    fireEvent.change(screen.getByPlaceholderText(/iPhone 13 Pro/i), { target: { value: 'iPhone 15' } })
+    fireEvent.change(screen.getByPlaceholderText(/^128$/), { target: { value: '128' } })
+
+    // Fill resale value and principal for valuation
+    const resaleInput = screen.getByRole('textbox', { name: /Resale value \(USD\)/i })
+    fireEvent.change(resaleInput, { target: { value: '600' } })
+
+    const principalInput = screen.getByRole('textbox', { name: /Principal \(USD\)/i })
+    fireEvent.change(principalInput, { target: { value: '100' } })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Create pawn contract/i })).not.toBeDisabled()
+    })
+
+    const form = screen.getByRole('dialog').querySelector('form')!
+
+    // Rapid double-submission before React rerenders
+    act(() => {
+      fireEvent.submit(form)
+      fireEvent.submit(form)
+    })
+
+    // Before submittingPawnRef fix, postCallCount is 2. Must be 1.
+    expect(postCallCount).toBe(1)
+
+    resolvePost!({
+      ok: true,
+      status: 201,
+      headers: new Headers(),
+      json: async () => ({
+        pawn: {
+          _id: 'pawn-rapid-1',
+          pawnNo: 'PW-2026-RAPID',
+          principal: 300,
+          currency: 'USD',
+        },
+      }),
+    } as Response)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Pawn contract created/i)).toBeInTheDocument()
+    })
+  })
+
+  it('failed pawn creation preserves entered form data, shows error inside dialog, and allows retry', async () => {
+    let attempt = 0
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      const method = (init?.method || 'GET').toUpperCase()
+
+      if (url.includes('/pawns') && method === 'POST') {
+        attempt++
+        if (attempt === 1) {
+          return {
+            ok: false,
+            status: 400,
+            headers: new Headers(),
+            json: async () => ({ message: 'Valuation limit exceeded for this model' }),
+          } as Response
+        }
+        return {
+          ok: true,
+          status: 201,
+          headers: new Headers(),
+          json: async () => ({
+            pawn: {
+              _id: 'pawn-retry-1',
+              pawnNo: 'PW-2026-RETRY',
+              principal: 100,
+              currency: 'USD',
+            },
+          }),
+        } as Response
+      }
+
+      if (url.includes('/exchange-rates')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ usdKhr: 4100 }),
+        } as Response
+      }
+
+      if (url.includes('/customers')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ customers: [] }),
+        } as Response
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({}),
+      } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'pawn' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // Step 1: Fill customer
+    fireEvent.click(screen.getByRole('tab', { name: /New customer/i }))
+    fireEvent.change(screen.getByPlaceholderText(/Full name/i), { target: { value: 'Retry Pawn Customer' } })
+    fireEvent.change(screen.getByPlaceholderText(/012 345 678/i), { target: { value: '012999000' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: /Customer identity and collateral ownership confirmed/i }))
+
+    fireEvent.click(screen.getByRole('button', { name: /Continue to collateral/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Phone collateral/i)).toBeInTheDocument()
+    })
+
+    // Step 2: Fill collateral details
+    fireEvent.change(screen.getByPlaceholderText(/15-digit IMEI/i), { target: { value: '354321098765432' } })
+    fireEvent.change(screen.getByPlaceholderText(/Apple/i), { target: { value: 'Apple' } })
+    fireEvent.change(screen.getByPlaceholderText(/iPhone 13 Pro/i), { target: { value: 'iPhone 15' } })
+    fireEvent.change(screen.getByPlaceholderText(/^128$/), { target: { value: '128' } })
+
+    const resaleInput = screen.getByRole('textbox', { name: /Resale value \(USD\)/i })
+    fireEvent.change(resaleInput, { target: { value: '600' } })
+
+    const principalInput = screen.getByRole('textbox', { name: /Principal \(USD\)/i })
+    fireEvent.change(principalInput, { target: { value: '100' } })
+
+    const form = screen.getByRole('dialog').querySelector('form')!
+    fireEvent.submit(form)
+
+    // First attempt fails: Error displayed inside active dialog
+    await waitFor(() => {
+      expect(screen.getByText('Valuation limit exceeded for this model')).toBeInTheDocument()
+    })
+
+    // Dialog remains open
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+    // Values preserved
+    expect(screen.getByPlaceholderText(/iPhone 13 Pro/i)).toHaveValue('iPhone 15')
+    expect(screen.getByPlaceholderText(/15-digit IMEI/i)).toHaveValue('354321098765432')
+
+    // Retry submission: submission guard must be released
+    fireEvent.submit(form)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Pawn contract created/i)).toBeInTheDocument()
+    })
+    expect(attempt).toBe(2)
+  })
 })
