@@ -186,7 +186,7 @@ function App({
       case 'services':
         return <ServiceWorkspace />
       case 'inventory':
-        return <InventoryPage />
+        return <InventoryPage user={user} />
       case 'customers':
         return <CustomerPage />
       case 'suppliers':

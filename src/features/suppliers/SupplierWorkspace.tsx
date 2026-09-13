@@ -4,6 +4,7 @@ import { AlertTriangle, BadgeCheck, Building2, CheckCircle2, Pencil, Phone, Plus
 import { api } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
 import SummaryStats from '../../components/SummaryStats'
+import OperationModalShell from '../../components/OperationModalShell'
 import './supplier-workspace.css'
 
 type Supplier = {
@@ -45,42 +46,45 @@ function SupplierActionButton({ tooltip, children, ...props }: ButtonHTMLAttribu
   </>
 }
 
-function SupplierModal({ supplier, busy, error, onClose, onSubmit }: {
+function SupplierModal({
+  supplier,
+  busy,
+  error,
+  onClose,
+  onSubmit,
+}: {
   supplier: Supplier | null
   busy: boolean
   error: string
   onClose: () => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }) {
-  useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => { if (event.key === 'Escape' && !busy) onClose() }
-    document.addEventListener('keydown', closeOnEscape)
-    document.body.classList.add('operation-modal-open')
-    return () => {
-      document.removeEventListener('keydown', closeOnEscape)
-      document.body.classList.remove('operation-modal-open')
-    }
-  }, [busy, onClose])
-
-  return <div className="operation-modal-backdrop" role="presentation">
-    <section className="operation-modal supplier-modal" role="dialog" aria-modal="true" aria-label={supplier ? 'Edit supplier' : 'Add supplier'}>
-      <header className="operation-modal-header">
-        <span className="operation-modal-icon"><Building2 size={21} /></span>
-        <div><span className="eyebrow">Supplier record</span><h2>{supplier ? 'Edit supplier' : 'Add supplier'}</h2><p>Maintain sellers that can be selected during a new purchase.</p></div>
-        <button type="button" className="operation-modal-close" onClick={onClose} disabled={busy} aria-label="Close"><X size={19} /></button>
-      </header>
+  return (
+    <OperationModalShell
+      title={supplier ? 'Edit supplier' : 'Add supplier'}
+      eyebrow="Supplier record"
+      description="Maintain sellers that can be selected during a new purchase."
+      icon={<Building2 size={21} />}
+      error={error}
+      busy={busy}
+      onClose={onClose}
+      className="supplier-modal"
+      ariaLabel={supplier ? 'Edit supplier' : 'Add supplier'}
+    >
       <form id="supplier-record-form" className="operation-form" onSubmit={onSubmit} key={supplier?._id || 'new'}>
-        {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
         <div className="operation-form-grid">
-          <label>Supplier name<input name="name" required autoFocus defaultValue={supplier?.name || ''} placeholder="Business or supplier name" /></label>
+          <label>Supplier name<input name="name" required autoFocus data-modal-initial-focus defaultValue={supplier?.name || ''} placeholder="Business or supplier name" /></label>
           <label>Phone number <small className="optional-marker">Optional</small><input name="phone" defaultValue={supplier?.phone || ''} placeholder="012 345 678" /></label>
           <label>National ID <small className="optional-marker">Optional</small><input name="nationalIdNumber" defaultValue={supplier?.nationalIdNumber || ''} /></label>
           <label className="operation-wide">Notes <small className="optional-marker">Optional</small><textarea name="notes" rows={4} defaultValue={supplier?.notes || ''} placeholder="Products supplied, payment terms, or contact notes" /></label>
         </div>
       </form>
-      <footer className="operation-modal-actions supplier-modal-actions"><button type="button" className="ghost-button" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" form="supplier-record-form" className="primary-button" disabled={busy}>{busy ? 'Saving...' : supplier ? 'Save changes' : 'Save supplier'}</button></footer>
-    </section>
-  </div>
+      <footer className="operation-modal-actions supplier-modal-actions">
+        <button type="button" className="ghost-button" onClick={onClose} disabled={busy}>Cancel</button>
+        <button type="submit" form="supplier-record-form" className="primary-button" disabled={busy}>{busy ? 'Saving...' : supplier ? 'Save changes' : 'Save supplier'}</button>
+      </footer>
+    </OperationModalShell>
+  )
 }
 
 type SupplierSuccess = {

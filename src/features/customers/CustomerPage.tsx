@@ -19,6 +19,7 @@ import {
 import { api } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
 import SummaryStats from '../../components/SummaryStats'
+import OperationModalShell from '../../components/OperationModalShell'
 
 type Customer = {
   _id: string
@@ -28,14 +29,18 @@ type Customer = {
   address?: string
   notes?: string
   active?: boolean
-  createdAt: string
+  createdAt?: string
 }
 
-const formatDate = (value: string) => {
+function formatDate(value?: string) {
+  if (!value) return '—'
   const date = new Date(value)
-  return Number.isNaN(date.getTime())
-    ? '—'
-    : new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(date)
+  if (Number.isNaN(date.getTime())) return '—'
+  return date.toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })
 }
 
 function CustomerActionButton({ tooltip, children, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & {
@@ -66,49 +71,32 @@ function CustomerModal({
   onClose: () => void
   onSubmit: (event: FormEvent<HTMLFormElement>) => void
 }) {
-  useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && !busy) onClose()
-    }
-    document.addEventListener('keydown', closeOnEscape)
-    document.body.classList.add('operation-modal-open')
-    return () => {
-      document.removeEventListener('keydown', closeOnEscape)
-      document.body.classList.remove('operation-modal-open')
-    }
-  }, [busy, onClose])
-
   return (
-    <div className="operation-modal-backdrop" role="presentation">
-      <section className="operation-modal customer-modal" role="dialog" aria-modal="true" aria-label={customer ? 'Edit customer' : 'Add customer'}>
-        <header className="operation-modal-header">
-          <span className="operation-modal-icon"><UserRound size={21} /></span>
-          <div>
-            <span className="eyebrow">Customer record</span>
-            <h2>{customer ? 'Edit customer' : 'Add customer'}</h2>
-            <p>{customer ? 'Update customer contact and identification details.' : 'Create the customer before starting a pawn, purchase, or sale.'}</p>
-          </div>
-          <button type="button" className="operation-modal-close" onClick={onClose} disabled={busy} aria-label="Close">
-            <X size={19} />
-          </button>
-        </header>
-
-        <form id="customer-record-form" className="operation-form" onSubmit={onSubmit} key={customer?._id || 'new'}>
-          {error && <div className="operation-modal-error"><AlertTriangle size={17} /> {error}</div>}
-          <div className="operation-form-grid">
-            <label>Full name<input name="name" required autoFocus defaultValue={customer?.name || ''} placeholder="Customer full name" /></label>
-            <label>Phone number <small className="optional-marker">Optional</small><input name="phone" defaultValue={customer?.phone || ''} placeholder="012 345 678" /></label>
-            <label>National ID number <small className="optional-marker">Optional</small><input name="nationalIdNumber" defaultValue={customer?.nationalIdNumber || ''} placeholder="ID number" /></label>
-            <label>Address <small className="optional-marker">Optional</small><input name="address" defaultValue={customer?.address || ''} placeholder="Village, district, province" /></label>
-            <label className="operation-wide">Notes <small className="optional-marker">Optional</small><textarea name="notes" rows={4} defaultValue={customer?.notes || ''} placeholder="Ownership details, contact notes, or other information" /></label>
-          </div>
-        </form>
-        <footer className="operation-modal-actions customer-modal-actions">
-          <button type="button" className="ghost-button" onClick={onClose} disabled={busy}>Cancel</button>
-          <button type="submit" form="customer-record-form" className="primary-button" disabled={busy}>{busy ? 'Saving...' : customer ? 'Save changes' : 'Save customer'}</button>
-        </footer>
-      </section>
-    </div>
+    <OperationModalShell
+      title={customer ? 'Edit customer' : 'Add customer'}
+      eyebrow="Customer record"
+      description={customer ? 'Update customer contact and identification details.' : 'Create the customer before starting a pawn, purchase, or sale.'}
+      icon={<UserRound size={21} />}
+      error={error}
+      busy={busy}
+      onClose={onClose}
+      className="customer-modal"
+      ariaLabel={customer ? 'Edit customer' : 'Add customer'}
+    >
+      <form id="customer-record-form" className="operation-form" onSubmit={onSubmit} key={customer?._id || 'new'}>
+        <div className="operation-form-grid">
+          <label>Full name<input name="name" required autoFocus data-modal-initial-focus defaultValue={customer?.name || ''} placeholder="Customer full name" /></label>
+          <label>Phone number <small className="optional-marker">Optional</small><input name="phone" defaultValue={customer?.phone || ''} placeholder="012 345 678" /></label>
+          <label>National ID number <small className="optional-marker">Optional</small><input name="nationalIdNumber" defaultValue={customer?.nationalIdNumber || ''} placeholder="ID number" /></label>
+          <label>Address <small className="optional-marker">Optional</small><input name="address" defaultValue={customer?.address || ''} placeholder="Village, district, province" /></label>
+          <label className="operation-wide">Notes <small className="optional-marker">Optional</small><textarea name="notes" rows={4} defaultValue={customer?.notes || ''} placeholder="Ownership details, contact notes, or other information" /></label>
+        </div>
+      </form>
+      <footer className="operation-modal-actions customer-modal-actions">
+        <button type="button" className="ghost-button" onClick={onClose} disabled={busy}>Cancel</button>
+        <button type="submit" form="customer-record-form" className="primary-button" disabled={busy}>{busy ? 'Saving...' : customer ? 'Save changes' : 'Save customer'}</button>
+      </footer>
+    </OperationModalShell>
   )
 }
 

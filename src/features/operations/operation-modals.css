@@ -1904,11 +1904,6 @@ body.operation-modal-open {
     border-radius: 20px 20px 0 0;
   }
 
-  .operation-modal-backdrop:has(.operation-modal-stock) {
-    align-items: center;
-    padding: 16px;
-  }
-
   /* Completed purchases and sales are short confirmation dialogs, not tall sheets. */
   .operation-modal-backdrop:has(.operation-modal-label),
   .operation-modal-backdrop:has(.operation-modal-sale:has(.sale-complete-workflow)) {
@@ -1937,19 +1932,25 @@ body.operation-modal-open {
     max-height: calc(83.3333dvh - 27px);
   }
 
+  .operation-modal-backdrop:has(.operation-modal-stock) {
+    align-items: center;
+    padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+  }
+
   .operation-modal-stock {
     width: 100%;
-    height: min(80dvh, 640px);
+    height: auto;
     max-height: calc(var(--operation-viewport-height, 100dvh) - 32px);
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
+    display: flex;
+    flex-direction: column;
     border-radius: 20px;
+    overflow: hidden;
   }
 
   /* Keep the dialog inside the physical viewport as Display size increases. */
-  .app[data-font-size='comfortable'] .operation-modal-stock { height: min(72.7273dvh, 582px); max-height: calc(90.9091dvh - 29px); }
-  .app[data-font-size='large'] .operation-modal-stock { height: min(66.6667dvh, 533px); max-height: calc(83.3333dvh - 27px); }
-  .operation-modal-stock .operation-form { min-height: 0; overflow-y: auto; }
+  .app[data-font-size='comfortable'] .operation-modal-stock { height: auto; max-height: calc(90.9091dvh - 29px); }
+  .app[data-font-size='large'] .operation-modal-stock { height: auto; max-height: calc(83.3333dvh - 27px); }
+  .operation-modal-stock .operation-form { min-height: 0; flex: 1 1 auto; overflow-y: auto; }
 
   /* Purchase stays a centred, contained workflow rather than a bottom sheet on phones. */
   .operation-modal-backdrop:has(.operation-modal-purchase) {
@@ -2649,8 +2650,11 @@ body.operation-modal-open {
   }
 
   .operation-modal-stock .stock-adjustment-form:has(.stock-adjustment-results) {
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr) auto;
+    display: flex;
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+    max-height: 100%;
     overflow: hidden;
     padding-top: 12px;
     padding-bottom: 0;
@@ -2661,7 +2665,7 @@ body.operation-modal-open {
   }
 
   .operation-modal-stock .stock-adjustment-form:has(.stock-adjustment-results) .stock-adjustment-search {
-    grid-row: 1;
+    flex: 0 0 auto;
     display: grid;
     gap: 6px;
     padding-bottom: 10px;
@@ -2681,9 +2685,13 @@ body.operation-modal-open {
   }
 
   .operation-modal-stock .stock-adjustment-form:has(.stock-adjustment-results) .stock-adjustment-results {
-    grid-row: 2;
+    flex: 0 1 auto;
+    display: grid;
+    align-content: start;
+    grid-auto-rows: max-content;
+    height: auto;
     min-height: 0;
-    max-height: none;
+    max-height: min(280px, 42dvh);
     margin-top: 0;
     padding-bottom: 10px;
     overflow-y: auto;
@@ -2692,14 +2700,20 @@ body.operation-modal-open {
     touch-action: pan-y;
   }
 
+  .operation-modal-stock .stock-adjustment-form:has(.stock-adjustment-results) .stock-adjustment-results > button {
+    height: auto;
+    min-height: 44px;
+    flex: 0 0 auto;
+  }
+
   .operation-modal-stock .stock-adjustment-form:has(.stock-adjustment-results) .operation-modal-actions {
     position: static;
-    grid-row: 3;
+    flex: 0 0 auto;
     display: grid;
     grid-template-columns: minmax(0, .75fr) minmax(0, 1.25fr);
     gap: 8px;
     margin: 0 -17px;
-    padding: 12px 17px max(12px, env(safe-area-inset-bottom));
+    padding: 12px 17px max(12px, env(safe-area-inset-bottom, 0px));
     border-top: 1px solid var(--border);
     background: var(--surface-solid);
     box-shadow: 0 -10px 24px color-mix(in srgb, var(--text) 12%, transparent);
@@ -2707,7 +2721,11 @@ body.operation-modal-open {
 
   .operation-modal-stock .stock-adjustment-form:has(.stock-adjustment-results) .operation-modal-actions button {
     min-width: 0;
-    min-height: 42px;
+    min-height: 44px;
+  }
+
+  .operation-modal-stock .operation-modal-actions button {
+    min-height: 44px;
   }
 
   .operation-modal-header,
@@ -2801,6 +2819,7 @@ body.operation-modal-open {
   .stock-adjustment-selected > button {
     grid-column: 1 / -1;
     width: 100%;
+    min-height: 44px;
   }
 
   .stock-adjustment-mode-options,
@@ -2814,6 +2833,8 @@ body.operation-modal-open {
 
   .stock-adjustment-results > button {
     grid-template-columns: auto minmax(0, 1fr);
+    min-height: 44px;
+    height: auto;
   }
 
   .stock-adjustment-results > button > span:last-child {

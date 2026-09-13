@@ -2307,6 +2307,76 @@ router.delete('/inventory/:id/photo', requireAuth, allowRoles('OWNER', 'MANAGER'
   res.json({ item })
 }))
 
+router.delete('/inventory/:id', requireAuth, allowRoles('OWNER'), asyncRoute(async (req, res) => {
+  if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    return res.status(400).json({ message: 'Invalid inventory item ID' })
+  }
+
+  const item = await InventoryItem.findById(req.params.id).select('+imagekitFileId')
+  if (!item) {
+    return res.status(404).json({ message: 'Inventory item not found' })
+  }
+
+  // Inspect referenced models
+  const linkedPawn = await Pawn.findOne({ inventoryItem: item._id }).select('pawnNo status').lean()
+  if (linkedPawn) {
+    const isPawnActive = ['OPEN', 'EXTENDED', 'OVERDUE'].includes(linkedPawn.status)
+    return res.status(409).json({
+      message: isPawnActive
+        ? `Cannot delete stock record linked to active pawn contract #${linkedPawn.pawnNo}.`
+        : `Cannot delete stock record linked to pawn contract #${linkedPawn.pawnNo} (${linkedPawn.status.toLowerCase()}). Archive this record instead.`,
+    })
+  }
+
+  const linkedTrade = await Trade.findOne({ 'items.inventoryItem': item._id }).select('tradeNo type').lean()
+  if (linkedTrade) {
+    const tradeKind = linkedTrade.type === 'BUY' ? 'purchase' : 'sale'
+    return res.status(409).json({
+      message: `Cannot delete stock record linked to recorded ${tradeKind} transaction #${linkedTrade.tradeNo || linkedTrade._id}. Archive this record instead.`,
+    })
+  }
+
+  const linkedIntent = await PaywayIntent.findOne({
+    inventoryItem: item._id,
+    status: { $in: ['PENDING', 'APPROVED', 'COMPLETED'] },
+  }).select('transactionId status').lean()
+  if (linkedIntent) {
+    return res.status(409).json({
+      message: `Cannot delete stock record linked to in-flight or completed KHQR transaction #${linkedIntent.transactionId}.`,
+    })
+  }
+
+  if (['RESERVED', 'PAWNED', 'SOLD'].includes(item.status)) {
+    return res.status(409).json({
+      message: `Cannot delete a stock item that is currently marked as ${item.status.toLowerCase()}.`,
+    })
+  }
+
+  // Safe to hard-delete orphan record
+  if (item.imagekitFileId) {
+    try {
+      await deleteImageKitImage(item.imagekitFileId)
+    } catch (cleanupError) {
+      console.error('Failed to clean up attached ImageKit photo for inventory:', item._id, cleanupError.message)
+    }
+  }
+
+  await InventoryItem.findByIdAndDelete(item._id)
+
+  await writeActivity(req, {
+    action: 'DELETE',
+    entity: 'INVENTORY',
+    entityId: item._id,
+    details: { sku: item.sku, name: item.name, category: item.category },
+  })
+
+  res.json({
+    message: 'Stock record deleted successfully',
+    deletedId: String(item._id),
+    sku: item.sku,
+  })
+}))
+
 router.post('/valuation/calculate', requireAuth, (req, res) => {
   res.json(calculatePawnOffer(req.body))
 })

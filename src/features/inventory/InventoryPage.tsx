@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertTriangle, Barcode, Grid2X2, List, MoreHorizontal, Package, Plus, ScanLine, Search, Smartphone, Wrench, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, Barcode, Grid2X2, List, MoreHorizontal, Package, Plus, ScanLine, Search, Smartphone, Trash2, Wrench, type LucideIcon } from 'lucide-react'
 import { api } from '../../lib/api'
 import type { InventoryItem, Pawn } from '../../types/domain'
 import { currency, money, riel, inventoryPriceCurrency, inventoryPriceText, inventoryDualPriceText, useExchangeRate, dateText, titleStatus, comingNext } from '../../lib/presentation'
@@ -9,7 +9,7 @@ import SectionHeader from '../../components/SectionHeader'
 import StatusBadge from '../../components/StatusBadge'
 import SummaryStats from '../../components/SummaryStats'
 import ScannerTriggerButton, { openProductScanner } from '../../components/scanner/ScannerTriggerButton'
-import { getStoredInventoryView, setStoredInventoryView } from '../../lib/storage'
+import { getStoredInventoryView, getStoredSessionUser, setStoredInventoryView, type SessionUser } from '../../lib/storage'
 import { printInventoryLabel } from './barcode'
 import NotificationToast from '../../components/NotificationToast'
 import DetailModalShell from '../../components/DetailModalShell'
@@ -49,7 +49,9 @@ function InventoryPhoto({ item, size = 'normal' }: { item: InventoryItem; size?:
   )
 }
 
-export default function InventoryView() {
+export default function InventoryView({ user }: { user?: SessionUser } = {}) {
+  const currentUser = user || getStoredSessionUser()
+  const isOwner = currentUser?.role === 'OWNER'
   const [items, setItems] = useState<InventoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null)
@@ -63,6 +65,11 @@ export default function InventoryView() {
   const [savingPhoto, setSavingPhoto] = useState(false)
   const savingPriceRef = useRef(false)
   const savingPhotoRef = useRef(false)
+  const [deleteConfirmation, setDeleteConfirmation] = useState(false)
+  const [deletingStock, setDeletingStock] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
+  const deletingStockRef = useRef(false)
+  const activeDeleteItemIdRef = useRef<string | null>(null)
   const [toastMessage, setToastMessage] = useState('')
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('ALL')
@@ -298,9 +305,42 @@ export default function InventoryView() {
   }
 
   function closeStockDetails() {
+    if (deleteConfirmation || deletingStockRef.current) return
     setSelectedItem(null)
     setEditingPrice(false)
     setError('')
+    setDeleteConfirmation(false)
+    setDeleteError('')
+  }
+
+  async function confirmDeleteStock() {
+    if (!selectedItem || deletingStockRef.current) return
+    const targetId = selectedItem._id
+    activeDeleteItemIdRef.current = targetId
+    deletingStockRef.current = true
+    setDeletingStock(true)
+    setDeleteError('')
+
+    try {
+      await api<{ message?: string; deletedId?: string }>(`/inventory/${targetId}`, {
+        method: 'DELETE',
+      })
+
+      if (activeDeleteItemIdRef.current !== targetId) return
+
+      setItems((current) => current.filter((item) => item._id !== targetId))
+      setDeleteConfirmation(false)
+      setSelectedItem(null)
+      setEditingPrice(false)
+      setToastMessage('Stock record deleted successfully.')
+      window.dispatchEvent(new CustomEvent('phoneflow:inventory-updated', { detail: { id: targetId } }))
+    } catch (reason) {
+      if (activeDeleteItemIdRef.current !== targetId) return
+      setDeleteError(reason instanceof Error ? reason.message : 'Unable to delete stock record')
+    } finally {
+      deletingStockRef.current = false
+      setDeletingStock(false)
+    }
   }
 
   return (
@@ -521,19 +561,104 @@ export default function InventoryView() {
               </>
             }
             destructiveAction={
-              selectedItem.imageUrl ? (
-                <button className="ghost-button danger-ghost-button" onClick={() => void removePhoto()} disabled={savingPhoto}>Remove photo</button>
-              ) : undefined
+              <>
+                {selectedItem.imageUrl && (
+                  <button
+                    type="button"
+                    className="ghost-button danger-ghost-button"
+                    onClick={() => void removePhoto()}
+                    disabled={savingPhoto || deletingStock}
+                  >
+                    Remove photo
+                  </button>
+                )}
+                {isOwner && (
+                  <button
+                    type="button"
+                    className="ghost-button danger-ghost-button inventory-delete-button"
+                    onClick={() => {
+                      setDeleteError('')
+                      setDeleteConfirmation(true)
+                    }}
+                    disabled={savingPhoto || deletingStock}
+                  >
+                    <Trash2 size={16} /> Delete stock record
+                  </button>
+                )}
+              </>
             }
             transactionActions={
               !editingPrice ? (
                 <button className="primary-button" onClick={openPriceEditor}>{selectedItem.sellPrice > 0 ? 'Change price' : 'Set selling price'}</button>
               ) : undefined
             }
-            dismissAction={
-              <button className="ghost-button" onClick={closeStockDetails}>Close</button>
-            }
           />
+        </DetailModalShell>
+      )}
+      {deleteConfirmation && selectedItem && (
+        <DetailModalShell
+          compact
+          onClose={() => {
+            if (!deletingStock) {
+              setDeleteConfirmation(false)
+              setDeleteError('')
+            }
+          }}
+          titleId="stock-delete-title"
+          className="stock-delete-modal"
+        >
+          <DetailModalHeader
+            eyebrow="Permanent deletion"
+            title="Delete stock record?"
+            titleId="stock-delete-title"
+            description="This action cannot be undone."
+            onClose={() => {
+              if (!deletingStock) {
+                setDeleteConfirmation(false)
+                setDeleteError('')
+              }
+            }}
+            closeLabel="Close delete confirmation"
+          />
+          <DetailModalBody className="stock-delete-content">
+            <span className="stock-delete-icon"><Trash2 size={22} /></span>
+            <div>
+              <strong>{selectedItem.name}</strong>
+              <p className="mono">{selectedItem.sku} · {titleStatus(selectedItem.category)}</p>
+            </div>
+            <p>
+              Permanent deletion completely removes this stock item. If this item has recorded purchase, sale, pawn, or refund transaction history, deletion will be blocked to preserve audit records.
+            </p>
+            {deleteError && (
+              <div className="operation-modal-error stock-delete-error" role="alert">
+                <AlertTriangle size={16} />
+                <span>{deleteError}</span>
+              </div>
+            )}
+          </DetailModalBody>
+          <DetailModalFooter className="stock-delete-actions">
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => {
+                if (!deletingStock) {
+                  setDeleteConfirmation(false)
+                  setDeleteError('')
+                }
+              }}
+              disabled={deletingStock}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="danger-button"
+              onClick={() => void confirmDeleteStock()}
+              disabled={deletingStock}
+            >
+              <Trash2 size={16} /> {deletingStock ? 'Deleting…' : 'Delete stock record'}
+            </button>
+          </DetailModalFooter>
         </DetailModalShell>
       )}
       <NotificationToast message={toastMessage} onDismiss={() => setToastMessage('')} />

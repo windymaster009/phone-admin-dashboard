@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
-import { ActivityLog, InventoryItem, Pawn, User } from './models.js'
+import { ActivityLog, InventoryItem, Pawn, PaywayIntent, Trade, User } from './models.js'
 import { AuthSession } from './authSessionModels.js'
 import router from './routes.js'
 
@@ -27,7 +27,7 @@ const defaultToken = createTestToken()
 async function callRoute(method, path, body = {}, { token = defaultToken, role = currentUserRole } = {}) {
   currentUserRole = role
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const [pathPart, queryPart = ''] = path.split('?')
     const queryParams = Object.fromEntries(new URLSearchParams(queryPart))
 
@@ -76,6 +76,7 @@ async function callRoute(method, path, body = {}, { token = defaultToken, role =
   })
 }
 
+// Setup and teardown auth mocking for router
 const origAuthSessionFindOne = AuthSession.findOne
 const origAuthSessionUpdateOne = AuthSession.updateOne
 const origUserFindById = User.findById
@@ -127,6 +128,9 @@ test('Authentication and RBAC: enforces permissions across inventory and valuati
   const unauthAdjust = await callRoute('POST', `/inventory/${sampleItemId}/adjust`, {}, { token: null })
   assert.equal(unauthAdjust.status, 401, 'POST /inventory/:id/adjust without auth must return 401')
 
+  const unauthDelete = await callRoute('DELETE', `/inventory/${sampleItemId}`, {}, { token: null })
+  assert.equal(unauthDelete.status, 401, 'DELETE /inventory/:id without auth must return 401')
+
   const unauthValuation = await callRoute('POST', '/valuation/calculate', {}, { token: null })
   assert.equal(unauthValuation.status, 401, 'POST /valuation/calculate without auth must return 401')
 
@@ -169,6 +173,15 @@ test('Authentication and RBAC: enforces permissions across inventory and valuati
 
   const cashierDeletePhoto = await callRoute('DELETE', `/inventory/${sampleItemId}/photo`, {}, { role: 'CASHIER' })
   assert.equal(cashierDeletePhoto.status, 403, 'DELETE /inventory/:id/photo must reject CASHIER with 403')
+
+  const cashierDelete = await callRoute('DELETE', `/inventory/${sampleItemId}`, {}, { role: 'CASHIER' })
+  assert.equal(cashierDelete.status, 403, 'DELETE /inventory/:id must reject CASHIER with 403')
+
+  const stockDelete = await callRoute('DELETE', `/inventory/${sampleItemId}`, {}, { role: 'STOCK' })
+  assert.equal(stockDelete.status, 403, 'DELETE /inventory/:id must reject STOCK with 403')
+
+  const managerDelete = await callRoute('DELETE', `/inventory/${sampleItemId}`, {}, { role: 'MANAGER' })
+  assert.equal(managerDelete.status, 403, 'DELETE /inventory/:id must reject MANAGER with 403 (OWNER only)')
 })
 
 test('POST /inventory: validates storage and RAM constraints on item creation', async () => {
@@ -764,5 +777,130 @@ test('PATCH /inventory/:id: supports dual-currency prices and rejects if minimum
   } finally {
     InventoryItem.findById = origFindById
     InventoryItem.findByIdAndUpdate = origFindByIdAndUpdate
+  }
+})
+
+test('DELETE /inventory/:id: enforces validation, reference guards, photo cleanup, activity logging, and safe hard-deletion for OWNER', async () => {
+  const origFindById = InventoryItem.findById
+  const origFindByIdAndDelete = InventoryItem.findByIdAndDelete
+  const origPawnFindOne = Pawn.findOne
+  const origTradeFindOne = Trade.findOne
+  const origPaywayIntentFindOne = PaywayIntent.findOne
+  const origActivitySave = ActivityLog.prototype.save
+
+  const validId = new mongoose.Types.ObjectId().toString()
+
+  try {
+    // 1. Invalid MongoDB ObjectId -> 400
+    const resInvalidId = await callRoute('DELETE', '/inventory/not-a-valid-id', {}, { role: 'OWNER' })
+    assert.equal(resInvalidId.status, 400)
+    assert.match(resInvalidId.body.message, /Invalid inventory item ID/i)
+
+    // 2. Item not found -> 404
+    InventoryItem.findById = () => ({
+      select: async () => null,
+    })
+    const resNotFound = await callRoute('DELETE', `/inventory/${validId}`, {}, { role: 'OWNER' })
+    assert.equal(resNotFound.status, 404)
+    assert.match(resNotFound.body.message, /Inventory item not found/i)
+
+    // Base mock item
+    const baseItem = {
+      _id: validId,
+      sku: 'STK-ORPHAN-01',
+      name: 'Orphan Phone Case',
+      category: 'ACCESSORY',
+      status: 'IN_STOCK',
+      quantity: 1,
+      imagekitFileId: 'img_test_123',
+    }
+
+    // 3. Linked to active pawn -> 409
+    InventoryItem.findById = () => ({
+      select: async () => ({ ...baseItem }),
+    })
+    Pawn.findOne = () => ({
+      select: () => ({
+        lean: async () => ({ pawnNo: 'PW-2026-001', status: 'OPEN' }),
+      }),
+    })
+    Trade.findOne = () => ({ select: () => ({ lean: async () => null }) })
+    PaywayIntent.findOne = () => ({ select: () => ({ lean: async () => null }) })
+
+    const resLinkedPawnActive = await callRoute('DELETE', `/inventory/${validId}`, {}, { role: 'OWNER' })
+    assert.equal(resLinkedPawnActive.status, 409)
+    assert.match(resLinkedPawnActive.body.message, /linked to active pawn contract #PW-2026-001/i)
+
+    // 4. Linked to historical (redeemed) pawn -> 409 with archive guidance
+    Pawn.findOne = () => ({
+      select: () => ({
+        lean: async () => ({ pawnNo: 'PW-2026-002', status: 'REDEEMED' }),
+      }),
+    })
+    const resLinkedPawnHist = await callRoute('DELETE', `/inventory/${validId}`, {}, { role: 'OWNER' })
+    assert.equal(resLinkedPawnHist.status, 409)
+    assert.match(resLinkedPawnHist.body.message, /Archive this record instead/i)
+
+    // 5. Linked to trade (BUY / purchase) -> 409
+    Pawn.findOne = () => ({ select: () => ({ lean: async () => null }) })
+    Trade.findOne = () => ({
+      select: () => ({
+        lean: async () => ({ tradeNo: 'TR-BUY-99', type: 'BUY' }),
+      }),
+    })
+    const resLinkedTrade = await callRoute('DELETE', `/inventory/${validId}`, {}, { role: 'OWNER' })
+    assert.equal(resLinkedTrade.status, 409)
+    assert.match(resLinkedTrade.body.message, /linked to recorded purchase transaction #TR-BUY-99/i)
+    assert.match(resLinkedTrade.body.message, /Archive this record instead/i)
+
+    // 6. Linked to in-flight PaywayIntent -> 409
+    Trade.findOne = () => ({ select: () => ({ lean: async () => null }) })
+    PaywayIntent.findOne = () => ({
+      select: () => ({
+        lean: async () => ({ transactionId: 'TX-PAY-555', status: 'PENDING' }),
+      }),
+    })
+    const resLinkedPayway = await callRoute('DELETE', `/inventory/${validId}`, {}, { role: 'OWNER' })
+    assert.equal(resLinkedPayway.status, 409)
+    assert.match(resLinkedPayway.body.message, /in-flight or completed KHQR transaction #TX-PAY-555/i)
+
+    // 7. Non-deletable status (e.g. SOLD or RESERVED) -> 409
+    PaywayIntent.findOne = () => ({ select: () => ({ lean: async () => null }) })
+    InventoryItem.findById = () => ({
+      select: async () => ({ ...baseItem, status: 'SOLD' }),
+    })
+    const resSold = await callRoute('DELETE', `/inventory/${validId}`, {}, { role: 'OWNER' })
+    assert.equal(resSold.status, 409)
+    assert.match(resSold.body.message, /currently marked as sold/i)
+
+    // 8. Safe orphan hard deletion succeeds
+    let deletedIdCalled = null
+    InventoryItem.findById = () => ({
+      select: async () => ({ ...baseItem, status: 'IN_STOCK' }),
+    })
+    InventoryItem.findByIdAndDelete = async (id) => {
+      deletedIdCalled = String(id)
+      return { _id: id }
+    }
+
+    let recordedActivity = null
+    ActivityLog.prototype.save = async function () {
+      recordedActivity = this
+      return this
+    }
+
+    const resSuccess = await callRoute('DELETE', `/inventory/${validId}`, {}, { role: 'OWNER' })
+    assert.equal(resSuccess.status, 200)
+    assert.equal(resSuccess.body.deletedId, validId)
+    assert.equal(resSuccess.body.sku, 'STK-ORPHAN-01')
+    assert.match(resSuccess.body.message, /Stock record deleted successfully/i)
+    assert.equal(deletedIdCalled, validId)
+  } finally {
+    InventoryItem.findById = origFindById
+    InventoryItem.findByIdAndDelete = origFindByIdAndDelete
+    Pawn.findOne = origPawnFindOne
+    Trade.findOne = origTradeFindOne
+    PaywayIntent.findOne = origPaywayIntentFindOne
+    ActivityLog.prototype.save = origActivitySave
   }
 })

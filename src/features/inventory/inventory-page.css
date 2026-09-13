@@ -284,13 +284,14 @@
 
 /* Inventory Detail Modal */
 .inventory-detail-modal {
-  width: min(940px, 100%);
+  width: min(800px, 100%);
 }
 
 .inventory-detail-modal .detail-modal-header {
   flex: 0 0 auto;
   align-items: center;
   padding: 18px 20px;
+  gap: 16px;
 }
 
 .inventory-detail-modal .detail-modal-header .inventory-photo-large {
@@ -314,9 +315,13 @@
   height: 30px;
 }
 
-.inventory-detail-modal .detail-modal-header > div {
+.inventory-detail-modal .detail-modal-header .detail-modal-leading {
+  flex: 0 0 auto;
+}
+
+.inventory-detail-modal .detail-modal-header .detail-modal-header-content {
   min-width: 0;
-  flex: 1;
+  flex: 1 1 auto;
 }
 
 .inventory-detail-modal .detail-modal-header .eyebrow {
@@ -325,10 +330,9 @@
 
 .inventory-detail-modal .detail-modal-header h3 {
   margin: 4px 0;
-  overflow: hidden;
-  font-size: 24px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 22px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .inventory-detail-modal .detail-modal-header p {
@@ -336,8 +340,9 @@
 }
 
 .inventory-detail-modal .detail-modal-header .icon-button {
-  width: 40px;
-  height: 40px;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
 }
 
 .inventory-detail-body {
@@ -535,6 +540,60 @@
   min-height: 42px;
   padding-inline: 16px;
   font-size: var(--text-xs);
+}
+
+/* Stock Deletion Confirmation Dialog */
+.stock-delete-modal {
+  width: min(460px, 100%);
+}
+
+.stock-delete-content {
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.stock-delete-icon {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--red, #ef4444) 14%, transparent);
+  color: var(--red, #ef4444);
+}
+
+.stock-delete-content strong {
+  font-size: 16px;
+  color: var(--text);
+  display: block;
+}
+
+.stock-delete-content p {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+  margin: 0;
+}
+
+.stock-delete-error {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: var(--text-xs);
+}
+
+.stock-delete-actions {
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px max(14px, env(safe-area-inset-bottom, 0px));
+}
+
+.stock-delete-actions button {
+  min-height: 44px;
 }
 
 /* Light Mode Overrides for Inventory Detail Modal */
@@ -848,6 +907,41 @@
 }
 
 @media (max-width: 640px) {
+  /*
+   * Keep the stock record inside the mobile visual viewport. Its multi-row
+   * action bar has a large intrinsic height; without an explicit, shrinkable
+   * shell height the bottom-aligned modal can grow past its max-height and
+   * push the header above the visible area.
+   */
+  .detail-modal-backdrop:has(.inventory-detail-modal) {
+    --inventory-modal-top-space: max(12px, env(safe-area-inset-top, 0px));
+    --inventory-modal-bottom-space: max(28px, calc(env(safe-area-inset-bottom, 0px) + 16px));
+    align-items: center;
+    padding:
+      var(--inventory-modal-top-space)
+      max(12px, env(safe-area-inset-right, 0px))
+      var(--inventory-modal-bottom-space)
+      max(12px, env(safe-area-inset-left, 0px));
+  }
+
+  .inventory-detail-modal {
+    min-height: 0;
+    height: min(
+      760px,
+      calc(
+        var(--modal-viewport-height, var(--operation-viewport-height, 100dvh))
+        - var(--inventory-modal-top-space, 12px)
+        - var(--inventory-modal-bottom-space, 28px)
+      )
+    );
+    max-height: calc(
+      var(--modal-viewport-height, var(--operation-viewport-height, 100dvh))
+      - var(--inventory-modal-top-space, 12px)
+      - var(--inventory-modal-bottom-space, 28px)
+    );
+    margin-block: 0;
+  }
+
   .stock-page-heading .section-header {
     margin-bottom: 10px;
   }
@@ -1021,46 +1115,117 @@
   }
 
   .inventory-detail-modal .detail-modal-header {
-    padding: 14px 12px;
+    padding: 12px 14px;
     gap: 12px;
+    align-items: center;
   }
 
   .inventory-detail-modal .detail-modal-header .inventory-photo-large {
-    width: 74px;
-    height: 74px;
-    border-radius: 13px;
+    width: 60px;
+    height: 60px;
+    border-radius: 12px;
+  }
+
+  .inventory-detail-modal .detail-modal-header .inventory-photo-large:not(.has-image) {
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
   }
 
   .inventory-detail-modal .detail-modal-header h3 {
-    font-size: 18px;
+    font-size: 17px;
+    line-height: 1.25;
+    margin: 2px 0;
+  }
+
+  .inventory-detail-modal .detail-modal-header p {
+    font-size: 11px;
+    line-height: 1.35;
+    margin: 2px 0 0;
   }
 
   .inventory-detail-modal .detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 7px;
-    padding: 12px;
+    gap: 8px;
+    padding: 10px 14px 14px;
+  }
+
+  .inventory-detail-modal .detail-grid div {
+    min-height: 56px;
+    padding: 8px 10px;
   }
 
   .inventory-detail-modal .detail-sections {
     grid-template-columns: 1fr;
     gap: 8px;
-    padding: 12px;
+    padding: 0 14px 14px;
+  }
+
+  .inventory-detail-modal .detail-sections article {
+    min-height: auto;
+    padding: 10px 12px;
+  }
+
+  .inventory-detail-modal .detail-note {
+    margin: 0 14px 14px;
+    padding: 10px 12px;
+  }
+
+  .inventory-detail-modal .detail-modal-footer {
+    padding: 8px 12px max(10px, env(safe-area-inset-bottom, 0px));
+    gap: 6px;
+  }
+
+  .inventory-detail-modal .detail-modal-footer-content {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
   }
 
   .inventory-detail-modal .detail-modal-transaction-group {
     order: 1;
+    display: flex;
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .inventory-detail-modal .detail-modal-transaction-group > button {
+    width: 100%;
   }
 
   .inventory-detail-modal .detail-modal-utility-group {
     order: 2;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    width: 100%;
   }
 
   .inventory-detail-modal .detail-modal-danger-group {
     order: 3;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 6px;
+    width: 100%;
+    padding-top: 4px;
+    border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  }
+
+  .inventory-detail-modal .detail-modal-danger-group > * {
+    width: 100%;
+    justify-content: center;
   }
 
   .inventory-detail-modal .detail-modal-dismiss-group {
-    order: 4;
+    display: none;
+  }
+
+  .inventory-detail-modal .detail-modal-footer button,
+  .inventory-detail-modal .detail-modal-footer label {
+    min-height: 44px;
+    padding: 8px 10px;
+    font-size: 13px;
   }
 
   .inventory-price-editor {

@@ -604,4 +604,80 @@ describe('SupplierWorkspace Regression & Workflow Tests', () => {
       expect(screen.getAllByRole('button', { name: 'Activate Angkor Tech Supplies' }).length).toBeGreaterThanOrEqual(1)
     })
   })
+
+  it('13. Add supplier renders through shared OperationModalShell portal with initial focus and Escape handling', async () => {
+    setupSupplierFetchMock()
+    render(<SupplierWorkspace />)
+
+    await waitFor(() => {
+      expect(within(screen.getByRole('table')).getByText('Angkor Tech Supplies')).toBeInTheDocument()
+    })
+
+    const addButton = screen.getByRole('button', { name: /add supplier/i })
+    fireEvent.click(addButton)
+
+    const dialog = screen.getByRole('dialog', { name: /add supplier/i })
+    expect(dialog).toBeInTheDocument()
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+
+    // Renders in document.body via portal
+    expect(document.body.contains(dialog)).toBe(true)
+
+    // Check initial focus attribute is on the name input
+    const nameInput = within(dialog).getByLabelText(/supplier name/i)
+    expect(nameInput).toHaveAttribute('data-modal-initial-focus', 'true')
+
+    // Escape closes modal when not busy
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: /add supplier/i })).not.toBeInTheDocument()
+    })
+  })
+
+  it('14. Supplier modal busy state prevents closing via Escape or Cancel button', async () => {
+    let resolvePendingPost!: (res: Response) => void
+    const pendingPromise = new Promise<Response>((r) => { resolvePendingPost = r })
+
+    setupSupplierFetchMock({
+      '/api/suppliers': (url, init) => {
+        if (init.method === 'POST') {
+          return pendingPromise
+        }
+        return new Response(JSON.stringify({ suppliers: [...supplierList] }), { status: 200 })
+      },
+    })
+
+    render(<SupplierWorkspace />)
+    await waitFor(() => {
+      expect(within(screen.getByRole('table')).getByText('Angkor Tech Supplies')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /add supplier/i }))
+    const dialog = screen.getByRole('dialog', { name: /add supplier/i })
+
+    const nameInput = within(dialog).getByLabelText(/supplier name/i)
+    fireEvent.change(nameInput, { target: { value: 'Busy Supplier' } })
+
+    const form = dialog.querySelector('form')!
+    fireEvent.submit(form)
+
+    // Modal is busy
+    const saveBtn = within(dialog).getByRole('button', { name: /saving.../i })
+    expect(saveBtn).toBeDisabled()
+    const cancelBtn = within(dialog).getByRole('button', { name: /cancel/i })
+    expect(cancelBtn).toBeDisabled()
+
+    // Escape does not dismiss while busy
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.getByRole('dialog', { name: /add supplier/i })).toBeInTheDocument()
+
+    // Resolve request
+    resolvePendingPost(new Response(JSON.stringify({
+      supplier: { _id: 'sup-busy', name: 'Busy Supplier', phone: '', active: true, createdAt: new Date().toISOString() },
+    }), { status: 201, headers: { 'content-type': 'application/json' } }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: /add supplier/i })).not.toBeInTheDocument()
+    })
+  })
 })

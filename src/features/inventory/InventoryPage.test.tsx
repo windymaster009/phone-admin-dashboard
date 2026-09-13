@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import InventoryPage from './InventoryPage'
 import { RouterProvider } from '../../app/routing'
-import { mockInventoryItem } from '../../test/testUtils'
+import { mockInventoryItem, mockOwnerUser, mockManagerUser, mockCashierUser, mockStockUser } from '../../test/testUtils'
 import * as barcodeModule from './barcode'
 
 describe('InventoryPage feature integration', () => {
@@ -327,11 +327,11 @@ describe('InventoryPage feature integration', () => {
     expect(transactionGroup).toHaveTextContent(/Change price|Set selling price/)
 
     const dismissGroup = dialog.querySelector('.detail-modal-dismiss-group')
-    expect(dismissGroup).toBeInTheDocument()
-    expect(dismissGroup).toHaveTextContent('Close')
+    expect(dismissGroup).not.toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument()
   })
 
-  it('closes stock details on Close button, Escape, and backdrop click, but ignores dialog clicks', async () => {
+  it('closes stock details from the header X, Escape, and backdrop click, but ignores dialog clicks', async () => {
     const item = { ...mockInventoryItem, _id: 'item-close-test' }
 
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
@@ -1024,5 +1024,387 @@ describe('InventoryPage feature integration', () => {
       const dialog = screen.getByRole('dialog')
       expect(within(dialog).getByText(scannedItem.name)).toBeInTheDocument()
     })
+  })
+
+  it('preserves shared DetailModal structure with separate leading media and content', async () => {
+    const item = { ...mockInventoryItem, _id: 'item-struct-1', name: 'Structure Phone' }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({ items: [item] }),
+    } as Response)
+
+    const user = userEvent.setup()
+    render(
+      <RouterProvider>
+        <InventoryPage user={mockOwnerUser} />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => expect(screen.getByText(item.name)).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: new RegExp(item.name, 'i') }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveClass('inventory-detail-modal')
+
+    // Header structure checks
+    const header = dialog.querySelector('.detail-modal-header')
+    expect(header).toBeInTheDocument()
+    const leading = header?.querySelector('.detail-modal-leading')
+    expect(leading).toBeInTheDocument()
+    const headerContent = header?.querySelector('.detail-modal-header-content')
+    expect(headerContent).toBeInTheDocument()
+    expect(within(headerContent as HTMLElement).getByText(item.name)).toBeInTheDocument()
+
+    // Body and Footer exist
+    expect(dialog.querySelector('.inventory-detail-body')).toBeInTheDocument()
+    expect(dialog.querySelector('.detail-modal-footer')).toBeInTheDocument()
+    expect(within(dialog).queryByRole('button', { name: 'Close' })).not.toBeInTheDocument()
+  })
+
+  it('shows Delete stock record only to OWNER and hides it from MANAGER, CASHIER, and STOCK', async () => {
+    const item = { ...mockInventoryItem, _id: 'item-role-1', name: 'Role Test Phone' }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({ items: [item] }),
+    } as Response)
+
+    const user = userEvent.setup()
+
+    // 1. OWNER sees Delete stock record
+    const { unmount: unmountOwner } = render(
+      <RouterProvider>
+        <InventoryPage user={mockOwnerUser} />
+      </RouterProvider>,
+    )
+    await waitFor(() => expect(screen.getByText(item.name)).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: new RegExp(item.name, 'i') }))
+    expect(screen.getByRole('button', { name: /Delete stock record/i })).toBeInTheDocument()
+    unmountOwner()
+
+    // 2. MANAGER does not see Delete stock record
+    const { unmount: unmountManager } = render(
+      <RouterProvider>
+        <InventoryPage user={mockManagerUser} />
+      </RouterProvider>,
+    )
+    await waitFor(() => expect(screen.getByText(item.name)).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: new RegExp(item.name, 'i') }))
+    expect(screen.queryByRole('button', { name: /Delete stock record/i })).not.toBeInTheDocument()
+    unmountManager()
+
+    // 3. CASHIER does not see Delete stock record
+    const { unmount: unmountCashier } = render(
+      <RouterProvider>
+        <InventoryPage user={mockCashierUser} />
+      </RouterProvider>,
+    )
+    await waitFor(() => expect(screen.getByText(item.name)).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: new RegExp(item.name, 'i') }))
+    expect(screen.queryByRole('button', { name: /Delete stock record/i })).not.toBeInTheDocument()
+    unmountCashier()
+
+    // 4. STOCK does not see Delete stock record
+    const { unmount: unmountStock } = render(
+      <RouterProvider>
+        <InventoryPage user={mockStockUser} />
+      </RouterProvider>,
+    )
+    await waitFor(() => expect(screen.getByText(item.name)).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: new RegExp(item.name, 'i') }))
+    expect(screen.queryByRole('button', { name: /Delete stock record/i })).not.toBeInTheDocument()
+    unmountStock()
+  })
+
+  it('renders Delete stock record whether or not the record has a photo, and Remove photo only removes photo', async () => {
+    const itemWithoutPhoto = { ...mockInventoryItem, _id: 'item-no-photo', name: 'Plain Phone Alpha', imageUrl: '' }
+    const itemWithPhoto = { ...mockInventoryItem, _id: 'item-with-photo', name: 'Pic Phone Beta', imageUrl: 'https://example.com/photo.jpg' }
+
+    let stockDeleteCalled = false
+    let photoDeleteCalled = false
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      const method = init?.method || 'GET'
+
+      if (url.includes('/inventory/') && url.includes('/photo') && method === 'DELETE') {
+        photoDeleteCalled = true
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ item: { ...itemWithPhoto, imageUrl: '' } }),
+        } as Response
+      }
+
+      if (url.includes('/inventory/') && method === 'DELETE') {
+        stockDeleteCalled = true
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ message: 'Deleted' }) } as Response
+      }
+
+      if (url.includes('/inventory') && method === 'GET') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ items: [itemWithoutPhoto, itemWithPhoto] }),
+        } as Response
+      }
+
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    const user = userEvent.setup()
+    render(
+      <RouterProvider>
+        <InventoryPage user={mockOwnerUser} />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => expect(screen.getByText(itemWithoutPhoto.name)).toBeInTheDocument())
+
+    // 1. Without photo: Delete stock record exists, Remove photo does NOT exist
+    await user.click(screen.getByRole('button', { name: /Plain Phone Alpha/i }))
+    expect(screen.getByRole('button', { name: /Delete stock record/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Remove photo/i })).not.toBeInTheDocument()
+
+    // Close details
+    await user.click(screen.getByRole('button', { name: /Close details/i }))
+
+    // 2. With photo: both Delete stock record and Remove photo exist
+    await user.click(screen.getByRole('button', { name: /Pic Phone Beta/i }))
+    expect(screen.getByRole('button', { name: /Delete stock record/i })).toBeInTheDocument()
+    const removePhotoBtn = screen.getByRole('button', { name: /Remove photo/i })
+    expect(removePhotoBtn).toBeInTheDocument()
+
+    // Clicking Remove photo removes photo, does not call stock DELETE endpoint
+    await user.click(removePhotoBtn)
+    await waitFor(() => expect(photoDeleteCalled).toBe(true))
+    expect(stockDeleteCalled).toBe(false)
+  })
+
+  it('opens confirmation modal on Delete click without immediately calling API, and Cancel closes only confirmation', async () => {
+    const item = { ...mockInventoryItem, _id: 'item-confirm-1', name: 'Confirm Test Item', sku: 'SKU-CONF-01' }
+    let deleteApiCalled = false
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      const method = init?.method || 'GET'
+      if (url.includes(`/inventory/${item._id}`) && method === 'DELETE') {
+        deleteApiCalled = true
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ items: [item] }),
+      } as Response
+    })
+
+    const user = userEvent.setup()
+    render(
+      <RouterProvider>
+        <InventoryPage user={mockOwnerUser} />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => expect(screen.getByText(item.name)).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: new RegExp(item.name, 'i') }))
+
+    // Click Delete stock record to open confirmation
+    await user.click(screen.getByRole('button', { name: /Delete stock record/i }))
+    expect(deleteApiCalled).toBe(false)
+
+    // Confirmation dialog is shown
+    const confirmModal = screen.getByRole('dialog', { name: /Delete stock record\?/i })
+    expect(within(confirmModal).getByText('Delete stock record?')).toBeInTheDocument()
+    expect(within(confirmModal).getByText('This action cannot be undone.')).toBeInTheDocument()
+    expect(within(confirmModal).getByText(new RegExp(item.sku, 'i'))).toBeInTheDocument()
+
+    // Click Cancel -> confirmation closes, detail modal remains open
+    const cancelBtn = within(confirmModal).getByRole('button', { name: /Cancel/i })
+    await user.click(cancelBtn)
+
+    expect(screen.queryByText('Delete stock record?')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: item.name })).toBeInTheDocument()
+    expect(deleteApiCalled).toBe(false)
+  })
+
+  it('closes only the confirmation dialog when Escape key is pressed', async () => {
+    const item = { ...mockInventoryItem, _id: 'item-esc-1', name: 'Escape Item' }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({ items: [item] }),
+    } as Response)
+
+    const user = userEvent.setup()
+    render(
+      <RouterProvider>
+        <InventoryPage user={mockOwnerUser} />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => expect(screen.getByText(item.name)).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: new RegExp(item.name, 'i') }))
+
+    // Open confirmation
+    await user.click(screen.getByRole('button', { name: /Delete stock record/i }))
+    expect(screen.getByText('Delete stock record?')).toBeInTheDocument()
+
+    // Press Escape
+    await user.keyboard('{Escape}')
+
+    // Confirmation is dismissed, detail modal is still open
+    expect(screen.queryByText('Delete stock record?')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: item.name })).toBeInTheDocument()
+
+    // Press Escape again -> detail modal is dismissed
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('heading', { name: item.name })).not.toBeInTheDocument()
+  })
+
+  it('successfully deletes stock record, updates counts, closes dialogs, shows toast, dispatches event, and prevents rapid double submission', async () => {
+    const itemToDelete = { ...mockInventoryItem, _id: 'item-del-target', name: 'Target Phone', category: 'PHONE', quantity: 1 }
+    const otherItem = { ...mockInventoryItem, _id: 'item-other', name: 'Keep Phone', category: 'PHONE', quantity: 2 }
+
+    let deleteCalls = 0
+    let resolveDelete: (res: Response) => void = () => {}
+    const deletePromise = new Promise<Response>((resolve) => {
+      resolveDelete = resolve
+    })
+
+    const dispatchEventSpy = vi.spyOn(window, 'dispatchEvent')
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      const method = init?.method || 'GET'
+
+      if (url.includes(`/inventory/${itemToDelete._id}`) && method === 'DELETE') {
+        deleteCalls++
+        return deletePromise
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ items: [itemToDelete, otherItem] }),
+      } as Response
+    })
+
+    const user = userEvent.setup()
+    render(
+      <RouterProvider>
+        <InventoryPage user={mockOwnerUser} />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => expect(screen.getByText(itemToDelete.name)).toBeInTheDocument())
+    // Initial count should be 1 + 2 = 3
+    expect(screen.getByText('3')).toBeInTheDocument()
+
+    // Open detail modal
+    await user.click(screen.getByRole('button', { name: new RegExp(itemToDelete.name, 'i') }))
+
+    // Open confirmation
+    await user.click(screen.getByRole('button', { name: /Delete stock record/i }))
+
+    // Click confirm button rapidly twice inside confirmation dialog
+    const confirmModal = screen.getByRole('dialog', { name: /Delete stock record\?/i })
+    const confirmBtn = within(confirmModal).getByRole('button', { name: /Delete stock record/i })
+    await user.click(confirmBtn)
+    await user.click(confirmBtn)
+
+    expect(deleteCalls).toBe(1)
+    expect(confirmBtn).toHaveTextContent(/Deleting/i)
+    expect(confirmBtn).toBeDisabled()
+
+    // Resolve deletion
+    act(() => {
+      resolveDelete({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ message: 'Stock record deleted successfully', deletedId: itemToDelete._id }),
+      } as Response)
+    })
+
+    // UI updates: dialogs close, toast appears, row removed, count decreases
+    await waitFor(() => {
+      expect(screen.queryByText('Delete stock record?')).not.toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: itemToDelete.name })).not.toBeInTheDocument()
+      expect(screen.getByText('Stock record deleted successfully.')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByText(itemToDelete.name)).not.toBeInTheDocument()
+    expect(screen.getByText(otherItem.name)).toBeInTheDocument()
+    // New phone count should be 2
+    expect(screen.getByText('2')).toBeInTheDocument()
+
+    // Verify custom event dispatch
+    expect(dispatchEventSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'phoneflow:inventory-updated',
+        detail: { id: itemToDelete._id },
+      }),
+    )
+  })
+
+  it('keeps confirmation dialog open and displays error when server returns 409 conflict, 403, 404, or network error', async () => {
+    const item = { ...mockInventoryItem, _id: 'item-conflict-1', name: 'Pawned Phone' }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      const method = init?.method || 'GET'
+
+      if (url.includes(`/inventory/${item._id}`) && method === 'DELETE') {
+        return {
+          ok: false,
+          status: 409,
+          headers: new Headers(),
+          json: async () => ({ message: 'Cannot delete stock record linked to active pawn contract #PW-2026-001.' }),
+        } as Response
+      }
+
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ items: [item] }),
+      } as Response
+    })
+
+    const user = userEvent.setup()
+    render(
+      <RouterProvider>
+        <InventoryPage user={mockOwnerUser} />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => expect(screen.getByText(item.name)).toBeInTheDocument())
+    await user.click(screen.getByRole('button', { name: new RegExp(item.name, 'i') }))
+    await user.click(screen.getByRole('button', { name: /Delete stock record/i }))
+
+    // Confirm deletion
+    const confirmModal = screen.getByRole('dialog', { name: /Delete stock record\?/i })
+    const confirmBtn = within(confirmModal).getByRole('button', { name: /Delete stock record/i })
+    await user.click(confirmBtn)
+
+    // Alert appears with error message
+    await waitFor(() => {
+      const alert = screen.getByRole('alert')
+      expect(alert).toHaveTextContent(/linked to active pawn contract #PW-2026-001/i)
+    })
+
+    // Dialogs remain open and item is preserved
+    expect(screen.getByText('Delete stock record?')).toBeInTheDocument()
+    expect(within(confirmModal).getByRole('button', { name: /Delete stock record/i })).not.toBeDisabled()
+    expect(within(confirmModal).getByRole('button', { name: /Cancel/i })).not.toBeDisabled()
   })
 })

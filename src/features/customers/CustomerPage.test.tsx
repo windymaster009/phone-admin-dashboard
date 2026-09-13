@@ -607,4 +607,80 @@ describe('CustomerPage Regression & Workflow Tests', () => {
     })
     expect(deleteCount).toBe(1)
   })
+
+  it('12. Add customer renders through shared OperationModalShell portal with initial focus and Escape handling', async () => {
+    setupCustomerFetchMock()
+    render(<CustomerPage />)
+
+    await waitFor(() => {
+      expect(within(screen.getByRole('table')).getByText('Sokha Chan')).toBeInTheDocument()
+    })
+
+    const addButton = screen.getByRole('button', { name: /add customer/i })
+    fireEvent.click(addButton)
+
+    const dialog = screen.getByRole('dialog', { name: /add customer/i })
+    expect(dialog).toBeInTheDocument()
+    expect(dialog).toHaveAttribute('aria-modal', 'true')
+
+    // Renders in document.body via portal
+    expect(document.body.contains(dialog)).toBe(true)
+
+    // Check initial focus attribute is on the name input
+    const nameInput = within(dialog).getByLabelText(/full name/i)
+    expect(nameInput).toHaveAttribute('data-modal-initial-focus', 'true')
+
+    // Escape closes modal when not busy
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: /add customer/i })).not.toBeInTheDocument()
+    })
+  })
+
+  it('13. Customer modal busy state prevents closing via Escape or Cancel button', async () => {
+    let resolvePendingPost!: (res: Response) => void
+    const pendingPromise = new Promise<Response>((r) => { resolvePendingPost = r })
+
+    setupCustomerFetchMock({
+      '/api/customers': (url, init) => {
+        if (init.method === 'POST') {
+          return pendingPromise
+        }
+        return new Response(JSON.stringify({ customers: [...customerList] }), { status: 200 })
+      },
+    })
+
+    render(<CustomerPage />)
+    await waitFor(() => {
+      expect(within(screen.getByRole('table')).getByText('Sokha Chan')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /add customer/i }))
+    const dialog = screen.getByRole('dialog', { name: /add customer/i })
+
+    const nameInput = within(dialog).getByLabelText(/full name/i)
+    fireEvent.change(nameInput, { target: { value: 'Busy Customer' } })
+
+    const form = dialog.querySelector('form')!
+    fireEvent.submit(form)
+
+    // Modal is busy
+    const saveBtn = within(dialog).getByRole('button', { name: /saving.../i })
+    expect(saveBtn).toBeDisabled()
+    const cancelBtn = within(dialog).getByRole('button', { name: /cancel/i })
+    expect(cancelBtn).toBeDisabled()
+
+    // Escape does not dismiss while busy
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.getByRole('dialog', { name: /add customer/i })).toBeInTheDocument()
+
+    // Resolve request
+    resolvePendingPost(new Response(JSON.stringify({
+      customer: { _id: 'cust-busy', name: 'Busy Customer', phone: '', active: true, createdAt: new Date().toISOString() },
+    }), { status: 201, headers: { 'content-type': 'application/json' } }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: /add customer/i })).not.toBeInTheDocument()
+    })
+  })
 })

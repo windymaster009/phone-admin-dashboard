@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import OperationModalBridge from './OperationModalBridge'
@@ -72,6 +72,137 @@ describe('OperationModalBridge component', () => {
     await waitFor(() => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
+  })
+
+  it('adjust stock with zero search results renders empty state and maintains functional footer', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [] }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'stock' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByText(/No matching inventory item/i)).toBeInTheDocument()
+    })
+
+    const resultsContainer = screen.getByRole('list', { name: /matching inventory items/i })
+    expect(resultsContainer).toBeInTheDocument()
+    expect(within(resultsContainer).queryByRole('listitem')).not.toBeInTheDocument()
+
+    // Footer actions remain present
+    const footerCancel = screen.getByRole('button', { name: /^cancel$/i })
+    const footerSubmit = screen.getByRole('button', { name: /select an item first/i })
+    expect(footerCancel).toBeInTheDocument()
+    expect(footerSubmit).toBeDisabled()
+
+    fireEvent.click(footerCancel)
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+  })
+
+  it('adjust stock with one result has natural content height, reveals controls on select, and updates footer', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [mockInventoryItem] }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'stock' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    const resultsContainer = screen.getByRole('list', { name: /matching inventory items/i })
+    const resultButtons = within(resultsContainer).getAllByRole('listitem')
+    expect(resultButtons).toHaveLength(1)
+    expect(resultButtons[0]).toHaveTextContent(mockInventoryItem.name)
+
+    // Footer starts with disabled "Select an item first"
+    const submitBtn = screen.getByRole('button', { name: /select an item first/i })
+    expect(submitBtn).toBeDisabled()
+
+    // Select the single item
+    fireEvent.click(resultButtons[0])
+
+    // Controls are revealed
+    await waitFor(() => {
+      expect(screen.getByText('Selected inventory item')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /change item/i })).toBeInTheDocument()
+    })
+
+    // Serialized or quantity panel is visible
+    expect(screen.getByText(mockInventoryItem.name)).toBeInTheDocument()
+    expect(screen.getByLabelText(/reason/i)).toBeInTheDocument()
+
+    // Footer button changes to "Update stock" (disabled until valid reason is selected)
+    const updateBtn = screen.getByRole('button', { name: /update stock/i })
+    expect(updateBtn).toBeDisabled()
+
+    // Select reason and change status from IN_STOCK to REPAIR so stockAdjustmentValid becomes true
+    fireEvent.change(screen.getByLabelText(/reason/i), { target: { value: 'COUNT_CORRECTION' } })
+    fireEvent.click(screen.getByRole('radio', { name: /in repair/i }))
+    expect(updateBtn).toBeEnabled()
+
+    // Cancel still works
+    fireEvent.click(screen.getByRole('button', { name: /^cancel$/i }))
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+  })
+
+  it('adjust stock with multiple search results supports filtering and scrolling', async () => {
+    const item1 = { ...mockInventoryItem, _id: 'item-1', name: 'iPhone 13 Pro', sku: 'IPHONE-13-PRO' }
+    const item2 = { ...mockInventoryItem, _id: 'item-2', name: 'Samsung Galaxy S24', sku: 'SAM-S24' }
+    const item3 = { ...mockInventoryItem, _id: 'item-3', name: 'Pixel 8 Pro', sku: 'PIX-8-PRO' }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [item1, item2, item3] }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'stock' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    const resultsContainer = screen.getByRole('list', { name: /matching inventory items/i })
+    expect(within(resultsContainer).getAllByRole('listitem')).toHaveLength(3)
+
+    // Filter by typing 'Pixel'
+    const searchInput = screen.getByPlaceholderText(/search or scan a product code/i)
+    fireEvent.change(searchInput, { target: { value: 'Pixel' } })
+
+    expect(within(resultsContainer).getAllByRole('listitem')).toHaveLength(1)
+    expect(within(resultsContainer).getByText('Pixel 8 Pro')).toBeInTheDocument()
+
+    // Footer actions remain present and functional
+    expect(screen.getByRole('button', { name: /select an item first/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^cancel$/i })).toBeEnabled()
   })
 
   it('opens sale modal, selects customer and item, and allows cancellation', async () => {
