@@ -415,9 +415,7 @@
   .font-size-settings-card {
     grid-area: auto;
   }
-}
 
-@media (max-width: 1024px) {
   .account-settings-body {
     grid-template-columns: minmax(0, 1fr);
     gap: 16px;
@@ -428,7 +426,9 @@
     border-right: 0;
     border-bottom: 1px solid var(--border);
   }
+}
 
+@media (max-width: 1024px) {
   .font-size-options {
     grid-template-columns: 1fr;
   }
