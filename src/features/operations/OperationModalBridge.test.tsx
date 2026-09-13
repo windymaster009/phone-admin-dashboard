@@ -2344,7 +2344,7 @@ describe('OperationModalBridge component', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument()
-      expect(screen.getByText(/Adjust stock/i)).toBeInTheDocument()
+      expect(screen.getByText('USB-C Cable')).toBeInTheDocument()
     })
 
     // Select the accessory
@@ -3161,5 +3161,1089 @@ describe('OperationModalBridge component', () => {
     })
 
     fireEvent.click(screen.getByRole('button', { name: /Cancel/i }))
+  })
+
+  it('imports valid calculator valuation snapshot from sessionStorage, sets fields, clears session, and allows ticket printing', async () => {
+    let capturedTicketDetail: any = null
+    const ticketHandler = (event: Event) => {
+      capturedTicketDetail = (event as CustomEvent).detail
+    }
+    window.addEventListener('phoneflow:open-pawn-ticket', ticketHandler)
+
+    const valuationSnapshot = {
+      id: 'VAL-TEST-001',
+      eligible: true,
+      currency: 'USD',
+      estimatedValue: 500,
+      marketPrice: 600,
+      repairCost: 40,
+      ageMonths: 5,
+      pawnRate: 45,
+      maximumPawn: 250,
+      batteryHealth: 92,
+      condition: 'excellent',
+      lockStatus: 'unlocked',
+      accessoriesIncluded: ['BOX', 'CHARGER'],
+      calculationMode: 'AUTO',
+    }
+    sessionStorage.setItem('phoneflow_last_valuation', JSON.stringify(valuationSnapshot))
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      if (url.includes('/pawns') && init?.method === 'POST') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            pawn: {
+              _id: 'pawn-imported-1',
+              pawnNo: 'PWN-2026-VAL',
+              principal: 250,
+              currency: 'USD',
+            },
+          }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-pawn'))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /New pawn contract/i })).toBeInTheDocument()
+    })
+
+    // Step 1: Customer verification
+    fireEvent.click(screen.getByRole('tab', { name: /New customer/i }))
+    fireEvent.change(screen.getByPlaceholderText(/Full name/i), { target: { value: 'Sok San' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: /Customer identity and collateral ownership confirmed/i }))
+
+    // Continue to Step 2
+    fireEvent.click(screen.getByRole('button', { name: /Continue to collateral/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Phone collateral/i)).toBeInTheDocument()
+    })
+
+    // Assert valuation was imported and sessionStorage was cleared
+    expect(screen.getByText(/Standalone calculator offer imported/i)).toBeInTheDocument()
+    expect(sessionStorage.getItem('phoneflow_last_valuation')).toBeNull()
+
+    // Assert battery health was imported
+    expect(screen.getByDisplayValue('92')).toBeInTheDocument()
+
+    // Fill collateral info
+    fireEvent.change(screen.getByPlaceholderText(/15-digit IMEI/i), { target: { value: '860123456789012' } })
+    fireEvent.change(screen.getByPlaceholderText(/Apple/i), { target: { value: 'Apple' } })
+    fireEvent.change(screen.getByPlaceholderText(/iPhone 13 Pro/i), { target: { value: 'iPhone 13 Pro' } })
+    fireEvent.change(screen.getByPlaceholderText(/128/i), { target: { value: '128' } })
+    fireEvent.change(screen.getByPlaceholderText(/Blue/i), { target: { value: 'Sierra Blue' } })
+
+    // Submit pawn contract
+    const submitBtn = screen.getByRole('button', { name: /Create pawn contract/i })
+    expect(submitBtn).not.toBeDisabled()
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Pawn contract created/i)).toBeInTheDocument()
+      expect(screen.getByText('PWN-2026-VAL')).toBeInTheDocument()
+    })
+
+    // Print ticket
+    const printBtn = screen.getByRole('button', { name: /Print 80mm pawn ticket/i })
+    fireEvent.click(printBtn)
+
+    await waitFor(() => {
+      expect(capturedTicketDetail).toEqual({ reference: 'PWN-2026-VAL' })
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    window.removeEventListener('phoneflow:open-pawn-ticket', ticketHandler)
+  })
+
+  it('handles invalid or ineligible calculator valuation in sessionStorage, displaying error inside dialog', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    // Case 1: Ineligible valuation
+    sessionStorage.setItem('phoneflow_last_valuation', JSON.stringify({ eligible: false }))
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-pawn'))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByText('The calculator valuation could not be imported. Review the contract values before continuing.')).toBeInTheDocument()
+    })
+    expect(sessionStorage.getItem('phoneflow_last_valuation')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /Close/i }))
+
+    // Case 2: KHR valuation with invalid exchange rate (< 1000)
+    sessionStorage.setItem('phoneflow_last_valuation', JSON.stringify({ eligible: true, currency: 'KHR', exchangeRate: 400 }))
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-pawn'))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByText('The calculator valuation could not be imported. Review the contract values before continuing.')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Close/i }))
+
+    // Case 3: Corrupt JSON
+    sessionStorage.setItem('phoneflow_last_valuation', '{invalid-json')
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-pawn'))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByText('The calculator valuation could not be imported. Review the contract values before continuing.')).toBeInTheDocument()
+    })
+  })
+
+  it('toggles auto-calculate and switches pawn currency with exchange rate recalculation', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4000 }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-pawn'))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // Advance to Step 2
+    fireEvent.click(screen.getByRole('tab', { name: /New customer/i }))
+    fireEvent.change(screen.getByPlaceholderText(/Full name/i), { target: { value: 'Dara Nim' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: /Customer identity and collateral ownership confirmed/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Continue to collateral/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Phone collateral/i)).toBeInTheDocument()
+    })
+
+    // Check auto calculate toggle
+    const toggle = screen.getByRole('switch', { name: /Auto calculate/i })
+    expect(toggle).toBeInTheDocument()
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+
+    // Turn auto calculate off
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-checked', 'false')
+
+    // Turn auto calculate back on
+    fireEvent.click(toggle)
+    expect(toggle).toHaveAttribute('aria-checked', 'true')
+
+    // Switch currency from USD to KHR
+    const currencySelect = screen.getByRole('combobox', { name: /Valuation currency/i })
+    fireEvent.change(currencySelect, { target: { value: 'KHR' } })
+
+    // Check that KHR currency is active in valuation
+    expect(screen.getByText(/Resale value \(KHR\)/i)).toBeInTheDocument()
+
+    // Switch back to USD
+    fireEvent.change(currencySelect, { target: { value: 'USD' } })
+    expect(screen.getByText(/Resale value \(USD\)/i)).toBeInTheDocument()
+  })
+
+  it('falls back to 4100 exchange rate when /exchange-rates API fails', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return Promise.reject(new Error('Rate service offline'))
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-pawn'))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('tab', { name: /New customer/i }))
+    fireEvent.change(screen.getByPlaceholderText(/Full name/i), { target: { value: 'Rate Fallback Customer' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: /Customer identity and collateral ownership confirmed/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Continue to collateral/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/1 USD = 4,100 KHR/i)).toBeInTheDocument()
+    })
+  })
+
+  it('validates and submits multiple non-phone purchase categories (TABLET, ACCESSORY, SPARE_PART)', async () => {
+    let capturedPayload: any = null
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/suppliers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ suppliers: [{ _id: 'sup-tech', name: 'Tech Supplies Co', phone: '012999000' }] }) } as Response
+      }
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      if (url.includes('/trades') && init?.method === 'POST') {
+        capturedPayload = JSON.parse(String(init.body))
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            trade: { _id: 'pur-multi-1', tradeNo: 'TR-BUY-MULTI', type: 'BUY', total: 620, amountPaid: 620, balance: 0, currency: 'USD' },
+            items: [],
+          }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'purchase' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // Step 1: Select supplier
+    fireEvent.click(screen.getByRole('tab', { name: /Existing supplier/i }))
+    const supplierSelect = screen.getByRole('combobox', { name: /Supplier/i })
+    fireEvent.change(supplierSelect, { target: { value: 'sup-tech' } })
+
+    fireEvent.click(screen.getByRole('button', { name: /Continue to items/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Inventory items/i)).toBeInTheDocument()
+    })
+
+    // Item 1: Switch to TABLET
+    fireEvent.click(screen.getByRole('button', { name: /^TABLET$/i }))
+    fireEvent.change(screen.getByPlaceholderText(/Apple/i), { target: { value: 'Apple' } })
+    fireEvent.change(screen.getByPlaceholderText(/iPhone 13 Pro/i), { target: { value: 'iPad Pro 11' } })
+    fireEvent.change(screen.getByPlaceholderText(/128/i), { target: { value: '256' } })
+    fireEvent.change(screen.getByPlaceholderText(/Blue/i), { target: { value: 'Space Gray' } })
+    fireEvent.change(screen.getByPlaceholderText(/Generated if empty/i), { target: { value: 'TAB-IPAD-01' } })
+    const item1Qty = screen.getByRole('spinbutton', { name: /Quantity/i })
+    fireEvent.change(item1Qty, { target: { value: '2' } })
+    const item1Price = screen.getByRole('textbox', { name: /Unit purchase price \(USD\)/i })
+    fireEvent.change(item1Price, { target: { value: '200.00' } })
+
+    // Add Item 2: ACCESSORY
+    fireEvent.click(screen.getByRole('button', { name: /Add another item/i }))
+    const accessoryBtn = screen.getByRole('button', { name: /^ACCESSORY$/i })
+    fireEvent.click(accessoryBtn)
+    fireEvent.change(screen.getByPlaceholderText(/USB-C charger/i), { target: { value: 'Fast GaN Charger' } })
+    fireEvent.change(screen.getByPlaceholderText(/Anker/i), { target: { value: 'Anker' } })
+    fireEvent.change(screen.getByPlaceholderText(/Required SKU/i), { target: { value: 'ACC-ANK-65W' } })
+    const item2Qty = screen.getByRole('spinbutton', { name: /Quantity/i })
+    fireEvent.change(item2Qty, { target: { value: '5' } })
+    const item2Price = screen.getByRole('textbox', { name: /Unit purchase price \(USD\)/i })
+    fireEvent.change(item2Price, { target: { value: '20.00' } })
+
+    // Add Item 3: SPARE_PART
+    fireEvent.click(screen.getByRole('button', { name: /Add another item/i }))
+    const sparePartBtn = screen.getByRole('button', { name: /^SPARE PART$/i })
+    fireEvent.click(sparePartBtn)
+    fireEvent.change(screen.getByPlaceholderText(/OLED display assembly/i), { target: { value: 'OLED Assembly Screen' } })
+    fireEvent.change(screen.getByPlaceholderText(/iPhone 13, iPhone 13 Pro/i), { target: { value: 'iPhone 14' } })
+    fireEvent.change(screen.getByRole('combobox', { name: /OEM quality/i }), { target: { value: 'OEM' } })
+    const item3Qty = screen.getByRole('spinbutton', { name: /Quantity/i })
+    fireEvent.change(item3Qty, { target: { value: '3' } })
+    const item3Price = screen.getByRole('textbox', { name: /Unit purchase price \(USD\)/i })
+    fireEvent.change(item3Price, { target: { value: '40.00' } })
+
+    // Total: 2 * 200 + 5 * 20 + 3 * 40 = 400 + 100 + 120 = 620
+    const paidInput = screen.getByRole('textbox', { name: /Amount paid \(USD\)/i })
+    fireEvent.change(paidInput, { target: { value: '620.00' } })
+
+    // Complete purchase
+    fireEvent.click(screen.getByRole('button', { name: /Complete purchase/i }))
+
+    await waitFor(() => {
+      expect(capturedPayload).not.toBeNull()
+    })
+
+    expect(capturedPayload.items).toHaveLength(3)
+    expect(capturedPayload.items[0]).toMatchObject({
+      category: 'TABLET',
+      brand: 'Apple',
+      model: 'iPad Pro 11',
+      storage: '256',
+      color: 'Space Gray',
+      sku: 'TAB-IPAD-01',
+      quantity: 2,
+      purchasePrice: 200,
+    })
+    expect(capturedPayload.items[1]).toMatchObject({
+      category: 'ACCESSORY',
+      name: 'Fast GaN Charger',
+      brand: 'Anker',
+      sku: 'ACC-ANK-65W',
+      quantity: 5,
+      purchasePrice: 20,
+    })
+    expect(capturedPayload.items[2]).toMatchObject({
+      category: 'SPARE_PART',
+      name: 'OLED Assembly Screen',
+      compatibleModels: 'iPhone 14',
+      oemQuality: 'OEM',
+      quantity: 3,
+      purchasePrice: 40,
+    })
+  })
+
+  it('validates restock restrictions for existing inventory and duplicate products', async () => {
+    const existingCase = {
+      ...mockInventoryItem,
+      _id: 'inv-case-existing',
+      name: 'Silicone Case Black',
+      category: 'ACCESSORY' as const,
+      sku: 'ACC-CASE-BLK',
+      quantity: 12,
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [existingCase] }) } as Response
+      }
+      if (url.includes('/suppliers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ suppliers: [] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'purchase' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // Step 1: Existing supplier without selection shows error
+    fireEvent.click(screen.getByRole('tab', { name: /Existing supplier/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Continue to items/i }))
+    expect(screen.getByText('Complete the required seller information')).toBeInTheDocument()
+
+    // Switch to Walk-in customer with name
+    fireEvent.click(screen.getByRole('tab', { name: /Walk-in customer/i }))
+    fireEvent.change(screen.getByPlaceholderText(/Customer name/i), { target: { value: 'Walk-in Vendor' } })
+    fireEvent.click(screen.getByRole('button', { name: /Continue to items/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Inventory items/i)).toBeInTheDocument()
+    })
+
+    // Switch to ACCESSORY
+    fireEvent.click(screen.getByRole('button', { name: /^ACCESSORY$/i }))
+
+    // Switch to Existing product
+    fireEvent.click(screen.getByRole('button', { name: /Existing product.*Increase current quantity/i }))
+
+    // Select existing product
+    const productSelect = screen.getByRole('combobox', { name: /Product/i })
+    fireEvent.change(productSelect, { target: { value: 'inv-case-existing' } })
+    expect(screen.getByText('Current stock')).toBeInTheDocument()
+
+    // Add another item with the SAME existing product
+    fireEvent.click(screen.getByRole('button', { name: /Add another item/i }))
+    const item2Accessory = screen.getByRole('button', { name: /^ACCESSORY$/i })
+    fireEvent.click(item2Accessory)
+    const item2Existing = screen.getByRole('button', { name: /Existing product.*Increase current quantity/i })
+    fireEvent.click(item2Existing)
+
+    const item2ProductSelect = screen.getByRole('combobox', { name: /Product/i })
+    fireEvent.change(item2ProductSelect, { target: { value: 'inv-case-existing' } })
+
+    // Submit form to trigger purchaseAttempted validation
+    const form = screen.getByRole('dialog').querySelector('form')!
+    fireEvent.submit(form)
+
+    // Error about duplicate product appears
+    expect(screen.getByText('This product is already included in the purchase')).toBeInTheDocument()
+    expect(screen.getByText('Add each existing product only once per purchase')).toBeInTheDocument()
+  })
+
+  it('enforces minimum selling price, maximum discount, and navigates to stock pricing', async () => {
+    let stockItemDetail: any = null
+    const stockItemHandler = (event: Event) => {
+      stockItemDetail = (event as CustomEvent).detail
+    }
+    window.addEventListener('phoneflow:open-stock-item', stockItemHandler)
+
+    const protectedItem = {
+      ...mockInventoryItem,
+      _id: 'item-protected-price',
+      name: 'Protected Price iPhone',
+      category: 'PHONE' as const,
+      quantity: 1,
+      sellPrice: 800,
+      minimumSellPrice: 750,
+      khrSellPrice: undefined,
+      khrMinimumSellPrice: undefined,
+      pricingCurrency: 'USD' as const,
+      status: 'IN_STOCK',
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [protectedItem] }) } as Response
+      }
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      if (url.includes('/payway/config')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ enabled: false, configured: false }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText(/Protected Price iPhone/)).toBeInTheDocument()
+    })
+
+    const select = screen.getByRole('combobox', { name: /Inventory item/i })
+    fireEvent.change(select, { target: { value: 'item-protected-price' } })
+    fireEvent.change(screen.getByPlaceholderText(/Enter days/i), { target: { value: '0' } })
+
+    // Max discount is 800 - 750 = $50.00
+    // Try to enter discount of $70.00
+    const discountInput = screen.getByRole('textbox', { name: /Discount \(USD\)/i })
+    fireEvent.change(discountInput, { target: { value: '70.00' } })
+
+    const form = screen.getByRole('dialog').querySelector('form')!
+    fireEvent.submit(form)
+
+    await waitFor(() => {
+      expect(screen.getByText('Discount cannot exceed $50.00')).toBeInTheDocument()
+    })
+
+    // Reset discount, enable manual price below minimum
+    fireEvent.change(discountInput, { target: { value: '0' } })
+    const manualBtn = screen.getByRole('button', { name: /Enter manually/i })
+    fireEvent.click(manualBtn)
+
+    const priceGroup = screen.getByRole('group', { name: /Selling price in USD/i })
+    const manualPriceInput = priceGroup.querySelector('input')!
+    fireEvent.change(manualPriceInput, { target: { value: '700.00' } })
+
+    fireEvent.submit(form)
+
+    await waitFor(() => {
+      expect(screen.getByText("Fix this product's minimum selling price in Stock Information before completing the sale")).toBeInTheDocument()
+    })
+
+    // Click "Fix price" button to trigger openSelectedSaleItemPricing
+    const fixPriceBtn = screen.getByRole('button', { name: /Fix price/i })
+    fireEvent.click(fixPriceBtn)
+
+    await waitFor(() => {
+      expect(stockItemDetail).toEqual({ item: protectedItem })
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    window.removeEventListener('phoneflow:open-stock-item', stockItemHandler)
+  })
+
+  it('validates KHR currency increments for prices, discounts, and amount received', async () => {
+    const khrItem = {
+      ...mockInventoryItem,
+      _id: 'item-khr-unit',
+      name: 'KHR Case',
+      category: 'ACCESSORY' as const,
+      quantity: 5,
+      sellPrice: 20000,
+      pricingCurrency: 'KHR' as const,
+      status: 'IN_STOCK',
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [khrItem] }) } as Response
+      }
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      if (url.includes('/payway/config')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ enabled: false, configured: false }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText(/KHR Case/)).toBeInTheDocument()
+    })
+
+    const select = screen.getByRole('combobox', { name: /Inventory item/i })
+    fireEvent.change(select, { target: { value: 'item-khr-unit' } })
+
+    // KHR discount with non-100 increment (e.g. 250)
+    const discountInput = screen.getByRole('textbox', { name: /Discount \(KHR\)/i })
+    fireEvent.change(discountInput, { target: { value: '250' } })
+
+    const form = screen.getByRole('dialog').querySelector('form')!
+    fireEvent.submit(form)
+
+    await waitFor(() => {
+      expect(screen.getByText('KHR prices and discounts must use whole 100 KHR increments')).toBeInTheDocument()
+    })
+
+    // Fix discount, enter non-100 amount received
+    fireEvent.change(discountInput, { target: { value: '0' } })
+    const paidInput = screen.getByRole('textbox', { name: /Amount received \(KHR\)/i })
+    fireEvent.change(paidInput, { target: { value: '19850' } })
+
+    fireEvent.submit(form)
+
+    await waitFor(() => {
+      expect(screen.getByText('Amount received must use whole 100 KHR increments')).toBeInTheDocument()
+    })
+  })
+
+  it('covers KHQR payment failure branches, trade creation failure, cancel errors, and closing in-flight', async () => {
+    let khqrStatus = 'WAITING'
+    let khqrApproved = false
+    let closeCalled = false
+
+    const salePhone = {
+      ...mockInventoryItem,
+      _id: 'item-khqr-lifecycle',
+      name: 'KHQR Lifecycle Phone',
+      quantity: 1,
+      sellPrice: 1150,
+      minimumSellPrice: 1100,
+      khrSellPrice: undefined,
+      khrMinimumSellPrice: undefined,
+      pricingCurrency: 'USD' as const,
+      status: 'IN_STOCK',
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [salePhone] }) } as Response
+      }
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      if (url.includes('/payway/config')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ enabled: true, configured: true, qrExpiresInSeconds: 120 }) } as Response
+      }
+      if (url.includes('/payway/khqr/TX-KHQR-LIFE/close')) {
+        closeCalled = true
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ success: true }) } as Response
+      }
+      if (url.includes('/payway/khqr') && init?.method === 'POST') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            transactionId: 'TX-KHQR-LIFE',
+            qrString: 'sample-khqr-string',
+            amount: 1150,
+            currency: 'USD',
+          }),
+        } as Response
+      }
+      if (url.includes('/payway/khqr/TX-KHQR-LIFE/status')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            approved: khqrApproved,
+            paymentStatus: khqrStatus,
+          }),
+        } as Response
+      }
+      if (url.includes('/trades') && init?.method === 'POST') {
+        return {
+          ok: false,
+          status: 400,
+          headers: new Headers(),
+          json: async () => ({ message: 'Trade transaction failed' }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText(/KHQR Lifecycle Phone/)).toBeInTheDocument()
+    })
+
+    const select = screen.getByRole('combobox', { name: /Inventory item/i })
+    fireEvent.change(select, { target: { value: 'item-khqr-lifecycle' } })
+    fireEvent.change(screen.getByPlaceholderText(/Enter days/i), { target: { value: '0' } })
+
+    // Select KHQR
+    const khqrBtn = screen.getByRole('button', { name: /Pay with KHQR/i })
+    fireEvent.click(khqrBtn)
+
+    // Generate KHQR
+    const generateBtn = screen.getByRole('button', { name: /Generate KHQR/i })
+    fireEvent.click(generateBtn)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Scan to pay \$1150\.00/i)).toBeInTheDocument()
+      expect(screen.getByText('Waiting for payment')).toBeInTheDocument()
+    })
+
+    // 1. Status is DECLINED
+    khqrStatus = 'DECLINED'
+    const checkNowBtn = screen.getByRole('button', { name: /Check now/i })
+    fireEvent.click(checkNowBtn)
+
+    await waitFor(() => {
+      expect(screen.getByText('Payment was not completed')).toBeInTheDocument()
+    })
+
+    // 2. Status is approved, but trade creation fails
+    khqrStatus = 'PAID'
+    khqrApproved = true
+    fireEvent.click(screen.getByRole('button', { name: /Check now/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Unable to verify payment')).toBeInTheDocument()
+      expect(screen.getByText('Trade transaction failed')).toBeInTheDocument()
+    })
+
+    // 3. Cancel payment: calls /close and transitions to CANCELLED, then Close button closes dialog
+    const cancelBtn = screen.getByRole('button', { name: /Cancel payment/i })
+    fireEvent.click(cancelBtn)
+
+    await waitFor(() => {
+      expect(closeCalled).toBe(true)
+      expect(screen.getByRole('button', { name: /^Close$/i })).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /^Close$/i }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+  })
+
+  it('handles failure when cancelling KHQR payment', async () => {
+    const salePhone = {
+      ...mockInventoryItem,
+      _id: 'item-khqr-cancel-fail',
+      name: 'KHQR Cancel Fail Phone',
+      quantity: 1,
+      sellPrice: 1150,
+      minimumSellPrice: 1100,
+      khrSellPrice: undefined,
+      khrMinimumSellPrice: undefined,
+      pricingCurrency: 'USD' as const,
+      status: 'IN_STOCK',
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [salePhone] }) } as Response
+      }
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      if (url.includes('/payway/config')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ enabled: true, configured: true, qrExpiresInSeconds: 120 }) } as Response
+      }
+      if (url.includes('/payway/khqr/TX-KHQR-CANCEL-ERR/close')) {
+        return {
+          ok: false,
+          status: 400,
+          headers: new Headers(),
+          json: async () => ({ message: 'Unable to close this KHQR request' }),
+        } as Response
+      }
+      if (url.includes('/payway/khqr/TX-KHQR-CANCEL-ERR/status')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ approved: false, paymentStatus: 'WAITING' }) } as Response
+      }
+      if (url.includes('/payway/khqr') && init?.method === 'POST') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            transactionId: 'TX-KHQR-CANCEL-ERR',
+            qrString: 'sample-qr-cancel',
+            amount: 1150,
+            currency: 'USD',
+          }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText(/KHQR Cancel Fail Phone/)).toBeInTheDocument()
+    })
+
+    const select = screen.getByRole('combobox', { name: /Inventory item/i })
+    fireEvent.change(select, { target: { value: 'item-khqr-cancel-fail' } })
+    fireEvent.change(screen.getByPlaceholderText(/Enter days/i), { target: { value: '0' } })
+
+    fireEvent.click(screen.getByRole('button', { name: /Pay with KHQR/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Generate KHQR/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Scan to pay \$1150\.00/i)).toBeInTheDocument()
+    })
+
+    // Click "Cancel payment"
+    const cancelBtn = screen.getByRole('button', { name: /Cancel payment/i })
+    fireEvent.click(cancelBtn)
+
+    await waitFor(() => {
+      expect(screen.getByText('Unable to close this KHQR request')).toBeInTheDocument()
+      expect(screen.getByText('Unable to cancel payment')).toBeInTheDocument()
+    })
+  })
+
+  it('covers interactive stock adjustment search, modes (ADD, REMOVE, SET), and changing selected item', async () => {
+    const item1 = { ...mockInventoryItem, _id: 'item-stk-1', name: 'USB-C Fast Cable', quantity: 10, category: 'ACCESSORY' as const, status: 'IN_STOCK' }
+    const item2 = { ...mockInventoryItem, _id: 'item-stk-2', name: 'Lightning Audio Adapter', quantity: 5, category: 'ACCESSORY' as const, status: 'IN_STOCK' }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/inventory') && !url.includes('/adjust')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [item1, item2] }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'stock' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('USB-C Fast Cable')).toBeInTheDocument()
+    })
+
+    // 1. Search filter input
+    const searchInput = screen.getByPlaceholderText(/Search or scan a product code/i)
+    fireEvent.change(searchInput, { target: { value: 'Lightning' } })
+    expect(screen.queryByText('USB-C Fast Cable')).not.toBeInTheDocument()
+    expect(screen.getByText('Lightning Audio Adapter')).toBeInTheDocument()
+
+    // Clear search
+    fireEvent.change(searchInput, { target: { value: '' } })
+    expect(screen.getByText('USB-C Fast Cable')).toBeInTheDocument()
+
+    // 2. Select item1
+    fireEvent.click(screen.getByText('USB-C Fast Cable'))
+    expect(screen.getByText('Current quantity')).toBeInTheDocument()
+
+    // 3. Switch adjustment modes: REMOVE, SET, ADD
+    const removeModeBtn = screen.getByRole('radio', { name: /Remove/i })
+    fireEvent.click(removeModeBtn)
+    expect(removeModeBtn).toHaveClass('active')
+
+    const setModeBtn = screen.getByRole('radio', { name: /Set count/i })
+    fireEvent.click(setModeBtn)
+    expect(setModeBtn).toHaveClass('active')
+
+    const addModeBtn = screen.getByRole('radio', { name: /Add/i })
+    fireEvent.click(addModeBtn)
+    expect(addModeBtn).toHaveClass('active')
+
+    // 4. Click "Change item" to return to search
+    const changeItemBtn = screen.getByRole('button', { name: /Change item/i })
+    fireEvent.click(changeItemBtn)
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/Search or scan a product code/i)).toBeInTheDocument()
+    })
+  })
+
+  it('covers purchase phone optional details, condition, notes, and sale notes toggle', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/suppliers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ suppliers: [] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'purchase' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // Walk in customer name
+    fireEvent.change(screen.getByPlaceholderText(/Customer name/i), { target: { value: 'Jane Doe' } })
+    fireEvent.click(screen.getByRole('button', { name: /Continue to items/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Inventory items/i)).toBeInTheDocument()
+    })
+
+    // Phone item: battery health, carrier lock, accessories checkboxes
+    const batteryInput = screen.getByPlaceholderText('88')
+    fireEvent.change(batteryInput, { target: { value: '95' } })
+    expect(batteryInput).toHaveValue(95)
+
+    const carrierSelect = screen.getByRole('combobox', { name: /Carrier lock/i })
+    fireEvent.change(carrierSelect, { target: { value: 'LOCKED' } })
+    expect(carrierSelect).toHaveValue('LOCKED')
+
+    // Accessories checkboxes
+    const boxCheckbox = screen.getByRole('checkbox', { name: /Box/i })
+    const chargerCheckbox = screen.getByRole('checkbox', { name: /Charger/i })
+    fireEvent.click(boxCheckbox)
+    expect(boxCheckbox).toBeChecked()
+    fireEvent.click(chargerCheckbox)
+    expect(chargerCheckbox).toBeChecked()
+    // Uncheck box
+    fireEvent.click(boxCheckbox)
+    expect(boxCheckbox).not.toBeChecked()
+
+    // Condition select
+    const conditionSelect = screen.getByRole('combobox', { name: /Condition/i })
+    fireEvent.change(conditionSelect, { target: { value: 'LIKE_NEW' } })
+    expect(conditionSelect).toHaveValue('LIKE_NEW')
+
+    // Notes textarea
+    const notesTextarea = screen.getByRole('textbox', { name: /Item notes/i })
+    fireEvent.change(notesTextarea, { target: { value: 'Screen protector pre-installed' } })
+    expect(notesTextarea).toHaveValue('Screen protector pre-installed')
+
+    // Close purchase and open sale to test sale notes toggle
+    fireEvent.click(screen.getByRole('button', { name: /Close/i }))
+
+    const salePhone = {
+      ...mockInventoryItem,
+      _id: 'sale-note-item',
+      name: 'Sale Note Phone',
+      quantity: 1,
+      sellPrice: 500,
+      status: 'IN_STOCK',
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [salePhone] }) } as Response
+      }
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      if (url.includes('/payway/config')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ enabled: false, configured: false }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText(/Sale Note Phone/)).toBeInTheDocument()
+    })
+
+    const noteToggleBtn = screen.getByRole('button', { name: /Add sale note/i })
+    fireEvent.click(noteToggleBtn)
+
+    const saleNotesTextarea = screen.getByRole('textbox', { name: /Notes/i })
+    fireEvent.change(saleNotesTextarea, { target: { value: 'Customer requested quick test' } })
+    expect(saleNotesTextarea).toHaveValue('Customer requested quick test')
+
+    // Collapse sale note
+    fireEvent.click(screen.getByRole('button', { name: /Sale note/i }))
+    expect(screen.queryByRole('textbox', { name: /Notes/i })).not.toBeInTheDocument()
+  })
+
+  it('covers pawn valuation inputs: condition, age, lock status, accessories, fee rate, LTV range, and term buttons', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'pawn' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // Fill Step 1: Switch to New customer tab
+    fireEvent.click(screen.getByRole('tab', { name: /New customer/i }))
+    fireEvent.change(screen.getByPlaceholderText(/Full name/i), { target: { value: 'Pawn Customer' } })
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: /Continue to collateral/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/Phone valuation and contract terms/i)).toBeInTheDocument()
+    })
+
+    // Physical condition
+    const conditionSelect = screen.getByRole('combobox', { name: /Physical condition/i })
+    fireEvent.change(conditionSelect, { target: { value: 'LIKE_NEW' } })
+    expect(conditionSelect).toHaveValue('LIKE_NEW')
+    fireEvent.change(conditionSelect, { target: { value: 'DAMAGED' } })
+    expect(conditionSelect).toHaveValue('DAMAGED')
+
+    // Phone age
+    const ageInput = screen.getByRole('spinbutton', { name: /Phone age/i })
+    fireEvent.change(ageInput, { target: { value: '12' } })
+    expect(ageInput).toHaveValue(12)
+
+    // Lock status
+    const lockSelect = screen.getByRole('combobox', { name: /Lock status/i })
+    fireEvent.change(lockSelect, { target: { value: 'LOCKED' } })
+    expect(lockSelect).toHaveValue('LOCKED')
+
+    // Included accessories checkbox toggle
+    const earphonesCheckbox = screen.getByRole('checkbox', { name: /Earphones/i })
+    fireEvent.click(earphonesCheckbox)
+    expect(earphonesCheckbox).toBeChecked()
+    fireEvent.click(earphonesCheckbox)
+    expect(earphonesCheckbox).not.toBeChecked()
+
+    // Loan to value range slider (40-50%)
+    const ltvSlider = screen.getByRole('slider')
+    fireEvent.change(ltvSlider, { target: { value: '50' } })
+    expect(screen.getByText('50%')).toBeInTheDocument()
+
+    // Daily pawn fee rate input
+    const feeRateInput = screen.getByRole('spinbutton', { name: /Daily pawn fee rate/i })
+    fireEvent.change(feeRateInput, { target: { value: '3.0' } })
+    expect(feeRateInput).toHaveValue(3)
+
+    // Pawn term buttons: 3 Days, 15 Days, 1 Month
+    const day3Btn = screen.getByRole('radio', { name: /3 Days/i })
+    fireEvent.click(day3Btn)
+    expect(day3Btn).toHaveClass('active')
+
+    const day15Btn = screen.getByRole('radio', { name: /Half Month/i })
+    fireEvent.click(day15Btn)
+    expect(day15Btn).toHaveClass('active')
+
+    const day30Btn = screen.getByRole('radio', { name: /1 Month/i })
+    fireEvent.click(day30Btn)
+    expect(day30Btn).toHaveClass('active')
   })
 })
