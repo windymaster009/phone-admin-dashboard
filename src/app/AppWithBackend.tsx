@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { RouterProvider } from './routing'
 import StartupScreen from './StartupScreen'
 import ErrorBoundary from '../components/ErrorBoundary'
@@ -57,6 +57,16 @@ export default function AppWithBackend() {
   const [checking, setChecking] = useState(true)
   const [startupError, setStartupError] = useState<{ message: string; retryable?: boolean } | null>(null)
   const [workspaceReady, setWorkspaceReady] = useState(false)
+  const isMountedRef = useRef(true)
+  const sessionRequestIdRef = useRef(0)
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+      sessionRequestIdRef.current++
+    }
+  }, [])
 
   useLayoutEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -71,25 +81,32 @@ export default function AppWithBackend() {
 
   useEffect(() => subscribeToTokenChanges(() => {
     if (!getToken()) {
-      setUser(null)
-      setChecking(false)
+      if (isMountedRef.current) {
+        sessionRequestIdRef.current++
+        setSessionUser(null)
+        setUser(null)
+        setChecking(false)
+        setStartupError(null)
+      }
     }
   }), [])
 
   useEffect(() => {
     let active = true
     api<{ shop: ShopProfile }>('/shop')
-      .then((result) => { if (active) setShop(result.shop) })
+      .then((result) => { if (active && isMountedRef.current) setShop(result.shop) })
       .catch(() => undefined)
     return () => { active = false }
   }, [])
 
   const checkSession = useCallback(() => {
+    const requestId = ++sessionRequestIdRef.current
     setChecking(true)
     setStartupError(null)
 
     api<{ user: SessionUser }>('/auth/me')
       .then((result) => {
+        if (!isMountedRef.current || sessionRequestIdRef.current !== requestId) return
         setToken(null)
         setSessionUser(result.user)
         setWorkspaceReady(false)
@@ -98,6 +115,7 @@ export default function AppWithBackend() {
         void loadApp()
       })
       .catch((error: unknown) => {
+        if (!isMountedRef.current || sessionRequestIdRef.current !== requestId) return
         const is401 = error instanceof ApiError && error.status === 401
         if (is401) {
           // Genuine 401 response: user is normally signed out
@@ -119,7 +137,9 @@ export default function AppWithBackend() {
         }
       })
       .finally(() => {
-        setChecking(false)
+        if (isMountedRef.current && sessionRequestIdRef.current === requestId) {
+          setChecking(false)
+        }
       })
   }, [])
 
@@ -134,7 +154,7 @@ export default function AppWithBackend() {
         reportFrontendError(new Error('Workspace readiness timed out; auto-dismissing overlay'), {
           operation: 'workspace_readiness_timeout',
         })
-        setWorkspaceReady(true)
+        if (isMountedRef.current) setWorkspaceReady(true)
       }, 8000)
 
       return () => window.clearTimeout(safetyTimer)
@@ -142,6 +162,7 @@ export default function AppWithBackend() {
   }, [user, workspaceReady])
 
   const handleAuthenticated = (authenticatedUser: SessionUser) => {
+    sessionRequestIdRef.current++
     setSessionUser(authenticatedUser)
     setWorkspaceReady(false)
     setUser(authenticatedUser)
@@ -186,10 +207,13 @@ export default function AppWithBackend() {
               shop={shop}
               onWorkspaceReady={() => setWorkspaceReady(true)}
               onLogout={() => {
+                sessionRequestIdRef.current++
                 void api('/auth/logout', { method: 'POST' }).catch(() => undefined).finally(() => {
-                  setToken(null)
-                  setSessionUser(null)
-                  setUser(null)
+                  if (isMountedRef.current) {
+                    setToken(null)
+                    setSessionUser(null)
+                    setUser(null)
+                  }
                 })
               }}
             />

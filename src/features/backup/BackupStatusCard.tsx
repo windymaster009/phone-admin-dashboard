@@ -106,25 +106,37 @@ export default function BackupStatusCard() {
   const [restoreError, setRestoreError] = useState('')
   const [restoreSuccess, setRestoreSuccess] = useState<RestoreResult | null>(null)
   const restoreFileInput = useRef<HTMLInputElement>(null)
+  const isMountedRef = useRef(true)
+  const deleteMutationRef = useRef(false)
+  const restoreMutationRef = useRef(false)
+  const refreshRequestIdRef = useRef(0)
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
     let active = true
 
     const load = async () => {
+      const requestId = ++refreshRequestIdRef.current
       try {
         const result = await api<BackupStatus>('/backups/status')
-        if (!active) return
+        if (!active || !isMountedRef.current || requestId !== refreshRequestIdRef.current) return
         setStatus(result)
         setError('')
       } catch (reason) {
-        if (!active) return
+        if (!active || !isMountedRef.current || requestId !== refreshRequestIdRef.current) return
         setError(reason instanceof Error ? reason.message : 'Unable to read backup status')
       }
     }
 
     void load()
     const timer = window.setInterval(() => {
-      if (!document.hidden && active) void load()
+      if (!document.hidden && active && isMountedRef.current) void load()
     }, 60_000)
     return () => {
       active = false
@@ -152,7 +164,9 @@ export default function BackupStatusCard() {
   }, [bulkDeleteBusy, deleteBusy, deleteConfirmation, managerOpen, restoreBusy, restoreCandidate, restoreSuccess])
 
   async function refreshStatus(options: { preserveError?: boolean } = {}) {
+    const requestId = ++refreshRequestIdRef.current
     const result = await api<BackupStatus>('/backups/status')
+    if (!isMountedRef.current || requestId !== refreshRequestIdRef.current) return result
     setStatus(result)
     if (!options.preserveError) {
       setError('')
@@ -162,6 +176,7 @@ export default function BackupStatusCard() {
 
   async function refreshList() {
     const result = await api<{ backups: BackupMetadata[] }>('/backups')
+    if (!isMountedRef.current) return
     setBackups(result.backups)
     const availableFilenames = new Set(result.backups.map((backup) => backup.filename))
     setSelectedBackups((current) => new Set([...current].filter((filename) => availableFilenames.has(filename))))
@@ -178,6 +193,7 @@ export default function BackupStatusCard() {
     try {
       await Promise.all([refreshStatus(), refreshList()])
     } catch (reason) {
+      if (!isMountedRef.current) return
       setError(reason instanceof Error ? reason.message : 'Unable to load backups')
     }
   }
@@ -191,8 +207,10 @@ export default function BackupStatusCard() {
 
     try {
       await api('/backups/run', { method: 'POST' })
+      if (!isMountedRef.current) return
       await Promise.all([refreshStatus(), refreshList()])
     } catch (reason) {
+      if (!isMountedRef.current) return
       const backupError = reason instanceof Error ? reason.message : 'Backup failed'
       setError(backupError)
       try {
@@ -202,7 +220,9 @@ export default function BackupStatusCard() {
       }
     } finally {
       backupRunRef.current = false
-      setBusy(false)
+      if (isMountedRef.current) {
+        setBusy(false)
+      }
     }
   }
 
@@ -230,10 +250,13 @@ export default function BackupStatusCard() {
       anchor.remove()
       URL.revokeObjectURL(url)
     } catch (reason) {
+      if (!isMountedRef.current) return
       setError(reason instanceof Error ? reason.message : 'Unable to download backup')
     } finally {
       backupDownloadRef.current = false
-      setDownloadBusy('')
+      if (isMountedRef.current) {
+        setDownloadBusy('')
+      }
     }
   }
 
@@ -269,7 +292,8 @@ export default function BackupStatusCard() {
   }
 
   async function confirmDelete() {
-    if (!deleteConfirmation || bulkDeleteBusy || deleteBusy) return
+    if (deleteMutationRef.current || !deleteConfirmation || bulkDeleteBusy || Boolean(deleteBusy)) return
+    deleteMutationRef.current = true
     setError('')
 
     if (deleteConfirmation.kind === 'single') {
@@ -277,13 +301,19 @@ export default function BackupStatusCard() {
       setDeleteBusy(backup.filename)
       try {
         await api(`/backups/${encodeURIComponent(backup.filename)}`, { method: 'DELETE' })
+        if (!isMountedRef.current) return
         await Promise.all([refreshStatus(), refreshList()])
+        if (!isMountedRef.current) return
         setToastMessage('Backup deleted successfully.')
         setDeleteConfirmation(null)
       } catch (reason) {
+        if (!isMountedRef.current) return
         setError(reason instanceof Error ? reason.message : 'Unable to delete backup')
       } finally {
-        setDeleteBusy('')
+        deleteMutationRef.current = false
+        if (isMountedRef.current) {
+          setDeleteBusy('')
+        }
       }
       return
     }
@@ -295,14 +325,20 @@ export default function BackupStatusCard() {
         method: 'DELETE',
         body: JSON.stringify({ filenames: deleteConfirmation.filenames }),
       })
+      if (!isMountedRef.current) return
       setSelectedBackups(new Set())
       await Promise.all([refreshStatus(), refreshList()])
+      if (!isMountedRef.current) return
       setToastMessage(`${count} backups deleted successfully.`)
       setDeleteConfirmation(null)
     } catch (reason) {
+      if (!isMountedRef.current) return
       setError(reason instanceof Error ? reason.message : 'Unable to delete selected backups')
     } finally {
-      setBulkDeleteBusy(false)
+      deleteMutationRef.current = false
+      if (isMountedRef.current) {
+        setBulkDeleteBusy(false)
+      }
     }
   }
 
@@ -337,18 +373,23 @@ export default function BackupStatusCard() {
         },
         body: file,
       })
+      if (!isMountedRef.current) return
       setRestoreConfirmation('')
       setRestoreSuccess(null)
       setRestoreCandidate({ source: 'upload', backup: result.backup })
     } catch (reason) {
+      if (!isMountedRef.current) return
       setError(reason instanceof Error ? reason.message : 'Unable to inspect the selected backup')
     } finally {
-      setRestoreInspectBusy(false)
+      if (isMountedRef.current) {
+        setRestoreInspectBusy(false)
+      }
     }
   }
 
   async function confirmRestore() {
-    if (!restoreCandidate || restoreConfirmation !== 'RESTORE' || restoreBusy) return
+    if (restoreMutationRef.current || !restoreCandidate || restoreConfirmation !== 'RESTORE' || restoreBusy) return
+    restoreMutationRef.current = true
     setRestoreBusy(true)
     setRestoreError('')
     setAuthTransitionInProgress(true)
@@ -365,13 +406,18 @@ export default function BackupStatusCard() {
         filename: result.restored.filename,
         safetyBackupAt: result.safetyBackup.completedAt,
       }, 'session')
+      if (!isMountedRef.current) return
       setRestoreSuccess(result)
-      setRestoreBusy(false)
     } catch (reason) {
       setAuthTransitionInProgress(false)
+      if (!isMountedRef.current) return
       setRestoreError(reason instanceof Error ? reason.message : 'Unable to restore this backup')
-      setRestoreBusy(false)
       if (reason instanceof ApiError && reason.status === 401) setToken(null)
+    } finally {
+      restoreMutationRef.current = false
+      if (isMountedRef.current) {
+        setRestoreBusy(false)
+      }
     }
   }
 

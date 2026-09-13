@@ -44,6 +44,12 @@ function callRouter(routerOrMiddleware, {
       },
       socket: { remoteAddress: '127.0.0.1' },
       hostname: 'localhost',
+      app: {
+        get(setting) {
+          if (setting === 'trust proxy') return false
+          return undefined
+        },
+      },
     }
 
     let statusCode = 200
@@ -139,6 +145,10 @@ const origActivityLogCreate = ActivityLog.create
 const origActivityLogFind = ActivityLog.find
 const origActivityLogCountDocs = ActivityLog.countDocuments
 
+const origAndroidPairingCreate = AndroidPairing.create
+const origAndroidPairingFindOne = AndroidPairing.findOne
+const origAndroidPairingFindOneAndUpdate = AndroidPairing.findOneAndUpdate
+
 test.beforeEach(() => {
   process.env.TWO_FACTOR_ENCRYPTION_KEY = validEncryptionKey
   ActivityLog.prototype.save = async function () { return this }
@@ -191,6 +201,10 @@ test.afterEach(() => {
   ActivityLog.create = origActivityLogCreate
   ActivityLog.find = origActivityLogFind
   ActivityLog.countDocuments = origActivityLogCountDocs
+
+  AndroidPairing.create = origAndroidPairingCreate
+  AndroidPairing.findOne = origAndroidPairingFindOne
+  AndroidPairing.findOneAndUpdate = origAndroidPairingFindOneAndUpdate
 })
 
 // -------------------------------------------------------------
@@ -898,4 +912,278 @@ test('/security/sessions/revoke-all: revokes all sessions and clears cookie', as
   assert.equal(res.body.revokedCount, 5)
   assert.equal(res.body.loggedOut, true)
   assert.ok(res.cookiesCleared.some((c) => c.name === SESSION_COOKIE_NAME))
+})
+
+// -------------------------------------------------------------
+// 8. Staff PATCH authorization and restrictions (/users/:id)
+// -------------------------------------------------------------
+test('/users/:id PATCH: CASHIER and MANAGER are denied (403), unauthenticated is denied (401), OWNER can update role and active status', async () => {
+  const targetId = new mongoose.Types.ObjectId()
+  let updateOneCalled = false
+  User.updateOne = async () => {
+    updateOneCalled = true
+    return { acknowledged: true, modifiedCount: 1 }
+  }
+
+  // 1. Unauthenticated -> 401
+  const unauthRes = await callRouter(appRouter, {
+    method: 'PATCH',
+    url: `/users/${targetId}`,
+    params: { id: targetId.toString() },
+    body: { role: 'MANAGER' },
+  })
+  assert.equal(unauthRes.status, 401)
+  assert.equal(updateOneCalled, false)
+
+  // 2. CASHIER -> 403
+  const cashierId = new mongoose.Types.ObjectId()
+  const cashierToken = signToken({ _id: cashierId }, { sessionId: 'cashier-patch-sess' })
+  AuthSession.findOne = async () => ({
+    sessionId: 'cashier-patch-sess',
+    user: cashierId,
+    revokedAt: null,
+    expiresAt: new Date(Date.now() + 3600000),
+  })
+  User.findById = (id) => ({
+    select: () => Promise.resolve(
+      String(id) === String(cashierId)
+        ? { _id: cashierId, name: 'Cashier Staff', role: 'CASHIER', active: true }
+        : null
+    ),
+  })
+
+  const cashierRes = await callRouter(appRouter, {
+    method: 'PATCH',
+    url: `/users/${targetId}`,
+    params: { id: targetId.toString() },
+    headers: { authorization: `Bearer ${cashierToken}` },
+    body: { role: 'MANAGER' },
+  })
+  assert.equal(cashierRes.status, 403)
+  assert.equal(updateOneCalled, false)
+
+  // 3. MANAGER -> 403
+  const managerId = new mongoose.Types.ObjectId()
+  const managerToken = signToken({ _id: managerId }, { sessionId: 'mgr-patch-sess' })
+  AuthSession.findOne = async () => ({
+    sessionId: 'mgr-patch-sess',
+    user: managerId,
+    revokedAt: null,
+    expiresAt: new Date(Date.now() + 3600000),
+  })
+  User.findById = (id) => ({
+    select: () => Promise.resolve(
+      String(id) === String(managerId)
+        ? { _id: managerId, name: 'Store Manager', role: 'MANAGER', active: true }
+        : null
+    ),
+  })
+
+  const managerRes = await callRouter(appRouter, {
+    method: 'PATCH',
+    url: `/users/${targetId}`,
+    params: { id: targetId.toString() },
+    headers: { authorization: `Bearer ${managerToken}` },
+    body: { role: 'CASHIER' },
+  })
+  assert.equal(managerRes.status, 403)
+  assert.equal(updateOneCalled, false)
+
+  // 4. OWNER -> 200, updates role and active status
+  const ownerId = new mongoose.Types.ObjectId()
+  const ownerToken = signToken({ _id: ownerId }, { sessionId: 'owner-patch-sess' })
+  AuthSession.findOne = async () => ({
+    sessionId: 'owner-patch-sess',
+    user: ownerId,
+    revokedAt: null,
+    expiresAt: new Date(Date.now() + 3600000),
+  })
+  const mockOwnerDoc = {
+    _id: ownerId,
+    name: 'Shop Owner',
+    role: 'OWNER',
+    active: true,
+    select() { return Promise.resolve(this) },
+  }
+  const mockTargetDoc = {
+    _id: targetId,
+    name: 'Target User',
+    role: 'CASHIER',
+    active: true,
+    select() { return Promise.resolve(this) },
+    save: async function () {
+      updateOneCalled = true
+      return this
+    },
+  }
+  User.findById = (id) => {
+    if (String(id) === String(ownerId)) return mockOwnerDoc
+    if (String(id) === String(targetId)) return mockTargetDoc
+    return null
+  }
+
+  const ownerRes = await callRouter(appRouter, {
+    method: 'PATCH',
+    url: `/users/${targetId}`,
+    params: { id: targetId.toString() },
+    headers: { authorization: `Bearer ${ownerToken}` },
+    body: { role: 'MANAGER', active: false },
+  })
+  assert.equal(ownerRes.status, 200)
+  assert.equal(updateOneCalled, true)
+  assert.equal(ownerRes.body.user.role, 'MANAGER')
+  assert.equal(ownerRes.body.user.active, false)
+})
+
+// -------------------------------------------------------------
+// 9. Android pairing authorization & 2FA inheritance
+// -------------------------------------------------------------
+test('/security/android-pairing: rejects unauthenticated and rejects 2FA-enrolled user without 2FA-verified session', async () => {
+  let createPairingCalled = false
+  AndroidPairing.create = async () => {
+    createPairingCalled = true
+    return { code: '123456', expiresAt: new Date(Date.now() + 90000) }
+  }
+
+  // 1. Unauthenticated -> 401
+  const unauthRes = await callRouter(sessionSecurityRouter, {
+    method: 'POST',
+    url: '/security/android-pairing',
+  })
+  assert.equal(unauthRes.status, 401)
+  assert.equal(createPairingCalled, false)
+
+  // 2. User has 2FA enabled, but authSession has twoFactorVerifiedAt = null -> 403
+  const ownerId = new mongoose.Types.ObjectId()
+  const token = signToken({ _id: ownerId }, { sessionId: 'owner-not-2fa-sess' })
+  AuthSession.findOne = async () => ({
+    sessionId: 'owner-not-2fa-sess',
+    user: ownerId,
+    revokedAt: null,
+    expiresAt: new Date(Date.now() + 3600000),
+    twoFactorVerifiedAt: null,
+  })
+  User.findById = () => ({
+    select: () => Promise.resolve({
+      _id: ownerId,
+      name: 'Owner',
+      role: 'OWNER',
+      active: true,
+    }),
+  })
+  TwoFactorCredential.findOne = () => ({
+    select: () => ({
+      lean: () => Promise.resolve({ _id: new mongoose.Types.ObjectId(), user: ownerId }),
+    }),
+  })
+
+  const forbiddenRes = await callRouter(sessionSecurityRouter, {
+    method: 'POST',
+    url: '/security/android-pairing',
+    headers: { authorization: `Bearer ${token}` },
+    authSession: { sessionId: 'owner-not-2fa-sess', twoFactorVerifiedAt: null },
+  })
+  assert.equal(forbiddenRes.status, 403)
+  assert.match(forbiddenRes.body.message, /Reauthenticate with two-factor authentication/i)
+  assert.equal(createPairingCalled, false)
+})
+
+// -------------------------------------------------------------
+// 10. Session deletion & invalid 2FA / pairing rejection tests
+// -------------------------------------------------------------
+test('/security/sessions/:sessionId DELETE: returns 401 unauthenticated and 404 if session not found', async () => {
+  // 1. Unauthenticated -> 401
+  const unauthRes = await callRouter(sessionSecurityRouter, {
+    method: 'DELETE',
+    url: '/security/sessions/target-session',
+    params: { sessionId: 'target-session' },
+  })
+  assert.equal(unauthRes.status, 401)
+
+  // 2. Authenticated, but target session does not exist in DB -> 404
+  const userId = new mongoose.Types.ObjectId()
+  const token = signToken({ _id: userId }, { sessionId: 'active-session' })
+  AuthSession.findOne = async (query) => {
+    // Current session check in requireAuth
+    if (query?.sessionId === 'active-session') {
+      return {
+        sessionId: 'active-session',
+        user: userId,
+        revokedAt: null,
+        expiresAt: new Date(Date.now() + 3600000),
+      }
+    }
+    return null // Target session not found
+  }
+  AuthSession.findOneAndUpdate = async () => null
+  User.findById = () => ({
+    select: () => Promise.resolve({
+      _id: userId,
+      name: 'User',
+      role: 'OWNER',
+      active: true,
+    }),
+  })
+
+  const notFoundRes = await callRouter(sessionSecurityRouter, {
+    method: 'DELETE',
+    url: '/security/sessions/target-session',
+    params: { sessionId: 'target-session' },
+    headers: { authorization: `Bearer ${token}` },
+    authSession: { sessionId: 'active-session' },
+  })
+  assert.equal(notFoundRes.status, 404)
+  assert.match(notFoundRes.body.message, /Active session was not found/i)
+})
+
+test('/security/two-factor/enable: rejects invalid non-ObjectId setupId with 400 without mutation', async () => {
+  const userId = new mongoose.Types.ObjectId()
+  const token = signToken({ _id: userId }, { sessionId: 'active-2fa-sess' })
+  AuthSession.findOne = async () => ({
+    sessionId: 'active-2fa-sess',
+    user: userId,
+    revokedAt: null,
+    expiresAt: new Date(Date.now() + 3600000),
+  })
+  User.findById = () => ({
+    select: () => Promise.resolve({
+      _id: userId,
+      name: 'Owner',
+      role: 'OWNER',
+      active: true,
+    }),
+  })
+
+  let credCreateCalled = false
+  TwoFactorCredential.create = async () => {
+    credCreateCalled = true
+  }
+
+  const res = await callRouter(sessionSecurityRouter, {
+    method: 'POST',
+    url: '/security/two-factor/enable',
+    headers: { authorization: `Bearer ${token}` },
+    body: { setupId: 'non-object-id', code: '123456' },
+  })
+  assert.equal(res.status, 400)
+  assert.match(res.body.message, /Two-factor setup is invalid or expired/i)
+  assert.equal(credCreateCalled, false)
+})
+
+test('/auth/pairing/redeem: rejects invalid or expired pairing code with 401', async () => {
+  AndroidPairing.findOneAndUpdate = async () => null
+
+  let sessionCreated = false
+  AuthSession.create = async () => {
+    sessionCreated = true
+  }
+
+  const res = await callRouter(sessionSecurityRouter, {
+    method: 'POST',
+    url: '/auth/pairing/redeem',
+    body: { code: '000000', deviceName: 'PhoneFlow Test Android' },
+  })
+  assert.equal(res.status, 401)
+  assert.match(res.body.message, /Pairing code is invalid or expired/i)
+  assert.equal(sessionCreated, false)
 })

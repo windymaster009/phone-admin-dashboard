@@ -347,6 +347,54 @@ describe('BackupStatusCard delete flows', () => {
     // No toast shown
     expect(screen.queryByText('Backup deleted successfully.')).not.toBeInTheDocument()
   })
+
+  it('blocks duplicate same-render delete requests and releases guard afterward', async () => {
+    let deleteCallCount = 0
+    let resolveDelete: () => void
+    const deletePendingPromise = new Promise<void>((resolve) => {
+      resolveDelete = resolve
+    })
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = (init?.method || 'GET').toUpperCase()
+
+      if (url.includes('/api/backups/status')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => mockStatus } as Response
+      }
+      if (url.includes('/api/backups/backup-2026-09-10.json.gz') && method === 'DELETE') {
+        deleteCallCount++
+        await deletePendingPromise
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ success: true }) } as Response
+      }
+      if (url.includes('/api/backups') && method === 'GET') {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ backups: mockBackups }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    const user = userEvent.setup()
+    render(<BackupStatusCard />)
+
+    const manageButton = await screen.findByTitle('Open backup manager')
+    await user.click(manageButton)
+
+    await screen.findByRole('dialog', { name: /Backup manager/i })
+    const deleteButtons = screen.getAllByRole('button', { name: /Delete backup from/i })
+    await user.click(deleteButtons[0])
+
+    const confirmButton = screen.getByRole('button', { name: /Delete backup$/i })
+    act(() => {
+      confirmButton.click()
+      confirmButton.click()
+    })
+
+    expect(deleteCallCount).toBe(1)
+    resolveDelete!()
+    await waitFor(() => {
+      expect(screen.getByText('Backup deleted successfully.')).toBeInTheDocument()
+    })
+  })
 })
 
 describe('BackupStatusCard creation, download, permission, and restore flows', () => {
@@ -787,5 +835,389 @@ describe('BackupStatusCard creation, download, permission, and restore flows', (
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent(/Corrupt archive: checksum validation failed/i)
+  })
+
+  it('blocks duplicate same-render restore requests and releases guard afterward', async () => {
+    let restoreCallCount = 0
+    let resolveRestore: () => void
+    const restorePromise = new Promise<void>((resolve) => {
+      resolveRestore = resolve
+    })
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = (init?.method || 'GET').toUpperCase()
+
+      if (url.includes('/api/backups/status')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => mockStatus } as Response
+      }
+      if (url.includes('/api/backups') && method === 'GET') {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ backups: mockBackups }) } as Response
+      }
+      if (url.includes('/api/backups/restore/server/') && method === 'POST') {
+        restoreCallCount++
+        await restorePromise
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            restored: { ...mockStatus.latest, collectionCount: 1, uncompressedUploadBytes: 100, database: 'db' },
+            safetyBackup: { ...mockStatus.latest, filename: 'safety.json.gz', completedAt: '2026-09-10T02:00:00.000Z' },
+            sessionsRevoked: true,
+          }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    const user = userEvent.setup()
+    render(<BackupStatusCard />)
+
+    const manageButton = await screen.findByTitle('Open backup manager')
+    await user.click(manageButton)
+
+    await screen.findByRole('dialog', { name: /Backup manager/i })
+    const restoreButtons = screen.getAllByRole('button', { name: /Restore backup from/i })
+    await user.click(restoreButtons[0])
+
+    const restoreDialog = await screen.findByRole('alertdialog', { name: /Restore this backup\?/i })
+    const input = within(restoreDialog).getByPlaceholderText('RESTORE')
+    await user.type(input, 'RESTORE')
+
+    const confirmButton = within(restoreDialog).getByRole('button', { name: /^Restore \d/i })
+    act(() => {
+      confirmButton.click()
+      confirmButton.click()
+    })
+
+    expect(restoreCallCount).toBe(1)
+    resolveRestore!()
+    await waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(/Backup restored successfully/i)
+    })
+  })
+
+  it('cancels restore dialog when user clicks Cancel button or presses Escape', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/backups/status')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => mockStatus } as Response
+      }
+      if (url.includes('/api/backups')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ backups: mockBackups }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    const user = userEvent.setup()
+    render(<BackupStatusCard />)
+
+    const manageButton = await screen.findByTitle('Open backup manager')
+    await user.click(manageButton)
+
+    await screen.findByRole('dialog', { name: /Backup manager/i })
+    const restoreButtons = screen.getAllByRole('button', { name: /Restore backup from/i })
+    await user.click(restoreButtons[0])
+
+    expect(screen.getByRole('alertdialog', { name: /Restore this backup\?/i })).toBeInTheDocument()
+
+    const cancelButton = screen.getByRole('button', { name: 'Cancel' })
+    await user.click(cancelButton)
+
+    expect(screen.queryByRole('alertdialog', { name: /Restore this backup\?/i })).not.toBeInTheDocument()
+
+    // Reopen restore preview and close via Escape key
+    await user.click(restoreButtons[0])
+    expect(screen.getByRole('alertdialog', { name: /Restore this backup\?/i })).toBeInTheDocument()
+
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByRole('alertdialog', { name: /Restore this backup\?/i })).not.toBeInTheDocument()
+  })
+
+  it('preserves operation failure error message across follow-up status refresh', async () => {
+    let statusCallCount = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = (init?.method || 'GET').toUpperCase()
+
+      if (url.includes('/api/backups/status')) {
+        statusCallCount++
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ ...mockStatus, lastError: null }),
+        } as Response
+      }
+      if (url.includes('/api/backups/run') && method === 'POST') {
+        return {
+          ok: false,
+          status: 400,
+          headers: new Headers(),
+          json: async () => ({ message: 'Disk space exhausted on backup partition' }),
+        } as Response
+      }
+      if (url.includes('/api/backups') && method === 'GET') {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ backups: mockBackups }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    const user = userEvent.setup()
+    render(<BackupStatusCard />)
+
+    const manageButton = await screen.findByTitle('Open backup manager')
+    await user.click(manageButton)
+
+    await screen.findByRole('dialog', { name: /Backup manager/i })
+    const runButton = screen.getByRole('button', { name: /Back up now/i })
+    await user.click(runButton)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('Disk space exhausted on backup partition')
+    expect(statusCallCount).toBeGreaterThanOrEqual(2)
+  })
+
+  it('inspects local backup archive and handles size limit 413 error', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = (init?.method || 'GET').toUpperCase()
+
+      if (url.includes('/api/backups/status')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => mockStatus } as Response
+      }
+      if (url.includes('/api/backups') && method === 'GET') {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ backups: mockBackups }) } as Response
+      }
+      if (url.includes('/api/backups/restore/upload') && method === 'POST') {
+        return {
+          ok: false,
+          status: 413,
+          headers: new Headers(),
+          json: async () => ({ message: 'Backup archive exceeds maximum upload size (50MB)' }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    const user = userEvent.setup()
+    render(<BackupStatusCard />)
+
+    const manageButton = await screen.findByTitle('Open backup manager')
+    await user.click(manageButton)
+
+    await screen.findByRole('dialog', { name: /Backup manager/i })
+    const fileInput = document.querySelector('input.backup-restore-file-input') as HTMLInputElement
+    const validFile = new File(['valid gzip contents'], 'phoneflow-2026-09-11.json.gz', { type: 'application/gzip' })
+
+    fireEvent.change(fileInput, { target: { files: [validFile] } })
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent(/Backup archive exceeds maximum upload size/i)
+  })
+
+  it('successfully inspects local backup archive and opens restore candidate preview with correct age tone', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      const method = (init?.method || 'GET').toUpperCase()
+
+      if (url.includes('/api/backups/status')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => mockStatus } as Response
+      }
+      if (url.includes('/api/backups') && method === 'GET') {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ backups: mockBackups }) } as Response
+      }
+      if (url.includes('/api/backups/restore/upload') && method === 'POST') {
+        return {
+          ok: true,
+          status: 201,
+          headers: new Headers(),
+          json: async () => ({
+            backup: {
+              ...mockStatus.latest,
+              filename: 'phoneflow-2026-09-11.json.gz',
+              createdAt: '2026-09-11T02:00:00.000Z',
+              token: 'stage-token-abc',
+              collectionCount: 8,
+              uncompressedUploadBytes: 4096,
+              database: 'phoneflow_restored',
+            },
+          }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    const user = userEvent.setup()
+    render(<BackupStatusCard />)
+
+    const manageButton = await screen.findByTitle('Open backup manager')
+    await user.click(manageButton)
+
+    await screen.findByRole('dialog', { name: /Backup manager/i })
+    const fileInput = document.querySelector('input.backup-restore-file-input') as HTMLInputElement
+    const validFile = new File(['valid gzip contents'], 'phoneflow-2026-09-11.json.gz', { type: 'application/gzip' })
+
+    fireEvent.change(fileInput, { target: { files: [validFile] } })
+
+    const restoreDialog = await screen.findByRole('alertdialog', { name: /Restore this backup\?/i })
+    expect(restoreDialog).toBeInTheDocument()
+    expect(restoreDialog).toHaveTextContent(/newer than the latest/i)
+  })
+})
+
+describe('BackupStatusCard status loading and visual states', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('renders loading state initially while reading status', () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise(() => {}))
+    render(<BackupStatusCard />)
+    expect(screen.getByText('Checking backup')).toBeInTheDocument()
+    expect(screen.getByText('Reading server status…')).toBeInTheDocument()
+  })
+
+  it('displays error state when initial status fetch fails', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/backups/status')) {
+        return { ok: false, status: 400, headers: new Headers(), json: async () => ({ message: 'Backup service unavailable' }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    render(<BackupStatusCard />)
+    expect(await screen.findByText('Backup needs attention')).toBeInTheDocument()
+    expect(screen.getByText('Backup service unavailable')).toBeInTheDocument()
+  })
+
+  it('displays disabled state when daily backup is disabled in status', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/backups/status')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ ...mockStatus, enabled: false }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    render(<BackupStatusCard />)
+    expect(await screen.findByText('Daily backup disabled')).toBeInTheDocument()
+    expect(screen.getByText('Manual backup is still available')).toBeInTheDocument()
+  })
+
+  it('displays restoring state when status.restoring is true', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/backups/status')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ ...mockStatus, restoring: true }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    render(<BackupStatusCard />)
+    expect(await screen.findByText('Restoring shop')).toBeInTheDocument()
+    expect(screen.getByText('Replacing database and uploaded images…')).toBeInTheDocument()
+  })
+
+  it('displays running state when status.running is true', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/backups/status')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ ...mockStatus, running: true }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    render(<BackupStatusCard />)
+    expect(await screen.findByText('Backing up shop')).toBeInTheDocument()
+    expect(screen.getByText('Database and images are being saved…')).toBeInTheDocument()
+  })
+
+  it('displays attention state when status.lastError is present', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/api/backups/status')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ ...mockStatus, lastError: 'Database snapshot timed out' }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    render(<BackupStatusCard />)
+    expect(await screen.findByText('Backup needs attention')).toBeInTheDocument()
+    expect(screen.getByText('Database snapshot timed out')).toBeInTheDocument()
+  })
+})
+
+describe('BackupStatusCard lifecycle and concurrency', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('cleans up interval timer and event listeners on unmount', () => {
+    const clearIntervalSpy = vi.spyOn(window, 'clearInterval')
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => ({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => mockStatus,
+    } as Response))
+
+    const { unmount } = render(<BackupStatusCard />)
+    unmount()
+
+    expect(clearIntervalSpy).toHaveBeenCalled()
+  })
+
+  it('does not crash or update state if unmounted during pending status fetch', async () => {
+    let resolveStatus: (value: any) => void
+    const pendingPromise = new Promise((resolve) => {
+      resolveStatus = resolve
+    })
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      await pendingPromise
+      return { ok: true, status: 200, headers: new Headers(), json: async () => mockStatus } as Response
+    })
+
+    const { unmount } = render(<BackupStatusCard />)
+    unmount()
+    resolveStatus!(null)
+  })
+
+  it('does not overwrite a manual refresh with an older background poll', async () => {
+    let poll!: () => void
+    const originalInterval = globalThis.setInterval.bind(globalThis)
+    vi.spyOn(window, 'setInterval').mockImplementation((callback, delay) => {
+      if (delay === 60_000) {
+        poll = callback as () => void
+        return originalInterval(() => {}, delay)
+      }
+      return originalInterval(callback, delay)
+    })
+    vi.spyOn(document, 'hidden', 'get').mockReturnValue(false)
+    let finishPoll!: (value: unknown) => void
+    let calls = 0
+    vi.spyOn(apiModule, 'api').mockImplementation(async (path) => {
+      if (path === '/backups/status') {
+        calls++
+        if (calls === 2) return new Promise((resolve) => { finishPoll = resolve }) as never
+        return { ...mockStatus, retentionCount: calls >= 3 ? 7 : 2 } as never
+      }
+      return { backups: mockBackups } as never
+    })
+    const user = userEvent.setup()
+    render(<BackupStatusCard />)
+    const manage = await screen.findByTitle('Open backup manager')
+    act(() => { poll() })
+    expect(calls).toBe(2)
+    await user.click(manage)
+    await screen.findByRole('dialog', { name: /Backup manager/i })
+    expect(calls).toBe(3)
+    expect(screen.getByText('7 archives')).toBeInTheDocument()
+    await act(async () => { finishPoll({ ...mockStatus, retentionCount: 1 }) })
+    expect(screen.getByText('7 archives')).toBeInTheDocument()
   })
 })

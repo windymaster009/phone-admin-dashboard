@@ -205,8 +205,29 @@ export default function SecurityWorkspacePage() {
   const [toastMessage, setToastMessage] = useState('')
   const [copied, setCopied] = useState('')
   const [clock, setClock] = useState(Date.now())
+  const isMountedRef = useRef(true)
+  const loadRequestIdRef = useRef(0)
+  const filterRequestIdRef = useRef(0)
+  const olderEventsRequestRef = useRef<number | null>(null)
+  const copyTimeoutRef = useRef<number | null>(null)
+  const eventFilterRef = useRef(eventFilter)
+  eventFilterRef.current = eventFilter
+
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+      if (copyTimeoutRef.current) {
+        window.clearTimeout(copyTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const load = useCallback(async () => {
+    const requestId = ++loadRequestIdRef.current
+    const eventsRequestId = ++filterRequestIdRef.current
+    olderEventsRequestRef.current = null
+    setLoadingOlderEvents(false)
     setLoading(true)
     setError('')
     setUserFormError('')
@@ -217,44 +238,61 @@ export default function SecurityWorkspacePage() {
         : Promise.resolve(null)
       const [sessionResult, eventResult, twoFactorResult, staffResult] = await Promise.all([
         api<{ sessions: AuthSession[] }>('/security/sessions'),
-        api<{ events: SecurityEvent[]; nextCursor?: string | null; hasMore?: boolean }>(`/security/events?limit=20&filter=${eventFilter}`),
+        api<{ events: SecurityEvent[]; nextCursor?: string | null; hasMore?: boolean }>(`/security/events?limit=20&filter=${eventFilterRef.current}`),
         api<TwoFactorStatus>('/security/two-factor'),
         staffResultPromise,
       ])
+      if (!isMountedRef.current || requestId !== loadRequestIdRef.current) return
       setSessions(sessionResult.sessions)
-      setEvents(eventResult.events)
-      setNextEventCursor(eventResult.nextCursor ?? null)
-      setHasMoreEvents(Boolean(eventResult.hasMore))
+      if (eventsRequestId === filterRequestIdRef.current) {
+        setEvents(eventResult.events)
+        setNextEventCursor(eventResult.nextCursor ?? null)
+        setHasMoreEvents(Boolean(eventResult.hasMore))
+      }
       setTwoFactorStatus(twoFactorResult)
       setStaffUsers(staffResult?.users ?? null)
     } catch (reason) {
+      if (!isMountedRef.current || requestId !== loadRequestIdRef.current) return
       setError(reason instanceof Error ? reason.message : 'Unable to load security information')
     } finally {
-      setLoading(false)
+      if (isMountedRef.current && requestId === loadRequestIdRef.current) {
+        setLoading(false)
+      }
     }
-  }, [eventFilter, user?.role])
+  }, [user?.role])
 
   const changeEventFilter = async (filter: SecurityEventFilter) => {
+    eventFilterRef.current = filter
     setEventFilter(filter)
+    const requestId = ++filterRequestIdRef.current
+    olderEventsRequestRef.current = null
+    setLoadingOlderEvents(false)
+    setNextEventCursor(null)
+    setHasMoreEvents(false)
     try {
       const result = await api<{ events: SecurityEvent[]; nextCursor?: string | null; hasMore?: boolean }>(
         `/security/events?limit=20&filter=${filter}`,
       )
+      if (!isMountedRef.current || requestId !== filterRequestIdRef.current) return
       setEvents(result.events)
       setNextEventCursor(result.nextCursor ?? null)
       setHasMoreEvents(Boolean(result.hasMore))
     } catch (reason) {
+      if (!isMountedRef.current || requestId !== filterRequestIdRef.current) return
       setError(reason instanceof Error ? reason.message : 'Unable to filter security events')
     }
   }
 
   const loadOlderSecurityEvents = async () => {
-    if (!nextEventCursor || loadingOlderEvents) return
+    if (!nextEventCursor || olderEventsRequestRef.current !== null) return
+    const requestId = filterRequestIdRef.current
+    olderEventsRequestRef.current = requestId
     setLoadingOlderEvents(true)
     try {
       const result = await api<{ events: SecurityEvent[]; nextCursor?: string | null; hasMore?: boolean }>(
         `/security/events?limit=20&filter=${eventFilter}&cursor=${encodeURIComponent(nextEventCursor)}`,
       )
+      if (!isMountedRef.current || requestId !== filterRequestIdRef.current) return
       setEvents((current) => {
         const existingKeys = new Set(current.map((e) => e.createdAt + e.action))
         const uniqueOlder = result.events.filter((e) => !existingKeys.has(e.createdAt + e.action))
@@ -263,9 +301,13 @@ export default function SecurityWorkspacePage() {
       setNextEventCursor(result.nextCursor ?? null)
       setHasMoreEvents(Boolean(result.hasMore))
     } catch (reason) {
+      if (!isMountedRef.current || requestId !== filterRequestIdRef.current) return
       setError(reason instanceof Error ? reason.message : 'Unable to load older events')
     } finally {
-      setLoadingOlderEvents(false)
+      if (isMountedRef.current && olderEventsRequestRef.current === requestId) {
+        olderEventsRequestRef.current = null
+        setLoadingOlderEvents(false)
+      }
     }
   }
 
@@ -382,7 +424,10 @@ export default function SecurityWorkspacePage() {
 
   const rememberCopied = (name: string) => {
     setCopied(name)
-    window.setTimeout(() => setCopied((current) => current === name ? '' : current), 1_500)
+    if (copyTimeoutRef.current) {
+      window.clearTimeout(copyTimeoutRef.current)
+    }
+    copyTimeoutRef.current = window.setTimeout(() => setCopied((current) => current === name ? '' : current), 1_500)
   }
 
   const copyText = async (name: string, value: string) => {
@@ -619,7 +664,22 @@ export default function SecurityWorkspacePage() {
       {staffUsers && <section className="card security-panel security-users-panel" id="user-management">
         <div className="security-panel-title">
           <div><h2>User management</h2><p>View staff access, assign roles, and activate or deactivate accounts.</p></div>
-          {user?.role === 'OWNER' && <button type="button" className="primary-button" onClick={() => setShowUserForm((current) => !current)}><UserPlus size={15} />{showUserForm ? 'Cancel' : 'Add user'}</button>}
+          {user?.role === 'OWNER' && (
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => {
+                if (showUserForm) {
+                  setUserForm(emptyUserForm)
+                  setUserFormError('')
+                }
+                setShowUserForm((current) => !current)
+              }}
+            >
+              <UserPlus size={15} />
+              {showUserForm ? 'Cancel' : 'Add user'}
+            </button>
+          )}
         </div>
 
         {showUserForm && <form className="security-user-form" onSubmit={(event) => void createStaffUser(event)}>

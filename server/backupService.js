@@ -748,7 +748,13 @@ export async function stageRestoreUpload(readable, { filename, userId }) {
 }
 
 async function stageServerRestore(filename) {
-  const sourcePath = await resolveBackupArchive(filename)
+  let sourcePath
+  try {
+    sourcePath = await resolveBackupArchive(filename)
+  } catch (error) {
+    if (error?.code === 'ENOENT') throw restoreRequestError('Backup not found', 404)
+    throw error
+  }
   const config = backupConfig()
   const filepath = path.join(config.directory, `.restore-${randomUUID()}.json.gz`)
   await fs.copyFile(sourcePath, filepath)

@@ -130,12 +130,28 @@ export default function AuthScreen({
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const submittingRef = useRef(false)
+  const isMountedRef = useRef(true)
   const [restoreNotice] = useState<RestoreSuccessNotice | null>(readRestoreSuccessNotice)
 
   useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let active = true
     api<{ setupRequired: boolean }>('/auth/status')
-      .then((result) => setSetupRequired(result.setupRequired))
-      .catch((reason: Error) => setError(reason.message))
+      .then((result) => {
+        if (active) setSetupRequired(result.setupRequired)
+      })
+      .catch((reason: Error) => {
+        if (active) setError(reason.message)
+      })
+    return () => {
+      active = false
+    }
   }, [])
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -154,6 +170,7 @@ export default function AuthScreen({
             code: String(form.get('twoFactorCode') || ''),
           }),
         })
+        if (!isMountedRef.current) return
         setToken(null)
         onAuthenticated(result.user)
         return
@@ -168,6 +185,7 @@ export default function AuthScreen({
             deviceName: /Android/i.test(navigator.userAgent) ? 'PhoneFlow Android' : 'Paired browser',
           }),
         })
+        if (!isMountedRef.current) return
         setToken(null)
         onAuthenticated(result.user)
         return
@@ -189,6 +207,7 @@ export default function AuthScreen({
         body: JSON.stringify(payload),
       }, { retryTransient: setupRequired === false })
 
+      if (!isMountedRef.current) return
       if (result.requiresTwoFactor && result.challengeToken && result.expiresAt) {
         setTwoFactor({ token: result.challengeToken, expiresAt: result.expiresAt, accountName: result.account?.name })
         return
@@ -197,18 +216,21 @@ export default function AuthScreen({
       setToken(null)
       onAuthenticated(result.user)
     } catch (reason) {
+      if (!isMountedRef.current) return
       if (twoFactor && reason instanceof ApiError && reason.status === 401) {
         setError(reason.message || 'Authenticator or recovery code is invalid')
       } else if (pairMode && reason instanceof ApiError && reason.status === 401) {
-        setError('Pairing code is invalid or expired')
+        if (isMountedRef.current) setError('Pairing code is invalid or expired')
       } else {
-        setError(reason instanceof ApiError && reason.status === 401
-          ? 'Invalid email or password'
-          : reason instanceof Error ? reason.message : 'Unable to sign in')
+        if (isMountedRef.current) {
+          setError(reason instanceof ApiError && reason.status === 401
+            ? 'Invalid email or password'
+            : reason instanceof Error ? reason.message : 'Unable to sign in')
+        }
       }
     } finally {
       submittingRef.current = false
-      setBusy(false)
+      if (isMountedRef.current) setBusy(false)
     }
   }
 

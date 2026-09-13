@@ -938,6 +938,9 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
   const [deleteConfirmation, setDeleteConfirmation] = useState(false)
   const [toastMessage, setToastMessage] = useState('')
   const submittingRef = useRef(false)
+  const activeDetailLoanIdRef = useRef<string | null>(null)
+  const detailRequestSeqRef = useRef(0)
+  const scannerRequestSeqRef = useRef(0)
 
   const loadLoans = useCallback(async () => {
     setLoading(true)
@@ -998,12 +1001,22 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
   }
 
   async function openDetail(loan: Loan) {
+    const seq = ++detailRequestSeqRef.current
+    activeDetailLoanIdRef.current = loan._id
     setModalError('')
     setPaymentConfirmation(null)
     setCancelConfirmation(false)
     setDeleteConfirmation(false)
-    try { setDetail(await api<LoanDetail>(`/loans/${loan._id}`)) }
-    catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to open loan') }
+    try {
+      const nextDetail = await api<LoanDetail>(`/loans/${loan._id}`)
+      if (detailRequestSeqRef.current === seq && activeDetailLoanIdRef.current === loan._id) {
+        setDetail(nextDetail)
+      }
+    } catch (reason) {
+      if (detailRequestSeqRef.current === seq && activeDetailLoanIdRef.current === loan._id) {
+        setError(reason instanceof Error ? reason.message : 'Unable to open loan')
+      }
+    }
   }
 
   async function recordPayment(event: FormEvent<HTMLFormElement>) {
@@ -1080,19 +1093,25 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
   async function findLoanByBarcode(rawCode: string) {
     const code = rawCode.trim()
     if (!code) return
+    const seq = ++scannerRequestSeqRef.current
     setBusy(true)
     setScannerError('')
     try {
       const result = await api<{ loans: Loan[] }>(`/loans?${new URLSearchParams({ search: code }).toString()}`)
+      if (scannerRequestSeqRef.current !== seq) return
       const normalised = code.toUpperCase()
       const loan = result.loans.find((item) => item.loanNo.toUpperCase() === normalised) || result.loans[0]
       if (!loan) throw new Error('No loan matches that barcode. Check that you scanned the loan receipt.')
       setShowScanner(false)
       await openDetail(loan)
     } catch (reason) {
-      setScannerError(reason instanceof Error ? reason.message : 'Unable to find this loan')
+      if (scannerRequestSeqRef.current === seq) {
+        setScannerError(reason instanceof Error ? reason.message : 'Unable to find this loan')
+      }
     } finally {
-      setBusy(false)
+      if (scannerRequestSeqRef.current === seq) {
+        setBusy(false)
+      }
     }
   }
 
@@ -1167,8 +1186,8 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
     </article>
 
     {showCreate && <CreateLoanModal busy={busy} error={modalError} createdLoan={createdLoan} onClose={() => { if (!busy) { setShowCreate(false); setCreatedLoan(null) } }} onSubmit={createLoan} />}
-    {showScanner && <ScanLoanModal busy={busy} error={scannerError} onClose={() => { if (!busy) { setShowScanner(false); setScannerError('') } }} onScan={(value) => void findLoanByBarcode(value)} />}
-    {detail && <LoanDetailModal detail={detail} user={user} busy={busy} error={modalError} paymentConfirmation={paymentConfirmation} cancelConfirmation={cancelConfirmation} deleteConfirmation={deleteConfirmation} onClose={() => { if (!busy) { setDetail(null); setPaymentConfirmation(null); setCancelConfirmation(false); setDeleteConfirmation(false) } }} onPayment={recordPayment} onDueDate={changeDueDate} onCancel={() => { setModalError(''); setCancelConfirmation(true) }} onConfirmCancel={cancelLoan} onDelete={() => { setModalError(''); setPaymentConfirmation(null); setCancelConfirmation(false); setDeleteConfirmation(true) }} onConfirmDelete={deleteLoan} onCancelConfirmationClose={() => { if (!busy) { setCancelConfirmation(false); setModalError('') } }} onDeleteConfirmationClose={() => { if (!busy) { setDeleteConfirmation(false); setModalError('') } }} />}
+    {showScanner && <ScanLoanModal busy={busy} error={scannerError} onClose={() => { if (!busy) { scannerRequestSeqRef.current++; setShowScanner(false); setScannerError('') } }} onScan={(value) => void findLoanByBarcode(value)} />}
+    {detail && <LoanDetailModal detail={detail} user={user} busy={busy} error={modalError} paymentConfirmation={paymentConfirmation} cancelConfirmation={cancelConfirmation} deleteConfirmation={deleteConfirmation} onClose={() => { if (!busy) { activeDetailLoanIdRef.current = null; setDetail(null); setPaymentConfirmation(null); setCancelConfirmation(false); setDeleteConfirmation(false) } }} onPayment={recordPayment} onDueDate={changeDueDate} onCancel={() => { setModalError(''); setCancelConfirmation(true) }} onConfirmCancel={cancelLoan} onDelete={() => { setModalError(''); setPaymentConfirmation(null); setCancelConfirmation(false); setDeleteConfirmation(true) }} onConfirmDelete={deleteLoan} onCancelConfirmationClose={() => { if (!busy) { setCancelConfirmation(false); setModalError('') } }} onDeleteConfirmationClose={() => { if (!busy) { setDeleteConfirmation(false); setModalError('') } }} />}
     <NotificationToast message={toastMessage} onDismiss={() => setToastMessage('')} />
   </div>
 }

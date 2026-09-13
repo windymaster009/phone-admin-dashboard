@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -35,6 +36,36 @@ describe('AuthScreen regression tests', () => {
     render(<AuthScreen onAuthenticated={vi.fn()} theme="dark" shop={mockShop} />)
 
     expect(screen.getByText(/Checking secure connection…/i)).toBeInTheDocument()
+  })
+
+  it('shows login failures and releases busy state under Strict Mode', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => new Response(JSON.stringify(
+      String(input).includes('/auth/status') ? { setupRequired: false } : { message: 'Rejected' },
+    ), { status: String(input).includes('/auth/status') ? 200 : 401 }))
+    const user = userEvent.setup()
+    render(<StrictMode><AuthScreen onAuthenticated={vi.fn()} theme="dark" shop={mockShop} /></StrictMode>)
+    await user.type(await screen.findByPlaceholderText('owner@shop.com'), 'owner@example.test')
+    await user.type(screen.getByPlaceholderText('Enter your password'), 'incorrect-password')
+    await user.click(screen.getByRole('button', { name: /^Sign in$/i }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid email or password')
+    expect(screen.getByRole('button', { name: /^Sign in$/i })).toBeEnabled()
+  })
+
+  it('does not authenticate from a login response after unmount', async () => {
+    let finish!: (value: Response) => void
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input).includes('/auth/status')) return new Response(JSON.stringify({ setupRequired: false }))
+      return new Promise<Response>((resolve) => { finish = resolve })
+    })
+    const authenticated = vi.fn()
+    const user = userEvent.setup()
+    const { unmount } = render(<AuthScreen onAuthenticated={authenticated} theme="dark" shop={mockShop} />)
+    await user.type(await screen.findByPlaceholderText('owner@shop.com'), 'owner@example.test')
+    await user.type(screen.getByPlaceholderText('Enter your password'), 'test-password')
+    await user.click(screen.getByRole('button', { name: /^Sign in$/i }))
+    unmount()
+    await act(async () => { finish(new Response(JSON.stringify({ user: mockUser }))) })
+    expect(authenticated).not.toHaveBeenCalled()
   })
 
   it('displays error if /auth/status request fails', async () => {
@@ -374,5 +405,211 @@ describe('AuthScreen regression tests', () => {
 
     // Should have removed the key from session storage so subsequent refreshes don't show it again
     expect(safeStorage.getJSON('phoneflow_restore_success', null, undefined, 'session')).toBeNull()
+  })
+
+  it('handles 409 error from /auth/bootstrap when owner account already exists', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/auth/status')) {
+        return new Response(JSON.stringify({ setupRequired: true }), { status: 200 })
+      }
+      if (url.includes('/auth/bootstrap')) {
+        return new Response(JSON.stringify({ message: 'The owner account has already been created' }), { status: 409 })
+      }
+      return new Response('Not found', { status: 404 })
+    })
+
+    const user = userEvent.setup()
+    render(<AuthScreen onAuthenticated={vi.fn()} theme="dark" shop={mockShop} />)
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Shop owner')).toBeInTheDocument()
+    })
+
+    await user.type(screen.getByPlaceholderText('Shop owner'), 'Late Owner')
+    await user.type(screen.getByPlaceholderText('owner@shop.com'), 'late@owner.com')
+    await user.type(screen.getByPlaceholderText('Enter your password'), 'initialpassword')
+    await user.click(screen.getByRole('button', { name: /Create shop account/i }))
+
+    await waitFor(() => {
+      const alert = screen.getByRole('alert')
+      expect(alert).toHaveTextContent('The owner account has already been created')
+    })
+  })
+
+  it('handles 403 error from /auth/bootstrap when setup is unauthorized', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/auth/status')) {
+        return new Response(JSON.stringify({ setupRequired: true }), { status: 200 })
+      }
+      if (url.includes('/auth/bootstrap')) {
+        return new Response(JSON.stringify({ message: 'Owner setup is not authorized on this server' }), { status: 403 })
+      }
+      return new Response('Not found', { status: 404 })
+    })
+
+    const user = userEvent.setup()
+    render(<AuthScreen onAuthenticated={vi.fn()} theme="dark" shop={mockShop} />)
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Shop owner')).toBeInTheDocument()
+    })
+
+    await user.type(screen.getByPlaceholderText('Shop owner'), 'Unauthorized Attempt')
+    await user.type(screen.getByPlaceholderText('owner@shop.com'), 'unauth@owner.com')
+    await user.type(screen.getByPlaceholderText('Enter your password'), 'initialpassword')
+    await user.click(screen.getByRole('button', { name: /Create shop account/i }))
+
+    await waitFor(() => {
+      const alert = screen.getByRole('alert')
+      expect(alert).toHaveTextContent('Owner setup is not authorized on this server')
+    })
+  })
+
+  it('handles 400 validation error from /auth/bootstrap for short passwords', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/auth/status')) {
+        return new Response(JSON.stringify({ setupRequired: true }), { status: 200 })
+      }
+      if (url.includes('/auth/bootstrap')) {
+        return new Response(JSON.stringify({ message: 'Name, email and a password of at least 8 characters are required' }), { status: 400 })
+      }
+      return new Response('Not found', { status: 404 })
+    })
+
+    const user = userEvent.setup()
+    render(<AuthScreen onAuthenticated={vi.fn()} theme="dark" shop={mockShop} />)
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Shop owner')).toBeInTheDocument()
+    })
+
+    await user.type(screen.getByPlaceholderText('Shop owner'), 'Owner Short')
+    await user.type(screen.getByPlaceholderText('owner@shop.com'), 'short@owner.com')
+    await user.type(screen.getByPlaceholderText('Enter your password'), '12345678')
+    await user.click(screen.getByRole('button', { name: /Create shop account/i }))
+
+    await waitFor(() => {
+      const alert = screen.getByRole('alert')
+      expect(alert).toHaveTextContent('Name, email and a password of at least 8 characters are required')
+    })
+  })
+
+  it('prevents duplicate in-flight bootstrap submissions and re-enables after failure', async () => {
+    let resolveBootstrapPromise: (res: Response) => void
+    const bootstrapPromise = new Promise<Response>((resolve) => {
+      resolveBootstrapPromise = resolve
+    })
+
+    let bootstrapCalls = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/auth/status')) {
+        return new Response(JSON.stringify({ setupRequired: true }), { status: 200 })
+      }
+      if (url.includes('/auth/bootstrap')) {
+        bootstrapCalls++
+        return bootstrapCalls === 1 ? bootstrapPromise : new Response(JSON.stringify({ user: mockUser }), { status: 200 })
+      }
+      return new Response('Not found', { status: 404 })
+    })
+
+    const user = userEvent.setup()
+    render(<AuthScreen onAuthenticated={vi.fn()} theme="dark" shop={mockShop} />)
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText('Shop owner')).toBeInTheDocument()
+    })
+
+    await user.type(screen.getByPlaceholderText('Shop owner'), 'Owner Duplicate')
+    await user.type(screen.getByPlaceholderText('owner@shop.com'), 'dup@owner.com')
+    await user.type(screen.getByPlaceholderText('Enter your password'), 'initialpassword')
+
+    const submitBtn = screen.getByRole('button', { name: /Create shop account/i })
+    act(() => {
+      const form = submitBtn.closest('form')!
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    })
+
+    // First click puts button into busy state
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Please wait…/i })).toBeDisabled()
+    })
+    expect(bootstrapCalls).toBe(1)
+
+    // Subsequent click attempt while in-flight should be ignored
+    await user.click(screen.getByRole('button', { name: /Please wait…/i }))
+    expect(bootstrapCalls).toBe(1)
+
+    // Complete bootstrap with failure
+    resolveBootstrapPromise!(new Response(JSON.stringify({ message: 'Setup rejected' }), { status: 400 }))
+    await screen.findByRole('alert')
+    await user.click(screen.getByRole('button', { name: /Create shop account/i }))
+    expect(bootstrapCalls).toBe(2)
+  })
+
+  it('safely handles unmount during /auth/status fetch', async () => {
+    let resolveStatus: (res: Response) => void
+    const statusPromise = new Promise<Response>((resolve) => {
+      resolveStatus = resolve
+    })
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/auth/status')) return statusPromise
+      return new Response('Not found', { status: 404 })
+    })
+
+    const { unmount } = render(<AuthScreen onAuthenticated={vi.fn()} theme="dark" shop={mockShop} />)
+    expect(screen.getByText(/Checking secure connection…/i)).toBeInTheDocument()
+
+    // Unmount while in flight
+    unmount()
+
+    // Now resolve the promise - should not throw unmounted state update warning/error
+    resolveStatus!(new Response(JSON.stringify({ setupRequired: false }), { status: 200 }))
+    await new Promise((r) => setTimeout(r, 20))
+  })
+
+  it('stardust canvas renders with simulated 2D context in both dark and light modes', () => {
+    const mockContext = {
+      setTransform: vi.fn(),
+      fillRect: vi.fn(),
+      fillStyle: '',
+    }
+    const getContextSpy = vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(mockContext as unknown as CanvasRenderingContext2D)
+    let animationCallback: FrameRequestCallback | null = null
+    const requestAnimationFrameSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+      animationCallback = cb
+      return 1
+    })
+
+    const { unmount, rerender } = render(<AuthScreen onAuthenticated={vi.fn()} theme="dark" shop={mockShop} />)
+
+    expect(getContextSpy).toHaveBeenCalled()
+
+    // Trigger animation frame with elapsed time >= 16ms
+    if (animationCallback) {
+      act(() => {
+        (animationCallback as FrameRequestCallback)(50)
+      })
+    }
+    expect(mockContext.fillRect).toHaveBeenCalled()
+
+    // Light theme
+    rerender(<AuthScreen onAuthenticated={vi.fn()} theme="light" shop={mockShop} />)
+    if (animationCallback) {
+      act(() => {
+        (animationCallback as FrameRequestCallback)(100)
+      })
+    }
+    expect(mockContext.fillRect).toHaveBeenCalled()
+
+    unmount()
+    requestAnimationFrameSpy.mockRestore()
+    getContextSpy.mockRestore()
   })
 })

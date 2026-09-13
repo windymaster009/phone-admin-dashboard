@@ -162,6 +162,18 @@ export default function OperationModalBridge() {
   const submittingPurchaseRef = useRef(false)
   const submittingSaleRef = useRef(false)
   const submittingPawnRef = useRef(false)
+  const submittingStockRef = useRef(false)
+  const scanRequestSeqRef = useRef(0)
+  const scanInFlightRef = useRef(false)
+
+  useEffect(() => {
+    // A lookup belongs to the dialog that started it, not the next operation.
+    if (scanInFlightRef.current) {
+      scanInFlightRef.current = false
+      setBusy(false)
+    }
+    return () => { scanRequestSeqRef.current++ }
+  }, [kind])
 
   useEffect(() => {
     const syncPreference = (event: Event) => setPawnAutoCalculate((event as CustomEvent<boolean>).detail)
@@ -420,35 +432,58 @@ export default function OperationModalBridge() {
   }, [])
 
   useEffect(() => {
+    let active = true
     if (!kind) return
     if (kind === 'stock') {
       setStockInventoryLoading(true)
       api<{ items: InventoryItem[] }>('/inventory')
-        .then((result) => setInventory(Array.isArray(result?.items) ? result.items : []))
-        .catch((reason: Error) => setError(reason.message))
-        .finally(() => setStockInventoryLoading(false))
+        .then((result) => {
+          if (active) setInventory(Array.isArray(result?.items) ? result.items : [])
+        })
+        .catch((reason: Error) => {
+          if (active) setError(reason.message)
+        })
+        .finally(() => {
+          if (active) setStockInventoryLoading(false)
+        })
     }
     if (kind === 'sale' || kind === 'pawn' || kind === 'purchase') {
       setCustomersLoading(true)
       api<{ customers: Customer[] }>('/customers')
-        .then((result) => setCustomers(Array.isArray(result?.customers) ? result.customers : []))
-        .catch((reason: Error) => setError(reason.message))
-        .finally(() => setCustomersLoading(false))
+        .then((result) => {
+          if (active) setCustomers(Array.isArray(result?.customers) ? result.customers : [])
+        })
+        .catch((reason: Error) => {
+          if (active) setError(reason.message)
+        })
+        .finally(() => {
+          if (active) setCustomersLoading(false)
+        })
     }
     if (kind === 'sale') {
       setSaleInventoryLoading(true)
       api<{ items: InventoryItem[] }>('/inventory?status=IN_STOCK')
         .then((result) => {
+          if (!active) return
           const items = Array.isArray(result?.items) ? result.items : []
           setInventory(items.filter((item) => item.quantity > 0))
         })
-        .catch((reason: Error) => setError(reason.message))
-        .finally(() => setSaleInventoryLoading(false))
+        .catch((reason: Error) => {
+          if (active) setError(reason.message)
+        })
+        .finally(() => {
+          if (active) setSaleInventoryLoading(false)
+        })
       api<{ usdKhr: number }>('/exchange-rates')
-        .then((result) => setUsdKhrRate(result.usdKhr))
-        .catch(() => setUsdKhrRate(4100))
+        .then((result) => {
+          if (active) setUsdKhrRate(result.usdKhr)
+        })
+        .catch(() => {
+          if (active) setUsdKhrRate(4100)
+        })
       api<{ enabled: boolean; configured: boolean }>('/payway/config')
         .then((result) => {
+          if (!active) return
           const available = Boolean(result?.enabled && result?.configured)
           setPaywayAvailable(available)
           if (!available) {
@@ -457,22 +492,40 @@ export default function OperationModalBridge() {
             setSaleDraft(null)
           }
         })
-        .catch(() => setPaywayAvailable(false))
+        .catch(() => {
+          if (active) setPaywayAvailable(false)
+        })
     }
     if (kind === 'purchase') {
       setSuppliersLoading(true)
       api<{ suppliers: Supplier[] }>('/suppliers')
-        .then((result) => setSuppliers(Array.isArray(result?.suppliers) ? result.suppliers : []))
-        .catch((reason: Error) => setError(reason.message))
-        .finally(() => setSuppliersLoading(false))
+        .then((result) => {
+          if (active) setSuppliers(Array.isArray(result?.suppliers) ? result.suppliers : [])
+        })
+        .catch((reason: Error) => {
+          if (active) setError(reason.message)
+        })
+        .finally(() => {
+          if (active) setSuppliersLoading(false)
+        })
       api<{ usdKhr: number }>('/exchange-rates')
-        .then((result) => setUsdKhrRate(result.usdKhr))
-        .catch(() => setUsdKhrRate(4100))
+        .then((result) => {
+          if (active) setUsdKhrRate(result.usdKhr)
+        })
+        .catch(() => {
+          if (active) setUsdKhrRate(4100)
+        })
       setPurchaseInventoryLoading(true)
       api<{ items: InventoryItem[] }>('/inventory')
-        .then((result) => setInventory(Array.isArray(result?.items) ? result.items : []))
-        .catch((reason: Error) => setError(reason.message))
-        .finally(() => setPurchaseInventoryLoading(false))
+        .then((result) => {
+          if (active) setInventory(Array.isArray(result?.items) ? result.items : [])
+        })
+        .catch((reason: Error) => {
+          if (active) setError(reason.message)
+        })
+        .finally(() => {
+          if (active) setPurchaseInventoryLoading(false)
+        })
     }
     if (kind === 'pawn') {
       const saved = safeStorage.getItem('phoneflow_last_valuation', 'session')
@@ -486,40 +539,51 @@ export default function OperationModalBridge() {
           if (valuationCurrency === 'KHR' && (valuationExchangeRate < 1000 || valuationExchangeRate > 10000)) {
             throw new Error('This KHR valuation does not have a valid exchange rate')
           }
-          setPawnValuation(valuation)
-          setPawnAutoCalculate(valuation.calculationMode !== 'MANUAL')
-          setPawnCurrency(valuationCurrency)
-          if (valuationCurrency === 'KHR') {
-            setUsdKhrRate(valuationExchangeRate)
-            importedExchangeRate = true
+          if (active) {
+            setPawnValuation(valuation)
+            setPawnAutoCalculate(valuation.calculationMode !== 'MANUAL')
+            setPawnCurrency(valuationCurrency)
+            if (valuationCurrency === 'KHR') {
+              setUsdKhrRate(valuationExchangeRate)
+              importedExchangeRate = true
+            }
+            if (Number(valuation.estimatedValue) > 0) setEstimatedValue(Number(valuation.estimatedValue))
+            if (Number(valuation.marketPrice) > 0) setPawnMarketPrice(Number(valuation.marketPrice))
+            if (Number.isFinite(Number(valuation.ageMonths))) setPawnAgeMonths(Math.max(0, Number(valuation.ageMonths)))
+            if (Number.isFinite(Number(valuation.repairCost))) setPawnRepairCost(Math.max(0, Number(valuation.repairCost)))
+            if (Number(valuation.pawnRate) >= 40 && Number(valuation.pawnRate) <= 50) setPawnPercentage(Number(valuation.pawnRate))
+            if (Number(valuation.maximumPawn) > 0) setPawnPrincipal(String(roundPawnAmount(Number(valuation.maximumPawn), valuationCurrency)))
+            if (Number.isFinite(Number(valuation.batteryHealth))) setPawnBatteryHealth(String(Number(valuation.batteryHealth)))
+            const conditionMap: Record<string, string> = { excellent: 'LIKE_NEW', good: 'GOOD', fair: 'FAIR', damaged: 'DAMAGED' }
+            if (valuation.condition && conditionMap[valuation.condition]) setPawnCondition(conditionMap[valuation.condition])
+            if (valuation.lockStatus === 'unlocked') setPawnCarrierLock('UNLOCKED')
+            if (valuation.lockStatus === 'carrier_locked') setPawnCarrierLock('LOCKED')
+            if (Array.isArray(valuation.accessoriesIncluded)) setPawnAccessories(valuation.accessoriesIncluded.filter((accessory) => ['BOX', 'CHARGER', 'CABLE', 'CASE', 'EARPHONES'].includes(accessory)))
+            else if (valuation.accessoryState === 'complete') setPawnAccessories(['BOX', 'CHARGER', 'CABLE'])
+            else if (valuation.accessoryState === 'missing_charger') setPawnAccessories(['BOX'])
+            else if (valuation.accessoryState === 'phone_only') setPawnAccessories([])
           }
-          if (Number(valuation.estimatedValue) > 0) setEstimatedValue(Number(valuation.estimatedValue))
-          if (Number(valuation.marketPrice) > 0) setPawnMarketPrice(Number(valuation.marketPrice))
-          if (Number.isFinite(Number(valuation.ageMonths))) setPawnAgeMonths(Math.max(0, Number(valuation.ageMonths)))
-          if (Number.isFinite(Number(valuation.repairCost))) setPawnRepairCost(Math.max(0, Number(valuation.repairCost)))
-          if (Number(valuation.pawnRate) >= 40 && Number(valuation.pawnRate) <= 50) setPawnPercentage(Number(valuation.pawnRate))
-          if (Number(valuation.maximumPawn) > 0) setPawnPrincipal(String(roundPawnAmount(Number(valuation.maximumPawn), valuationCurrency)))
-          if (Number.isFinite(Number(valuation.batteryHealth))) setPawnBatteryHealth(String(Number(valuation.batteryHealth)))
-          const conditionMap: Record<string, string> = { excellent: 'LIKE_NEW', good: 'GOOD', fair: 'FAIR', damaged: 'DAMAGED' }
-          if (valuation.condition && conditionMap[valuation.condition]) setPawnCondition(conditionMap[valuation.condition])
-          if (valuation.lockStatus === 'unlocked') setPawnCarrierLock('UNLOCKED')
-          if (valuation.lockStatus === 'carrier_locked') setPawnCarrierLock('LOCKED')
-          if (Array.isArray(valuation.accessoriesIncluded)) setPawnAccessories(valuation.accessoriesIncluded.filter((accessory) => ['BOX', 'CHARGER', 'CABLE', 'CASE', 'EARPHONES'].includes(accessory)))
-          else if (valuation.accessoryState === 'complete') setPawnAccessories(['BOX', 'CHARGER', 'CABLE'])
-          else if (valuation.accessoryState === 'missing_charger') setPawnAccessories(['BOX'])
-          else if (valuation.accessoryState === 'phone_only') setPawnAccessories([])
         } catch {
-          setPawnValuation(null)
-          setError('The calculator valuation could not be imported. Review the contract values before continuing.')
+          if (active) {
+            setPawnValuation(null)
+            setError('The calculator valuation could not be imported. Review the contract values before continuing.')
+          }
         } finally {
           safeStorage.removeItem('phoneflow_last_valuation', 'session')
         }
       }
       if (!importedExchangeRate) {
         api<{ usdKhr: number }>('/exchange-rates')
-          .then((result) => setUsdKhrRate(result.usdKhr))
-          .catch(() => setUsdKhrRate(4100))
+          .then((result) => {
+            if (active) setUsdKhrRate(result.usdKhr)
+          })
+          .catch(() => {
+            if (active) setUsdKhrRate(4100)
+          })
       }
+    }
+    return () => {
+      active = false
     }
   }, [kind])
 
@@ -598,7 +662,11 @@ export default function OperationModalBridge() {
     setSaleScannerError('')
     khqrFinalizing.current = false
     khqrChecking.current = false
+    submittingPurchaseRef.current = false
+    submittingSaleRef.current = false
     submittingPawnRef.current = false
+    submittingStockRef.current = false
+    scanRequestSeqRef.current++
     setSellerType('WALK_IN')
     setSupplierId('')
     setSellerCustomerId('')
@@ -707,19 +775,27 @@ export default function OperationModalBridge() {
       setError('Scan or enter a barcode first')
       return
     }
+    const seq = ++scanRequestSeqRef.current
+    scanInFlightRef.current = true
     setBusy(true)
     setError('')
     setScannedItem(null)
     setScannedPawn(null)
     try {
       const result = await api<{ item: InventoryItem; relatedPawn?: RelatedPawn | null }>(`/inventory/scan/${encodeURIComponent(code)}`)
+      if (scanRequestSeqRef.current !== seq) return
       setScanCode(code)
       setScannedItem(result.item)
       setScannedPawn(result.relatedPawn || null)
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to find this product')
+      if (scanRequestSeqRef.current === seq) {
+        setError(reason instanceof Error ? reason.message : 'Unable to find this product')
+      }
     } finally {
-      setBusy(false)
+      if (scanRequestSeqRef.current === seq) {
+        scanInFlightRef.current = false
+        setBusy(false)
+      }
     }
   }, [])
 
@@ -771,10 +847,12 @@ export default function OperationModalBridge() {
 
   async function submitStock(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (submittingStockRef.current || busy) return
     if (!selectedStockItem || !stockAdjustmentValid) {
       setError('Select an item and complete the required adjustment details')
       return
     }
+    submittingStockRef.current = true
     setBusy(true)
     setError('')
     const payload = {
@@ -793,6 +871,7 @@ export default function OperationModalBridge() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to adjust stock')
     } finally {
+      submittingStockRef.current = false
       setBusy(false)
     }
   }

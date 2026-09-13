@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { mkdtempSync, rmSync } from 'node:fs'
+import fs from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { Readable } from 'node:stream'
 import mongoose from 'mongoose'
 import jwt from 'jsonwebtoken'
 import backupRouter from './backupRoutes.js'
@@ -100,6 +102,7 @@ function callRouter(router, {
   body = {},
   query = {},
   user = null,
+  streamContent = null,
 } = {}) {
   return new Promise((resolve) => {
     if (user) currentUser = user
@@ -111,7 +114,11 @@ function callRouter(router, {
       headerMap.authorization = `Bearer ${makeToken(user)}`
     }
 
-    const req = {
+    const reqStream = streamContent !== null
+      ? Readable.from(Array.isArray(streamContent) ? streamContent : [streamContent])
+      : Readable.from([])
+
+    const req = Object.assign(reqStream, {
       method: method.toUpperCase(),
       url,
       originalUrl: url,
@@ -125,7 +132,7 @@ function callRouter(router, {
       },
       socket: { remoteAddress: '127.0.0.1' },
       hostname: 'localhost',
-    }
+    })
 
     let statusCode = 200
     let responseBody = null
@@ -309,4 +316,147 @@ test('DELETE / (bulk) returns 404 when specified backups do not exist', async ()
   })
   assert.equal(res.status, 404)
   assert.equal(res.body.message, 'One or more backups were not found')
+})
+
+test('DELETE / (bulk) validates input: requires non-empty array under 100 valid filenames', async () => {
+  // Empty filenames array
+  const resEmpty = await callRouter(backupRouter, {
+    method: 'DELETE',
+    url: '/',
+    user: mockOwner,
+    body: { filenames: [] },
+  })
+  assert.equal(resEmpty.status, 400)
+  assert.equal(resEmpty.body.message, 'Select at least one backup to delete')
+
+  // Missing filenames property
+  const resMissing = await callRouter(backupRouter, {
+    method: 'DELETE',
+    url: '/',
+    user: mockOwner,
+    body: {},
+  })
+  assert.equal(resMissing.status, 400)
+  assert.equal(resMissing.body.message, 'Select at least one backup to delete')
+
+  // Exceeds 100 limit
+  const tooMany = Array.from({ length: 101 }, (_, i) => `phoneflow-2026-01-01T00-00-00-${String(i).padStart(3, '0')}Z.json.gz`)
+  const resTooMany = await callRouter(backupRouter, {
+    method: 'DELETE',
+    url: '/',
+    user: mockOwner,
+    body: { filenames: tooMany },
+  })
+  assert.equal(resTooMany.status, 400)
+  assert.equal(resTooMany.body.message, 'No more than 100 backups can be deleted at once')
+
+  // Contains invalid pattern
+  const resInvalid = await callRouter(backupRouter, {
+    method: 'DELETE',
+    url: '/',
+    user: mockOwner,
+    body: { filenames: ['phoneflow-2026-01-01T00-00-00-000Z.json.gz', 'invalid-backup.tar'] },
+  })
+  assert.equal(resInvalid.status, 400)
+  assert.equal(resInvalid.body.message, 'Invalid backup filename')
+})
+
+test('DELETE /:filename rejects invalid filename patterns and traversal with 400', async () => {
+  const invalidNames = ['../evil.json.gz', 'backup.tar', 'random-name.json.gz']
+  for (const name of invalidNames) {
+    const res = await callRouter(backupRouter, {
+      method: 'DELETE',
+      url: `/${encodeURIComponent(name)}`,
+      user: mockOwner,
+    })
+    assert.equal(res.status, 400, `DELETE ${name} should return 400`)
+    assert.equal(res.body.message, 'Invalid backup filename')
+  }
+})
+
+test('POST /restore/server/:filename validates filename and returns 404 for missing backup', async () => {
+  // Invalid filename pattern
+  const resInvalid = await callRouter(backupRouter, {
+    method: 'POST',
+    url: '/restore/server/invalid-archive.json.gz',
+    user: mockOwner,
+    body: { confirmation: 'RESTORE' },
+  })
+  assert.equal(resInvalid.status, 400)
+  assert.equal(resInvalid.body.message, 'Invalid backup filename')
+
+  // Valid pattern but does not exist
+  const resMissing = await callRouter(backupRouter, {
+    method: 'POST',
+    url: '/restore/server/phoneflow-2026-01-01T00-00-00-000Z.json.gz',
+    user: mockOwner,
+    body: { confirmation: 'RESTORE' },
+  })
+  assert.equal(resMissing.status, 404)
+  assert.match(resMissing.body?.message || '', /Backup not found|ENOENT/i)
+})
+
+test('POST /restore/server preserves staging filesystem failures as server errors', async (t) => {
+  // The source exists, but preparing the restore fails. This is not a missing archive.
+  t.mock.method(fs, 'access', async () => undefined)
+  t.mock.method(fs, 'copyFile', async () => {
+    throw Object.assign(new Error('Restore staging directory unavailable'), { code: 'ENOENT' })
+  })
+  const result = await callRouter(backupRouter, {
+    method: 'POST',
+    url: '/restore/server/phoneflow-2026-01-01T00-00-00-000Z.json.gz',
+    user: mockOwner,
+    body: { confirmation: 'RESTORE' },
+  })
+  assert.equal(result.status, 500)
+  assert.equal(result.body.message, 'Restore staging directory unavailable')
+})
+
+test('POST /restore/upload validates filename header, empty stream, and size limit', async () => {
+  // Missing or non-.json.gz filename header
+  const resBadHeader = await callRouter(backupRouter, {
+    method: 'POST',
+    url: '/restore/upload',
+    user: mockOwner,
+    headers: { 'x-backup-filename': 'backup.tar' },
+    streamContent: Buffer.from('data'),
+  })
+  assert.equal(resBadHeader.status, 400)
+  assert.equal(resBadHeader.body.message, 'Choose a PhoneFlow .json.gz backup file')
+
+  // Empty stream
+  const resEmptyStream = await callRouter(backupRouter, {
+    method: 'POST',
+    url: '/restore/upload',
+    user: mockOwner,
+    headers: { 'x-backup-filename': 'phoneflow-2026-01-01T00-00-00-000Z.json.gz' },
+    streamContent: [],
+  })
+  assert.equal(resEmptyStream.status, 400)
+  assert.equal(resEmptyStream.body.message, 'The selected backup file is empty')
+
+  // Exceeds max bytes via content-length
+  const resOversized = await callRouter(backupRouter, {
+    method: 'POST',
+    url: '/restore/upload',
+    user: mockOwner,
+    headers: {
+      'x-backup-filename': 'phoneflow-2026-01-01T00-00-00-000Z.json.gz',
+      'content-length': String(1024 * 1024 * 1024), // 1 GB > 512 MB default limit
+    },
+    streamContent: Buffer.from('x'),
+  })
+  assert.equal(resOversized.status, 413)
+  assert.match(resOversized.body.message, /Backup uploads are limited to/i)
+})
+
+test('POST /restore/upload/:token returns 404 for expired or non-existent token', async () => {
+  const res = await callRouter(backupRouter, {
+    method: 'POST',
+    url: '/restore/upload/non-existent-or-expired-token',
+    user: mockOwner,
+    body: { confirmation: 'RESTORE' },
+  })
+  assert.equal(res.status, 404)
+  assert.equal(res.body.message, 'The uploaded backup has expired. Choose the file again.')
 })
