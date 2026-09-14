@@ -9,6 +9,7 @@ import helmet from 'helmet'
 import mongoose from 'mongoose'
 import morgan from 'morgan'
 import { requireAuth } from './auth.js'
+import { corsOriginIsAllowed } from './corsPolicy.js'
 import backupRouter from './backupRoutes.js'
 import { startBackupScheduler, stopBackupScheduler } from './backupService.js'
 import customerDocumentRouter from './documentRoutes.js'
@@ -24,6 +25,7 @@ import { shopProfile } from './shopProfile.js'
 const app = express()
 const port = Number(process.env.PORT || 5000)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const uploadsPath = path.resolve(process.env.UPLOAD_DIR || path.join(__dirname, '../uploads'))
 
 function trustProxySetting() {
   const value = String(process.env.TRUST_PROXY || '').trim()
@@ -127,25 +129,21 @@ app.use(helmet({
     },
   },
 }))
-app.use(cors({
-  origin(origin, callback) {
-    const allowed = (process.env.CLIENT_ORIGIN || 'http://localhost:5173')
-      .split(',')
-      .map((value) => value.trim())
-    const localDevelopmentOrigin = process.env.NODE_ENV !== 'production'
-      && /^https?:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/.test(origin || '')
-    const privateLanDevelopmentOrigin = process.env.NODE_ENV !== 'production'
-      && /^https?:\/\/(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)[^/]+(?::\d+)?$/.test(origin || '')
-    if (!origin || allowed.includes(origin) || localDevelopmentOrigin || privateLanDevelopmentOrigin) return callback(null, true)
-    const error = new Error('Origin is not allowed by CORS')
-    error.status = 403
-    callback(error)
-  },
-  credentials: true,
+app.use(cors((req, callback) => {
+  const origin = req.get('Origin') || ''
+  const host = req.get('host') || ''
+  const requestOrigin = host ? `${req.protocol}://${host}` : ''
+  if (corsOriginIsAllowed({ origin, requestOrigin })) {
+    return callback(null, { origin: true, credentials: true })
+  }
+
+  const error = new Error('Origin is not allowed by CORS')
+  error.status = 403
+  callback(error)
 }))
 app.use(express.json({ limit: '8mb' }))
 app.use(express.urlencoded({ extended: true, limit: '8mb' }))
-app.use('/uploads', requireAuth, express.static(path.resolve(__dirname, '../uploads'), {
+app.use('/uploads', requireAuth, express.static(uploadsPath, {
   dotfiles: 'deny',
   index: false,
   maxAge: '1h',

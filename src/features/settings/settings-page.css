@@ -26,7 +26,10 @@
 .account-settings-card { grid-area: account; }
 .environment-settings-card { grid-area: environment; }
 .valuation-settings-card { grid-area: valuation; }
-.font-size-settings-card { grid-area: display; }
+.font-size-settings-card {
+  display: none;
+  grid-area: display;
+}
 
 .settings-card-heading {
   display: flex;

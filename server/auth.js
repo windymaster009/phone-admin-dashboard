@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken'
 import { ActivityLog, User } from './models.js'
 import { findActiveSession, sessionDurationMs, touchSession } from './sessionService.js'
+import { sessionCookieIsSecure } from './deploymentMode.js'
 
 export const SESSION_COOKIE_NAME = 'phoneflow_session'
 
@@ -24,7 +25,7 @@ export function setSessionCookie(res, token, { expiresAt } = {}) {
   const remainingMs = expiresAt ? Math.max(1_000, new Date(expiresAt).getTime() - Date.now()) : sessionDurationMs()
   res.cookie(SESSION_COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: sessionCookieIsSecure(),
     sameSite: 'strict',
     path: '/',
     maxAge: remainingMs,
@@ -35,7 +36,7 @@ export function setSessionCookie(res, token, { expiresAt } = {}) {
 export function clearSessionCookie(res) {
   res.clearCookie(SESSION_COOKIE_NAME, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: sessionCookieIsSecure(),
     sameSite: 'strict',
     path: '/',
     priority: 'high',

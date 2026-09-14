@@ -1,0 +1,21 @@
+<service>
+  <id>PhoneFlow</id>
+  <name>PhoneFlow</name>
+  <description>PhoneFlow phone shop management server</description>
+  <executable>%BASE%\..\releases\{{VERSION}}\runtime\node.exe</executable>
+  <arguments>"%BASE%\..\releases\{{VERSION}}\app\server\service-entry.js"</arguments>
+  <workingdirectory>%BASE%\..\releases\{{VERSION}}\app</workingdirectory>
+  <env name="NODE_ENV" value="production" />
+  <env name="PHONEFLOW_DEPLOYMENT_MODE" value="local-lan" />
+  <env name="DOTENV_CONFIG_PATH" value="%ProgramData%\PhoneFlow\.env" />
+  <env name="PORT" value="5000" />
+  <env name="BACKUP_DIR" value="%ProgramData%\PhoneFlow\backups" />
+  <env name="UPLOAD_DIR" value="%ProgramData%\PhoneFlow\uploads" />
+  <startmode>Automatic</startmode>
+  <delayedAutoStart>true</delayedAutoStart>
+  <onfailure action="restart" delay="10 sec" />
+  <resetfailure>1 hour</resetfailure>
+  <stoptimeout>30 sec</stoptimeout>
+  <logpath>%ProgramData%\PhoneFlow\logs</logpath>
+  <log mode="roll" />
+</service>
