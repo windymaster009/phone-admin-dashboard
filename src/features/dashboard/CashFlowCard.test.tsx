@@ -3,6 +3,19 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import CashFlowCard from './CashFlowCard'
 
+const CAMBODIA_OFFSET_MS = 7 * 60 * 60 * 1000
+
+function currentCambodiaWeekDate(dayOffset = 0) {
+  const cambodiaNow = new Date(Date.now() + CAMBODIA_OFFSET_MS)
+  const daysSinceMonday = (cambodiaNow.getUTCDay() + 6) % 7
+  const date = new Date(Date.UTC(
+    cambodiaNow.getUTCFullYear(),
+    cambodiaNow.getUTCMonth(),
+    cambodiaNow.getUTCDate() - daysSinceMonday + dayOffset,
+  ))
+  return date.toISOString().slice(0, 10)
+}
+
 const mockPerformanceData = {
   monthPerformance: [
     { _id: 'SELL' as const, total: 15000 },
@@ -21,8 +34,8 @@ const mockPerformanceData = {
     { _id: { day: 2, type: 'BUY' as const }, total: 7000 },
   ],
   weekPerformance: [
-    { _id: { date: '2026-09-08', type: 'SELL' as const }, total: 3000 },
-    { _id: { date: '2026-09-08', type: 'BUY' as const }, total: 1000 },
+    { _id: { date: currentCambodiaWeekDate(), type: 'SELL' as const }, total: 3000 },
+    { _id: { date: currentCambodiaWeekDate(), type: 'BUY' as const }, total: 1000 },
   ],
 }
 

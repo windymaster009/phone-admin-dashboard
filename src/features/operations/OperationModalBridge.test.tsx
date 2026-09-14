@@ -191,7 +191,9 @@ describe('OperationModalBridge component', () => {
     })
 
     const resultsContainer = screen.getByRole('list', { name: /matching inventory items/i })
-    expect(within(resultsContainer).getAllByRole('listitem')).toHaveLength(3)
+    await waitFor(() => {
+      expect(within(resultsContainer).getAllByRole('listitem')).toHaveLength(3)
+    })
 
     // Filter by typing 'Pixel'
     const searchInput = screen.getByPlaceholderText(/search or scan a product code/i)

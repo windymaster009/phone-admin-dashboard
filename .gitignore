@@ -25,3 +25,5 @@ android-app/.cxx/
 android-app/local.properties
 *.apk
 *.aab
+installer/.build/
+installer/.cache/
