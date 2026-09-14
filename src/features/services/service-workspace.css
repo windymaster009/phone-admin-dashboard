@@ -24,17 +24,17 @@
 .service-catalogue-tools { display: grid; grid-template-columns: minmax(220px, 1fr) 180px auto; gap: 8px; padding: 12px; }
 .service-catalogue-tools .search-field { min-height: 44px; padding: 0 12px; border-radius: 10px; }
 .service-catalogue-tools select,
-.service-charge-panel select,
-.service-charge-panel input,
-.service-charge-panel textarea,
-.service-price-modal select,
-.service-price-modal input { width: 100%; min-height: 44px; border: 1px solid var(--border-strong); border-radius: 10px; outline: 2px solid transparent; outline-offset: 1px; padding: 0 12px; color: var(--text); background: var(--bg-soft); font: inherit; }
+.operation-modal-service-charge select,
+.operation-modal-service-charge input,
+.operation-modal-service-charge textarea,
+.operation-modal-service-price select,
+.operation-modal-service-price input { width: 100%; min-height: 44px; border: 1px solid var(--border-strong); border-radius: 10px; outline: 2px solid transparent; outline-offset: 1px; padding: 0 12px; color: var(--text); background: var(--bg-soft); font: inherit; }
 .service-catalogue-tools select:focus-visible,
-.service-charge-panel select:focus-visible,
-.service-charge-panel input:focus-visible,
-.service-charge-panel textarea:focus-visible,
-.service-price-modal select:focus-visible,
-.service-price-modal input:focus-visible { border-color: color-mix(in srgb, var(--primary) 72%, var(--border)); outline-color: var(--primary); }
+.operation-modal-service-charge select:focus-visible,
+.operation-modal-service-charge input:focus-visible,
+.operation-modal-service-charge textarea:focus-visible,
+.operation-modal-service-price select:focus-visible,
+.operation-modal-service-price input:focus-visible { border-color: color-mix(in srgb, var(--primary) 72%, var(--border)); outline-color: var(--primary); }
 
 .service-catalogue-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
 .service-card { min-width: 0; overflow: hidden; transition: border-color 160ms cubic-bezier(.2,.8,.2,1), background 160ms cubic-bezier(.2,.8,.2,1); }
@@ -71,28 +71,82 @@
 .service-change-price:focus-visible { outline-color: var(--primary); }
 .service-change-price:active { color: var(--text); background: var(--surface-hover); }
 
-.service-charge-panel { width: min(680px, 100%); max-height: min(760px, calc(100dvh - 36px)); display: flex; flex-direction: column; overflow: hidden; }
-.service-charge-panel > header,
-.service-price-modal > header { display: flex; align-items: flex-start; gap: 11px; padding: 16px; border-bottom: 1px solid var(--border); background: linear-gradient(120deg, var(--primary-soft), var(--surface-solid) 72%); }
-.service-charge-panel header div,
-.service-price-modal header div { min-width: 0; flex: 1; }
-.service-charge-panel > header .icon-button { margin-inline-start: auto; flex: 0 0 auto; }
-.service-charge-panel h3,
-.service-price-modal h3 { margin: 4px 0; min-width: 0; overflow-wrap: anywhere; color: var(--text); font: 800 1rem var(--font-display); }
-.service-charge-panel header p,
-.service-price-modal header p { margin: 0; color: var(--muted); font-size: .68rem; line-height: 1.5; }
-.service-charge-panel form { min-height: 0; display: grid; gap: 12px; overflow-y: auto; padding: 16px; overscroll-behavior: contain; }
-.service-charge-panel label,
-.service-price-modal label { min-width: 0; display: grid; gap: 6px; color: var(--muted); font-size: .68rem; font-weight: 700; }
-.service-charge-panel label > span small { color: var(--primary); font-size: .56rem; }
-.service-field-help { min-height: 13px; color: var(--muted-2); font-size: .58rem; font-weight: 600; line-height: 1.35; }
-.service-discount-mode { min-width: 0; display: grid; align-content: start; gap: 6px; color: var(--muted); font-size: .68rem; font-weight: 700; }
-.service-discount-mode > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; min-height: 44px; padding: 4px; border: 1px solid var(--border-strong); border-radius: 10px; background: var(--bg-soft); }
-.service-discount-mode button { min-width: 0; border: 0; border-radius: 7px; outline: 2px solid transparent; outline-offset: 1px; color: var(--muted); background: transparent; font: 800 .65rem var(--font-body); }
-.service-discount-mode button.selected { color: var(--text); background: var(--primary-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 45%, transparent); }
-.service-discount-mode button:focus-visible { outline-color: var(--primary); }
-.service-discount-mode button:active { background: var(--surface-hover); }
-.service-charge-panel textarea { min-height: 70px; padding-block: 10px; resize: vertical; }
+.operation-modal.operation-modal-service-charge {
+  width: min(680px, 100%);
+  max-height: min(760px, calc(var(--operation-viewport-height, 100dvh) - 36px));
+}
+
+.operation-modal.operation-modal-service-price {
+  width: min(520px, 100%);
+  max-height: min(720px, calc(var(--operation-viewport-height, 100dvh) - 36px));
+}
+
+.service-charge-form,
+.service-price-form {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.service-charge-body,
+.service-price-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  padding: 16px;
+  scroll-padding-bottom: 72px;
+}
+
+.service-charge-body label,
+.service-price-body label {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: .68rem;
+  font-weight: 700;
+}
+
+.service-charge-body label > span small {
+  color: var(--primary);
+  font-size: .56rem;
+}
+
+.service-charge-body textarea {
+  min-height: 70px;
+  padding-block: 10px;
+  resize: vertical;
+}
+
+.operation-modal-service-charge .service-charge-actions {
+  flex: 0 0 auto;
+  display: flex;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-solid);
+}
+
+.operation-modal-service-charge .service-charge-actions .service-complete {
+  width: 100%;
+}
+
+.operation-modal-service-price .service-price-actions {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-solid);
+}
 .service-form-pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 .service-security-note { display: flex; align-items: flex-start; gap: 8px; padding: 12px; border: 1px solid color-mix(in srgb, var(--green) 28%, var(--border)); border-radius: 10px; color: var(--green); background: color-mix(in srgb, var(--green) 7%, var(--bg-soft)); }
 .service-security-note span { display: grid; gap: 2px; color: var(--muted); font-size: .62rem; line-height: 1.45; }
@@ -138,9 +192,6 @@
 .service-empty p { margin: 4px 0 0; font-size: .67rem; }
 
 .service-modal-backdrop { position: fixed; inset: 0; z-index: 120; display: grid; place-items: center; padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left)); background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(8px); }
-.service-price-modal { width: min(520px, 100%); overflow: hidden; }
-.service-price-modal > header .icon-button { margin-left: auto; }
-.service-price-modal form { display: grid; gap: 13px; padding: 16px; }
 .service-price-heading { display: flex; align-items: end; justify-content: space-between; gap: 12px; }
 .service-price-heading > div { min-width: 0; }
 .service-price-heading .eyebrow { font-size: .58rem; }
@@ -161,7 +212,6 @@
 .service-price-input > span { padding: 0 0 0 10px; color: var(--muted); font-size: .7rem; font-weight: 800; }
 .service-price-input input { min-width: 0; min-height: 38px; border: 0; border-radius: 0; outline: 0 !important; padding: 0 9px 0 6px; background: transparent; }
 .service-price-help { margin: 0; color: var(--muted); font-size: .68rem; line-height: 1.5; }
-.service-price-modal form footer { display: flex; justify-content: flex-end; gap: 9px; padding-top: 3px; }
 .service-success-modal { width: min(420px, 100%); display: flex; flex-direction: column; align-items: center; padding: 28px; text-align: center; }
 .service-success-icon { width: 58px; height: 58px; display: grid; place-items: center; margin-bottom: 12px; border: 1px solid color-mix(in srgb, var(--green) 38%, var(--border)); border-radius: 16px; color: var(--green); background: color-mix(in srgb, var(--green) 10%, var(--surface-solid)); }
 .service-success-modal h3 { margin: 4px 0; min-width: 0; overflow-wrap: anywhere; color: var(--text); font: 800 1.1rem var(--font-display); }
@@ -193,10 +243,6 @@
   .service-change-price { min-height: 34px; }
   .service-change-price { width: 34px; padding: 0; }
   .service-change-price span { display: none; }
-  .service-charge-panel { width: 100%; max-height: min(720px, calc(100dvh - max(28px, env(safe-area-inset-top)) - max(28px, env(safe-area-inset-bottom)))); }
-  .service-charge-backdrop { align-items: start; padding-top: max(16px, env(safe-area-inset-top)); }
-  .service-charge-panel > header { padding: 13px; }
-  .service-charge-panel form { gap: 11px; padding: 13px; }
   .service-panel-empty { min-height: 230px; padding: 22px 16px; }
   .service-panel-empty.service-service-picker { padding: 14px; }
   .service-recent > header { padding: 13px; }
@@ -206,6 +252,47 @@
   .service-success-modal { padding: 23px 18px; }
 }
 
+@media (max-width: 700px) {
+  .operation-modal.operation-modal-service-charge,
+  .operation-modal.operation-modal-service-price {
+    height: calc(var(--operation-viewport-height, 100dvh) - max(8px, env(safe-area-inset-top, 0px)));
+    max-height: calc(var(--operation-viewport-height, 100dvh) - max(8px, env(safe-area-inset-top, 0px)));
+  }
+  .service-form-pair {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .service-price-columns {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .service-charge-body,
+  .service-price-body {
+    padding: 10px 12px;
+    gap: 10px;
+  }
+  .operation-modal-service-charge .service-charge-actions,
+  .operation-modal-service-price .service-price-actions {
+    padding: 10px 12px max(10px, env(safe-area-inset-bottom, 0px));
+  }
+  .operation-modal-service-price .service-price-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+  }
+  .operation-modal-service-price .service-price-actions button {
+    min-height: 44px;
+    width: 100%;
+  }
+  .operation-modal-service-charge .service-charge-actions .service-complete {
+    min-height: 44px;
+  }
+  .service-security-note {
+    padding: 9px 10px;
+    gap: 8px;
+  }
+}
+
 @media (max-width: 560px) {
   .service-catalogue-grid { grid-template-columns: 1fr; }
   .service-card-main { min-height: 72px; grid-template-columns: 32px minmax(0, 1fr); padding: 10px; }
@@ -213,17 +300,25 @@
   .service-card-main strong { font-size: .76rem; white-space: nowrap; }
   .service-card-main p { font-size: .66rem; -webkit-line-clamp: 1; }
   .service-card-footer { min-height: 52px; padding: 7px 12px; }
-  .service-form-pair { grid-template-columns: 1fr; }
   .service-header-actions .primary-button { min-height: 44px; font-size: .68rem; }
   .service-workflow > div { padding-inline: 8px; }
   .service-workflow strong { font-size: .6rem; }
-  .service-price-modal form footer,
   .service-success-modal > div { width: 100%; }
-  .service-price-modal form footer > *,
   .service-success-modal > div > * { flex: 1; }
   .service-price-heading { align-items: flex-start; flex-direction: column; gap: 4px; }
-  .service-price-columns { grid-template-columns: 1fr; }
   .service-currency-price { padding: 9px; }
+}
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .service-charge-body,
+  .service-price-body {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+  .operation-modal-service-charge .service-charge-actions,
+  .operation-modal-service-price .service-price-actions {
+    padding: 8px 12px max(8px, env(safe-area-inset-bottom, 0px));
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

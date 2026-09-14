@@ -74,8 +74,11 @@ const sampleCharges = [
   },
 ]
 
+const originalVisualViewport = Object.getOwnPropertyDescriptor(window, 'visualViewport')
+
 describe('ServiceWorkspace', () => {
   beforeEach(() => {
+    document.body.className = ''
     setSessionUser({
       id: 'usr-mgr',
       name: 'Manager User',
@@ -87,6 +90,12 @@ describe('ServiceWorkspace', () => {
 
   afterEach(() => {
     setSessionUser(null)
+    if (originalVisualViewport) {
+      Object.defineProperty(window, 'visualViewport', originalVisualViewport)
+    } else {
+      Reflect.deleteProperty(window, 'visualViewport')
+    }
+    document.body.className = ''
     vi.restoreAllMocks()
   })
 
@@ -1593,5 +1602,284 @@ describe('ServiceWorkspace', () => {
     await user.selectOptions(currencySelect, 'USD')
 
     expect(within(chargeModal).getByText(/Legacy KHR Service · \$5\.00/)).toBeInTheDocument()
+  })
+
+  it('26. Both service dialogs render via shared OperationModalShell portal into document.body with body scroll lock, shortened security note, and escape closing', async () => {
+    const user = userEvent.setup()
+    setupFetchMock()
+
+    render(
+      <RouterProvider>
+        <ServiceWorkspace />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Gmail account setup').length).toBeGreaterThanOrEqual(1)
+    })
+
+    // 1. Open "Record service charge" dialog
+    const chargeButtons = screen.getAllByRole('button', { name: /^charge/i })
+    await user.click(chargeButtons[0])
+
+    // Verify it rendered through the shared portal directly into document.body
+    const chargeBackdrop = document.body.querySelector('.operation-modal-backdrop') as HTMLElement
+    expect(chargeBackdrop).toBeInTheDocument()
+    const chargeDialog = chargeBackdrop.querySelector('.operation-modal.operation-modal-service-charge') as HTMLElement
+    expect(chargeDialog).toBeInTheDocument()
+    expect(chargeDialog.getAttribute('role')).toBe('dialog')
+    expect(chargeDialog.getAttribute('aria-modal')).toBe('true')
+    expect(chargeDialog.getAttribute('aria-label')).toBe('Record service charge')
+    expect(document.body.classList.contains('operation-modal-open')).toBe(true)
+
+    // Verify shortened security note text: "Protect customer access" and "Never store passwords or verification codes."
+    expect(within(chargeDialog).getByText('Protect customer access')).toBeInTheDocument()
+    expect(within(chargeDialog).getByText('Never store passwords or verification codes.')).toBeInTheDocument()
+
+    // Verify Escape closing and body lock removal
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(document.body.querySelector('.operation-modal-service-charge')).not.toBeInTheDocument()
+    expect(document.body.classList.contains('operation-modal-open')).toBe(false)
+
+    // 2. Open "Set service price" dialog
+    const changePriceBtn = screen.getByRole('button', { name: /Change price for Gmail account setup/i })
+    await user.click(changePriceBtn)
+
+    const priceBackdrop = document.body.querySelector('.operation-modal-backdrop') as HTMLElement
+    expect(priceBackdrop).toBeInTheDocument()
+    const priceDialog = priceBackdrop.querySelector('.operation-modal.operation-modal-service-price') as HTMLElement
+    expect(priceDialog).toBeInTheDocument()
+    expect(priceDialog.getAttribute('role')).toBe('dialog')
+    expect(priceDialog.getAttribute('aria-modal')).toBe('true')
+    expect(priceDialog.getAttribute('aria-label')).toBe('Set service price')
+    expect(document.body.classList.contains('operation-modal-open')).toBe(true)
+
+    // Verify Close button aria-label
+    expect(within(priceDialog).getByRole('button', { name: 'Close pricing' })).toBeInTheDocument()
+
+    // Verify Escape closing
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(document.body.querySelector('.operation-modal-service-price')).not.toBeInTheDocument()
+    expect(document.body.classList.contains('operation-modal-open')).toBe(false)
+  })
+
+  it('27. Service charge dialog remains fully usable and keeps action footer visible when mobile keyboard reduces visualViewport height across 320px, 390px, 430px, and mobile landscape', async () => {
+    const user = userEvent.setup()
+    let postRecorded: Record<string, unknown> | null = null
+
+    setupFetchMock({
+      '/api/services/charges': async (init) => {
+        if (init.method === 'POST') {
+          postRecorded = JSON.parse(String(init.body))
+          return {
+            charge: {
+              _id: 'sc-responsive-1',
+              serviceNo: 'SV-20260314-RESP',
+              serviceSnapshot: { name: 'Gmail account setup', category: 'ACCOUNT_SETUP' },
+              customerSnapshot: { name: 'Mobile Customer' },
+              currency: 'USD',
+              total: 5,
+              paymentMethod: 'CASH',
+              status: 'COMPLETED',
+              completedAt: new Date().toISOString(),
+            },
+          }
+        }
+        return { charges: sampleCharges }
+      },
+    })
+
+    const listeners: Record<string, () => void> = {}
+    const mockViewport = {
+      height: 844,
+      width: 390,
+      offsetTop: 0,
+      offsetLeft: 0,
+      addEventListener: vi.fn((event: string, cb: () => void) => {
+        listeners[event] = cb
+      }),
+      removeEventListener: vi.fn((event: string) => {
+        delete listeners[event]
+      }),
+    }
+
+    Object.defineProperty(window, 'visualViewport', {
+      writable: true,
+      configurable: true,
+      value: mockViewport,
+    })
+
+    render(
+      <RouterProvider>
+        <ServiceWorkspace />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getAllByText('Gmail account setup').length).toBeGreaterThanOrEqual(1)
+    })
+
+    // Open Record service charge modal
+    const chargeButtons = screen.getAllByRole('button', { name: /^charge/i })
+    await user.click(chargeButtons[0])
+
+    const dialog = screen.getByRole('dialog', { name: /Record service charge/i })
+    expect(dialog).toBeInTheDocument()
+
+    const backdrop = document.body.querySelector('.operation-modal-backdrop') as HTMLElement
+    expect(backdrop).toBeInTheDocument()
+
+    // The mounted shared shell tracks common phone widths and landscape.
+    for (const [width, height] of [
+      [320, 568],
+      [390, 844],
+      [430, 932],
+      [844, 390],
+    ]) {
+      mockViewport.width = width
+      mockViewport.height = height
+      act(() => {
+        listeners['resize']?.()
+      })
+      expect(backdrop.style.getPropertyValue('--operation-viewport-width')).toBe(`${width}px`)
+      expect(backdrop.style.getPropertyValue('--operation-viewport-height')).toBe(`${height}px`)
+    }
+
+    // Simulate mobile keyboard opening: visualViewport height reduces to 340px
+    mockViewport.height = 340
+    act(() => {
+      listeners['resize']?.()
+    })
+
+    // Shared shell automatically syncs backdrop viewport height
+    expect(backdrop.style.getPropertyValue('--operation-viewport-height')).toBe('340px')
+
+    // Fixed header and action footer remain in document and visible above keyboard
+    const headerTitle = within(dialog).getByRole('heading', { name: /Record service charge/i })
+    expect(headerTitle).toBeInTheDocument()
+    const recordChargeBtn = within(dialog).getByRole('button', { name: /Record charge/i })
+    expect(recordChargeBtn).toBeInTheDocument()
+
+    // Scrollable body allows interactions even with keyboard open
+    const walkInInput = screen.getByPlaceholderText('Walk-in customer')
+    await user.type(walkInInput, 'Mobile Customer')
+
+    const notesInput = screen.getByPlaceholderText('What was completed for the customer?')
+    await user.type(notesInput, 'Setup completed on small screen.')
+
+    // Submit charge with reduced keyboard viewport
+    await user.click(recordChargeBtn)
+
+    await waitFor(() => {
+      expect(postRecorded).not.toBeNull()
+      expect(screen.getByRole('dialog', { name: /completed/i })).toBeInTheDocument()
+    })
+  })
+
+  it('28. Set service price dialog uses shared shell and remains fully usable under keyboard-height visualViewport across mobile dimensions', async () => {
+    const user = userEvent.setup()
+    let patchRecorded: Record<string, unknown> | null = null
+
+    setupFetchMock({
+      '/api/services/catalog/svc-unpriced': async (init) => {
+        if (init.method === 'PATCH') {
+          patchRecorded = JSON.parse(String(init.body))
+          return {
+            service: {
+              ...sampleServices[2],
+              price: 15,
+              priceUsd: 15,
+              priceKhr: 61500,
+            },
+          }
+        }
+        return { service: sampleServices[2] }
+      },
+    })
+
+    const listeners: Record<string, () => void> = {}
+    const mockViewport = {
+      height: 844,
+      width: 390,
+      offsetTop: 0,
+      offsetLeft: 0,
+      addEventListener: vi.fn((event: string, cb: () => void) => {
+        listeners[event] = cb
+      }),
+      removeEventListener: vi.fn((event: string) => {
+        delete listeners[event]
+      }),
+    }
+
+    Object.defineProperty(window, 'visualViewport', {
+      writable: true,
+      configurable: true,
+      value: mockViewport,
+    })
+
+    render(
+      <RouterProvider>
+        <ServiceWorkspace />
+      </RouterProvider>,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Custom repair help')).toBeInTheDocument()
+    })
+
+    // Click "Set price" on unpriced service
+    const setPriceBtn = screen.getByRole('button', { name: /Set price/i })
+    await user.click(setPriceBtn)
+
+    const dialog = screen.getByRole('dialog', { name: /Set service price/i })
+    expect(dialog).toBeInTheDocument()
+
+    const backdrop = document.body.querySelector('.operation-modal-backdrop') as HTMLElement
+    expect(backdrop).toBeInTheDocument()
+
+    // The mounted shared shell tracks common phone widths and landscape.
+    for (const [width, height] of [
+      [320, 568],
+      [390, 844],
+      [430, 932],
+      [844, 390],
+    ]) {
+      mockViewport.width = width
+      mockViewport.height = height
+      act(() => {
+        listeners['resize']?.()
+      })
+      expect(backdrop.style.getPropertyValue('--operation-viewport-width')).toBe(`${width}px`)
+      expect(backdrop.style.getPropertyValue('--operation-viewport-height')).toBe(`${height}px`)
+    }
+
+    // Simulate mobile keyboard opening: visualViewport height reduces to 320px
+    mockViewport.height = 320
+    act(() => {
+      listeners['resize']?.()
+    })
+
+    expect(backdrop.style.getPropertyValue('--operation-viewport-height')).toBe('320px')
+
+    // Fixed header and action footer remain in document and visible above keyboard
+    const headerTitle = within(dialog).getByRole('heading', { name: /Set service price/i })
+    expect(headerTitle).toBeInTheDocument()
+    const cancelBtn = within(dialog).getByRole('button', { name: /Cancel/i })
+    expect(cancelBtn).toBeInTheDocument()
+    const savePriceBtn = within(dialog).getByRole('button', { name: /Save price/i })
+    expect(savePriceBtn).toBeInTheDocument()
+
+    // Edit USD price input
+    const usdInput = screen.getByRole('textbox', { name: /Service price in US dollars/i })
+    await user.clear(usdInput)
+    await user.type(usdInput, '15')
+
+    // Click "Save price"
+    await user.click(savePriceBtn)
+
+    await waitFor(() => {
+      expect(patchRecorded).not.toBeNull()
+      expect(patchRecorded?.price).toBe(15)
+    })
   })
 })

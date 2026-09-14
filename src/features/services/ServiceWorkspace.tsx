@@ -27,6 +27,7 @@ import {
 import { api, getSessionUser } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
 import MoneyInput from '../../components/MoneyInput'
+import OperationModalShell from '../../components/OperationModalShell'
 import './service-workspace.css'
 
 type Currency = 'USD' | 'KHR'
@@ -192,6 +193,7 @@ export default function ServiceWorkspace() {
     setPriceCurrency(service.currency)
     setPriceUsd(usd > 0 ? String(usd) : '')
     setPriceKhr(khr > 0 ? String(khr) : '')
+    setError('')
   }
 
   function choose(service: ServiceOffering) {
@@ -218,6 +220,13 @@ export default function ServiceWorkspace() {
     if (busy) return
     setChargeOpen(false)
     setSelected(null)
+    setError('')
+  }
+
+  function closePricing() {
+    if (busy) return
+    setPricing(null)
+    setError('')
   }
 
   async function savePrice(event: FormEvent) {
@@ -368,54 +377,310 @@ export default function ServiceWorkspace() {
         </section>
       </main>
 
-      {chargeOpen && <div className="service-modal-backdrop service-charge-backdrop">
-      <section className="surface-card service-charge-panel" role="dialog" aria-modal="true" aria-labelledby="service-charge-title">
-        <header><span className="service-panel-icon"><CircleDollarSign size={21} /></span><div><span className="eyebrow">Service checkout</span><h3 id="service-charge-title">Record service charge</h3><p>{selected ? `${selected.name} · ${money(unitPrice, chargeCurrency)}` : 'Choose a priced service to begin.'}</p></div><button className="icon-button" type="button" onClick={closeCharge} disabled={busy} aria-label="Close service checkout"><X size={18} /></button></header>
-        {error && <div className="service-alert" role="alert"><AlertTriangle size={17} /><span>{error}</span><button type="button" onClick={() => setError('')} aria-label="Dismiss message"><X size={15} /></button></div>}
-        {selected ? <form onSubmit={recordCharge}>
-          <label><span>Customer</span><select value={customerId} onChange={(event) => setCustomerId(event.target.value)}><option value="">Walk-in customer</option>{customers.map((customer) => <option value={customer._id} key={customer._id}>{customer.name}{customer.phone ? ` · ${customer.phone}` : ''}</option>)}</select></label>
-          {!customerId && <label><span>Customer name <small>Optional</small></span><input value={walkInName} onChange={(event) => setWalkInName(event.target.value)} placeholder="Walk-in customer" /></label>}
-          <div className="service-form-pair"><label><span>Currency</span><select value={chargeCurrency} onChange={(event) => { setChargeCurrency(event.target.value as Currency); setDiscount('0') }}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Cambodian Riel</option></select><small className="service-field-help">1 USD = {serviceExchangeRate.toLocaleString('en-US')} KHR</small></label><label><span>Quantity</span><input type="number" min="1" max="1000" value={quantity} onChange={(event) => setQuantity(Math.max(1, Number(event.target.value) || 1))} /><small className="service-field-help">{money(unitPrice, chargeCurrency)} each</small></label></div>
-          <div className="service-form-pair"><div className="service-discount-mode"><span>Discount method</span><div role="group" aria-label="Discount method"><button type="button" className={discountType === 'AMOUNT' ? 'selected' : ''} onClick={() => { setDiscountType('AMOUNT'); setDiscount('0') }}>Money</button><button type="button" className={discountType === 'PERCENT' ? 'selected' : ''} onClick={() => { setDiscountType('PERCENT'); setDiscount('0') }}>Percent</button></div></div><label><span>{discountType === 'PERCENT' ? 'Discount (%)' : `Discount (${chargeCurrency})`}</span>{discountType === 'PERCENT' ? <input type="number" min="0" max="100" step="0.01" inputMode="decimal" value={discount} onChange={(event) => setDiscount(event.target.value.replace(/[^\d.]/g, ''))} placeholder="0" /> : <MoneyInput currency={chargeCurrency} minimum={0} maximum={subtotal} value={discount} onValueChange={setDiscount} placeholder={chargeCurrency === 'KHR' ? '0' : '0.00'} />}<small className="service-field-help">{discountType === 'PERCENT' ? `${discountPercent}% = ${money(normalizedDiscount, chargeCurrency)}` : `Maximum ${money(subtotal, chargeCurrency)}`}</small></label></div>
-          <label><span>Payment method</span><select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}><option value="CASH">Cash</option><option value="KHQR">KHQR</option><option value="BANK">Bank transfer</option><option value="CARD">Card</option><option value="OTHER">Other</option></select></label>
-          <label><span>Work note <small>Optional</small></span><textarea maxLength={500} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="What was completed for the customer?" /></label>
-          <div className="service-security-note"><ShieldCheck size={16} /><span><strong>Protect customer access</strong>Never save passwords, one-time codes, or recovery codes.</span></div>
-          <dl className="service-total"><div><dt>Subtotal</dt><dd>{money(subtotal, chargeCurrency)}</dd></div>{normalizedDiscount > 0 && <div><dt>Discount</dt><dd>− {money(normalizedDiscount, chargeCurrency)}</dd></div>}<div><dt>Total</dt><dd>{money(total, chargeCurrency)}</dd></div></dl>
-          <button className="primary-button service-complete" disabled={busy} type="submit"><CreditCard size={16} />{busy ? 'Saving…' : 'Record charge'}</button>
-        </form> : <div className="service-panel-empty service-service-picker">
-          <div className="service-picker-heading"><span className="service-picker-icon"><MessageCircle size={19} /></span><div><span className="eyebrow">Start a charge</span><strong>What service did you complete?</strong><p>Choose a priced service to add the customer and payment.</p></div></div>
-          {pricedServices.length ? <>
-            <label className="service-picker-select"><span>Choose from {pricedServices.length} priced service{pricedServices.length === 1 ? '' : 's'}</span><select autoFocus value="" onChange={(event) => {
-              const service = pricedServices.find((item) => item._id === event.target.value)
-              if (service) choose(service)
-            }} aria-label="Service to charge"><option value="">Select service</option>{pricedServices.map((service) => <option value={service._id} key={service._id}>{service.name} · {money(service.price, service.currency)}</option>)}</select></label>
-          </> : <div className="service-picker-unpriced"><AlertTriangle size={17} /><span><strong>No priced services yet</strong><small>Set a catalogue price before recording a service charge.</small></span></div>}
-        </div>}
-      </section>
-      </div>}
     </div>
 
-    {pricing && <div className="service-modal-backdrop">
-      <section className="surface-card service-price-modal" role="dialog" aria-modal="true" aria-labelledby="service-price-title">
-        <header><span className="service-panel-icon"><Banknote size={20} /></span><div><span className="eyebrow">Catalogue pricing</span><h3 id="service-price-title">Set service price</h3><p>{pricing.name}</p></div><button className="icon-button" type="button" onClick={() => setPricing(null)} aria-label="Close pricing"><X size={18} /></button></header>
-        {error && <div className="service-alert" role="alert"><AlertTriangle size={17} /><span>{error}</span><button type="button" onClick={() => setError('')} aria-label="Dismiss message"><X size={15} /></button></div>}
-        <form onSubmit={savePrice}>
-          <div className="service-price-heading"><div><span className="eyebrow">Two-currency price</span><p>Enter either amount; the matching price updates automatically.</p></div><small>1 USD = {serviceExchangeRate.toLocaleString('en-US')} KHR</small></div>
-          <div className="service-price-columns">
-            <section className={`service-currency-price ${priceCurrency === 'USD' ? 'is-default' : ''}`}>
-              <header><span className="service-currency-mark">$</span><div><strong>US Dollar</strong><small>USD</small></div><label className="service-default-currency"><input type="radio" name="service-price-currency" checked={priceCurrency === 'USD'} onChange={() => setPriceCurrency('USD')} /><span>Checkout default</span></label></header>
-              <label><span>Standard price</span><div className="service-price-input"><span>$</span><MoneyInput autoFocus currency="USD" minimum={0.01} required value={priceUsd} onValueChange={(value) => { setPriceUsd(value); setPriceKhr(usdToKhr(value)) }} placeholder="2.50" aria-label="Service price in US dollars" /></div></label>
-            </section>
-            <section className={`service-currency-price ${priceCurrency === 'KHR' ? 'is-default' : ''}`}>
-              <header><span className="service-currency-mark">៛</span><div><strong>Cambodian Riel</strong><small>KHR</small></div><label className="service-default-currency"><input type="radio" name="service-price-currency" checked={priceCurrency === 'KHR'} onChange={() => setPriceCurrency('KHR')} /><span>Checkout default</span></label></header>
-              <label><span>Standard price</span><div className="service-price-input"><span>៛</span><MoneyInput currency="KHR" minimum={100} required value={priceKhr} onValueChange={(value) => { setPriceKhr(value); setPriceUsd(khrToUsd(value)) }} placeholder="10,000" aria-label="Service price in Cambodian riel" /></div></label>
-            </section>
+    {chargeOpen && (
+      <OperationModalShell
+        title="Record service charge"
+        eyebrow="Service checkout"
+        description={selected ? `${selected.name} · ${money(unitPrice, chargeCurrency)}` : 'Choose a priced service to begin.'}
+        icon={<CircleDollarSign size={21} />}
+        error={error}
+        onDismissError={() => setError('')}
+        busy={busy}
+        onClose={closeCharge}
+        closeAriaLabel="Close service checkout"
+        className="operation-modal-service-charge"
+      >
+        {selected ? (
+          <form className="service-charge-form" onSubmit={recordCharge}>
+            <div className="service-charge-body">
+              <label>
+                <span>Customer</span>
+                <select value={customerId} onChange={(event) => setCustomerId(event.target.value)}>
+                  <option value="">Walk-in customer</option>
+                  {customers.map((customer) => (
+                    <option value={customer._id} key={customer._id}>
+                      {customer.name}{customer.phone ? ` · ${customer.phone}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {!customerId && (
+                <label>
+                  <span>Customer name <small>Optional</small></span>
+                  <input
+                    value={walkInName}
+                    onChange={(event) => setWalkInName(event.target.value)}
+                    placeholder="Walk-in customer"
+                  />
+                </label>
+              )}
+              <div className="service-form-pair">
+                <label>
+                  <span>Currency</span>
+                  <select
+                    value={chargeCurrency}
+                    onChange={(event) => {
+                      setChargeCurrency(event.target.value as Currency)
+                      setDiscount('0')
+                    }}
+                  >
+                    <option value="USD">USD — US Dollar</option>
+                    <option value="KHR">KHR — Cambodian Riel</option>
+                  </select>
+                  <small className="service-field-help">1 USD = {serviceExchangeRate.toLocaleString('en-US')} KHR</small>
+                </label>
+                <label>
+                  <span>Quantity</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="1000"
+                    value={quantity}
+                    onChange={(event) => setQuantity(Math.max(1, Number(event.target.value) || 1))}
+                  />
+                  <small className="service-field-help">{money(unitPrice, chargeCurrency)} each</small>
+                </label>
+              </div>
+              <div className="service-form-pair">
+                <div className="service-discount-mode">
+                  <span>Discount method</span>
+                  <div role="group" aria-label="Discount method">
+                    <button
+                      type="button"
+                      className={discountType === 'AMOUNT' ? 'selected' : ''}
+                      onClick={() => {
+                        setDiscountType('AMOUNT')
+                        setDiscount('0')
+                      }}
+                    >
+                      Money
+                    </button>
+                    <button
+                      type="button"
+                      className={discountType === 'PERCENT' ? 'selected' : ''}
+                      onClick={() => {
+                        setDiscountType('PERCENT')
+                        setDiscount('0')
+                      }}
+                    >
+                      Percent
+                    </button>
+                  </div>
+                </div>
+                <label>
+                  <span>{discountType === 'PERCENT' ? 'Discount (%)' : `Discount (${chargeCurrency})`}</span>
+                  {discountType === 'PERCENT' ? (
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      inputMode="decimal"
+                      value={discount}
+                      onChange={(event) => setDiscount(event.target.value.replace(/[^\d.]/g, ''))}
+                      placeholder="0"
+                    />
+                  ) : (
+                    <MoneyInput
+                      currency={chargeCurrency}
+                      minimum={0}
+                      maximum={subtotal}
+                      value={discount}
+                      onValueChange={setDiscount}
+                      placeholder={chargeCurrency === 'KHR' ? '0' : '0.00'}
+                    />
+                  )}
+                  <small className="service-field-help">
+                    {discountType === 'PERCENT'
+                      ? `${discountPercent}% = ${money(normalizedDiscount, chargeCurrency)}`
+                      : `Maximum ${money(subtotal, chargeCurrency)}`}
+                  </small>
+                </label>
+              </div>
+              <label>
+                <span>Payment method</span>
+                <select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
+                  <option value="CASH">Cash</option>
+                  <option value="KHQR">KHQR</option>
+                  <option value="BANK">Bank transfer</option>
+                  <option value="CARD">Card</option>
+                  <option value="OTHER">Other</option>
+                </select>
+              </label>
+              <label>
+                <span>Work note <small>Optional</small></span>
+                <textarea
+                  maxLength={500}
+                  value={notes}
+                  onChange={(event) => setNotes(event.target.value)}
+                  placeholder="What was completed for the customer?"
+                />
+              </label>
+              <div className="service-security-note">
+                <ShieldCheck size={16} />
+                <span>
+                  <strong>Protect customer access</strong>
+                  <span>Never store passwords or verification codes.</span>
+                </span>
+              </div>
+              <dl className="service-total">
+                <div><dt>Subtotal</dt><dd>{money(subtotal, chargeCurrency)}</dd></div>
+                {normalizedDiscount > 0 && <div><dt>Discount</dt><dd>− {money(normalizedDiscount, chargeCurrency)}</dd></div>}
+                <div><dt>Total</dt><dd>{money(total, chargeCurrency)}</dd></div>
+              </dl>
+            </div>
+            <footer className="operation-modal-actions service-charge-actions">
+              <button className="primary-button service-complete" disabled={busy} type="submit">
+                <CreditCard size={16} />{busy ? 'Saving…' : 'Record charge'}
+              </button>
+            </footer>
+          </form>
+        ) : (
+          <div className="service-charge-body service-panel-empty service-service-picker">
+            <div className="service-picker-heading">
+              <span className="service-picker-icon"><MessageCircle size={19} /></span>
+              <div>
+                <span className="eyebrow">Start a charge</span>
+                <strong>What service did you complete?</strong>
+                <p>Choose a priced service to add the customer and payment.</p>
+              </div>
+            </div>
+            {pricedServices.length ? (
+              <label className="service-picker-select">
+                <span>Choose from {pricedServices.length} priced service{pricedServices.length === 1 ? '' : 's'}</span>
+                <select
+                  autoFocus
+                  value=""
+                  onChange={(event) => {
+                    const service = pricedServices.find((item) => item._id === event.target.value)
+                    if (service) choose(service)
+                  }}
+                  aria-label="Service to charge"
+                >
+                  <option value="">Select service</option>
+                  {pricedServices.map((service) => (
+                    <option value={service._id} key={service._id}>
+                      {service.name} · {money(service.price, service.currency)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <div className="service-picker-unpriced">
+                <AlertTriangle size={17} />
+                <span>
+                  <strong>No priced services yet</strong>
+                  <small>Set a catalogue price before recording a service charge.</small>
+                </span>
+              </div>
+            )}
           </div>
-          <p className="service-price-help">The selected default currency is used when staff record this service charge.</p>
-          <footer><button className="ghost-button" type="button" onClick={() => setPricing(null)}>Cancel</button><button className="primary-button" disabled={busy || !(Number(priceUsd) > 0) || !(Number(priceKhr) > 0)} type="submit">Save price</button></footer>
+        )}
+      </OperationModalShell>
+    )}
+
+    {pricing && (
+      <OperationModalShell
+        title="Set service price"
+        eyebrow="Catalogue pricing"
+        description={pricing.name}
+        icon={<Banknote size={20} />}
+        error={error}
+        onDismissError={() => setError('')}
+        busy={busy}
+        onClose={closePricing}
+        closeAriaLabel="Close pricing"
+        className="operation-modal-service-price"
+      >
+        <form className="service-price-form" onSubmit={savePrice}>
+          <div className="service-price-body">
+            <div className="service-price-heading">
+              <div>
+                <span className="eyebrow">Two-currency price</span>
+                <p>Enter either amount; the matching price updates automatically.</p>
+              </div>
+              <small>1 USD = {serviceExchangeRate.toLocaleString('en-US')} KHR</small>
+            </div>
+            <div className="service-price-columns">
+              <section className={`service-currency-price ${priceCurrency === 'USD' ? 'is-default' : ''}`}>
+                <header>
+                  <span className="service-currency-mark">$</span>
+                  <div><strong>US Dollar</strong><small>USD</small></div>
+                  <label className="service-default-currency">
+                    <input
+                      type="radio"
+                      name="service-price-currency"
+                      checked={priceCurrency === 'USD'}
+                      onChange={() => setPriceCurrency('USD')}
+                    />
+                    <span>Checkout default</span>
+                  </label>
+                </header>
+                <label>
+                  <span>Standard price</span>
+                  <div className="service-price-input">
+                    <span>$</span>
+                    <MoneyInput
+                      autoFocus
+                      currency="USD"
+                      minimum={0.01}
+                      required
+                      value={priceUsd}
+                      onValueChange={(value) => { setPriceUsd(value); setPriceKhr(usdToKhr(value)) }}
+                      placeholder="2.50"
+                      aria-label="Service price in US dollars"
+                    />
+                  </div>
+                </label>
+              </section>
+              <section className={`service-currency-price ${priceCurrency === 'KHR' ? 'is-default' : ''}`}>
+                <header>
+                  <span className="service-currency-mark">៛</span>
+                  <div><strong>Cambodian Riel</strong><small>KHR</small></div>
+                  <label className="service-default-currency">
+                    <input
+                      type="radio"
+                      name="service-price-currency"
+                      checked={priceCurrency === 'KHR'}
+                      onChange={() => setPriceCurrency('KHR')}
+                    />
+                    <span>Checkout default</span>
+                  </label>
+                </header>
+                <label>
+                  <span>Standard price</span>
+                  <div className="service-price-input">
+                    <span>៛</span>
+                    <MoneyInput
+                      currency="KHR"
+                      minimum={100}
+                      required
+                      value={priceKhr}
+                      onValueChange={(value) => { setPriceKhr(value); setPriceUsd(khrToUsd(value)) }}
+                      placeholder="10,000"
+                      aria-label="Service price in Cambodian riel"
+                    />
+                  </div>
+                </label>
+              </section>
+            </div>
+            <p className="service-price-help">The selected default currency is used when staff record this service charge.</p>
+          </div>
+          <footer className="operation-modal-actions service-price-actions">
+            <button className="ghost-button" type="button" onClick={closePricing} disabled={busy}>Cancel</button>
+            <button
+              className="primary-button"
+              disabled={busy || !(Number(priceUsd) > 0) || !(Number(priceKhr) > 0)}
+              type="submit"
+            >
+              Save price
+            </button>
+          </footer>
         </form>
-      </section>
-    </div>}
+      </OperationModalShell>
+    )}
 
     {success && <div className="service-modal-backdrop">
       <section className="surface-card service-success-modal" role="dialog" aria-modal="true" aria-labelledby="service-success-title">

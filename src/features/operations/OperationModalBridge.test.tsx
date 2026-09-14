@@ -130,8 +130,10 @@ describe('OperationModalBridge component', () => {
     })
 
     const resultsContainer = screen.getByRole('list', { name: /matching inventory items/i })
+    await waitFor(() => {
+      expect(within(resultsContainer).getAllByRole('listitem')).toHaveLength(1)
+    })
     const resultButtons = within(resultsContainer).getAllByRole('listitem')
-    expect(resultButtons).toHaveLength(1)
     expect(resultButtons[0]).toHaveTextContent(mockInventoryItem.name)
 
     // Footer starts with disabled "Select an item first"
@@ -4378,5 +4380,313 @@ describe('OperationModalBridge component', () => {
     const day30Btn = screen.getByRole('radio', { name: /1 Month/i })
     fireEvent.click(day30Btn)
     expect(day30Btn).toHaveClass('active')
+  })
+
+  it('maintains visible header, scrollable content, and fixed footer when mobile keyboard resizes visualViewport in pawn workflow', async () => {
+    const scrollIntoViewMock = vi.fn()
+    window.HTMLElement.prototype.scrollIntoView = scrollIntoViewMock
+
+    const listeners: Record<string, () => void> = {}
+    const mockViewport = {
+      height: 844,
+      width: 390,
+      offsetTop: 0,
+      offsetLeft: 0,
+      addEventListener: vi.fn((event: string, cb: () => void) => {
+        listeners[event] = cb
+      }),
+      removeEventListener: vi.fn((event: string) => {
+        delete listeners[event]
+      }),
+    }
+
+    Object.defineProperty(window, 'visualViewport', {
+      writable: true,
+      configurable: true,
+      value: mockViewport,
+    })
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ customers: [], suppliers: [], items: [], usdKhr: 4100 }),
+      } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'pawn' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /New pawn contract/i })).toBeInTheDocument()
+    })
+
+    const backdrop = document.querySelector('.operation-modal-backdrop') as HTMLElement
+    expect(backdrop).toBeInTheDocument()
+    expect(backdrop.style.getPropertyValue('--operation-viewport-height')).toBe('844px')
+
+    // Switch to New customer tab
+    fireEvent.click(screen.getByRole('tab', { name: /New customer/i }))
+    const nameInput = screen.getByPlaceholderText(/Full name/i)
+
+    // Focus input and verify scrollIntoView was called
+    nameInput.focus()
+    fireEvent.focusIn(nameInput)
+    await waitFor(() => expect(scrollIntoViewMock).toHaveBeenCalled())
+
+    // Simulate mobile keyboard opening: visualViewport height reduces to 380px
+    mockViewport.height = 380
+    act(() => {
+      listeners['resize']?.()
+    })
+
+    // Verify modal backdrop updates to remaining visual viewport height
+    expect(backdrop.style.getPropertyValue('--operation-viewport-height')).toBe('380px')
+
+    // Header and footer actions remain in document and visible
+    expect(screen.getByRole('heading', { name: /New pawn contract/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Close/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Cancel/i })).toBeInTheDocument()
+    const continueBtn = screen.getByRole('button', { name: /Continue to collateral/i })
+    expect(continueBtn).toBeInTheDocument()
+
+    // Type customer name and confirm ownership
+    fireEvent.change(nameInput, { target: { value: 'Sokha Mobile' } })
+    fireEvent.click(screen.getByRole('checkbox'))
+
+    // Advance to Step 2 under keyboard-sized viewport
+    fireEvent.click(continueBtn)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Step 2 of 2: Collateral and contract terms/i)).toBeInTheDocument()
+    })
+
+    // Step 2 controls remain functional under keyboard viewport
+    const imeiInput = screen.getByPlaceholderText(/15-digit IMEI/i)
+    imeiInput.focus()
+    fireEvent.focusIn(imeiInput)
+    expect(scrollIntoViewMock).toHaveBeenCalled()
+
+    // Footer actions in Step 2 include Back and Enter valuation details
+    expect(screen.getByRole('button', { name: /Back/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Enter valuation details/i })).toBeInTheDocument()
+
+    // Close modal via header Close button
+    const closeBtn = screen.getByRole('button', { name: /Close/i })
+    fireEvent.click(closeBtn)
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+  })
+
+  it('maintains visible header, scrollable content, and fixed footer when mobile keyboard resizes visualViewport in purchase workflow', async () => {
+    const scrollIntoViewMock = vi.fn()
+    window.HTMLElement.prototype.scrollIntoView = scrollIntoViewMock
+
+    const listeners: Record<string, () => void> = {}
+    const mockViewport = {
+      height: 844,
+      width: 390,
+      offsetTop: 0,
+      offsetLeft: 0,
+      addEventListener: vi.fn((event: string, cb: () => void) => {
+        listeners[event] = cb
+      }),
+      removeEventListener: vi.fn((event: string) => {
+        delete listeners[event]
+      }),
+    }
+
+    Object.defineProperty(window, 'visualViewport', {
+      writable: true,
+      configurable: true,
+      value: mockViewport,
+    })
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ customers: [], suppliers: [], items: [], usdKhr: 4100 }),
+      } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'purchase' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /^New purchase$/i })).toBeInTheDocument()
+    })
+
+    const backdrop = document.querySelector('.operation-modal-backdrop') as HTMLElement
+    expect(backdrop.style.getPropertyValue('--operation-viewport-height')).toBe('844px')
+
+    // Fill Walk-in seller name
+    const sellerInput = screen.getByPlaceholderText(/Customer name/i)
+    sellerInput.focus()
+    fireEvent.focusIn(sellerInput)
+
+    // Keyboard opens: viewport shrinks to 380px
+    mockViewport.height = 380
+    act(() => {
+      listeners['resize']?.()
+    })
+
+    expect(backdrop.style.getPropertyValue('--operation-viewport-height')).toBe('380px')
+
+    fireEvent.change(sellerInput, { target: { value: 'Walk-in seller' } })
+
+    // Step navigation works under keyboard viewport
+    const continueBtn = screen.getByRole('button', { name: /Continue to items/i })
+    fireEvent.click(continueBtn)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Step 2 of 2: Items & payment/i)).toBeInTheDocument()
+    })
+
+    // Header and footer actions remain rendered and accessible
+    expect(screen.getByRole('heading', { name: /^New purchase$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Close/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Back/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Complete required fields/i })).toBeInTheDocument()
+
+    // Dismiss with Escape
+    fireEvent.keyDown(document, { key: 'Escape' })
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+  })
+
+  describe.each([320, 390, 430])('Mobile Pawn Step 1 layout at %ipx width', (width) => {
+    it(`renders compact customer summary, redesigned ownership checkbox, clear stepper, and fitting card at ${width}px`, async () => {
+      window.innerWidth = width
+      const mockViewport = {
+        width,
+        height: width === 320 ? 568 : 844,
+        offsetTop: 0,
+        offsetLeft: 0,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+      }
+      Object.defineProperty(window, 'visualViewport', {
+        writable: true,
+        configurable: true,
+        value: mockViewport,
+      })
+
+      vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            customers: [
+              { _id: 'cust-mob-1', name: 'Sok Dara', phone: '012 345 678', nationalIdNumber: '0987654321', active: true },
+              { _id: 'cust-mob-2', name: 'Keo Bopha', phone: '', nationalIdNumber: '', active: true },
+            ],
+            suppliers: [],
+            items: [],
+            usdKhr: 4100,
+          }),
+        } as Response
+      })
+
+      renderModalBridge()
+
+      act(() => {
+        window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'pawn' } }))
+      })
+
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument()
+        expect(screen.getByRole('heading', { name: /New pawn contract/i })).toBeInTheDocument()
+      })
+
+      // 1. Step Indicator (Stepper)
+      expect(screen.getByLabelText(/Step 1 of 2: Customer verification/i)).toBeInTheDocument()
+      expect(screen.getByLabelText(/Step 2 of 2: Collateral and contract terms/i)).toBeInTheDocument()
+      const stepper = document.querySelector('.operation-workflow-stepper') as HTMLElement
+      expect(stepper).toBeInTheDocument()
+      const stepItems = stepper.querySelectorAll('.operation-workflow-step')
+      expect(stepItems.length).toBe(2)
+      expect(stepItems[0].querySelector('span')?.textContent).toBe('1')
+      expect(stepItems[1].querySelector('span')?.textContent).toBe('2')
+
+      // 2. Customer verification card fits content
+      const card = document.querySelector('.operation-section-card') as HTMLElement
+      expect(card).toBeInTheDocument()
+      expect(screen.getByRole('heading', { level: 3, name: /Customer verification/i })).toBeInTheDocument()
+
+      // 3. Ownership confirmation redesign
+      const checkbox = screen.getByRole('checkbox') as HTMLInputElement
+      expect(checkbox).toBeInTheDocument()
+      expect(checkbox.checked).toBe(false)
+      expect(checkbox.getAttribute('aria-describedby')).toBe('pawn-ownership-explanation')
+
+      expect(screen.getByText('Confirm identity and collateral ownership')).toBeInTheDocument()
+      expect(screen.getByText('No National ID will be stored.')).toBeInTheDocument()
+
+      const fullExplanation = document.getElementById('pawn-ownership-explanation')
+      expect(fullExplanation).toBeInTheDocument()
+      expect(fullExplanation?.textContent).toContain('No National ID will be stored. I confirmed ownership using the information and evidence available to the shop.')
+
+      const checkCard = document.querySelector('.pawn-verification-check') as HTMLLabelElement
+      expect(checkCard).toBeInTheDocument()
+      fireEvent.click(checkCard)
+      expect(checkbox.checked).toBe(true)
+      fireEvent.click(checkCard)
+      expect(checkbox.checked).toBe(false)
+
+      // 4. Customer summary (Existing customer)
+      const customerSelect = screen.getByRole('combobox')
+      fireEvent.change(customerSelect, { target: { value: 'cust-mob-1' } })
+
+      const summaryCard = document.querySelector('.pawn-customer-summary') as HTMLElement
+      expect(summaryCard).toBeInTheDocument()
+      expect(summaryCard.getAttribute('role')).toBe('list')
+      const summaryItems = summaryCard.querySelectorAll('.key-value-item')
+      expect(summaryItems.length).toBe(3)
+      expect(summaryItems[0].textContent).toContain('Customer')
+      expect(summaryItems[0].textContent).toContain('Sok Dara')
+      expect(summaryItems[1].textContent).toContain('Phone')
+      expect(summaryItems[1].textContent).toContain('012 345 678')
+      expect(summaryItems[2].textContent).toContain('National ID')
+      expect(summaryItems[2].textContent).toContain('0987654321')
+      expect(screen.getByText('National ID checked.')).toBeInTheDocument()
+
+      fireEvent.change(customerSelect, { target: { value: 'cust-mob-2' } })
+      expect(summaryItems[0].textContent).toContain('Keo Bopha')
+      expect(summaryItems[1].textContent).toContain('Not recorded')
+      expect(summaryItems[2].textContent).toContain('Not provided (optional)')
+
+      // 5. Footer buttons visible and functional
+      const continueBtn = screen.getByRole('button', { name: /Continue to collateral/i })
+      const cancelBtn = screen.getByRole('button', { name: /Cancel/i })
+      expect(continueBtn).toBeInTheDocument()
+      expect(cancelBtn).toBeInTheDocument()
+
+      fireEvent.click(continueBtn)
+      expect(screen.getByText(/Select a customer and confirm identity and collateral ownership first/i)).toBeInTheDocument()
+
+      fireEvent.click(checkCard)
+      expect(checkbox.checked).toBe(true)
+      fireEvent.click(continueBtn)
+
+      await waitFor(() => {
+        expect(screen.getByLabelText(/Step 2 of 2: Collateral and contract terms/i)).toBeInTheDocument()
+        expect(screen.getByRole('heading', { level: 3, name: /Phone collateral/i })).toBeInTheDocument()
+      })
+    })
   })
 })

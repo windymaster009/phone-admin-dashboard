@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import OperationModalShell from './OperationModalShell'
 
@@ -257,5 +257,163 @@ describe('OperationModalShell component', () => {
     expect(() => {
       fireEvent.keyDown(dialog, { key: 'Tab' })
     }).not.toThrow()
+  })
+
+  it('resizes modal to remaining visual viewport and keeps focused input visible when mobile keyboard opens', async () => {
+    const scrollIntoViewMock = vi.fn()
+    window.HTMLElement.prototype.scrollIntoView = scrollIntoViewMock
+
+    const listeners: Record<string, () => void> = {}
+    // Initial viewport: 390px wide x 844px tall (iPhone standard)
+    const mockViewport = {
+      height: 844,
+      width: 390,
+      offsetTop: 0,
+      offsetLeft: 0,
+      addEventListener: vi.fn((event: string, cb: () => void) => {
+        listeners[event] = cb
+      }),
+      removeEventListener: vi.fn((event: string) => {
+        delete listeners[event]
+      }),
+    }
+
+    Object.defineProperty(window, 'visualViewport', {
+      writable: true,
+      configurable: true,
+      value: mockViewport,
+    })
+
+    const { container, unmount } = render(
+      <OperationModalShell kind="pawn" title="New pawn contract" onClose={vi.fn()}>
+        <form className="operation-form">
+          <div className="operation-form-grid">
+            <input data-testid="test-phone-input" placeholder="Customer phone" />
+            <input data-testid="test-principal-input" placeholder="Principal amount" />
+          </div>
+        </form>
+        <footer className="operation-modal-actions">
+          <button type="button">Cancel</button>
+          <button type="submit">Submit</button>
+        </footer>
+      </OperationModalShell>,
+    )
+
+    const backdrop = container.parentElement?.querySelector('.operation-modal-backdrop') as HTMLElement
+    const dialog = screen.getByRole('dialog')
+    const principalInput = screen.getByTestId('test-principal-input')
+
+    // Initial styles
+    expect(backdrop.style.getPropertyValue('--operation-viewport-height')).toBe('844px')
+    expect(backdrop.style.getPropertyValue('--operation-viewport-width')).toBe('390px')
+
+    // Focus on principal input
+    principalInput.focus()
+    fireEvent.focusIn(principalInput)
+    expect(document.activeElement).toBe(principalInput)
+    await waitFor(() => {
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({
+        block: 'nearest',
+        inline: 'nearest',
+      })
+    })
+
+    scrollIntoViewMock.mockClear()
+
+    // Simulate mobile keyboard opening: viewport height shrinks from 844px to 380px (keyboard height ~464px)
+    mockViewport.height = 380
+    mockViewport.offsetTop = 0
+
+    act(() => {
+      listeners['resize']?.()
+    })
+
+    // Verify modal backdrop updates to remaining visual viewport height (380px)
+    expect(backdrop.style.getPropertyValue('--operation-viewport-height')).toBe('380px')
+
+    // Header and footer remain in the dialog while only its body scrolls.
+    expect(screen.getByRole('heading', { name: 'New pawn contract' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Close/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Submit' })).toBeInTheDocument()
+
+    // Touch gestures are not cancelled at the backdrop, so an inner scroll
+    // container can still receive vertical pan gestures on mobile browsers.
+    const touchEvent = new Event('touchmove', { cancelable: true })
+    const preventDefaultSpy = vi.spyOn(touchEvent, 'preventDefault')
+    backdrop.dispatchEvent(touchEvent)
+    expect(preventDefaultSpy).not.toHaveBeenCalled()
+
+    // Touchmove inside dialog does not prevent default (allows internal scrolling)
+    const dialogTouchEvent = new Event('touchmove', { cancelable: true })
+    const dialogPreventDefaultSpy = vi.spyOn(dialogTouchEvent, 'preventDefault')
+    dialog.dispatchEvent(dialogTouchEvent)
+    expect(dialogPreventDefaultSpy).not.toHaveBeenCalled()
+
+    unmount()
+  })
+
+  it('renders shared shell consistently across pawn, purchase, stock, customer, and supplier dialogs', () => {
+    const onClose = vi.fn()
+
+    // 1. Pawn dialog
+    const { rerender } = render(
+      <OperationModalShell kind="pawn" onClose={onClose}>
+        <div data-testid="pawn-content">Pawn Form Content</div>
+      </OperationModalShell>,
+    )
+    expect(screen.getByRole('dialog')).toHaveClass('operation-modal-pawn')
+    expect(screen.getByText('New pawn contract')).toBeInTheDocument()
+    expect(screen.getByTestId('pawn-content')).toBeInTheDocument()
+
+    // 2. Purchase dialog
+    rerender(
+      <OperationModalShell kind="purchase" onClose={onClose}>
+        <div data-testid="purchase-content">Purchase Form Content</div>
+      </OperationModalShell>,
+    )
+    expect(screen.getByRole('dialog')).toHaveClass('operation-modal-purchase')
+    expect(screen.getByText('New purchase')).toBeInTheDocument()
+    expect(screen.getByTestId('purchase-content')).toBeInTheDocument()
+
+    // 3. Stock dialog
+    rerender(
+      <OperationModalShell kind="stock" onClose={onClose}>
+        <div data-testid="stock-content">Stock Form Content</div>
+      </OperationModalShell>,
+    )
+    expect(screen.getByRole('dialog')).toHaveClass('operation-modal-stock')
+    expect(screen.getByText('Adjust stock')).toBeInTheDocument()
+    expect(screen.getByTestId('stock-content')).toBeInTheDocument()
+
+    // 4. Customer dialog
+    rerender(
+      <OperationModalShell
+        title="Add customer"
+        eyebrow="Customer record"
+        className="customer-modal"
+        onClose={onClose}
+      >
+        <div data-testid="customer-content">Customer Form Content</div>
+      </OperationModalShell>,
+    )
+    expect(screen.getByRole('dialog')).toHaveClass('customer-modal')
+    expect(screen.getByText('Add customer')).toBeInTheDocument()
+    expect(screen.getByTestId('customer-content')).toBeInTheDocument()
+
+    // 5. Supplier dialog
+    rerender(
+      <OperationModalShell
+        title="Add supplier"
+        eyebrow="Supplier record"
+        className="supplier-modal"
+        onClose={onClose}
+      >
+        <div data-testid="supplier-content">Supplier Form Content</div>
+      </OperationModalShell>,
+    )
+    expect(screen.getByRole('dialog')).toHaveClass('supplier-modal')
+    expect(screen.getByText('Add supplier')).toBeInTheDocument()
+    expect(screen.getByTestId('supplier-content')).toBeInTheDocument()
   })
 })

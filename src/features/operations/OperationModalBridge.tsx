@@ -45,7 +45,6 @@ import ScannerWorkflow from '../../components/scanner/ScannerWorkflow'
 import ScannerTriggerButton, { PRODUCT_SCANNER_EVENT } from '../../components/scanner/ScannerTriggerButton'
 import { notifyPawnCreated } from '../pawns/pawnEvents'
 import { ModalKind, StockCategory, Customer, InventoryItem, RelatedPawn, Supplier, SellerType, PurchaseCurrency, SaleCurrency, PawnCurrency, PurchaseInventoryMode, PawnCustomerMode, SalePaymentMethod, SalePaymentPhase, StockAdjustmentMode, StockAdjustmentStatus, PawnValuationSnapshot, CreatedPawn, CompletedStockAdjustment, SaleDraft, SaleKhqr, CreatedSaleTrade, CompletedSale, completedSaleFromTrade, paywayImageSource, PurchaseDevice, newPurchaseDevice, canRestockExisting, localDateValue, roundPawnAmount, pawnAmountText, pawnEquivalentAmountText, money, riel, saleAmountText, inventorySalePrice, inventoryNativeSalePriceText } from './operationDomain'
-import './operation-modals.css'
 import './pawn-guide.css'
 
 
@@ -2004,9 +2003,30 @@ export default function OperationModalBridge() {
                   ]}
                 />
               )}
-              <label className={`pawn-verification-check ${pawnAttempted && !pawnCustomerValid ? 'field-invalid' : ''}`}>
-                <input type="checkbox" checked={pawnOwnershipConfirmed} onChange={(event) => setPawnOwnershipConfirmed(event.target.checked)} />
-                <span><strong>Customer identity and collateral ownership confirmed</strong><small>{pawnCustomerHasId ? 'I checked the recorded National ID and confirmed this customer owns the phone.' : 'No National ID will be stored. I confirmed ownership using the information and evidence available to the shop.'}</small></span>
+              <label
+                htmlFor="pawn-ownership-checkbox"
+                className={`pawn-verification-check ${pawnAttempted && !pawnCustomerValid ? 'field-invalid' : ''}`}
+              >
+                <input
+                  id="pawn-ownership-checkbox"
+                  type="checkbox"
+                  checked={pawnOwnershipConfirmed}
+                  onChange={(event) => setPawnOwnershipConfirmed(event.target.checked)}
+                  aria-describedby="pawn-ownership-explanation"
+                />
+                <span className="pawn-verification-text">
+                  <strong className="pawn-verification-desktop-title">Customer identity and collateral ownership confirmed</strong>
+                  <strong className="pawn-verification-mobile-title">Confirm identity and collateral ownership</strong>
+                  <small className="pawn-verification-desktop-desc">
+                    {pawnCustomerHasId ? 'I checked the recorded National ID and confirmed this customer owns the phone.' : 'No National ID will be stored. I confirmed ownership using the information and evidence available to the shop.'}
+                  </small>
+                  <small className="pawn-verification-mobile-desc">
+                    {pawnCustomerHasId ? 'National ID checked.' : 'No National ID will be stored.'}
+                  </small>
+                  <span id="pawn-ownership-explanation" className="sr-only">
+                    {pawnCustomerHasId ? 'I checked the recorded National ID and confirmed this customer owns the phone.' : 'No National ID will be stored. I confirmed ownership using the information and evidence available to the shop.'}
+                  </span>
+                </span>
               </label>
             </OperationSectionCard>
           </div>

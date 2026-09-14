@@ -1,7 +1,10 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { AlertTriangle, HandCoins, Package, Printer, ScanLine, ShoppingCart, X } from 'lucide-react'
 import type { ModalKind } from './operationDomain'
+import './operation-modals.css'
+
+let openModalCount = 0
 
 const modalMeta: Record<ModalKind, { title: string; description: string; icon: ReactNode }> = {
   stock: {
@@ -43,8 +46,10 @@ export type OperationModalShellProps = {
   description?: string
   icon?: ReactNode
   error?: string
+  onDismissError?: () => void
   busy?: boolean
   onClose: () => void
+  closeAriaLabel?: string
   compact?: boolean
   confirmation?: boolean
   scanner?: boolean
@@ -62,8 +67,10 @@ export default function OperationModalShell({
   description,
   icon,
   error,
+  onDismissError,
   busy = false,
   onClose,
+  closeAriaLabel,
   compact = false,
   confirmation = false,
   scanner = false,
@@ -85,10 +92,32 @@ export default function OperationModalShell({
   const sectionClass = `operation-modal ${kindClass} ${compactClass} ${confirmationClass} ${scannerClass} ${className}`.trim()
   const backdropRef = useRef<HTMLDivElement>(null)
   const dialogRef = useRef<HTMLElement>(null)
+  const autoDescId = useId()
+  const descId = `operation-modal-desc-${autoDescId.replace(/:/g, '')}`
 
   useEffect(() => {
     const backdrop = backdropRef.current
     if (!backdrop) return
+
+    const keepFocusedElementVisible = () => {
+      const active = document.activeElement
+      if (
+        active instanceof HTMLElement &&
+        dialogRef.current?.contains(active) &&
+        (active.tagName === 'INPUT' ||
+          active.tagName === 'TEXTAREA' ||
+          active.tagName === 'SELECT' ||
+          active.isContentEditable ||
+          active.getAttribute('role') === 'textbox' ||
+          active.getAttribute('role') === 'combobox')
+      ) {
+        try {
+          active.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+        } catch {
+          active.scrollIntoView()
+        }
+      }
+    }
 
     const syncVisualViewport = () => {
       const viewport = window.visualViewport
@@ -101,6 +130,8 @@ export default function OperationModalShell({
       backdrop.style.setProperty('--operation-viewport-width', `${Math.max(0, width)}px`)
       backdrop.style.setProperty('--operation-viewport-top', `${Math.max(0, top)}px`)
       backdrop.style.setProperty('--operation-viewport-left', `${Math.max(0, left)}px`)
+
+      keepFocusedElementVisible()
     }
 
     syncVisualViewport()
@@ -108,10 +139,14 @@ export default function OperationModalShell({
     window.visualViewport?.addEventListener('resize', syncVisualViewport)
     window.visualViewport?.addEventListener('scroll', syncVisualViewport)
 
+    const dialog = dialogRef.current
+    dialog?.addEventListener('focusin', keepFocusedElementVisible)
+
     return () => {
       window.removeEventListener('resize', syncVisualViewport)
       window.visualViewport?.removeEventListener('resize', syncVisualViewport)
       window.visualViewport?.removeEventListener('scroll', syncVisualViewport)
+      dialog?.removeEventListener('focusin', keepFocusedElementVisible)
     }
   }, [])
 
@@ -120,12 +155,20 @@ export default function OperationModalShell({
       if (event.key === 'Escape' && !busy && dismissible && dismissOnEscape) onClose()
     }
     document.addEventListener('keydown', closeOnEscape)
-    document.body.classList.add('operation-modal-open')
     return () => {
       document.removeEventListener('keydown', closeOnEscape)
-      document.body.classList.remove('operation-modal-open')
     }
   }, [busy, dismissible, dismissOnEscape, onClose])
+
+  useEffect(() => {
+    openModalCount += 1
+    document.body.classList.add('operation-modal-open')
+
+    return () => {
+      openModalCount = Math.max(0, openModalCount - 1)
+      if (openModalCount === 0) document.body.classList.remove('operation-modal-open')
+    }
+  }, [])
 
   useEffect(() => {
     const dialog = dialogRef.current
@@ -166,13 +209,18 @@ export default function OperationModalShell({
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel || resolvedTitle}
+        aria-describedby={resolvedDescription ? descId : undefined}
       >
         <header className="operation-modal-header">
           {resolvedIcon && <span className="operation-modal-icon">{resolvedIcon}</span>}
-          <div>
+          <div className="operation-modal-header-text">
             {resolvedEyebrow && <span className="eyebrow">{resolvedEyebrow}</span>}
             <h2>{resolvedTitle}</h2>
-            {resolvedDescription && <p>{resolvedDescription}</p>}
+            {resolvedDescription && (
+              <p id={descId} className="operation-modal-description">
+                {resolvedDescription}
+              </p>
+            )}
           </div>
           {dismissible && (
             <button
@@ -180,13 +228,28 @@ export default function OperationModalShell({
               className="operation-modal-close"
               onClick={onClose}
               disabled={busy}
-              aria-label="Close"
+              aria-label={closeAriaLabel || 'Close'}
             >
               <X size={19} />
             </button>
           )}
         </header>
-        {error && <div className="operation-modal-error" role="alert"><AlertTriangle size={17} /> {error}</div>}
+        {error && (
+          <div className="operation-modal-error" role="alert">
+            <AlertTriangle size={17} />
+            <span className="operation-modal-error-text">{error}</span>
+            {onDismissError && (
+              <button
+                type="button"
+                className="operation-modal-error-dismiss"
+                onClick={onDismissError}
+                aria-label="Dismiss message"
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
+        )}
         {children}
       </section>
     </div>
