@@ -1174,6 +1174,50 @@ describe('Sales & Purchases Report Additional States, Filters & Validation', () 
     vi.restoreAllMocks()
   })
 
+  it.each([
+    { path: '/reports/sales', summary: { salesRevenue: 0, cogs: 0, grossProfit: 0, itemsSold: 0, transactions: 0, averageSale: 0 } },
+    { path: '/reports/purchases', summary: { totalPurchases: 0, amountPaid: 0, outstandingBalance: 0, itemsPurchased: 0, transactions: 0, averagePurchase: 0 } },
+  ])('$path offers All Time and sends it to the API', async ({ path, summary }) => {
+    const requestedUrls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      requestedUrls.push(String(input))
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({
+          period: { key: 'all_time', label: 'All Time' },
+          filters: {},
+          summary,
+          chart: [],
+          products: [],
+          payments: [],
+          sources: [],
+          staff: [],
+          transactions: [],
+          totalRecords: 0,
+          limited: false,
+        }),
+      } as Response
+    })
+
+    window.history.pushState({}, '', path)
+    const user = userEvent.setup()
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    const periodSelect = await screen.findByRole('combobox', { name: /^Period$/i }) as HTMLSelectElement
+    expect(within(periodSelect).getByRole('option', { name: 'All Time' })).toHaveValue('all_time')
+
+    await user.selectOptions(periodSelect, 'all_time')
+    await waitFor(() => {
+      expect(requestedUrls.at(-1)).toContain('period=all_time')
+    })
+  })
+
   it('Sales Report: displays LoadingState when initial data is loading', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(() => new Promise(() => {}))
 

@@ -118,6 +118,11 @@ function resolveOverviewPeriod(query) {
   let label
 
   switch (period) {
+    case 'all_time':
+      from = new Date(0)
+      to = tomorrow
+      label = 'All Time'
+      break
     case 'today':
       from = today
       to = tomorrow
@@ -170,7 +175,7 @@ function resolveOverviewPeriod(query) {
   const dayCount = Math.max(1, Math.ceil((to.getTime() - from.getTime()) / 86_400_000))
   const granularity = ['today', 'yesterday'].includes(period)
     ? 'hour'
-    : period === 'this_year' || dayCount > 92
+    : period === 'all_time' || period === 'this_year' || dayCount > 92
       ? 'month'
       : 'day'
 
@@ -1218,7 +1223,17 @@ router.get('/business-overview', requireAuth, allowRoles('OWNER', 'MANAGER'), as
   const chartByKey = new Map(chartRows.map((row) => [row._id, row]))
   const chart = []
 
-  if (period.granularity === 'hour') {
+  if (period.key === 'all_time') {
+    for (const row of chartRows) {
+      const [rowYear, rowMonth] = String(row._id).split('-').map(Number)
+      if (Number.isInteger(rowYear) && rowMonth >= 1 && rowMonth <= 12) {
+        const date = cambodiaDate(rowYear, rowMonth - 1, 1)
+        const sales = roundMoney(row.sales || 0)
+        const bucketCogs = roundMoney(row.cogs || 0)
+        chart.push({ key: row._id, label: `${overviewBucketLabel(date, 'month')} ${rowYear}`, sales, purchases: roundMoney(row.purchases || 0), grossProfit: roundMoney(sales - bucketCogs) })
+      }
+    }
+  } else if (period.granularity === 'hour') {
     for (let hour = 0; hour < 24; hour += 1) {
       const date = new Date(period.from.getTime() + hour * 3_600_000)
       const key = overviewDateKey(date, 'hour')
@@ -1489,7 +1504,17 @@ router.get('/reports/sales', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncR
     chart.push({ key, label: overviewBucketLabel(date, period.granularity), sales, cogs: bucketCogs, grossProfit: roundMoney(sales - bucketCogs) })
   }
 
-  if (period.granularity === 'hour') {
+  if (period.key === 'all_time') {
+    for (const row of chartRows) {
+      const [rowYear, rowMonth] = String(row._id).split('-').map(Number)
+      if (Number.isInteger(rowYear) && rowMonth >= 1 && rowMonth <= 12) {
+        const date = cambodiaDate(rowYear, rowMonth - 1, 1)
+        const sales = roundMoney(row.sales || 0)
+        const bucketCogs = roundMoney(row.cogs || 0)
+        chart.push({ key: row._id, label: `${overviewBucketLabel(date, 'month')} ${rowYear}`, sales, cogs: bucketCogs, grossProfit: roundMoney(sales - bucketCogs) })
+      }
+    }
+  } else if (period.granularity === 'hour') {
     for (let hour = 0; hour < 24; hour += 1) appendChartPoint(new Date(period.from.getTime() + hour * 3_600_000))
   } else if (period.granularity === 'month') {
     const start = cambodiaParts(period.from)
@@ -1741,7 +1766,21 @@ router.get('/reports/purchases', requireAuth, allowRoles('OWNER', 'MANAGER'), as
     })
   }
 
-  if (period.granularity === 'hour') {
+  if (period.key === 'all_time') {
+    for (const row of chartRows) {
+      const [rowYear, rowMonth] = String(row._id).split('-').map(Number)
+      if (Number.isInteger(rowYear) && rowMonth >= 1 && rowMonth <= 12) {
+        const date = cambodiaDate(rowYear, rowMonth - 1, 1)
+        chart.push({
+          key: row._id,
+          label: `${overviewBucketLabel(date, 'month')} ${rowYear}`,
+          total: roundMoney(row.total || 0),
+          paid: roundMoney(row.paid || 0),
+          balance: roundMoney(row.balance || 0),
+        })
+      }
+    }
+  } else if (period.granularity === 'hour') {
     for (let hour = 0; hour < 24; hour += 1) appendChartPoint(new Date(period.from.getTime() + hour * 3_600_000))
   } else if (period.granularity === 'month') {
     const start = cambodiaParts(period.from)

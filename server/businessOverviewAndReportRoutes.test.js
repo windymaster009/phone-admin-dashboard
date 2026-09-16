@@ -586,6 +586,56 @@ test('GET /reports/purchases: rejects invalid source and invalid payment status 
   assert.match(badPaymentStatusRes.body.message, /valid payment status/i)
 })
 
+test('GET /reports/sales and purchases: all_time includes full history and returns compact monthly chart points', async () => {
+  const origTradeAggregate = Trade.aggregate
+  const origTradeFind = Trade.find
+  const origUserFind = User.find
+  const capturedPipelines = []
+
+  Trade.aggregate = async (pipeline) => {
+    capturedPipelines.push(pipeline)
+    const groupStage = pipeline.find((stage) => stage.$group)
+    if (groupStage?.$group?._id === '$bucket') {
+      return [{ _id: '2024-01', sales: 100, cogs: 60, total: 80, paid: 50, balance: 30 }]
+    }
+    return []
+  }
+  Trade.find = () => {
+    const query = {
+      populate() { return query },
+      sort() { return query },
+      limit() { return query },
+      lean: async () => [],
+    }
+    return query
+  }
+  User.find = () => ({ select: () => ({ sort: () => ({ lean: async () => [] }) }) })
+
+  try {
+    for (const path of ['/reports/sales', '/reports/purchases']) {
+      capturedPipelines.length = 0
+      const res = await callRoute(path, { period: 'all_time' })
+      assert.equal(res.status, 200)
+      assert.equal(res.body.period.key, 'all_time')
+      assert.equal(res.body.period.label, 'All Time')
+      assert.equal(res.body.period.granularity, 'month')
+      assert.equal(res.body.period.from, new Date(0).toISOString())
+      assert.equal(res.body.chart.length, 1, 'All Time should not create empty chart buckets from 1970')
+      assert.equal(res.body.chart[0].key, '2024-01')
+      assert.equal(res.body.chart[0].label, 'Jan 2024')
+
+      const firstMatch = capturedPipelines[0][0].$match
+      const dateRange = path.endsWith('/sales') ? firstMatch.createdAt : firstMatch.$or[0].purchaseDate
+      assert.equal(dateRange.$gte.getTime(), 0)
+      assert.ok(dateRange.$lt instanceof Date)
+    }
+  } finally {
+    Trade.aggregate = origTradeAggregate
+    Trade.find = origTradeFind
+    User.find = origUserFind
+  }
+})
+
 test('GET /reports/sales & /reports/purchases: rejects invalid custom date ranges and verifies pipeline construction', async () => {
   // 1. Invalid custom date format in sales
   const badDateSales = await callRoute('/reports/sales', { period: 'custom', from: 'invalid-date', to: '2026-03-10' })

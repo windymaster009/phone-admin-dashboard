@@ -266,6 +266,7 @@ export type ActivityLog = {
 export type OverviewCurrencyTotals = { USD: number; KHR: number }
 
 export type BusinessOverviewPeriod = 'today' | 'yesterday' | 'last_7_days' | 'last_30_days' | 'this_month' | 'last_month' | 'this_year' | 'custom'
+export type ReportPeriod = BusinessOverviewPeriod | 'all_time'
 
 export type BusinessOverviewData = {
   period: {
@@ -326,7 +327,7 @@ export type BusinessOverviewData = {
 
 export type SalesReportData = {
   period: {
-    key: BusinessOverviewPeriod
+    key: ReportPeriod
     label: string
     from: string
     to: string
@@ -452,5 +453,4 @@ export type OperationalReportData = {
   filterOptions?: { actions?: string[]; entities?: string[] }
   notes?: string[]
 }
-
 

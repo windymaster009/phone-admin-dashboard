@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, ArrowLeft, ArrowUpRight, BadgeCheck, Banknote, BarChart3, Building2, Boxes, Calculator, CalendarRange, ChevronDown, CircleDollarSign, FileText, HandCoins, Package, RefreshCcw, Search, ShoppingCart, Users, WalletCards, Wrench, X, type LucideIcon } from 'lucide-react'
 import { api } from '../../lib/api'
-import type { Customer, Supplier, DirectoryReportPeriodKey, CustomerActivityReport, SupplierActivityReport, Pawn, BusinessOverviewPeriod, BusinessOverviewData, SalesReportData, PurchaseReportData, OperationalReportKind, OperationalReportData, ReportCurrencyFilter } from '../../types/domain'
+import type { Customer, Supplier, DirectoryReportPeriodKey, CustomerActivityReport, SupplierActivityReport, Pawn, BusinessOverviewData, SalesReportData, PurchaseReportData, OperationalReportKind, OperationalReportData, ReportCurrencyFilter, ReportPeriod } from '../../types/domain'
 import { currency, money, tradePartyName, purchaseSourceLabel, tradeTransactionMoney, pawnMoney, dateText, titleStatus } from '../../lib/presentation'
 import LoadingState from '../../components/LoadingState'
 import SectionHeader from '../../components/SectionHeader'
@@ -79,6 +79,18 @@ const directoryReportPeriodOptions: Array<{ value: DirectoryReportPeriodKey; lab
   { value: 'last_6_months', label: 'Last 6 months' },
   { value: 'this_year', label: 'This year' },
   { value: 'custom', label: 'Custom months' },
+]
+
+const reportPeriodOptions: Array<{ value: ReportPeriod; label: string }> = [
+  { value: 'all_time', label: 'All Time' },
+  { value: 'today', label: 'Today' },
+  { value: 'yesterday', label: 'Yesterday' },
+  { value: 'last_7_days', label: '7 Days' },
+  { value: 'last_30_days', label: '30 Days' },
+  { value: 'this_month', label: 'This Month' },
+  { value: 'last_month', label: 'Last Month' },
+  { value: 'this_year', label: 'This Year' },
+  { value: 'custom', label: 'Custom' },
 ]
 
 function currentCambodiaMonth() {
@@ -394,7 +406,7 @@ function ReportBackButton({ navigate }: { navigate: (path: string) => void }) {
 function SalesReportView({ navigate }: { navigate: (path: string) => void }) {
   const now = new Date()
   const todayInput = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-  const [period, setPeriod] = useState<BusinessOverviewPeriod>('this_month')
+  const [period, setPeriod] = useState<ReportPeriod>('this_month')
   const [customFrom, setCustomFrom] = useState(`${todayInput.slice(0, 8)}01`)
   const [customTo, setCustomTo] = useState(todayInput)
   const [paymentMethod, setPaymentMethod] = useState('ALL')
@@ -429,16 +441,6 @@ function SalesReportView({ navigate }: { navigate: (path: string) => void }) {
     }
   }, [period, customFrom, customTo, paymentMethod, status, staff])
 
-  const periodOptions: Array<{ value: BusinessOverviewPeriod; label: string }> = [
-    { value: 'today', label: 'Today' },
-    { value: 'yesterday', label: 'Yesterday' },
-    { value: 'last_7_days', label: '7 Days' },
-    { value: 'last_30_days', label: '30 Days' },
-    { value: 'this_month', label: 'This Month' },
-    { value: 'last_month', label: 'Last Month' },
-    { value: 'this_year', label: 'This Year' },
-    { value: 'custom', label: 'Custom' },
-  ]
   const chartPoints: BusinessOverviewData['chart'] = (data?.chart || []).map((point) => ({
     key: point.key,
     label: point.label,
@@ -465,7 +467,7 @@ function SalesReportView({ navigate }: { navigate: (path: string) => void }) {
       <SectionHeader eyebrow="Reports & analytics" title="Sales Report" description="Revenue, cost of goods sold, gross profit, products, and payment performance." action={<ReportBackButton navigate={navigate} />} />
 
       <section className="surface-card sales-report-filters" aria-label="Sales report filters">
-        <label><span>Period</span><select value={period} onChange={(event) => setPeriod(event.target.value as BusinessOverviewPeriod)}>{periodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+        <label><span>Period</span><select value={period} onChange={(event) => setPeriod(event.target.value as ReportPeriod)}>{reportPeriodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
         {period === 'custom' && <><label><span>From</span><input type="date" value={customFrom} max={customTo || undefined} onChange={(event) => setCustomFrom(event.target.value)} /></label><label><span>To</span><input type="date" value={customTo} min={customFrom || undefined} onChange={(event) => setCustomTo(event.target.value)} /></label></>}
         <label><span>Payment method</span><select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}><option value="ALL">All methods</option><option value="CASH">Cash</option><option value="KHQR">KHQR</option><option value="BANK">Bank</option><option value="CARD">Card</option></select></label>
         <label><span>Status</span><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="COMPLETED">Completed</option><option value="RETURNED">Returned</option><option value="CANCELLED">Cancelled</option></select></label>
@@ -512,7 +514,7 @@ function SalesReportView({ navigate }: { navigate: (path: string) => void }) {
 function PurchasesReportView({ navigate }: { navigate: (path: string) => void }) {
   const now = new Date()
   const todayInput = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-  const [period, setPeriod] = useState<BusinessOverviewPeriod>('this_month')
+  const [period, setPeriod] = useState<ReportPeriod>('this_month')
   const [customFrom, setCustomFrom] = useState(`${todayInput.slice(0, 8)}01`)
   const [customTo, setCustomTo] = useState(todayInput)
   const [source, setSource] = useState('ALL')
@@ -549,16 +551,6 @@ function PurchasesReportView({ navigate }: { navigate: (path: string) => void })
     }
   }, [period, customFrom, customTo, source, paymentMethod, paymentStatus, status, staff])
 
-  const periodOptions: Array<{ value: BusinessOverviewPeriod; label: string }> = [
-    { value: 'today', label: 'Today' },
-    { value: 'yesterday', label: 'Yesterday' },
-    { value: 'last_7_days', label: '7 Days' },
-    { value: 'last_30_days', label: '30 Days' },
-    { value: 'this_month', label: 'This Month' },
-    { value: 'last_month', label: 'Last Month' },
-    { value: 'this_year', label: 'This Year' },
-    { value: 'custom', label: 'Custom' },
-  ]
   const chartPoints: BusinessOverviewData['chart'] = (data?.chart || []).map((point) => ({
     key: point.key,
     label: point.label,
@@ -586,7 +578,7 @@ function PurchasesReportView({ navigate }: { navigate: (path: string) => void })
       <SectionHeader eyebrow="Reports & analytics" title="Purchases Report" description="Purchase cost, stock acquired, seller sources, balances, and payment performance." action={<ReportBackButton navigate={navigate} />} />
 
       <section className="surface-card sales-report-filters purchases-report-filters" aria-label="Purchases report filters">
-        <label><span>Period</span><select value={period} onChange={(event) => setPeriod(event.target.value as BusinessOverviewPeriod)}>{periodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+        <label><span>Period</span><select value={period} onChange={(event) => setPeriod(event.target.value as ReportPeriod)}>{reportPeriodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
         {period === 'custom' && <><label><span>From</span><input type="date" value={customFrom} max={customTo || undefined} onChange={(event) => setCustomFrom(event.target.value)} /></label><label><span>To</span><input type="date" value={customTo} min={customFrom || undefined} onChange={(event) => setCustomTo(event.target.value)} /></label></>}
         <label><span>Seller source</span><select value={source} onChange={(event) => setSource(event.target.value)}><option value="ALL">All sources</option><option value="SUPPLIER">Suppliers</option><option value="CUSTOMER">Customers</option><option value="WALK_IN">Walk-in sellers</option><option value="LEGACY">Legacy records</option></select></label>
         <label><span>Payment method</span><select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}><option value="ALL">All methods</option><option value="CASH">Cash</option><option value="KHQR">KHQR</option><option value="BANK">Bank</option><option value="CARD">Card</option><option value="OTHER">Other</option></select></label>
@@ -641,7 +633,7 @@ function OperationalReportView({ kind, navigate }: { kind: OperationalReportKind
   const now = new Date()
   const todayInput = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   const isMultiCurrency = ['pawns', 'loans', 'payments', 'services'].includes(kind)
-  const [period, setPeriod] = useState<BusinessOverviewPeriod | 'all_time'>(['pawns', 'loans'].includes(kind) ? 'all_time' : 'this_month')
+  const [period, setPeriod] = useState<ReportPeriod>(['pawns', 'loans'].includes(kind) ? 'all_time' : 'this_month')
   const [customFrom, setCustomFrom] = useState(`${todayInput.slice(0, 8)}01`)
   const [customTo, setCustomTo] = useState(todayInput)
   const [currencyCode, setCurrencyCode] = useState<ReportCurrencyFilter>(isMultiCurrency ? 'ALL' : 'USD')
@@ -713,12 +705,6 @@ function OperationalReportView({ kind, navigate }: { kind: OperationalReportKind
     }
   }, [kind, period, customFrom, customTo, currencyCode, status, staff, category, source, stock, method, direction, action, entity])
 
-  const periodOptions: Array<{ value: BusinessOverviewPeriod | 'all_time'; label: string }> = [
-    { value: 'all_time', label: 'All Time' }, { value: 'today', label: 'Today' }, { value: 'yesterday', label: 'Yesterday' },
-    { value: 'last_7_days', label: '7 Days' }, { value: 'last_30_days', label: '30 Days' },
-    { value: 'this_month', label: 'This Month' }, { value: 'last_month', label: 'Last Month' },
-    { value: 'this_year', label: 'This Year' }, { value: 'custom', label: 'Custom' },
-  ]
   const statusOptions: Record<'inventory' | 'pawns' | 'loans' | 'services', string[]> = {
     inventory: ['ALL', 'IN_STOCK', 'RESERVED', 'SOLD', 'PAWNED', 'REPAIR', 'ARCHIVED'],
     pawns: ['ALL', 'ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED', 'REDEEMED', 'FORFEITED', 'CANCELLED'],
@@ -777,7 +763,7 @@ function OperationalReportView({ kind, navigate }: { kind: OperationalReportKind
       <SectionHeader eyebrow="Reports & analytics" title={data?.title || `${titleStatus(kind)} Report`} description={data?.description || 'Operational reporting.'} action={<ReportBackButton navigate={navigate} />} />
 
       <section className="surface-card sales-report-filters operational-report-filters" aria-label={`${kind} report filters`}>
-        {kind !== 'inventory' && <label><span>Period</span><select value={period} onChange={(event) => setPeriod(event.target.value as BusinessOverviewPeriod | 'all_time')}>{periodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>}
+        {kind !== 'inventory' && <label><span>Period</span><select value={period} onChange={(event) => setPeriod(event.target.value as ReportPeriod)}>{reportPeriodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>}
         {period === 'custom' && kind !== 'inventory' && <><label><span>From</span><input type="date" value={customFrom} max={customTo || undefined} onChange={(event) => setCustomFrom(event.target.value)} /></label><label><span>To</span><input type="date" value={customTo} min={customFrom || undefined} onChange={(event) => setCustomTo(event.target.value)} /></label></>}
         {kind === 'inventory' && <>
           <label><span>Category</span><select value={category} onChange={(event) => setCategory(event.target.value)}>{['ALL', 'PHONE', 'TABLET', 'ACCESSORY', 'SPARE_PART', 'OTHER'].map((value) => <option key={value} value={value}>{value === 'ALL' ? 'All categories' : titleStatus(value)}</option>)}</select></label>
