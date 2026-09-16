@@ -4,6 +4,7 @@ import { api, type SessionUser } from '../../lib/api'
 import { titleStatus } from '../../lib/presentation'
 import SectionHeader from '../../components/SectionHeader'
 import NotificationToast from '../../components/NotificationToast'
+import PrintingSettings from './PrintingSettings'
 import { getStoredValuations, clearStoredValuations } from '../../lib/storage'
 import type { AppFontSize } from '../../app/types'
 import './settings-page.css'
@@ -92,6 +93,8 @@ export default function SettingsView({
             <button className="ghost-button danger-button" onClick={onLogout}><LogOut size={15} />Log out</button>
           </div>
         </article>
+
+        <PrintingSettings />
 
         <article className="surface-card settings-card font-size-settings-card">
           <div className="settings-card-heading">

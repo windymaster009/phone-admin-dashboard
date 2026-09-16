@@ -383,6 +383,122 @@
   line-height: 1.5;
 }
 
+/* Printing Settings */
+.printing-list {
+  padding: 8px 20px 13px;
+}
+
+.printing-list > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 13px 0;
+  border-top: 1px solid var(--border);
+}
+
+.printing-list > div:first-child {
+  border-top: 0;
+}
+
+.printing-item-main {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+  flex: 1 1 190px;
+}
+
+.printing-item-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.printing-item-text strong {
+  color: var(--text);
+  font-size: var(--text-2xs);
+}
+
+.printing-item-text small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.printing-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.printing-layout-toggle {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-soft);
+  gap: 2px;
+}
+
+.printing-layout-toggle button {
+  min-height: 38px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  background: transparent;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 150ms ease, background 150ms ease;
+  white-space: nowrap;
+}
+
+.printing-layout-toggle button:hover:not(.active) {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.printing-layout-toggle button.active {
+  color: #fff;
+  background: var(--primary);
+}
+
+.printing-feedback {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 20px 14px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  font-size: var(--text-2xs);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.printing-feedback svg {
+  flex-shrink: 0;
+}
+
+.printing-feedback.printing-error {
+  border: 1px solid color-mix(in srgb, var(--rose) 35%, transparent);
+  background: color-mix(in srgb, var(--rose) 10%, transparent);
+  color: var(--rose);
+}
+
+.printing-feedback.printing-success {
+  border: 1px solid color-mix(in srgb, var(--green) 35%, transparent);
+  background: color-mix(in srgb, var(--green) 10%, transparent);
+  color: var(--green);
+}
+
 @media (max-width: 1480px) {
   .settings-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -396,14 +512,16 @@
   .account-settings-card,
   .environment-settings-card,
   .valuation-settings-card,
-  .font-size-settings-card {
+  .font-size-settings-card,
+  .printing-settings-card {
     grid-area: auto;
   }
 
   .account-settings-card { order: 1; }
-  .environment-settings-card { order: 2; }
-  .font-size-settings-card { order: 3; }
-  .valuation-settings-card { order: 4; }
+  .printing-settings-card { order: 2; }
+  .environment-settings-card { order: 3; }
+  .font-size-settings-card { order: 4; }
+  .valuation-settings-card { order: 5; }
 }
 
 @media (max-width: 1180px) {
@@ -415,7 +533,8 @@
   .account-settings-card,
   .environment-settings-card,
   .valuation-settings-card,
-  .font-size-settings-card {
+  .font-size-settings-card,
+  .printing-settings-card {
     grid-area: auto;
   }
 
@@ -476,5 +595,48 @@
 
   .environment-list {
     padding-inline: 17px;
+  }
+
+  .printing-list {
+    padding-inline: 17px;
+  }
+
+  .printing-list > div {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .printing-item-main {
+    width: 100%;
+    flex-basis: auto;
+  }
+
+  .printing-item-actions {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .printing-item-actions .ghost-button {
+    flex: 1;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .printing-layout-toggle {
+    flex-shrink: 0;
+  }
+
+  .printing-layout-toggle button {
+    flex: 1;
+    min-height: 44px;
+  }
+
+  .printing-feedback {
+    margin-inline: 17px;
   }
 }
