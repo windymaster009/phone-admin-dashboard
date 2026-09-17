@@ -904,3 +904,49 @@ test('DELETE /inventory/:id: enforces validation, reference guards, photo cleanu
     ActivityLog.prototype.save = origActivitySave
   }
 })
+
+test('POST /inventory: sanitizes bad SKU and barcode values and prevents literal "NULL" in inventory', async () => {
+  const origCreate = InventoryItem.create
+  let createdPayload = null
+  InventoryItem.create = async (data) => {
+    createdPayload = data
+    return {
+      _id: 'mock-item-sanitized',
+      ...data,
+      save: async () => {},
+    }
+  }
+  try {
+    const res = await callRoute('POST', '/inventory', {
+      name: 'Samsung Galaxy S24 Ultra',
+      category: 'PHONE',
+      brand: 'Samsung',
+      model: 'S24 Ultra',
+      storage: '256GB',
+      sku: 'NULL',
+      barcode: 'NULL',
+      buyPrice: 600,
+      sellPrice: 900,
+      quantity: 1,
+      status: 'IN_STOCK',
+    }, { role: 'MANAGER' })
+
+    assert.equal(res.status, 201)
+    assert.notEqual(createdPayload.sku, 'NULL', 'Must not store literal string "NULL" as SKU')
+    assert.match(createdPayload.sku, /^STK-/, 'Auto-generates clean STK- SKU')
+    assert.notEqual(createdPayload.barcode, 'NULL', 'Must not store literal string "NULL" as barcode')
+    assert.match(createdPayload.barcode, /^PF-/, 'Auto-generates clean PF- barcode')
+  } finally {
+    InventoryItem.create = origCreate
+  }
+})
+
+test('GET /inventory/scan/:code: rejects literal "NULL" or blank code with 400 Bad Request', async () => {
+  const resNull = await callRoute('GET', '/inventory/scan/NULL', {}, { role: 'CASHIER' })
+  assert.equal(resNull.status, 400)
+  assert.match(resNull.body.message, /Scan a barcode, SKU, IMEI/i)
+
+  const resLowerNull = await callRoute('GET', '/inventory/scan/null', {}, { role: 'CASHIER' })
+  assert.equal(resLowerNull.status, 400)
+  assert.match(resLowerNull.body.message, /Scan a barcode, SKU, IMEI/i)
+})

@@ -47,10 +47,41 @@ const supplierSchema = new Schema(
   baseOptions,
 )
 
+const INVALID_CODE_PATTERN = /^(NULL|UNDEFINED|N\/A|NONE|\[NULL\]|BLANK)$/i
+
 const inventoryItemSchema = new Schema(
   {
-    sku: { type: String, required: true, unique: true, uppercase: true, trim: true },
-    barcode: { type: String, unique: true, sparse: true, uppercase: true, trim: true, index: true },
+    sku: {
+      type: String,
+      required: true,
+      unique: true,
+      uppercase: true,
+      trim: true,
+      validate: {
+        validator(value) {
+          if (!this.isNew && typeof this.isModified === 'function' && !this.isModified('sku')) return true
+          if (!value) return false
+          return !INVALID_CODE_PATTERN.test(String(value).trim())
+        },
+        message: (props) => `SKU cannot be a placeholder or empty value: ${props.value}`,
+      },
+    },
+    barcode: {
+      type: String,
+      unique: true,
+      sparse: true,
+      uppercase: true,
+      trim: true,
+      index: true,
+      validate: {
+        validator(value) {
+          if (value == null || value === '') return true
+          if (!this.isNew && typeof this.isModified === 'function' && !this.isModified('barcode')) return true
+          return !INVALID_CODE_PATTERN.test(String(value).trim())
+        },
+        message: (props) => `Barcode cannot be a placeholder value: ${props.value}`,
+      },
+    },
     category: {
       type: String,
       enum: ['PHONE', 'TABLET', 'ACCESSORY', 'SPARE_PART', 'OTHER'],
@@ -214,7 +245,7 @@ const pawnSchema = new Schema(
     exchangeRate: { type: Number, min: 0, default: 1 },
     issueDate: { type: Date, default: Date.now },
     dueDate: { type: Date, required: true, index: true },
-    gracePeriodDays: { type: Number, min: 0, max: 30, default: 2 },
+    gracePeriodDays: { type: Number, min: 0, max: 30, default: 5 },
     graceEndsAt: { type: Date, required: true, index: true },
     dueReminderFor: { type: Date, index: true, sparse: true },
     dueReminderSentAt: Date,

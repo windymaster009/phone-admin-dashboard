@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
 import './loan-workspace.css'
 import {
+  AlertCircle,
   AlertTriangle,
   BadgeCheck,
+  Ban,
   Banknote,
   CheckCircle2,
   CircleDollarSign,
@@ -11,6 +13,7 @@ import {
   MoreHorizontal,
   Phone,
   Plus,
+  Printer,
   RefreshCcw,
   Search,
   Trash2,
@@ -91,9 +94,10 @@ export type LoanSummary = {
   counts: { total: number; open: number; dueSoon: number; overdue: number; paid: number }
 }
 
-type LoanDetail = { loan: Loan; payments: LoanPayment[] }
+type LoanDetail = { loan: Loan; payments: LoanPayment[]; recordedPaymentId?: string }
 
 type LoanPaymentConfirmation = {
+  _id?: string
   amount: number
   paymentMethod: string
   currency: Currency
@@ -333,6 +337,22 @@ function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
             />
           </div>
           <OperationWorkflowFooter
+            secondaryAction={
+              <button
+                type="button"
+                className="secondary-button loan-print-created-btn"
+                onClick={() => {
+                  onClose()
+                  window.requestAnimationFrame(() => {
+                    window.dispatchEvent(new CustomEvent('phoneflow:open-loan-receipt', {
+                      detail: { reference: createdLoan.loanNo, layout: 'THERMAL' },
+                    }))
+                  })
+                }}
+              >
+                <Printer size={16} /> Print 80mm receipt
+              </button>
+            }
             primaryAction={
               <button type="button" className="primary-button record-created-done" onClick={onClose}>
                 <CheckCircle2 size={16} /> Done
@@ -734,11 +754,32 @@ function LoanDetailModal({ detail, user, busy, error, paymentConfirmation, cance
           </div>
           <OperationWorkflowFooter
             secondaryAction={
-              paymentConfirmation.status === 'PAID' && user?.role === 'OWNER' ? (
-                <button type="button" className="ghost-button danger-button" onClick={onDelete}>
-                  <Trash2 size={15} /> Delete loan
-                </button>
-              ) : undefined
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                {paymentConfirmation._id && <button
+                  type="button"
+                  className="secondary-button loan-print-payment-btn"
+                  onClick={() => {
+                    onClose()
+                    window.requestAnimationFrame(() => {
+                      window.dispatchEvent(new CustomEvent('phoneflow:open-loan-receipt', {
+                        detail: {
+                          reference: loan.loanNo,
+                          documentType: 'LOAN_PAYMENT',
+                          sourceSubId: paymentConfirmation._id,
+                          layout: 'THERMAL',
+                        },
+                      }))
+                    })
+                  }}
+                >
+                  <Printer size={16} /> Print 80mm receipt
+                </button>}
+                {paymentConfirmation.status === 'PAID' && user?.role === 'OWNER' ? (
+                  <button type="button" className="ghost-button danger-button" onClick={onDelete}>
+                    <Trash2 size={15} /> Delete loan
+                  </button>
+                ) : null}
+              </div>
             }
             primaryAction={
               <button type="button" className="primary-button record-created-done" onClick={onClose}>
@@ -873,12 +914,24 @@ function LoanDetailModal({ detail, user, busy, error, paymentConfirmation, cance
                 <button className="ghost-button" disabled={busy}>Save due date</button>
               </form>
             )}
+            {open && canManage && loan.amountPaid === 0 && (
+              <div className="loan-removal-hint">
+                <Ban size={13} />
+                <span>Zero repayments recorded · Loan can be cancelled anytime via <strong>Cancel loan</strong> below.</span>
+              </div>
+            )}
+            {open && canManage && loan.amountPaid > 0 && (
+              <div className="loan-repayment-history-lock">
+                <AlertCircle size={13} />
+                <span>Repayments recorded ({money(loan.amountPaid, loan.currency)}) · Loan cannot be cancelled.</span>
+              </div>
+            )}
           </OperationSectionCard>
 
           <OperationSectionCard
-            title="Record payment"
-            eyebrow="Repayment"
-            badge={<CircleDollarSign size={21} />}
+            title={loan.status === 'CANCELLED' ? 'Loan status' : 'Record payment'}
+            eyebrow={loan.status === 'CANCELLED' ? 'Closure' : 'Repayment'}
+            badge={loan.status === 'CANCELLED' ? <Ban size={21} /> : <CircleDollarSign size={21} />}
             className="loan-detail-card"
           >
             {canPay && open ? (
@@ -891,9 +944,17 @@ function LoanDetailModal({ detail, user, busy, error, paymentConfirmation, cance
                 <button className="primary-button" disabled={busy}>{busy ? 'Recording...' : 'Record payment'}</button>
               </form>
             ) : (
-              <div className="loan-payment-complete">
-                <BadgeCheck size={28} />
+              <div className={`loan-payment-complete ${loan.status === 'CANCELLED' ? 'loan-status-cancelled-card' : ''}`}>
+                {loan.status === 'CANCELLED' ? <Ban size={28} /> : <BadgeCheck size={28} />}
                 <strong>{loan.status === 'PAID' ? 'Loan paid in full' : loan.status === 'CANCELLED' ? 'Loan cancelled' : 'You cannot record payments'}</strong>
+                {loan.status === 'CANCELLED' && (
+                  <p className="loan-cancelled-description">
+                    This agreement was cancelled without repayment.
+                    {user?.role === 'OWNER'
+                      ? ' As shop Owner, you can permanently delete this record using the Delete loan action below.'
+                      : ' Only the shop Owner can permanently delete cancelled loan records.'}
+                  </p>
+                )}
               </div>
             )}
           </OperationSectionCard>
@@ -903,10 +964,63 @@ function LoanDetailModal({ detail, user, busy, error, paymentConfirmation, cance
           <div className="loan-card-heading"><div><span className="eyebrow">Audit trail</span><h3>Payment history</h3></div><span>{payments.length} payment{payments.length === 1 ? '' : 's'}</span></div>
           {payments.length > 0 ? <div className="loan-payment-list">{payments.map((payment) => <article key={payment._id}><span className="loan-payment-icon"><Banknote size={17} /></span><div><strong>{money(payment.amount, loan.currency)}</strong><small>{payment.paymentNo} · {payment.paymentMethod}</small></div><div><strong>{dateText(payment.paidAt)}</strong><small>{payment.receivedBy?.name || 'Staff'}{payment.reference ? ` · ${payment.reference}` : ''}</small></div></article>)}</div> : <div className="loan-empty-history"><FileText size={27} /><span>No repayments recorded yet.</span></div>}
         </section>
-
-        {canManage && open && loan.amountPaid === 0 && <div className="loan-danger-zone"><div><strong>Cancel this loan</strong><span>Only loans without repayment history can be cancelled.</span></div><button type="button" className="ghost-button danger-button" disabled={busy} onClick={onCancel}>Cancel loan</button></div>}
-        {canDelete && <div className="loan-danger-zone loan-delete-zone"><div><strong>Delete completed loan</strong><span>Permanently remove this {loan.status === 'PAID' ? 'paid' : 'cancelled'} loan and its linked payment records.</span></div><button type="button" className="ghost-button danger-button" disabled={busy} onClick={onDelete}><Trash2 size={15} /> Delete loan</button></div>}
       </div>
+      <OperationWorkflowFooter
+        className="loan-detail-footer"
+        secondaryAction={
+          <div className="loan-detail-footer-actions">
+            <button
+              type="button"
+              className="secondary-button loan-print-receipt-btn"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('phoneflow:open-loan-receipt', {
+                  detail: { reference: loan.loanNo, layout: 'THERMAL' },
+                }))
+              }}
+              title="Print 80mm loan receipt with barcode"
+            >
+              <Printer size={15} /> Print 80mm receipt
+            </button>
+            <button
+              type="button"
+              className="secondary-button loan-documents-btn"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent('phoneflow:open-documents', {
+                  detail: { sourceType: 'LOAN', reference: loan.loanNo },
+                }))
+              }}
+              title="View all loan documents and receipts"
+            >
+              <FileText size={15} /> Documents
+            </button>
+          </div>
+        }
+        primaryAction={
+          <div className="loan-detail-footer-primary">
+            {canManage && open && loan.amountPaid === 0 ? (
+              <button
+                type="button"
+                className="ghost-button danger-button loan-cancel-btn"
+                disabled={busy}
+                onClick={onCancel}
+                title="Cancel this loan without repayment"
+              >
+                <Ban size={15} /> Cancel loan
+              </button>
+            ) : canDelete ? (
+              <button
+                type="button"
+                className="ghost-button danger-button loan-delete-btn"
+                disabled={busy}
+                onClick={onDelete}
+                title={`Permanently delete this ${loan.status === 'PAID' ? 'paid' : 'cancelled'} loan and its records`}
+              >
+                <Trash2 size={15} /> Delete loan
+              </button>
+            ) : null}
+          </div>
+        }
+      />
     </OperationModalShell>
   )
 }
@@ -1037,7 +1151,11 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
         note: String(form.get('note') || '').trim(),
       }) })
       setDetail(nextDetail)
+      const existingPaymentIds = new Set(detail.payments.map((payment) => payment._id))
+      const recordedPaymentId = nextDetail.recordedPaymentId
+        || nextDetail.payments.find((payment) => !existingPaymentIds.has(payment._id))?._id
       setPaymentConfirmation({
+        _id: recordedPaymentId,
         amount,
         paymentMethod,
         currency: nextDetail.loan.currency,

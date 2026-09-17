@@ -6,6 +6,7 @@ import receiptRouter from './receiptRoutes.js'
 import { ActivityLog, Trade, User } from './models.js'
 import { AuthSession } from './authSessionModels.js'
 import { Receipt } from './receiptModels.js'
+import { Loan, LoanPayment } from './loanModels.js'
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret-receipt-routes-12345'
 mongoose.set('bufferCommands', false)
@@ -314,6 +315,29 @@ test('GET /options: returns 404 for missing reference and 400 for invalid source
 })
 
 // ---------------------- POST /generate Tests ----------------------
+
+test('POST /generate: unknown loan payment ID never falls back to another repayment', async () => {
+  const originalLoanFindOne = Loan.findOne
+  const originalPaymentFind = LoanPayment.find
+  const loan = { _id: new mongoose.Types.ObjectId(), loanNo: 'LN-STRICT-001' }
+  const loanQuery = { populate: () => loanQuery, then(resolve) { resolve(loan) } }
+  const payments = [{ _id: new mongoose.Types.ObjectId(), amount: 25 }]
+  Loan.findOne = () => loanQuery
+  LoanPayment.find = () => ({ sort: () => ({ populate: async () => payments }) })
+  try {
+    const response = await callRouter(receiptRouter, {
+      method: 'POST',
+      url: '/generate',
+      user: mockOwner,
+      body: { sourceType: 'LOAN', reference: loan.loanNo, documentType: 'LOAN_PAYMENT', sourceSubId: 'missing-payment' },
+    })
+    assert.equal(response.status, 404)
+    assert.match(response.body.message, /repayment was not found/i)
+  } finally {
+    Loan.findOne = originalLoanFindOne
+    LoanPayment.find = originalPaymentFind
+  }
+})
 
 test('POST /generate: creates immutable receipt snapshot (201 created: true)', async () => {
   const origFindOne = Trade.findOne

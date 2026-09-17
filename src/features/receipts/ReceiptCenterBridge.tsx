@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { AlertTriangle, Banknote, ChevronRight, HandCoins, Landmark, LoaderCircle, Printer, ReceiptText, RefreshCcw, Search, ShoppingCart, X } from 'lucide-react'
+import { AlertTriangle, Banknote, ChevronDown, ChevronRight, HandCoins, History, Landmark, LoaderCircle, Printer, ReceiptText, RefreshCcw, Search, ShoppingCart, X } from 'lucide-react'
 import { api, defaultShopProfile, type ShopProfile } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
 import ReceiptDocument from './ReceiptDocument'
 import { fitReceiptPrintPage, writeReceiptPrintDocument } from './receipt-print'
 import type { ReceiptDocumentType, ReceiptLayout, ReceiptOption, ReceiptOptionResponse, ReceiptRecord, ReceiptSourceType } from './receipt-types'
+import './receipt-center.css'
 
 type SourceContext = { sourceType: ReceiptSourceType; reference: string }
 type ViewerState = { receipt: ReceiptRecord; initialLayout?: ReceiptLayout }
@@ -79,22 +80,93 @@ function Modal({ title, description, onClose, children, wide = false, className 
 }
 
 function OptionPicker({ response, busy, pendingOptionKey, error, onSelect, onClose }: { response: ReceiptOptionResponse; busy: boolean; pendingOptionKey: string | null; error: string; onSelect: (option: ReceiptOption) => void; onClose: () => void }) {
-  return <Modal className="receipt-option-picker-modal" title={response.referenceNo} description="Choose the historical document to preview or print." onClose={onClose}>
-    {error && <div className="receipt-error" role="alert"><AlertTriangle size={16} /> {error}</div>}
-    <div className="receipt-option-list">
-      {response.options.map((option) => {
-        const optionKey = `${option.documentType}-${option.sourceSubId}`
-        const pending = pendingOptionKey === optionKey
-        return <button key={optionKey} className={pending ? 'is-loading' : ''} disabled={busy} aria-busy={pending} onClick={() => onSelect(option)}>
-          <span><DocumentIcon type={option.documentType} /></span>
-          <p><strong>{option.label}</strong><small>{pending ? 'Preparing preview...' : dateText(option.issuedAt, true)}</small></p>
-          <div><strong>{money(option.amount, option.currency)}</strong><small>{option.currency}</small></div>
-          {pending ? <LoaderCircle className="receipt-option-spinner" size={17} /> : <ChevronRight size={17} />}
-        </button>
-      })}
-    </div>
-    <footer className="receipt-modal-actions"><button className="ghost-button" onClick={onClose}>Close</button></footer>
-  </Modal>
+  const [previousExpanded, setPreviousExpanded] = useState(false)
+  const isPawn = response.sourceType === 'PAWN' || response.options.some((o) => o.documentType === 'PAWN_CONTRACT')
+  const contracts = isPawn ? response.options.filter((o) => o.documentType === 'PAWN_CONTRACT') : []
+  const payments = isPawn ? response.options.filter((o) => o.documentType !== 'PAWN_CONTRACT') : []
+  const currentContract = contracts[0]
+  const previousContracts = contracts.slice(1)
+
+  const renderOptionButton = (option: ReceiptOption, isCurrent = false) => {
+    const optionKey = `${option.documentType}-${option.sourceSubId}`
+    const pending = pendingOptionKey === optionKey
+    return (
+      <button
+        key={optionKey}
+        type="button"
+        className={`receipt-option-button ${isCurrent ? 'receipt-current-contract-card' : ''} ${pending ? 'is-loading' : ''}`}
+        disabled={busy}
+        aria-busy={pending}
+        onClick={() => onSelect(option)}
+      >
+        <span><DocumentIcon type={option.documentType} /></span>
+        <p>
+          <span className="receipt-option-label-group">
+            <strong>{option.label}</strong>
+            {isCurrent && <span className="receipt-current-badge">Current</span>}
+          </span>
+          <small>{pending ? 'Preparing preview...' : dateText(option.issuedAt, true)}</small>
+        </p>
+        <div>
+          <strong>{money(option.amount, option.currency)}</strong>
+          <small>{option.currency}{isCurrent ? ' · Principal' : ''}</small>
+        </div>
+        {pending ? <LoaderCircle className="receipt-option-spinner" size={17} /> : isCurrent ? <Printer size={17} /> : <ChevronRight size={17} />}
+      </button>
+    )
+  }
+
+  return (
+    <Modal className="receipt-option-picker-modal" title={response.referenceNo} description="Choose the historical document to preview or print." onClose={onClose}>
+      {error && <div className="receipt-error" role="alert"><AlertTriangle size={16} /> {error}</div>}
+      <div className="receipt-option-list">
+        {isPawn ? (
+          <>
+            {currentContract && (
+              <section className="receipt-picker-section receipt-current-contract-section" aria-label="Current contract — Print for customer">
+                <span className="eyebrow receipt-section-eyebrow">Current contract — Print for customer</span>
+                {renderOptionButton(currentContract, true)}
+              </section>
+            )}
+
+            {previousContracts.length > 0 && (
+              <section className="receipt-picker-section receipt-previous-contracts-section" aria-label="Previous contract versions">
+                <button
+                  type="button"
+                  className="receipt-collapse-toggle"
+                  onClick={() => setPreviousExpanded((open) => !open)}
+                  aria-expanded={previousExpanded}
+                >
+                  <span className="receipt-collapse-left">
+                    <History size={15} />
+                    <strong>Previous contract versions ({previousContracts.length})</strong>
+                  </span>
+                  <ChevronDown size={16} className={`receipt-chevron ${previousExpanded ? 'is-rotated' : ''}`} />
+                </button>
+                {previousExpanded && (
+                  <div className="receipt-previous-contracts-list">
+                    {previousContracts.map((option) => renderOptionButton(option))}
+                  </div>
+                )}
+              </section>
+            )}
+
+            {payments.length > 0 && (
+              <section className="receipt-picker-section receipt-payments-section" aria-label="Payment receipts">
+                <span className="eyebrow receipt-section-eyebrow">Payment receipts</span>
+                <div className="receipt-payments-list">
+                  {payments.map((option) => renderOptionButton(option))}
+                </div>
+              </section>
+            )}
+          </>
+        ) : (
+          response.options.map((option) => renderOptionButton(option))
+        )}
+      </div>
+      <footer className="receipt-modal-actions"><button className="ghost-button" onClick={onClose}>Close</button></footer>
+    </Modal>
+  )
 }
 
 function Viewer({ initialReceipt, initialLayout = 'A4', onClose, onUpdated }: { initialReceipt: ReceiptRecord; initialLayout?: ReceiptLayout; onClose: () => void; onUpdated: (receipt: ReceiptRecord) => void }) {
@@ -218,6 +290,11 @@ export default function ReceiptCenterBridge() {
     const loanTitle = loanModal?.querySelector('h2')?.textContent?.trim() || ''
     const loanReference = loanTitle.match(/^(LN-[A-Z0-9-]+)/)?.[1]
     if (loanModal && loanReference) {
+      if (loanModal.querySelector('.loan-detail-footer, .loan-footer-actions, .record-created-workflow')) {
+        setActionTarget(null)
+        setContext(null)
+        return
+      }
       const headerContent = loanModal.querySelector<HTMLElement>('.operation-modal-header > div')
       if (headerContent) {
         let host = headerContent.querySelector<HTMLElement>('.receipt-action-host')
@@ -270,12 +347,19 @@ export default function ReceiptCenterBridge() {
       if (controller.signal.aborted || generationController.current !== controller) return
       if (!result.receipt?._id) throw new Error('The receipt was created without a valid preview. Please try again.')
       setViewer({ receipt: result.receipt, initialLayout }); setPicker(null); setVersion((value) => value + 1)
+      window.dispatchEvent(new CustomEvent('phoneflow:documents-opened', { detail: { receipt: result.receipt } }))
     } catch (reason) {
       if (generationController.current !== controller) return
+      let message = 'Unable to generate receipt'
       if (reason instanceof DOMException && reason.name === 'AbortError') {
-        if (!generationClosed.current) setError('The receipt preview took too long to prepare. Please try again.')
-      } else {
-        setError(reason instanceof Error ? reason.message : 'Unable to generate receipt')
+        if (!generationClosed.current) message = 'The receipt preview took too long to prepare. Please try again.'
+        else message = ''
+      } else if (reason instanceof Error) {
+        message = reason.message
+      }
+      if (message) {
+        setError(message)
+        window.dispatchEvent(new CustomEvent('phoneflow:documents-error', { detail: { message } }))
       }
     } finally {
       window.clearTimeout(timeout)
@@ -296,12 +380,15 @@ export default function ReceiptCenterBridge() {
       const response = await api<ReceiptOptionResponse>(`/receipts/options?${query}`)
       setContext(source)
       if (response.options.length === 1) {
-        await generate(source, response.options[0])
+        await generate(source, response.options[0], source.sourceType === 'LOAN' || source.sourceType === 'PAWN' ? 'THERMAL' : 'A4')
       } else {
         setPicker({ ...response, source })
+        window.dispatchEvent(new CustomEvent('phoneflow:documents-opened'))
       }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : 'Unable to load receipt options')
+      const message = reason instanceof Error ? reason.message : 'Unable to load receipt options'
+      setError(message)
+      window.dispatchEvent(new CustomEvent('phoneflow:documents-error', { detail: { message } }))
     } finally {
       setBusy(false)
     }
@@ -331,6 +418,18 @@ export default function ReceiptCenterBridge() {
         'THERMAL',
       )
     }
+    const openLoanReceipt = (event: Event) => {
+      const detail = (event as CustomEvent<{ reference?: string; documentType?: 'LOAN_AGREEMENT' | 'LOAN_PAYMENT'; sourceSubId?: string; layout?: ReceiptLayout }>).detail
+      const reference = detail?.reference?.trim()
+      if (!reference) return
+      const documentType = detail?.documentType || 'LOAN_AGREEMENT'
+      const sourceSubId = detail?.sourceSubId?.trim() || (documentType === 'LOAN_AGREEMENT' ? 'agreement' : '')
+      void generate(
+        { sourceType: 'LOAN', reference },
+        { documentType, sourceSubId, label: documentType === 'LOAN_AGREEMENT' ? 'Loan agreement' : 'Loan repayment receipt', issuedAt: new Date().toISOString(), amount: 0, currency: 'USD' },
+        detail?.layout || 'THERMAL',
+      )
+    }
     const openTradeReceipt = (event: Event) => {
       const detail = (event as CustomEvent<{ reference?: string; currency?: 'USD' | 'KHR'; refreshOnClose?: boolean }>).detail
       const reference = detail?.reference?.trim()
@@ -353,11 +452,13 @@ export default function ReceiptCenterBridge() {
     }
     window.addEventListener('phoneflow:open-documents', openDocumentsEvent)
     window.addEventListener('phoneflow:open-pawn-ticket', openPawnTicket)
+    window.addEventListener('phoneflow:open-loan-receipt', openLoanReceipt)
     window.addEventListener('phoneflow:open-trade-receipt', openTradeReceipt)
     window.addEventListener('phoneflow:open-refund-receipt', openRefundReceipt)
     return () => {
       window.removeEventListener('phoneflow:open-documents', openDocumentsEvent)
       window.removeEventListener('phoneflow:open-pawn-ticket', openPawnTicket)
+      window.removeEventListener('phoneflow:open-loan-receipt', openLoanReceipt)
       window.removeEventListener('phoneflow:open-trade-receipt', openTradeReceipt)
       window.removeEventListener('phoneflow:open-refund-receipt', openRefundReceipt)
     }
@@ -383,7 +484,7 @@ export default function ReceiptCenterBridge() {
 
   return <>
     {actionTarget && context && createPortal(<button className="secondary-button receipt-detail-action" onClick={() => void openDocuments()} disabled={busy}><Printer size={15} /> {busy ? 'Loading...' : context.sourceType === 'TRADE' ? 'Print receipt' : 'Documents'}</button>, actionTarget)}
-    {picker && <OptionPicker response={picker} busy={busy} pendingOptionKey={pendingOptionKey} error={error} onSelect={(option) => void generate(picker.source, option)} onClose={closePicker} />}
+    {picker && <OptionPicker response={picker} busy={busy} pendingOptionKey={pendingOptionKey} error={error} onSelect={(option) => void generate(picker.source, option, picker.source.sourceType === 'LOAN' || picker.source.sourceType === 'PAWN' ? 'THERMAL' : 'A4')} onClose={closePicker} />}
     {viewer && <Viewer key={viewer.receipt._id} initialReceipt={viewer.receipt} initialLayout={viewer.initialLayout} onClose={closeViewer} onUpdated={(receipt) => { setViewer((current) => current ? { ...current, receipt } : null); setVersion((value) => value + 1) }} />}
     {!picker && !viewer && error && createPortal(<div className="receipt-toast" role="alert"><AlertTriangle size={16} /> {error}<button onClick={() => setError('')}><X size={14} /></button></div>, document.body)}
   </>

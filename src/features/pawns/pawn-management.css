@@ -557,6 +557,19 @@
   font-size: var(--text-2xs);
 }
 
+.pawn-documents-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--rose) 35%, transparent);
+  background: color-mix(in srgb, var(--rose) 12%, transparent);
+  color: var(--rose);
+  font-size: var(--text-xs);
+  font-weight: 500;
+}
+
 /* ==========================================================================
    Responsive / Mobile Overrides
    Co-located to ensure deterministic CSS cascade regardless of lazy loading.

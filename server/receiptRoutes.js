@@ -293,7 +293,7 @@ function daysBetween(fromValue, toValue, fallback = 0) {
 function graceEndForTicket(dueDate, gracePeriodDays) {
   const due = new Date(dueDate)
   if (Number.isNaN(due.getTime())) return dueDate
-  return new Date(due.getTime() + Math.max(0, Number(gracePeriodDays) || 0) * RECEIPT_DAY_MS)
+  return new Date(due.getTime() + Math.max(5, Number(gracePeriodDays) || 5) * RECEIPT_DAY_MS)
 }
 
 function pawnContractRevisions(pawn) {
@@ -482,11 +482,12 @@ function buildLoanAgreementSnapshot(loan) {
 }
 
 function findLoanPayment(payments, sourceSubId) {
-  let payment
   if (sourceSubId && sourceSubId !== 'latest') {
-    payment = payments.find((entry) => entry._id.toString() === sourceSubId)
+    const payment = payments.find((entry) => entry._id.toString() === sourceSubId)
+    if (!payment) throw requestError(404, 'This loan repayment was not found')
+    return payment
   }
-  if (!payment) payment = payments.at(-1)
+  const payment = payments.at(-1)
   if (!payment) throw requestError(404, 'This loan does not have a repayment to receipt')
   return payment
 }

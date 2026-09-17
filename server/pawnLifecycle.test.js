@@ -298,7 +298,6 @@ test('Pawn creation: rejects non-existent existing customer (404)', async () => 
     Customer.findById = origCustomerFindById
   }
 })
-
 test('Pawn creation: rejects unconfirmed ownership / identity (400)', async () => {
   const res = await callRouter(apiRouter, {
     method: 'POST',
@@ -413,7 +412,14 @@ test('Pawn creation: successfully creates customer, collateral inventory item, a
       _id: new mongoose.Types.ObjectId(),
       status: 'ACTIVE',
       ...items[0],
-      populate: async () => createdPawn,
+      populate: async (field) => {
+        if (field === 'customer') {
+          createdPawn.customer = createdCustomer
+        } else if (field === 'inventoryItem') {
+          createdPawn.inventoryItem = createdItem
+        }
+        return createdPawn
+      },
       toObject: () => ({ ...createdPawn }),
     }
     return [createdPawn]
@@ -457,6 +463,18 @@ test('Pawn creation: successfully creates customer, collateral inventory item, a
     assert.equal(createdPawn.feeModel, 'DAILY_SIMPLE')
     assert.equal(createdPawn.termDays, 7)
     assert.equal(createdPawn.principal, 135)
+    assert.equal(createdPawn.gracePeriodDays, 5)
+    assert.equal(createdPawn.graceEndsAt.getTime(), createdPawn.dueDate.getTime() + 5 * 86400000)
+
+    // Verify linked inventory item details returned immediately in creation response
+    assert.equal(createdItem.barcode, createdPawn.pawnNo)
+    assert.ok(createdItem.sku)
+    assert.ok(res.body.pawn.inventoryItem)
+    assert.equal(typeof res.body.pawn.inventoryItem, 'object')
+    assert.equal(res.body.pawn.inventoryItem.barcode, createdPawn.pawnNo)
+    assert.equal(res.body.pawn.inventoryItem.sku, createdItem.sku)
+    assert.equal(res.body.pawn.inventoryItem.name, 'Samsung S22')
+    assert.equal(res.body.pawn.inventoryItem.status, 'PAWNED')
   } finally {
     Customer.create = origCustomerCreate
     InventoryItem.create = origItemCreate
@@ -761,6 +779,324 @@ test('Pawn forfeiture: past grace period transfers collateral into second-hand s
   }
 })
 
+test('Pawn forfeiture timing: rejects claim before 5 full days have passed (409)', async () => {
+  const origPawnFindById = Pawn.findById
+  const pawnId = new mongoose.Types.ObjectId().toString()
+  const now = Date.now()
+  const dueDate = new Date(now - 4 * 86400000)
+
+  Pawn.findById = () => ({
+    _id: pawnId,
+    status: 'OVERDUE',
+    dueDate,
+    graceEndsAt: new Date(dueDate.getTime() + 5 * 86400000),
+    session() { return this },
+  })
+
+  try {
+    const res = await callRouter(apiRouter, {
+      method: 'POST',
+      url: `/pawns/${pawnId}/forfeit`,
+      user: mockOwner,
+    })
+    assert.equal(res.status, 409)
+    assert.ok(res.body.message.includes('cannot be claimed until'))
+  } finally {
+    Pawn.findById = origPawnFindById
+  }
+})
+
+test('Pawn forfeiture timing: allows claim exactly at 5 full days', async () => {
+  const origPawnFindById = Pawn.findById
+  const origItemUpdate = InventoryItem.findByIdAndUpdate
+  InventoryItem.findByIdAndUpdate = async (id) => ({ _id: id })
+  const pawnId = new mongoose.Types.ObjectId().toString()
+  const now = Date.now()
+  const dueDate = new Date(now - 5 * 86400000)
+
+  const fakePawn = {
+    _id: pawnId,
+    status: 'OVERDUE',
+    currency: 'USD',
+    principal: 100,
+    dueDate,
+    graceEndsAt: new Date(dueDate.getTime() + 5 * 86400000),
+    session() { return this },
+    save: async () => fakePawn,
+    toObject: () => ({ ...fakePawn }),
+  }
+  Pawn.findById = () => fakePawn
+
+  try {
+    const res = await callRouter(apiRouter, {
+      method: 'POST',
+      url: `/pawns/${pawnId}/forfeit`,
+      user: mockOwner,
+    })
+    assert.equal(res.status, 200)
+    assert.equal(fakePawn.status, 'FORFEITED')
+  } finally {
+    Pawn.findById = origPawnFindById
+    InventoryItem.findByIdAndUpdate = origItemUpdate
+  }
+})
+
+test('Pawn forfeiture timing: allows claim after 5 full days', async () => {
+  const origPawnFindById = Pawn.findById
+  const origItemUpdate = InventoryItem.findByIdAndUpdate
+  InventoryItem.findByIdAndUpdate = async (id) => ({ _id: id })
+  const pawnId = new mongoose.Types.ObjectId().toString()
+  const now = Date.now()
+  const dueDate = new Date(now - 6 * 86400000)
+
+  const fakePawn = {
+    _id: pawnId,
+    status: 'OVERDUE',
+    currency: 'USD',
+    principal: 100,
+    dueDate,
+    graceEndsAt: new Date(dueDate.getTime() + 5 * 86400000),
+    session() { return this },
+    save: async () => fakePawn,
+    toObject: () => ({ ...fakePawn }),
+  }
+  Pawn.findById = () => fakePawn
+
+  try {
+    const res = await callRouter(apiRouter, {
+      method: 'POST',
+      url: `/pawns/${pawnId}/forfeit`,
+      user: mockOwner,
+    })
+    assert.equal(res.status, 200)
+    assert.equal(fakePawn.status, 'FORFEITED')
+  } finally {
+    Pawn.findById = origPawnFindById
+    InventoryItem.findByIdAndUpdate = origItemUpdate
+  }
+})
+
+test('Pawn forfeiture timing: older contract with 2-day graceEndsAt enforces 5-day minimum (before, exactly at, and after)', async () => {
+  const origPawnFindById = Pawn.findById
+  const origItemUpdate = InventoryItem.findByIdAndUpdate
+  InventoryItem.findByIdAndUpdate = async (id) => ({ _id: id })
+  const pawnId = new mongoose.Types.ObjectId().toString()
+  const now = Date.now()
+
+  // 1. Before: 3 days overdue (2-day grace passed, but 5-day minimum has not)
+  const dueDateBefore = new Date(now - 3 * 86400000)
+  const graceEndsAt2Day = new Date(dueDateBefore.getTime() + 2 * 86400000)
+  Pawn.findById = () => ({
+    _id: pawnId,
+    status: 'OVERDUE',
+    dueDate: dueDateBefore,
+    graceEndsAt: graceEndsAt2Day,
+    session() { return this },
+  })
+
+  try {
+    const resBefore = await callRouter(apiRouter, {
+      method: 'POST',
+      url: `/pawns/${pawnId}/forfeit`,
+      user: mockOwner,
+    })
+    assert.equal(resBefore.status, 409)
+    assert.ok(resBefore.body.message.includes('cannot be claimed until'))
+  } finally {
+    Pawn.findById = origPawnFindById
+  }
+
+  // 2. Exactly at: 5 days overdue (reaches 5-day minimum)
+  const dueDateExact = new Date(now - 5 * 86400000)
+  const fakePawnExact = {
+    _id: pawnId,
+    status: 'OVERDUE',
+    currency: 'USD',
+    principal: 100,
+    dueDate: dueDateExact,
+    graceEndsAt: new Date(dueDateExact.getTime() + 2 * 86400000),
+    session() { return this },
+    save: async () => fakePawnExact,
+    toObject: () => ({ ...fakePawnExact }),
+  }
+  Pawn.findById = () => fakePawnExact
+
+  try {
+    const resExact = await callRouter(apiRouter, {
+      method: 'POST',
+      url: `/pawns/${pawnId}/forfeit`,
+      user: mockOwner,
+    })
+    assert.equal(resExact.status, 200)
+    assert.equal(fakePawnExact.status, 'FORFEITED')
+  } finally {
+    Pawn.findById = origPawnFindById
+  }
+
+  // 3. After: 6 days overdue
+  const dueDateAfter = new Date(now - 6 * 86400000)
+  const fakePawnAfter = {
+    _id: pawnId,
+    status: 'OVERDUE',
+    currency: 'USD',
+    principal: 100,
+    dueDate: dueDateAfter,
+    graceEndsAt: new Date(dueDateAfter.getTime() + 2 * 86400000),
+    session() { return this },
+    save: async () => fakePawnAfter,
+    toObject: () => ({ ...fakePawnAfter }),
+  }
+  Pawn.findById = () => fakePawnAfter
+
+  try {
+    const resAfter = await callRouter(apiRouter, {
+      method: 'POST',
+      url: `/pawns/${pawnId}/forfeit`,
+      user: mockOwner,
+    })
+    assert.equal(resAfter.status, 200)
+    assert.equal(fakePawnAfter.status, 'FORFEITED')
+  } finally {
+    Pawn.findById = origPawnFindById
+    InventoryItem.findByIdAndUpdate = origItemUpdate
+  }
+})
+
+test('Pawn forfeiture timing: honors later saved graceEndsAt (before, exactly at, and after)', async () => {
+  const origPawnFindById = Pawn.findById
+  const origItemUpdate = InventoryItem.findByIdAndUpdate
+  InventoryItem.findByIdAndUpdate = async (id) => ({ _id: id })
+  const pawnId = new mongoose.Types.ObjectId().toString()
+  const now = Date.now()
+
+  // 1. Before: 6 days overdue (past 5-day minimum, but before 7-day graceEndsAt)
+  const dueDateBefore = new Date(now - 6 * 86400000)
+  const graceEndsAt7Day = new Date(dueDateBefore.getTime() + 7 * 86400000)
+  Pawn.findById = () => ({
+    _id: pawnId,
+    status: 'OVERDUE',
+    dueDate: dueDateBefore,
+    graceEndsAt: graceEndsAt7Day,
+    session() { return this },
+  })
+
+  try {
+    const resBefore = await callRouter(apiRouter, {
+      method: 'POST',
+      url: `/pawns/${pawnId}/forfeit`,
+      user: mockOwner,
+    })
+    assert.equal(resBefore.status, 409)
+    assert.ok(resBefore.body.message.includes('cannot be claimed until'))
+  } finally {
+    Pawn.findById = origPawnFindById
+  }
+
+  // 2. Exactly at: 7 days overdue (reaches 7-day graceEndsAt)
+  const dueDateExact = new Date(now - 7 * 86400000)
+  const fakePawnExact = {
+    _id: pawnId,
+    status: 'OVERDUE',
+    currency: 'USD',
+    principal: 100,
+    dueDate: dueDateExact,
+    graceEndsAt: new Date(dueDateExact.getTime() + 7 * 86400000),
+    session() { return this },
+    save: async () => fakePawnExact,
+    toObject: () => ({ ...fakePawnExact }),
+  }
+  Pawn.findById = () => fakePawnExact
+
+  try {
+    const resExact = await callRouter(apiRouter, {
+      method: 'POST',
+      url: `/pawns/${pawnId}/forfeit`,
+      user: mockOwner,
+    })
+    assert.equal(resExact.status, 200)
+    assert.equal(fakePawnExact.status, 'FORFEITED')
+  } finally {
+    Pawn.findById = origPawnFindById
+  }
+
+  // 3. After: 8 days overdue
+  const dueDateAfter = new Date(now - 8 * 86400000)
+  const fakePawnAfter = {
+    _id: pawnId,
+    status: 'OVERDUE',
+    currency: 'USD',
+    principal: 100,
+    dueDate: dueDateAfter,
+    graceEndsAt: new Date(dueDateAfter.getTime() + 7 * 86400000),
+    session() { return this },
+    save: async () => fakePawnAfter,
+    toObject: () => ({ ...fakePawnAfter }),
+  }
+  Pawn.findById = () => fakePawnAfter
+
+  try {
+    const resAfter = await callRouter(apiRouter, {
+      method: 'POST',
+      url: `/pawns/${pawnId}/forfeit`,
+      user: mockOwner,
+    })
+    assert.equal(resAfter.status, 200)
+    assert.equal(fakePawnAfter.status, 'FORFEITED')
+  } finally {
+    Pawn.findById = origPawnFindById
+    InventoryItem.findByIdAndUpdate = origItemUpdate
+  }
+})
+
+test('Pawn redemption and claim separation: cashier can redeem overdue contract but cannot claim collateral', async () => {
+  const origPawnFindById = Pawn.findById
+  const origItemUpdate = InventoryItem.findByIdAndUpdate
+  InventoryItem.findByIdAndUpdate = async (id) => ({ _id: id })
+  const pawnId = new mongoose.Types.ObjectId().toString()
+  const inventoryItemId = new mongoose.Types.ObjectId().toString()
+
+  const fakePawn = {
+    _id: pawnId,
+    pawnNo: 'PW-SEPARATE-1',
+    status: 'OVERDUE',
+    currency: 'USD',
+    principal: 100,
+    remainingPrincipal: 100,
+    accruedInterest: 10,
+    fees: 5,
+    dueDate: new Date(Date.now() - 10 * 86400000),
+    graceEndsAt: new Date(Date.now() - 5 * 86400000),
+    inventoryItem: inventoryItemId,
+    payments: [],
+    session() { return this },
+    save: async () => fakePawn,
+    populate: async () => fakePawn,
+    toObject: () => ({ ...fakePawn }),
+  }
+  Pawn.findById = () => fakePawn
+
+  try {
+    const resClaim = await callRouter(apiRouter, {
+      method: 'POST',
+      url: `/pawns/${pawnId}/forfeit`,
+      user: mockCashier,
+    })
+    assert.equal(resClaim.status, 403)
+
+    const resRedeem = await callRouter(apiRouter, {
+      method: 'POST',
+      url: `/pawns/${pawnId}/redeem`,
+      user: mockCashier,
+      body: { amount: 115 },
+    })
+    assert.equal(resRedeem.status, 200)
+    assert.equal(fakePawn.status, 'REDEEMED')
+  } finally {
+    Pawn.findById = origPawnFindById
+    InventoryItem.findByIdAndUpdate = origItemUpdate
+  }
+})
+
 // ---------------------------------------------------------------------------
 // 7. Pawn Deletion
 // ---------------------------------------------------------------------------
@@ -872,5 +1208,130 @@ test('Pawn deletion: successfully deletes untouched open contract and inventory 
     CustomerDocument.countDocuments = origDocCount
     Pawn.deleteOne = origPawnDeleteOne
     InventoryItem.deleteOne = origItemDeleteOne
+  }
+})
+
+test('Inventory scan: resolves collateral item and related pawn when scanning pawnNo barcode', async () => {
+  const origItemFindOne = InventoryItem.findOne
+  const origPawnFindOne = Pawn.findOne
+  const itemId = new mongoose.Types.ObjectId()
+  const pawnId = new mongoose.Types.ObjectId()
+  const pawnNo = 'PW-20260917-SCAN01'
+
+  const mockItem = {
+    _id: itemId,
+    sku: 'PWN-20260917-SCAN01',
+    barcode: pawnNo,
+    name: 'iPhone 14 Pro',
+    brand: 'Apple',
+    model: 'iPhone 14 Pro 128GB',
+    imei1: '358901234567890',
+    sellPrice: 0,
+    status: 'PAWNED',
+  }
+
+  const mockPawn = {
+    _id: pawnId,
+    pawnNo,
+    status: 'ACTIVE',
+    customer: { name: 'Sokha Meng' },
+    inventoryItem: mockItem,
+  }
+
+  // Scanner finds via InventoryItem.findOne (barcode: exactCode)
+  InventoryItem.findOne = (query) => {
+    if (query.$or && query.$or.some((c) => c.barcode && c.barcode.test && c.barcode.test(pawnNo))) {
+      return Promise.resolve(mockItem)
+    }
+    return Promise.resolve(null)
+  }
+  Pawn.findOne = () => ({
+    select: () => ({
+      populate: () => ({
+        lean: () => Promise.resolve(mockPawn),
+      }),
+    }),
+  })
+
+  try {
+    const res = await callRouter(apiRouter, {
+      method: 'GET',
+      url: `/inventory/scan/${pawnNo}`,
+      user: mockOwner,
+    })
+    assert.equal(res.status, 200)
+    assert.ok(res.body.item)
+    assert.equal(res.body.item.barcode, pawnNo)
+    assert.ok(res.body.relatedPawn)
+    assert.equal(res.body.relatedPawn.pawnNo, pawnNo)
+    assert.equal(res.body.relatedPawn.customer.name, 'Sokha Meng')
+  } finally {
+    InventoryItem.findOne = origItemFindOne
+    Pawn.findOne = origPawnFindOne
+  }
+})
+
+test('Inventory scan: fallback resolves collateral when code matches pawnNo directly', async () => {
+  const origItemFindOne = InventoryItem.findOne
+  const origPawnFindOne = Pawn.findOne
+  const itemId = new mongoose.Types.ObjectId()
+  const pawnId = new mongoose.Types.ObjectId()
+  const pawnNo = 'PW-20260917-FALLBACK'
+
+  const mockItem = {
+    _id: itemId,
+    sku: 'PWN-FALLBACK',
+    barcode: pawnNo,
+    name: 'iPad Pro 11',
+    status: 'PAWNED',
+  }
+
+  const mockPawn = {
+    _id: pawnId,
+    pawnNo,
+    status: 'ACTIVE',
+    customer: { name: 'Dara Chan' },
+    inventoryItem: mockItem,
+  }
+
+  // Item not found directly in inventory items table
+  InventoryItem.findOne = () => Promise.resolve(null)
+  Pawn.findOne = (query) => {
+    if (query.pawnNo && query.pawnNo.test && query.pawnNo.test(pawnNo)) {
+      return {
+        select: () => ({
+          populate: () => ({
+            populate: () => ({
+              lean: () => Promise.resolve(mockPawn),
+            }),
+          }),
+        }),
+      }
+    }
+    return {
+      select: () => ({
+        populate: () => ({
+          populate: () => ({
+            lean: () => Promise.resolve(null),
+          }),
+        }),
+      }),
+    }
+  }
+
+  try {
+    const res = await callRouter(apiRouter, {
+      method: 'GET',
+      url: `/inventory/scan/${pawnNo}`,
+      user: mockOwner,
+    })
+    assert.equal(res.status, 200)
+    assert.ok(res.body.item)
+    assert.equal(res.body.item.name, 'iPad Pro 11')
+    assert.ok(res.body.relatedPawn)
+    assert.equal(res.body.relatedPawn.pawnNo, pawnNo)
+  } finally {
+    InventoryItem.findOne = origItemFindOne
+    Pawn.findOne = origPawnFindOne
   }
 })

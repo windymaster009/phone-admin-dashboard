@@ -1,5 +1,5 @@
-import { useRef, useState, type FormEvent } from 'react'
-import { AlertTriangle, ArrowUpRight, Printer, Trash2, X } from 'lucide-react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { AlertTriangle, ArrowUpRight, FileText, LoaderCircle, Printer, Trash2, X } from 'lucide-react'
 import type { Pawn, PawnAction, PawnCurrency } from '../../types/domain'
 import { dateText, pawnMoney } from '../../lib/presentation'
 import MoneyInput from '../../components/MoneyInput'
@@ -24,6 +24,7 @@ export type PawnDetailModalProps = {
   onAction?: (action: PawnAction, payload: Record<string, unknown>) => Promise<void>
   onDelete?: () => Promise<void>
   canDelete?: boolean
+  canClaim?: boolean
   onOpenDocuments?: () => void
 }
 
@@ -34,6 +35,7 @@ export default function PawnDetailModal({
   onAction,
   onDelete,
   canDelete = false,
+  canClaim = true,
   onOpenDocuments,
 }: PawnDetailModalProps) {
   const [action, setAction] = useState<PawnAction | null>(null)
@@ -47,8 +49,36 @@ export default function PawnDetailModal({
   const [deleteBusy, setDeleteBusy] = useState(false)
   const [deleteError, setDeleteError] = useState('')
   const [renewalIdempotencyKey, setRenewalIdempotencyKey] = useState('')
+  const [documentsBusy, setDocumentsBusy] = useState(false)
+  const [ticketBusy, setTicketBusy] = useState(false)
+  const [documentsError, setDocumentsError] = useState('')
   const actionSubmittingRef = useRef(false)
   const deleteSubmittingRef = useRef(false)
+  const documentsTimeoutRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    const handleOpened = () => {
+      setDocumentsBusy(false)
+      setTicketBusy(false)
+      if (documentsTimeoutRef.current) clearTimeout(documentsTimeoutRef.current)
+    }
+    const handleError = (event: Event) => {
+      setDocumentsBusy(false)
+      setTicketBusy(false)
+      if (documentsTimeoutRef.current) clearTimeout(documentsTimeoutRef.current)
+      const detail = (event as CustomEvent<{ message?: string }>).detail
+      if (detail?.message) {
+        setDocumentsError(detail.message)
+      }
+    }
+    window.addEventListener('phoneflow:documents-opened', handleOpened)
+    window.addEventListener('phoneflow:documents-error', handleError)
+    return () => {
+      window.removeEventListener('phoneflow:documents-opened', handleOpened)
+      window.removeEventListener('phoneflow:documents-error', handleError)
+      if (documentsTimeoutRef.current) clearTimeout(documentsTimeoutRef.current)
+    }
+  }, [])
 
   const outstanding = pawnOutstanding(pawn)
   const pawnCurrency: PawnCurrency = pawn.currency === 'KHR' ? 'KHR' : 'USD'
@@ -65,13 +95,16 @@ export default function PawnDetailModal({
   const dailyFeeAmount = pawn.feeSummary?.dailyFeeAmount ?? remainingPrincipal * Number(pawn.dailyFeeRate || 2.5) / 100
   const dayInMilliseconds = 86_400_000
   const dueDateMilliseconds = new Date(pawn.dueDate).getTime()
+  const originalDueDate = pawn.renewals?.[0]?.previousDueDate || pawn.dueDate
+  const originalStartDate = pawn.startDate || pawn.issueDate || pawn.createdAt
+  const originalTermDays = Math.round((new Date(originalDueDate).getTime() - new Date(originalStartDate).getTime()) / dayInMilliseconds)
   const minimumClaimDateMilliseconds = dueDateMilliseconds + 5 * dayInMilliseconds
   const savedClaimDateMilliseconds = pawn.graceEndsAt ? new Date(pawn.graceEndsAt).getTime() : Number.NaN
   const claimAvailableAtMilliseconds = Number.isFinite(savedClaimDateMilliseconds)
     ? Math.max(minimumClaimDateMilliseconds, savedClaimDateMilliseconds)
-    : dueDateMilliseconds + Math.max(2, Number(pawn.gracePeriodDays) || 0) * dayInMilliseconds
+    : minimumClaimDateMilliseconds
   const claimRecommendedByMilliseconds = dueDateMilliseconds + 7 * dayInMilliseconds
-  const canClaimCollateral = pawn.status === 'OVERDUE' && Date.now() > claimAvailableAtMilliseconds
+  const canClaimCollateral = pawn.status === 'OVERDUE' && Date.now() >= claimAvailableAtMilliseconds
   const claimAvailableText = dateText(new Date(claimAvailableAtMilliseconds).toISOString())
   const claimRecommendedByText = dateText(new Date(claimRecommendedByMilliseconds).toISOString())
 
@@ -94,12 +127,24 @@ export default function PawnDetailModal({
       onOpenDocuments()
       return
     }
+    setDocumentsBusy(true)
+    setDocumentsError('')
+    if (documentsTimeoutRef.current) clearTimeout(documentsTimeoutRef.current)
+    documentsTimeoutRef.current = window.setTimeout(() => {
+      setDocumentsBusy(false)
+    }, 4000)
     window.dispatchEvent(new CustomEvent('phoneflow:open-documents', {
       detail: { sourceType: 'PAWN', reference: pawn.pawnNo },
     }))
   }
 
   function printPawnTicket(sourceSubId = 'latest-contract') {
+    setTicketBusy(true)
+    setDocumentsError('')
+    if (documentsTimeoutRef.current) clearTimeout(documentsTimeoutRef.current)
+    documentsTimeoutRef.current = window.setTimeout(() => {
+      setTicketBusy(false)
+    }, 4000)
     window.dispatchEvent(new CustomEvent('phoneflow:open-pawn-ticket', {
       detail: { reference: pawn.pawnNo, sourceSubId },
     }))
@@ -107,22 +152,19 @@ export default function PawnDetailModal({
 
   function printPawnProductLabel() {
     const linkedItem = typeof pawn.inventoryItem === 'object' ? pawn.inventoryItem : null
-    if (!linkedItem?.sku) {
-      window.alert('This pawn is not linked to an inventory label yet. Refresh Pawn Management and try again.')
-      return
-    }
     printInventoryLabel({
-      sku: linkedItem.sku,
+      sku: linkedItem?.sku || pawn.pawnNo,
       barcode: pawn.pawnNo,
-      name: linkedItem.name || pawn.itemSnapshot.name,
-      brand: linkedItem.brand || pawn.itemSnapshot.brand,
-      model: [linkedItem.model || pawn.itemSnapshot.model, linkedItem.storage || pawn.itemSnapshot.storage, linkedItem.color || pawn.itemSnapshot.color].filter(Boolean).join(' '),
-      imei1: linkedItem.imei1 || pawn.itemSnapshot.imei,
+      name: linkedItem?.name || pawn.itemSnapshot.name,
+      brand: linkedItem?.brand || pawn.itemSnapshot.brand,
+      model: [linkedItem?.model || pawn.itemSnapshot.model, linkedItem?.storage || pawn.itemSnapshot.storage, linkedItem?.color || pawn.itemSnapshot.color].filter(Boolean).join(' '),
+      imei1: linkedItem?.imei1 || pawn.itemSnapshot.imei,
       sellPrice: 0,
     })
   }
 
   function openAction(nextAction: PawnAction) {
+    if (nextAction === 'forfeit' && !canClaim) return
     setAction(nextAction)
     setActionError('')
     setNote('')
@@ -275,6 +317,18 @@ export default function PawnDetailModal({
           {pawn.renewals && pawn.renewals.length > 0 && (
             <div className="detail-note pawn-renewal-history">
               <span className="eyebrow">Extension history</span>
+              <div className="pawn-renewal-history-row" key="part-1-original">
+                <p>
+                  <strong>Part 1 · {dateText(originalStartDate)}</strong> · Original contract · Term {Number.isFinite(originalTermDays) && originalTermDays > 0 ? originalTermDays : '—'} days · Principal {pawnMoney(pawn.originalPrincipal ?? pawn.principal, pawnCurrency)} · Due {dateText(originalDueDate)}
+                </p>
+                <button
+                  type="button"
+                  className="ghost-button pawn-renewal-print"
+                  onClick={() => printPawnTicket('contract')}
+                >
+                  Print Part 1
+                </button>
+              </div>
               {pawn.renewals.map((renewal, index) => {
                 const recordedPayment = renewal.feePaid ?? renewal.paymentAmount
                 const ticketPart = renewal.ticketPart || index + 2
@@ -449,33 +503,52 @@ export default function PawnDetailModal({
         {!action && (
           <DetailModalFooter
             banner={
-              onAction && isOpen && pawn.status === 'OVERDUE' ? (
-                <div className={`pawn-claim-action ${canClaimCollateral ? 'eligible' : ''}`} role="note">
-                  <span>
-                    <strong>{canClaimCollateral ? 'Claim is available' : `Claim available ${claimAvailableText}`}</strong>
-                    <small>Recommended claim window: 5-7 days overdue{claimRecommendedByMilliseconds > claimAvailableAtMilliseconds ? `, by ${claimRecommendedByText}` : ''}.</small>
-                  </span>
-                  <button
-                    type="button"
-                    className="ghost-button danger-link"
-                    onClick={() => openAction('forfeit')}
-                    disabled={!canClaimCollateral}
-                    title={canClaimCollateral ? 'Claim this collateral for shop inventory' : `Wait until ${claimAvailableText} to claim this collateral`}
-                  >
-                    Claim collateral
-                  </button>
-                </div>
+              documentsError || (canClaim && onAction && isOpen && pawn.status === 'OVERDUE') ? (
+                <>
+                  {documentsError ? (
+                    <div className="pawn-action-error pawn-documents-error" role="alert" style={{ marginBottom: canClaim && onAction && isOpen && pawn.status === 'OVERDUE' ? 8 : 0 }}>
+                      <AlertTriangle size={15} /> {documentsError}
+                    </div>
+                  ) : null}
+                  {canClaim && onAction && isOpen && pawn.status === 'OVERDUE' ? (
+                    <div className={`pawn-claim-action ${canClaimCollateral ? 'eligible' : ''}`} role="note">
+                      <span>
+                        <strong>{canClaimCollateral ? 'Claim is available' : `Claim available ${claimAvailableText}`}</strong>
+                        <small>Recommended claim window: 5-7 days overdue{claimRecommendedByMilliseconds > claimAvailableAtMilliseconds ? `, by ${claimRecommendedByText}` : ''}.</small>
+                      </span>
+                      <button
+                        type="button"
+                        className="ghost-button danger-link"
+                        onClick={() => openAction('forfeit')}
+                        disabled={!canClaimCollateral}
+                        title={canClaimCollateral ? 'Claim this collateral for shop inventory' : `Wait until ${claimAvailableText} to claim this collateral`}
+                      >
+                        Claim collateral
+                      </button>
+                    </div>
+                  ) : null}
+                </>
               ) : null
             }
             utilityActions={
               <>
                 <button
                   type="button"
+                  className="secondary-button pawn-ticket-action"
+                  onClick={() => printPawnTicket()}
+                  disabled={ticketBusy || documentsBusy}
+                  title="Print the 80mm pawn ticket / contract"
+                >
+                  {ticketBusy ? <LoaderCircle className="animate-spin" size={15} /> : <Printer size={15} />} {ticketBusy ? 'Preparing...' : 'Print ticket'}
+                </button>
+                <button
+                  type="button"
                   className="secondary-button pawn-documents-action"
                   onClick={handleOpenDocuments}
+                  disabled={ticketBusy || documentsBusy}
                   title="View receipts, contracts, and documents"
                 >
-                  <Printer size={15} /> Documents
+                  {documentsBusy ? <LoaderCircle className="animate-spin" size={15} /> : <FileText size={15} />} {documentsBusy ? 'Loading...' : 'Documents'}
                 </button>
                 <button
                   type="button"

@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import LoanPage, { type LoanSummary } from './LoanPage'
-import { mockOwnerUser } from '../../test/testUtils'
+import { mockOwnerUser, mockManagerUser, mockCashierUser } from '../../test/testUtils'
 
 const mockSummary: LoanSummary = {
   byCurrency: {
@@ -390,6 +390,8 @@ describe('LoanPage component and shared component adoption', () => {
 
   it('opens loan detail modal with KeyValueSummary, OperationSectionCard, and allows payment recording', async () => {
     let capturedPayment: Record<string, unknown> | null = null
+    const receiptHandler = vi.fn()
+    window.addEventListener('phoneflow:open-loan-receipt', receiptHandler)
 
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
@@ -417,6 +419,13 @@ describe('LoanPage component and shared component adoption', () => {
             },
             payments: [
               {
+                _id: 'old-pay',
+                paymentNo: 'PM-OLD',
+                amount: 300,
+                paymentMethod: 'CASH',
+                paidAt: '2026-09-03T10:00:00.000Z',
+              },
+              {
                 _id: 'pay-1',
                 paymentNo: 'PM-001',
                 amount: 500,
@@ -436,7 +445,7 @@ describe('LoanPage component and shared component adoption', () => {
           headers: new Headers(),
           json: async () => ({
             loan: mockLoanRecord,
-            payments: [],
+            payments: [{ _id: 'old-pay', paymentNo: 'PM-OLD', amount: 300, paymentMethod: 'CASH', paidAt: '2026-09-03T10:00:00.000Z' }],
           }),
         } as Response
       }
@@ -505,6 +514,13 @@ describe('LoanPage component and shared component adoption', () => {
       expect(screen.getByRole('dialog', { name: /Payment recorded/i })).toBeInTheDocument()
       expect(screen.getByText('Loan payment recorded')).toBeInTheDocument()
     })
+    await user.click(screen.getByRole('button', { name: /Print 80mm receipt/i }))
+    await waitFor(() => {
+      expect(receiptHandler).toHaveBeenCalledWith(expect.objectContaining({
+        detail: expect.objectContaining({ documentType: 'LOAN_PAYMENT', sourceSubId: 'pay-1' }),
+      }))
+    })
+    window.removeEventListener('phoneflow:open-loan-receipt', receiptHandler)
   })
 
   it('safely handles large KHR amounts and long borrower names', async () => {
@@ -2359,5 +2375,469 @@ describe('LoanPage component and shared component adoption', () => {
       expect(deletedId).toBe('loan-cancelled')
       expect(screen.getByText('Loan deleted successfully.')).toBeInTheDocument()
     })
+  })
+
+  it('renders Print 80mm receipt button on loan creation and dispatches open-loan-receipt', async () => {
+    let dispatchedDetail: any = null
+    const receiptHandler = (e: Event) => {
+      dispatchedDetail = (e as CustomEvent).detail
+    }
+    window.addEventListener('phoneflow:open-loan-receipt', receiptHandler)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/auth/me')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ user: mockOwnerUser }),
+        } as Response
+      }
+      if (url.includes('/customers')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ customers: [] }),
+        } as Response
+      }
+      if (url.includes('/loans') && init?.method === 'POST') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            loan: {
+              ...mockLoanRecord,
+              _id: 'loan-created-1',
+              loanNo: 'LN-2026-999',
+            },
+          }),
+        } as Response
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ loans: [mockLoanRecord], summary: mockSummary }),
+      } as Response
+    })
+
+    const user = userEvent.setup()
+    render(<LoanPage summary={mockSummary} />)
+
+    // Wait for auth to resolve
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /New loan/i })).toBeInTheDocument()
+    })
+
+    // Open create loan modal
+    const newLoanBtn = screen.getByRole('button', { name: /New loan/i })
+    await user.click(newLoanBtn)
+
+    const createDialog = screen.getByRole('dialog', { name: /Create loan/i })
+    await user.click(within(createDialog).getByRole('tab', { name: 'New customer' }))
+
+    const nameInput = within(createDialog).getByPlaceholderText('Full name')
+    await user.type(nameInput, 'Vannak Heng')
+
+    const continueButton = within(createDialog).getByRole('button', { name: /Continue/i })
+    await user.click(continueButton)
+
+    await waitFor(() => {
+      expect(within(createDialog).getByLabelText(/Loan amount/i)).toBeInTheDocument()
+    })
+
+    const amountInput = within(createDialog).getByLabelText(/Loan amount/i)
+    await user.type(amountInput, '500')
+
+    const createButton = within(createDialog).getByRole('button', { name: /Create loan/i })
+    await user.click(createButton)
+
+    await waitFor(() => {
+      expect(screen.getByText('Loan record created')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Print 80mm receipt/i })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /Print 80mm receipt/i }))
+
+    await waitFor(() => {
+      expect(dispatchedDetail).toMatchObject({
+        reference: 'LN-2026-999',
+        layout: 'THERMAL',
+      })
+    })
+
+    window.removeEventListener('phoneflow:open-loan-receipt', receiptHandler)
+  })
+
+  it('renders Print 80mm receipt and Documents buttons in loan detail footer', async () => {
+    let receiptDetail: any = null
+    let docsDetail: any = null
+    const receiptHandler = (e: Event) => {
+      receiptDetail = (e as CustomEvent).detail
+    }
+    const docsHandler = (e: Event) => {
+      docsDetail = (e as CustomEvent).detail
+    }
+    window.addEventListener('phoneflow:open-loan-receipt', receiptHandler)
+    window.addEventListener('phoneflow:open-documents', docsHandler)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.includes('/auth/me')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ user: mockOwnerUser }),
+        } as Response
+      }
+      if (url.includes('/loans/loan-1')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ loan: mockLoanRecord, payments: [] }),
+        } as Response
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ loans: [mockLoanRecord], summary: mockSummary }),
+      } as Response
+    })
+
+    const user = userEvent.setup()
+    render(<LoanPage summary={mockSummary} />)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(`View ${mockLoanRecord.loanNo}`)).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByLabelText(`View ${mockLoanRecord.loanNo}`))
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: new RegExp(mockLoanRecord.loanNo, 'i') })).toBeInTheDocument()
+    })
+
+    const printBtn = screen.getByRole('button', { name: /Print 80mm receipt/i })
+    const docsBtn = screen.getByRole('button', { name: /Documents/i })
+    expect(printBtn).toBeInTheDocument()
+    expect(docsBtn).toBeInTheDocument()
+
+    await user.click(printBtn)
+    expect(receiptDetail).toMatchObject({
+      reference: mockLoanRecord.loanNo,
+      layout: 'THERMAL',
+    })
+
+    await user.click(docsBtn)
+    expect(docsDetail).toMatchObject({
+      sourceType: 'LOAN',
+      reference: mockLoanRecord.loanNo,
+    })
+
+    window.removeEventListener('phoneflow:open-loan-receipt', receiptHandler)
+    window.removeEventListener('phoneflow:open-documents', docsHandler)
+  })
+
+  it('verifies active → cancelled → deleted complete flow and unburied footer actions', async () => {
+    let cancelCalled = false
+    let deleteCalled = false
+    let currentLoanState: Omit<typeof mockLoanRecord, 'status'> & { status: 'ACTIVE' | 'CANCELLED' } = {
+      ...mockLoanRecord,
+      _id: 'loan-flow-1',
+      loanNo: 'LN-FLOW-001',
+      amountPaid: 0,
+      status: 'ACTIVE',
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/auth/me')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ user: mockOwnerUser }) } as Response
+      }
+      if (url.includes('/loans/loan-flow-1/cancel') && init?.method === 'POST') {
+        cancelCalled = true
+        currentLoanState = { ...currentLoanState, status: 'CANCELLED' }
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ loan: currentLoanState }),
+        } as Response
+      }
+      if (url.includes('/loans/loan-flow-1') && init?.method === 'DELETE') {
+        deleteCalled = true
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ deleted: true }) } as Response
+      }
+      if (url.includes('/loans/loan-flow-1')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ loan: currentLoanState, payments: [] }),
+        } as Response
+      }
+      if (url.includes('/loans')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ loans: deleteCalled ? [] : [currentLoanState], summary: mockSummary }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    const user = userEvent.setup()
+    render(<LoanPage summary={mockSummary} />)
+
+    // Wait for list to load
+    await waitFor(() => {
+      expect(screen.getByLabelText(`View ${currentLoanState.loanNo}`)).toBeInTheDocument()
+    })
+
+    // Open detail modal
+    await user.click(screen.getByLabelText(`View ${currentLoanState.loanNo}`))
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: new RegExp(currentLoanState.loanNo, 'i') })).toBeInTheDocument()
+    })
+
+    // 1. ACTIVE LOAN CHECKS
+    // Contextual hint is present
+    expect(screen.getByText(/Zero repayments recorded · Loan can be cancelled anytime via/i)).toBeInTheDocument()
+
+    // Cancel loan button is in footer
+    const cancelBtn = screen.getByRole('button', { name: /Cancel loan/i })
+    expect(cancelBtn).toBeInTheDocument()
+    expect(cancelBtn).toHaveClass('loan-cancel-btn')
+
+    // Delete loan must NOT be present on active loan
+    expect(screen.queryByRole('button', { name: /Delete loan/i })).not.toBeInTheDocument()
+
+    // 2. CANCEL FLOW WITH CONFIRMATION
+    await user.click(cancelBtn)
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: /Cancel this loan\?/i })).toBeInTheDocument()
+    })
+    expect(screen.getByText(/No payments have been recorded, so this loan can be cancelled/i)).toBeInTheDocument()
+
+    // Test keep loan cancels confirmation dialog
+    const keepLoanBtn = screen.getByRole('button', { name: /Keep loan/i })
+    await user.click(keepLoanBtn)
+    expect(screen.queryByRole('dialog', { name: /Cancel this loan\?/i })).not.toBeInTheDocument()
+    expect(cancelCalled).toBe(false)
+
+    // Reopen and confirm cancellation
+    await user.click(screen.getByRole('button', { name: /Cancel loan/i }))
+    const confirmCancelBtn = screen.getByRole('button', { name: /Cancel loan/i })
+    await user.click(confirmCancelBtn)
+
+    await waitFor(() => {
+      expect(cancelCalled).toBe(true)
+    })
+
+    // 3. CANCELLED STATE CHECKS
+    await waitFor(() => {
+      expect(screen.getByText('Loan cancelled')).toBeInTheDocument()
+      expect(screen.getByText(/As shop Owner, you can permanently delete this record/i)).toBeInTheDocument()
+    })
+
+    // "Cancel loan" is no longer present
+    expect(screen.queryByRole('button', { name: /Cancel loan/i })).not.toBeInTheDocument()
+
+    // "Delete loan" action is now clearly shown in footer
+    const deleteBtn = screen.getByRole('button', { name: /Delete loan/i })
+    expect(deleteBtn).toBeInTheDocument()
+    expect(deleteBtn).toHaveClass('loan-delete-btn')
+
+    // 4. DELETE FLOW WITH CONFIRMATION
+    await user.click(deleteBtn)
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: /Delete this loan\?/i })).toBeInTheDocument()
+    })
+    expect(screen.getByText(/This permanently removes the loan, its repayments, and related receipts/i)).toBeInTheDocument()
+
+    // Test keep record cancels delete dialog
+    const keepRecordBtn = screen.getByRole('button', { name: /Keep record/i })
+    await user.click(keepRecordBtn)
+    expect(screen.queryByRole('dialog', { name: /Delete this loan\?/i })).not.toBeInTheDocument()
+    expect(deleteCalled).toBe(false)
+
+    // Reopen and confirm delete permanently
+    await user.click(screen.getByRole('button', { name: /Delete loan/i }))
+    const confirmDeleteBtn = screen.getByRole('button', { name: /Delete permanently/i })
+    await user.click(confirmDeleteBtn)
+
+    await waitFor(() => {
+      expect(deleteCalled).toBe(true)
+      expect(screen.getByText('Loan deleted successfully.')).toBeInTheDocument()
+      expect(screen.queryByRole('dialog', { name: new RegExp(currentLoanState.loanNo, 'i') })).not.toBeInTheDocument()
+    })
+  })
+
+  it('enforces role permissions for loan cancellation and permanent deletion', async () => {
+    // A) MANAGER ROLE: Can cancel active loan, but CANNOT delete cancelled loan
+    const managerLoan = {
+      ...mockLoanRecord,
+      _id: 'loan-mgr-1',
+      loanNo: 'LN-MGR-001',
+      amountPaid: 0,
+      status: 'CANCELLED' as const,
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/auth/me')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ user: mockManagerUser }) } as Response
+      }
+      if (url.includes('/loans/loan-mgr-1')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ loan: managerLoan, payments: [] }),
+        } as Response
+      }
+      if (url.includes('/loans')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ loans: [managerLoan], summary: mockSummary }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    const user = userEvent.setup()
+    const { unmount } = render(<LoanPage summary={mockSummary} />)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(`View ${managerLoan.loanNo}`)).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByLabelText(`View ${managerLoan.loanNo}`))
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: new RegExp(managerLoan.loanNo, 'i') })).toBeInTheDocument()
+    })
+
+    // Manager sees cancelled status text indicating only Owner can delete
+    expect(screen.getByText(/Only the shop Owner can permanently delete cancelled loan records/i)).toBeInTheDocument()
+    // Manager does NOT see Delete loan button
+    expect(screen.queryByRole('button', { name: /Delete loan/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Cancel loan/i })).not.toBeInTheDocument()
+
+    unmount()
+
+    // B) CASHIER ROLE: Cannot cancel active loan, cannot delete cancelled loan
+    const cashierActiveLoan = {
+      ...mockLoanRecord,
+      _id: 'loan-csh-1',
+      loanNo: 'LN-CSH-001',
+      amountPaid: 0,
+      status: 'ACTIVE' as const,
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/auth/me')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ user: mockCashierUser }) } as Response
+      }
+      if (url.includes('/loans/loan-csh-1')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ loan: cashierActiveLoan, payments: [] }),
+        } as Response
+      }
+      if (url.includes('/loans')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ loans: [cashierActiveLoan], summary: mockSummary }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    render(<LoanPage summary={mockSummary} />)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(`View ${cashierActiveLoan.loanNo}`)).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByLabelText(`View ${cashierActiveLoan.loanNo}`))
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: new RegExp(cashierActiveLoan.loanNo, 'i') })).toBeInTheDocument()
+    })
+
+    // Cashier does NOT see Cancel loan or Delete loan
+    expect(screen.queryByRole('button', { name: /Cancel loan/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Delete loan/i })).not.toBeInTheDocument()
+  })
+
+  it('prevents cancelling an active loan when repayments have already been recorded', async () => {
+    const loanWithPayments = {
+      ...mockLoanRecord,
+      _id: 'loan-paid-part-1',
+      loanNo: 'LN-PART-001',
+      amountPaid: 300,
+      remainingBalance: 800,
+      status: 'PARTIALLY_PAID' as const,
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/auth/me')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ user: mockOwnerUser }) } as Response
+      }
+      if (url.includes('/loans/loan-paid-part-1')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ loan: loanWithPayments, payments: [] }),
+        } as Response
+      }
+      if (url.includes('/loans')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ loans: [loanWithPayments], summary: mockSummary }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    const user = userEvent.setup()
+    render(<LoanPage summary={mockSummary} />)
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(`View ${loanWithPayments.loanNo}`)).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByLabelText(`View ${loanWithPayments.loanNo}`))
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: new RegExp(loanWithPayments.loanNo, 'i') })).toBeInTheDocument()
+    })
+
+    // Repayment lock banner is shown
+    expect(screen.getByText(/Repayments recorded \(\$300\.00\) · Loan cannot be cancelled\./i)).toBeInTheDocument()
+
+    // Neither Cancel loan nor Delete loan are present in footer
+    expect(screen.queryByRole('button', { name: /Cancel loan/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Delete loan/i })).not.toBeInTheDocument()
   })
 })

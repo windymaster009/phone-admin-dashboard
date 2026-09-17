@@ -281,10 +281,17 @@ var
   Parameters: String;
 begin
   Parameters := QuoteArgument(ProgramDataRoot) +
-    ' /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F /T /C /Q';
+    ' /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F /Q';
   if (not RunHidden(ExpandConstant('{sys}\icacls.exe'), Parameters, ResultCode)) or
      (ResultCode <> 0) then
     RaiseException('Setup could not protect the PhoneFlow configuration directory.');
+
+  { Only the root has inheritance disabled. Reset descendants so files such as
+    .env and service logs inherit the SYSTEM/Administrators grants from it. }
+  Parameters := QuoteArgument(ProgramDataRoot + '\*') + ' /reset /T /Q';
+  if (not RunHidden(ExpandConstant('{sys}\icacls.exe'), Parameters, ResultCode)) or
+     (ResultCode <> 0) then
+    RaiseException('Setup could not repair PhoneFlow data file permissions.');
 end;
 
 procedure ConfigurePrivateFirewall;

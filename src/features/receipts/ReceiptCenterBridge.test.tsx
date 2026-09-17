@@ -392,6 +392,72 @@ describe('ReceiptCenterBridge component', () => {
     loanModal.remove()
   })
 
+  it('suppresses duplicate header button when loan modal already contains footer actions', async () => {
+    const loanModal = document.createElement('div')
+    loanModal.className = 'loan-modal'
+    const h2 = document.createElement('h2')
+    h2.textContent = 'LN-2026-9999 - Borrower Alice'
+    loanModal.appendChild(h2)
+    const header = document.createElement('div')
+    header.className = 'operation-modal-header'
+    const headerContent = document.createElement('div')
+    header.appendChild(headerContent)
+    loanModal.appendChild(header)
+    const footer = document.createElement('div')
+    footer.className = 'loan-detail-footer'
+    loanModal.appendChild(footer)
+    document.body.appendChild(loanModal)
+
+    render(<ReceiptCenterBridge />)
+
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(screen.queryByRole('button', { name: 'Documents' })).not.toBeInTheDocument()
+
+    loanModal.remove()
+  })
+
+  it('handles phoneflow:open-loan-receipt custom event and opens 80mm thermal viewer', async () => {
+    let generatedBody: any = null
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/receipts/generate') && init?.method === 'POST') {
+        generatedBody = JSON.parse(String(init.body))
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            receipt: {
+              ...mockRefundReceipt,
+              documentType: generatedBody.documentType,
+              referenceNo: generatedBody.reference,
+              sourceType: 'LOAN',
+            },
+          }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    render(<ReceiptCenterBridge />)
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-loan-receipt', {
+        detail: { reference: 'LN-20260917-SPP3M0', documentType: 'LOAN_AGREEMENT', layout: 'THERMAL' },
+      }))
+    })
+
+    await waitFor(() => {
+      expect(generatedBody).toMatchObject({
+        sourceType: 'LOAN',
+        reference: 'LN-20260917-SPP3M0',
+        documentType: 'LOAN_AGREEMENT',
+      })
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /80mm thermal/i })).toHaveClass('active')
+    })
+  })
+
   it('handles phoneflow:open-pawn-ticket and phoneflow:open-trade-receipt custom events', async () => {
     let generatedDocType = ''
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -441,6 +507,334 @@ describe('ReceiptCenterBridge component', () => {
     await waitFor(() => {
       expect(generatedDocType).toBe('SALE_RECEIPT')
       expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+  })
+
+  it('opens document picker for multi-part pawn contracts and previews selected extension ticket', async () => {
+    const user = userEvent.setup()
+    let generatedPayload: any = null
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/receipts/options') && url.includes('sourceType=PAWN')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            sourceType: 'PAWN',
+            referenceNo: 'PW-2026-MULTI',
+            options: [
+              {
+                documentType: 'PAWN_CONTRACT',
+                sourceSubId: 'renewal:renewal-2',
+                label: 'Pawn contract - Part 2',
+                issuedAt: '2026-09-17T08:00:00.000Z',
+                amount: 300,
+                currency: 'USD',
+              },
+              {
+                documentType: 'PAWN_CONTRACT',
+                sourceSubId: 'contract',
+                label: 'Pawn contract - Part 1',
+                issuedAt: '2026-09-10T08:00:00.000Z',
+                amount: 300,
+                currency: 'USD',
+              },
+            ],
+          }),
+        } as Response
+      }
+      if (url.includes('/receipts/generate') && init?.method === 'POST') {
+        generatedPayload = JSON.parse(String(init.body))
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            receipt: {
+              ...mockRefundReceipt,
+              _id: 'rec-pawn-part2',
+              receiptNo: 'RCP-PW-P2',
+              documentType: 'PAWN_CONTRACT',
+              sourceType: 'PAWN',
+              sourceId: 'pawn-multi',
+              sourceSubId: generatedPayload.sourceSubId,
+              referenceNo: 'PW-2026-MULTI',
+              snapshot: {
+                ...mockRefundReceipt.snapshot,
+                documentType: 'PAWN_CONTRACT',
+                title: 'Pawn Contract - Part 2',
+                referenceNo: 'PW-2026-MULTI',
+                ticketPart: 2,
+                items: [{ name: 'iPhone 15', quantity: 1, unitPrice: 300, total: 300 }],
+              },
+            },
+          }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    render(<ReceiptCenterBridge />)
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-documents', {
+        detail: { sourceType: 'PAWN', reference: 'PW-2026-MULTI' },
+      }))
+    })
+
+    // Option picker opens with Part 2 prominently as current contract, and Part 1 collapsed
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'PW-2026-MULTI' })).toBeInTheDocument()
+      expect(screen.getByText('Current contract — Print for customer')).toBeInTheDocument()
+      expect(screen.getByText('Pawn contract - Part 2')).toBeInTheDocument()
+      expect(screen.getByText('Current')).toBeInTheDocument()
+      expect(screen.getByText('Previous contract versions (1)')).toBeInTheDocument()
+      expect(screen.queryByText('Pawn contract - Part 1')).not.toBeInTheDocument()
+    })
+
+    // Expanding previous versions reveals Part 1
+    const toggleBtn = screen.getByRole('button', { name: /Previous contract versions/i })
+    await user.click(toggleBtn)
+    expect(screen.getByText('Pawn contract - Part 1')).toBeInTheDocument()
+
+    // Select Part 2
+    const part2Btn = screen.getByRole('button', { name: /Pawn contract - Part 2/i })
+    await user.click(part2Btn)
+
+    await waitFor(() => {
+      expect(generatedPayload).toEqual({
+        sourceType: 'PAWN',
+        reference: 'PW-2026-MULTI',
+        documentType: 'PAWN_CONTRACT',
+        sourceSubId: 'renewal:renewal-2',
+      })
+      expect(screen.getByRole('dialog', { name: 'RCP-PW-P2' })).toBeInTheDocument()
+      expect(screen.getByText(/Pawn ticket · Part 2/i)).toBeInTheDocument()
+    })
+  })
+
+  it('preserves Part 1 as current contract when only interest payment is made and separates payment receipt', async () => {
+    const user = userEvent.setup()
+    let generatedPayload: any = null
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/receipts/options') && url.includes('sourceType=PAWN')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            sourceType: 'PAWN',
+            referenceNo: 'PW-2026-INTEREST-ONLY',
+            options: [
+              {
+                documentType: 'PAWN_CONTRACT',
+                sourceSubId: 'contract',
+                label: 'Pawn contract - Part 1',
+                issuedAt: '2026-09-10T08:00:00.000Z',
+                amount: 500,
+                currency: 'USD',
+              },
+              {
+                documentType: 'PAWN_PAYMENT',
+                sourceSubId: 'payment-1',
+                label: 'Interest payment receipt',
+                issuedAt: '2026-09-17T08:00:00.000Z',
+                amount: 25,
+                currency: 'USD',
+              },
+            ],
+          }),
+        } as Response
+      }
+      if (url.includes('/receipts/generate') && init?.method === 'POST') {
+        generatedPayload = JSON.parse(String(init.body))
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            receipt: {
+              ...mockRefundReceipt,
+              _id: 'rec-interest-payment',
+              receiptNo: 'RCP-INT-1',
+              documentType: generatedPayload.documentType,
+              sourceType: 'PAWN',
+              sourceId: 'pawn-interest-only',
+              sourceSubId: generatedPayload.sourceSubId,
+              referenceNo: 'PW-2026-INTEREST-ONLY',
+              snapshot: {
+                ...mockRefundReceipt.snapshot,
+                documentType: generatedPayload.documentType,
+                title: generatedPayload.documentType === 'PAWN_CONTRACT' ? 'Pawn Contract - Part 1' : 'Payment Receipt',
+                referenceNo: 'PW-2026-INTEREST-ONLY',
+              },
+            },
+          }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    render(<ReceiptCenterBridge />)
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-documents', {
+        detail: { sourceType: 'PAWN', reference: 'PW-2026-INTEREST-ONLY' },
+      }))
+    })
+
+    // Option picker opens: Part 1 is current, payment is under Payment receipts, NO previous versions
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'PW-2026-INTEREST-ONLY' })).toBeInTheDocument()
+      expect(screen.getByText('Current contract — Print for customer')).toBeInTheDocument()
+      expect(screen.getByText('Pawn contract - Part 1')).toBeInTheDocument()
+      expect(screen.getByText('Current')).toBeInTheDocument()
+      // Interest payment alone must not create previous contract versions
+      expect(screen.queryByText(/Previous contract versions/i)).not.toBeInTheDocument()
+      // Payment receipts section exists
+      expect(screen.getByText('Payment receipts')).toBeInTheDocument()
+      expect(screen.getByText('Interest payment receipt')).toBeInTheDocument()
+    })
+
+    // Selecting the payment receipt generates the payment receipt
+    const paymentBtn = screen.getByRole('button', { name: /Interest payment receipt/i })
+    await user.click(paymentBtn)
+
+    await waitFor(() => {
+      expect(generatedPayload).toEqual({
+        sourceType: 'PAWN',
+        reference: 'PW-2026-INTEREST-ONLY',
+        documentType: 'PAWN_PAYMENT',
+        sourceSubId: 'payment-1',
+      })
+      expect(screen.getByRole('dialog', { name: 'RCP-INT-1' })).toBeInTheDocument()
+    })
+  })
+
+  it('handles multiple extensions with Part 3 as current and reprinting older parts from collapsed section', async () => {
+    const user = userEvent.setup()
+    let generatedPayload: any = null
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/receipts/options') && url.includes('sourceType=PAWN')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            sourceType: 'PAWN',
+            referenceNo: 'PW-2026-EXT3',
+            options: [
+              {
+                documentType: 'PAWN_CONTRACT',
+                sourceSubId: 'renewal:renewal-3',
+                label: 'Pawn contract - Part 3',
+                issuedAt: '2026-09-17T12:00:00.000Z',
+                amount: 300,
+                currency: 'USD',
+              },
+              {
+                documentType: 'PAWN_CONTRACT',
+                sourceSubId: 'renewal:renewal-2',
+                label: 'Pawn contract - Part 2',
+                issuedAt: '2026-09-15T08:00:00.000Z',
+                amount: 300,
+                currency: 'USD',
+              },
+              {
+                documentType: 'PAWN_CONTRACT',
+                sourceSubId: 'contract',
+                label: 'Pawn contract - Part 1',
+                issuedAt: '2026-09-10T08:00:00.000Z',
+                amount: 300,
+                currency: 'USD',
+              },
+              {
+                documentType: 'PAWN_PAYMENT',
+                sourceSubId: 'payment-renewal-3',
+                label: 'Extension payment receipt',
+                issuedAt: '2026-09-17T12:00:00.000Z',
+                amount: 15,
+                currency: 'USD',
+              },
+            ],
+          }),
+        } as Response
+      }
+      if (url.includes('/receipts/generate') && init?.method === 'POST') {
+        generatedPayload = JSON.parse(String(init.body))
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            receipt: {
+              ...mockRefundReceipt,
+              _id: 'rec-pawn-part1',
+              receiptNo: 'RCP-PW-P1',
+              documentType: 'PAWN_CONTRACT',
+              sourceType: 'PAWN',
+              sourceId: 'pawn-ext3',
+              sourceSubId: generatedPayload.sourceSubId,
+              referenceNo: 'PW-2026-EXT3',
+              snapshot: {
+                ...mockRefundReceipt.snapshot,
+                documentType: 'PAWN_CONTRACT',
+                title: 'Pawn Contract - Part 1',
+                referenceNo: 'PW-2026-EXT3',
+                ticketPart: 1,
+              },
+            },
+          }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    render(<ReceiptCenterBridge />)
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-documents', {
+        detail: { sourceType: 'PAWN', reference: 'PW-2026-EXT3' },
+      }))
+    })
+
+    // Part 3 is current, Part 2 & Part 1 in collapsed section (2 versions)
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'PW-2026-EXT3' })).toBeInTheDocument()
+      expect(screen.getByText('Current contract — Print for customer')).toBeInTheDocument()
+      expect(screen.getByText('Pawn contract - Part 3')).toBeInTheDocument()
+      expect(screen.getByText('Current')).toBeInTheDocument()
+      expect(screen.getByText('Previous contract versions (2)')).toBeInTheDocument()
+      expect(screen.queryByText('Pawn contract - Part 2')).not.toBeInTheDocument()
+      expect(screen.queryByText('Pawn contract - Part 1')).not.toBeInTheDocument()
+      expect(screen.getByText('Payment receipts')).toBeInTheDocument()
+      expect(screen.getByText('Extension payment receipt')).toBeInTheDocument()
+    })
+
+    // Expand previous versions and click Part 1 to reprint older version
+    const toggleBtn = screen.getByRole('button', { name: /Previous contract versions/i })
+    await user.click(toggleBtn)
+
+    expect(screen.getByText('Pawn contract - Part 2')).toBeInTheDocument()
+    expect(screen.getByText('Pawn contract - Part 1')).toBeInTheDocument()
+
+    const part1Btn = screen.getByRole('button', { name: /Pawn contract - Part 1/i })
+    await user.click(part1Btn)
+
+    await waitFor(() => {
+      expect(generatedPayload).toEqual({
+        sourceType: 'PAWN',
+        reference: 'PW-2026-EXT3',
+        documentType: 'PAWN_CONTRACT',
+        sourceSubId: 'contract',
+      })
+      expect(screen.getByRole('dialog', { name: 'RCP-PW-P1' })).toBeInTheDocument()
     })
   })
 
@@ -694,5 +1088,98 @@ describe('ReceiptCenterBridge component', () => {
     await waitFor(() => {
       expect(mockDoc.write).toHaveBeenCalledWith(expect.stringContaining('@page{size:A4;margin:0}'))
     })
+  })
+
+  it('handles phoneflow:open-documents event, generates receipt for single option, and dispatches documents-opened event', async () => {
+    const openedHandler = vi.fn()
+    window.addEventListener('phoneflow:documents-opened', openedHandler)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/receipts/options')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            sourceType: 'PAWN',
+            referenceNo: 'PW-2026-TEST-DOC',
+            options: [{
+              documentType: 'PAWN_CONTRACT',
+              sourceSubId: 'contract',
+              label: 'Pawn contract - Part 1',
+              issuedAt: new Date().toISOString(),
+              amount: 100000,
+              currency: 'KHR',
+            }],
+          }),
+        } as Response
+      }
+      if (url.includes('/receipts/generate') && init?.method === 'POST') {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            receipt: {
+              ...mockRefundReceipt,
+              receiptNo: 'PC-2026-DOC-PREVIEW',
+              documentType: 'PAWN_CONTRACT',
+              referenceNo: 'PW-2026-TEST-DOC',
+            },
+          }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    render(<ReceiptCenterBridge />)
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-documents', {
+        detail: { sourceType: 'PAWN', reference: 'PW-2026-TEST-DOC' },
+      }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'PC-2026-DOC-PREVIEW' })).toBeInTheDocument()
+      expect(openedHandler).toHaveBeenCalled()
+    })
+
+    window.removeEventListener('phoneflow:documents-opened', openedHandler)
+  })
+
+  it('handles phoneflow:open-documents failure and dispatches documents-error event', async () => {
+    const errorHandler = vi.fn()
+    window.addEventListener('phoneflow:documents-error', errorHandler)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/receipts/options')) {
+        return {
+          ok: false,
+          status: 404,
+          headers: new Headers(),
+          json: async () => ({ message: 'Pawn contract not found' }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    render(<ReceiptCenterBridge />)
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-documents', {
+        detail: { sourceType: 'PAWN', reference: 'PW-NOT-FOUND' },
+      }))
+    })
+
+    await waitFor(() => {
+      expect(errorHandler).toHaveBeenCalled()
+      const customEvent = errorHandler.mock.calls[0][0] as CustomEvent
+      expect(customEvent.detail.message).toMatch(/Pawn contract not found/i)
+    })
+
+    window.removeEventListener('phoneflow:documents-error', errorHandler)
   })
 })

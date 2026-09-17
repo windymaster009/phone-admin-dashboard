@@ -186,7 +186,16 @@ export default function PawnView({ user }: { user: SessionUser }) {
           {!loading && visiblePawns.length === 0 && <p className="mobile-contract-empty">No pawn contracts match these filters.</p>}
         </div>
       </article>
-      {selectedPawn && <PawnDetailModal pawn={selectedPawn} onClose={() => setSelectedPawn(null)} onAction={updatePawn} canDelete={user.role === 'OWNER'} onDelete={deletePawn} />}
+      {selectedPawn && (
+        <PawnDetailModal
+          pawn={selectedPawn}
+          onClose={() => setSelectedPawn(null)}
+          onAction={updatePawn}
+          canDelete={user.role === 'OWNER'}
+          canClaim={user.role === 'OWNER' || user.role === 'MANAGER'}
+          onDelete={deletePawn}
+        />
+      )}
       <NotificationToast message={successToast} onDismiss={() => setSuccessToast('')} />
     </>
   )

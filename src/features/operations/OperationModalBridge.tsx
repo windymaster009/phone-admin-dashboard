@@ -38,7 +38,7 @@ import SegmentedControl, { type SegmentedControlOption } from '../../components/
 import KeyValueSummary from '../../components/KeyValueSummary'
 import SerializedDeviceFields from '../../components/SerializedDeviceFields'
 import { getPawnAutoCalculatePreference, PAWN_AUTO_CALCULATE_EVENT, savePawnAutoCalculatePreference } from '../../lib/pawnPreferences'
-import { BarcodeGraphic, printInventoryLabels } from '../inventory/barcode'
+import { BarcodeGraphic, printInventoryLabels, sanitizeCode } from '../inventory/barcode'
 import OperationModalShell from './OperationModalShell'
 import CameraBarcodeReader from '../../components/scanner/CameraBarcodeReader'
 import ScannerWorkflow from '../../components/scanner/ScannerWorkflow'
@@ -1061,7 +1061,7 @@ export default function OperationModalBridge() {
         model: device.model.trim(),
         storage: device.storage.trim(),
         color: device.color.trim(),
-        sku: device.sku.trim() ? device.sku.trim().toUpperCase() : undefined,
+        sku: sanitizeCode(device.sku) || undefined,
         quantity: Math.max(1, Number(device.quantity) || 1),
       }
     }
@@ -1070,7 +1070,7 @@ export default function OperationModalBridge() {
         ...common,
         name: device.name.trim(),
         brand: device.brand.trim(),
-        sku: device.sku.trim().toUpperCase(),
+        sku: sanitizeCode(device.sku),
         quantity: Math.max(1, Number(device.quantity) || 1),
       }
     }
@@ -1080,14 +1080,14 @@ export default function OperationModalBridge() {
         name: device.name.trim(),
         compatibleModels: device.compatibleModels.trim(),
         oemQuality: device.oemQuality || undefined,
-        sku: device.sku.trim() ? device.sku.trim().toUpperCase() : undefined,
+        sku: sanitizeCode(device.sku) || undefined,
         quantity: Math.max(1, Number(device.quantity) || 1),
       }
     }
     return {
       ...common,
       name: device.name.trim(),
-      sku: device.sku.trim() ? device.sku.trim().toUpperCase() : undefined,
+      sku: sanitizeCode(device.sku) || undefined,
       quantity: Math.max(1, Number(device.quantity) || 1),
     }
   }
@@ -1938,7 +1938,7 @@ export default function OperationModalBridge() {
 
       {kind === 'label' && labelItems.length > 0 && <div className="label-prompt">
         <div className="label-success"><span><Printer size={21} /></span><div><h3>Print barcode labels now?</h3><p>{labelItems.length} inventory item{labelItems.length === 1 ? ' was' : 's were'} added. You can also print later from Stock Information.</p></div></div>
-        <div className="barcode-label-preview-list">{labelItems.slice(0, 3).map((item) => <article className="barcode-label-preview" key={item.sku}><strong>{item.name}</strong><small>{item.imei1 || item.sku}</small><BarcodeGraphic item={item} compact /></article>)}{labelItems.length > 3 && <p>+ {labelItems.length - 3} more label{labelItems.length - 3 === 1 ? '' : 's'}</p>}</div>
+        <div className="barcode-label-preview-list">{labelItems.slice(0, 3).map((item) => <article className="barcode-label-preview" key={item._id || item.sku || item.barcode}><strong>{item.name}</strong><small>{item.imei1 || sanitizeCode(item.sku) || sanitizeCode(item.barcode)}</small><BarcodeGraphic item={item} compact /></article>)}{labelItems.length > 3 && <p>+ {labelItems.length - 3} more label{labelItems.length - 3 === 1 ? '' : 's'}</p>}</div>
         <footer className="operation-modal-actions"><button type="button" className="ghost-button" onClick={close}>Print later</button><button type="button" className="primary-button" onClick={() => { printInventoryLabels(labelItems); close() }}><Printer size={17} /> Print labels</button></footer>
       </div>}
 

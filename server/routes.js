@@ -268,6 +268,29 @@ function makeCode(prefix) {
   return `${prefix}-${date}-${random}`
 }
 
+const INVALID_CODE_VALUES = new Set(['NULL', 'UNDEFINED', 'N/A', 'NONE', '[NULL]', 'BLANK'])
+
+function isInvalidCode(value) {
+  if (value === null || value === undefined) return true
+  const str = String(value).trim()
+  if (!str) return true
+  return INVALID_CODE_VALUES.has(str.toUpperCase())
+}
+
+function sanitizeSku(value, fallbackPrefix = 'STK') {
+  if (typeof value === 'string' && !isInvalidCode(value)) {
+    return value.trim().toUpperCase()
+  }
+  return makeCode(fallbackPrefix)
+}
+
+function sanitizeBarcode(value, fallbackPrefix = 'PF') {
+  if (typeof value === 'string' && !isInvalidCode(value)) {
+    return value.trim().toUpperCase()
+  }
+  return makeCode(fallbackPrefix)
+}
+
 function requestError(status, message) {
   const error = new Error(message)
   error.status = status
@@ -680,10 +703,11 @@ function parsePawnDueDate(value) {
   return date
 }
 
-const PAWN_GRACE_PERIOD_DAYS = 2
+const PAWN_GRACE_PERIOD_DAYS = 5
 
 function pawnGraceEnd(dueDate, days = PAWN_GRACE_PERIOD_DAYS) {
-  return new Date(dueDate.getTime() + Math.max(PAWN_GRACE_PERIOD_DAYS, Number(days) || 0) * 86_400_000)
+  const due = new Date(dueDate)
+  return new Date(due.getTime() + Math.max(PAWN_GRACE_PERIOD_DAYS, Number(days) || 0) * 86_400_000)
 }
 
 function pawnFeeSummary(pawn, asOf = new Date()) {
@@ -2120,7 +2144,7 @@ router.get('/inventory', requireAuth, asyncRoute(async (req, res) => {
 
 router.get('/inventory/scan/:code', requireAuth, asyncRoute(async (req, res) => {
   const code = clean(decodeURIComponent(req.params.code || '')).toUpperCase()
-  if (!code) return res.status(400).json({ message: 'Scan a barcode, SKU, IMEI, or serial number' })
+  if (!code || isInvalidCode(code)) return res.status(400).json({ message: 'Scan a barcode, SKU, IMEI, or serial number' })
   const exactCode = new RegExp(`^${escapeRegex(code)}$`, 'i')
 
   let item = await InventoryItem.findOne({
@@ -2167,8 +2191,8 @@ router.post('/inventory', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), 
     storage,
     ram,
     imageUrl: clean(req.body.imageUrl),
-    sku: clean(req.body.sku || makeCode('STK')),
-    barcode: clean(req.body.barcode || makeCode('PF')),
+    sku: sanitizeSku(req.body.sku, 'STK'),
+    barcode: sanitizeBarcode(req.body.barcode, 'PF'),
     createdBy: req.user._id,
   })
   if (rawImageData) {
@@ -2530,8 +2554,9 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
       }], { session })
       pawnCustomerId = createdCustomer._id
     }
+    const pawnNo = makeCode('PW')
     const [inventoryItem] = await InventoryItem.create([{
-      sku: makeCode('PWN'), category: 'PHONE', name: clean(itemSnapshot.name),
+      sku: makeCode('PWN'), barcode: pawnNo, category: 'PHONE', name: clean(itemSnapshot.name),
       brand: clean(itemSnapshot.brand), model: clean(itemSnapshot.model), imei1: clean(itemSnapshot.imei),
       condition: itemSnapshot.condition || 'GOOD', color: clean(itemSnapshot.color), storage: normalizeGigabytes(itemSnapshot.storage),
       ram: normalizeGigabytes(itemSnapshot.ram), batteryHealth: itemSnapshot.batteryHealth,
@@ -2543,7 +2568,7 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
       status: 'PAWNED', source: 'CUSTOMER', createdBy: req.user._id,
     }], { session })
     const created = await Pawn.create([{
-      pawnNo: makeCode('PW'), customer: pawnCustomerId, inventoryItem: inventoryItem._id,
+      pawnNo, customer: pawnCustomerId, inventoryItem: inventoryItem._id,
       itemSnapshot: {
         ...itemSnapshot,
         imei: clean(itemSnapshot.imei),
@@ -2573,8 +2598,11 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
     pawn = created[0]
   })
   await writeActivity(req, { action: 'CREATE', entity: 'PAWN', entityId: pawn._id, details: { pawnNo: pawn.pawnNo, principal: pawn.principal, currency: pawn.currency } })
-  await pawn.populate('customer', 'name phone nationalIdNumber')
-  await pawn.populate('renewals.renewedBy', 'name role')
+  if (typeof pawn.populate === 'function') {
+    await pawn.populate('customer', 'name phone nationalIdNumber')
+    await pawn.populate('inventoryItem', 'sku barcode name brand model storage color imei1 sellPrice status')
+    await pawn.populate('renewals.renewedBy', 'name role')
+  }
   res.status(201).json({ pawn: pawnResponse(pawn) })
 }))
 
@@ -2597,8 +2625,11 @@ router.post('/pawns/:id/payment', requireAuth, allowRoles('OWNER', 'MANAGER', 'C
   })
   await writeActivity(req, { action: 'PAYMENT', entity: 'PAWN', entityId: pawn._id, details: { ...allocation, currency: pawn.currency } })
   const customerFields = req.user.role === 'CASHIER' ? 'name phone' : 'name phone nationalIdNumber'
-  await pawn.populate('customer', customerFields)
-  await pawn.populate('renewals.renewedBy', 'name role')
+  if (typeof pawn.populate === 'function') {
+    await pawn.populate('customer', customerFields)
+    await pawn.populate('inventoryItem', 'sku barcode name brand model storage color imei1 sellPrice status')
+    await pawn.populate('renewals.renewedBy', 'name role')
+  }
   res.json({ pawn: pawnResponse(pawn) })
 }))
 
@@ -2726,8 +2757,11 @@ router.post('/pawns/:id/renew', requireAuth, allowRoles('OWNER', 'MANAGER', 'CAS
     await writeActivity(req, { action: 'RENEW', entity: 'PAWN', entityId: pawn._id, details: auditDetails })
   }
   const customerFields = req.user.role === 'CASHIER' ? 'name phone' : 'name phone nationalIdNumber'
-  await pawn.populate('customer', customerFields)
-  await pawn.populate('renewals.renewedBy', 'name role')
+  if (typeof pawn.populate === 'function') {
+    await pawn.populate('customer', customerFields)
+    await pawn.populate('inventoryItem', 'sku barcode name brand model storage color imei1 sellPrice status')
+    await pawn.populate('renewals.renewedBy', 'name role')
+  }
   // Replays return current balances without changing the recorded renewal.
   res.json({ pawn: pawnResponse(pawn) })
 }))
@@ -2788,8 +2822,11 @@ router.post('/pawns/:id/redeem', requireAuth, allowRoles('OWNER', 'MANAGER', 'CA
   })
   await writeActivity(req, { action: 'REDEEM', entity: 'PAWN', entityId: pawn._id, details: { ...allocation, currency: pawn.currency } })
   const customerFields = req.user.role === 'CASHIER' ? 'name phone' : 'name phone nationalIdNumber'
-  await pawn.populate('customer', customerFields)
-  await pawn.populate('renewals.renewedBy', 'name role')
+  if (typeof pawn.populate === 'function') {
+    await pawn.populate('customer', customerFields)
+    await pawn.populate('inventoryItem', 'sku barcode name brand model storage color imei1 sellPrice status')
+    await pawn.populate('renewals.renewedBy', 'name role')
+  }
   res.json({ pawn: pawnResponse(pawn) })
 }))
 
@@ -2800,10 +2837,15 @@ router.post('/pawns/:id/forfeit', requireAuth, allowRoles('OWNER', 'MANAGER'), a
     pawn = await Pawn.findById(req.params.id).session(session)
     if (!pawn) throw requestError(404, 'Pawn contract not found')
     if (pawn.status !== 'OVERDUE') throw requestError(409, 'Only overdue pawn collateral can be claimed')
-    const minimumClaimDate = pawnGraceEnd(new Date(pawn.dueDate), PAWN_GRACE_PERIOD_DAYS)
-    const savedGraceEnd = pawn.graceEndsAt ? new Date(pawn.graceEndsAt) : minimumClaimDate
-    const claimAvailableAt = savedGraceEnd > minimumClaimDate ? savedGraceEnd : minimumClaimDate
-    if (new Date() <= claimAvailableAt) throw requestError(409, `This collateral cannot be claimed until ${claimAvailableAt.toISOString()}`)
+    const dueDateMilliseconds = new Date(pawn.dueDate).getTime()
+    const minimumClaimDate = new Date(dueDateMilliseconds + 5 * 86_400_000)
+    const savedGraceEnd = pawn.graceEndsAt ? new Date(pawn.graceEndsAt) : null
+    const claimAvailableAt = savedGraceEnd && savedGraceEnd.getTime() > minimumClaimDate.getTime()
+      ? savedGraceEnd
+      : minimumClaimDate
+    if (new Date().getTime() < claimAvailableAt.getTime()) {
+      throw requestError(409, `This collateral cannot be claimed until ${claimAvailableAt.toISOString()}`)
+    }
     pawn.status = 'FORFEITED'
     pawn.forfeitedAt = new Date()
     await pawn.save({ session })
@@ -2821,6 +2863,11 @@ router.post('/pawns/:id/forfeit', requireAuth, allowRoles('OWNER', 'MANAGER'), a
     }
   })
   await writeActivity(req, { action: 'FORFEIT', entity: 'PAWN', entityId: pawn._id })
+  if (typeof pawn.populate === 'function') {
+    await pawn.populate('customer', 'name phone nationalIdNumber')
+    await pawn.populate('inventoryItem', 'sku barcode name brand model storage color imei1 sellPrice status')
+    await pawn.populate('renewals.renewedBy', 'name role')
+  }
   res.json({ pawn: pawnResponse(pawn) })
 }))
 
@@ -2919,7 +2966,8 @@ async function createMultiDevicePurchase(req, res) {
     const storage = normalizeGigabytes(item.storage)
     const ram = normalizeGigabytes(item.ram)
     const color = clean(item.color)
-    const sku = clean(item.sku)?.toUpperCase()
+    const rawSku = clean(item.sku)
+    const sku = isInvalidCode(rawSku) ? undefined : rawSku.toUpperCase()
     const quantity = serialized ? 1 : Number(item.quantity)
     const purchasePrice = Number(item.purchasePrice)
     const label = `Item ${index + 1}`
@@ -2936,7 +2984,7 @@ async function createMultiDevicePurchase(req, res) {
       if (!brand || !model || !storage || !color) throw requestError(400, `${label}: brand, model, storage, and color are required`)
       name = `${brand} ${model} ${storage}`
     } else if (category === 'ACCESSORY') {
-      if (!name || !brand || !sku) throw requestError(400, `${label}: item name, brand, and SKU are required`)
+      if (!name || !brand || !sku) throw requestError(400, `${label}: item name, brand, and valid SKU are required`)
     } else if (category === 'SPARE_PART') {
       if (!name) throw requestError(400, `${label}: part name is required`)
       if (!clean(item.compatibleModels)) throw requestError(400, `${label}: compatible models are required`)
@@ -3064,8 +3112,8 @@ async function createMultiDevicePurchase(req, res) {
           await inventoryItem.save({ session })
         } else {
           ;[inventoryItem] = await InventoryItem.create([{
-            sku: purchaseItem.sku || makeCode('BUY'),
-            barcode: makeCode('PF'),
+            sku: sanitizeSku(purchaseItem.sku, 'BUY'),
+            barcode: sanitizeBarcode(purchaseItem.barcode, 'PF'),
             category: purchaseItem.category,
             name: purchaseItem.name,
             brand: purchaseItem.brand,

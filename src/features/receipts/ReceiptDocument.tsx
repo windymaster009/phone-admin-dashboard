@@ -139,6 +139,13 @@ function PawnTicketThermal({ receipt, snapshot }: { receipt: ReceiptRecord; snap
   return (
     <article className="receipt-paper receipt-paper-thermal pawn-ticket-thermal">
       <header className="pawn-ticket-shop">
+        {snapshot.shop.logoUrl && (
+          <img
+            src={snapshot.shop.logoUrl}
+            alt={snapshot.shop.name || 'Shop Logo'}
+            className="pawn-ticket-logo"
+          />
+        )}
         <h1>Pawn Shop {snapshot.shop.name}</h1>
         {snapshot.shop.phone && <strong>Tel: {snapshot.shop.phone}</strong>}
         {snapshot.shop.address && <span>{snapshot.shop.address}</span>}
@@ -161,8 +168,21 @@ function PawnTicketThermal({ receipt, snapshot }: { receipt: ReceiptRecord; snap
           <Row label="Daily pawn fee rate" value={`${number.format(Number(snapshot.dailyFeeRate || 0))}% · ${money(snapshot.dailyFeeAmount, snapshot.currency)} / day`} />
         </> : <Row label="Interest" value={`${number.format(Number(snapshot.interestRate || 0))}% per month`} />}
         {isDailyFee && <Row label="Contract length" value={`${Number(snapshot.contractLengthDays || snapshot.termDays || 0)} days`} />}
+        {isDailyFee && Number(snapshot.ticketPart || 1) > 1 && (
+          <Row label="Extension period" value={`${Number(snapshot.extensionTermDays || snapshot.termDays || 0)} days added`} />
+        )}
         <Row label="Pawned / deposited on" value={dateOnly(snapshot.startDate || snapshot.issuedAt)} />
-        <Row label={isDailyFee ? 'Date to pay pawn fee' : 'Date to pay interest'} value={dateOnly(snapshot.dueDate)} />
+        {snapshot.previousDueDate && Number(snapshot.ticketPart || 1) > 1 && (
+          <Row label="Previous due date" value={dateOnly(snapshot.previousDueDate)} />
+        )}
+        <Row
+          label={
+            isDailyFee
+              ? (Number(snapshot.ticketPart || 1) > 1 ? 'New fee due date' : 'Date to pay pawn fee')
+              : (Number(snapshot.ticketPart || 1) > 1 ? 'New due date' : 'Date to pay interest')
+          }
+          value={dateOnly(snapshot.dueDate)}
+        />
         <Row label="Grace period ends" value={dateOnly(snapshot.graceEndsAt || snapshot.dueDate)} />
       </section>
 
@@ -187,11 +207,82 @@ function PawnTicketThermal({ receipt, snapshot }: { receipt: ReceiptRecord; snap
   )
 }
 
+function LoanTicketThermal({ receipt, snapshot }: { receipt: ReceiptRecord; snapshot: ReceiptSnapshot }) {
+  const isRepayment = snapshot.documentType === 'LOAN_PAYMENT'
+  return (
+    <article className="receipt-paper receipt-paper-thermal pawn-ticket-thermal loan-ticket-thermal">
+      <header className="pawn-ticket-shop">
+        <h1>{snapshot.shop.name}</h1>
+        {snapshot.shop.phone && <strong>Tel: {snapshot.shop.phone}</strong>}
+        {snapshot.shop.address && <span>{snapshot.shop.address}</span>}
+      </header>
+
+      <div className="pawn-ticket-reference">
+        <strong>{isRepayment ? 'Loan Repayment Receipt' : 'Loan Agreement'}</strong>
+        <span>{snapshot.referenceNo}</span>
+        <small>Receipt {receipt.receiptNo}{snapshot.paymentReference ? ` · ${snapshot.paymentReference}` : ''}</small>
+      </div>
+
+      <ReferenceBarcode reference={snapshot.referenceNo} label={isRepayment ? 'loan repayment' : 'loan agreement'} thermal />
+
+      <section className="pawn-ticket-fields">
+        <Row label="Borrower" value={snapshot.party.name || 'Unknown borrower'} />
+        {snapshot.party.phone && <Row label="Phone" value={snapshot.party.phone} />}
+        {snapshot.party.nationalIdNumber && <Row label="National ID" value={snapshot.party.nationalIdNumber} />}
+        <Row label={isRepayment ? 'Paid on' : 'Loan date'} value={dateOnly(snapshot.issuedAt)} />
+        <Row label="Due date" value={dateOnly(snapshot.dueDate)} />
+        <Row label="Principal" value={money(isRepayment ? snapshot.contractPrincipal : snapshot.principal, snapshot.currency)} />
+        {snapshot.interestType && snapshot.interestType !== 'NONE' && (
+          <Row
+            label="Interest"
+            value={snapshot.interestType === 'PERCENT' ? `${number.format(Number(snapshot.interestValue || 0))}%` : money(snapshot.interestAmount, snapshot.currency)}
+          />
+        )}
+        <Row label="Total agreement" value={money(isRepayment ? snapshot.contractTotal : snapshot.total, snapshot.currency)} />
+        {isRepayment && (
+          <>
+            <Row label="Amount paid" value={money(snapshot.amountPaid, snapshot.currency)} />
+            <Row label="Payment method" value={title(snapshot.paymentMethod)} />
+            <Row label="Remaining balance" value={money(snapshot.balance, snapshot.currency)} />
+          </>
+        )}
+        {!isRepayment && snapshot.balance !== undefined && (
+          <Row label="Balance remaining" value={money(snapshot.balance, snapshot.currency)} />
+        )}
+        <Row label="Status" value={title(snapshot.status)} />
+      </section>
+
+      {snapshot.notes && (
+        <div style={{ margin: '8px 0', fontSize: '9px', textAlign: 'center', color: '#4b5563' }}>
+          Note: {snapshot.notes}
+        </div>
+      )}
+
+      <p className="pawn-ticket-warning">
+        <strong>Notice:</strong> Keep this official 80mm loan receipt for repayments, verification, and barcode scanning.
+      </p>
+
+      <section className="pawn-ticket-signatures">
+        <div><span /><strong>Borrower signature / thumbprint</strong></div>
+        <div><span /><strong>Authorized lender</strong></div>
+      </section>
+
+      <footer>
+        <strong>{snapshot.shop.footer || 'Thank you.'}</strong>
+        <small>Immutable receipt snapshot · Printed {receipt.printCount} time{receipt.printCount === 1 ? '' : 's'}</small>
+      </footer>
+    </article>
+  )
+}
+
 export default function ReceiptDocument({ receipt, layout }: { receipt: ReceiptRecord; layout: ReceiptLayout }) {
   const snapshot = receipt.snapshot
   if (!snapshot) return <div className="receipt-paper">Receipt snapshot is unavailable.</div>
   if (layout === 'THERMAL' && snapshot.documentType === 'PAWN_CONTRACT') {
     return <PawnTicketThermal receipt={receipt} snapshot={snapshot} />
+  }
+  if (layout === 'THERMAL' && ['LOAN_AGREEMENT', 'LOAN_PAYMENT'].includes(snapshot.documentType)) {
+    return <LoanTicketThermal receipt={receipt} snapshot={snapshot} />
   }
 
   const pawnReceipt = ['PAWN_CONTRACT', 'PAWN_PAYMENT', 'PAWN_REDEMPTION'].includes(snapshot.documentType)
@@ -227,7 +318,7 @@ export default function ReceiptDocument({ receipt, layout }: { receipt: ReceiptR
         {snapshot.staff?.name && <Row label="Processed by" value={snapshot.staff.name} />}
       </section>
 
-      {(pawnReceipt || loanReceipt) && <ReferenceBarcode reference={snapshot.referenceNo} label={loanReceipt ? 'loan' : 'pawn contract'} />}
+      {(pawnReceipt || loanReceipt) && <ReferenceBarcode reference={snapshot.referenceNo} label={loanReceipt ? 'loan' : 'pawn contract'} thermal={layout === 'THERMAL'} />}
 
       <section className="receipt-section">
         <h3>{snapshot.party.role || 'Customer'}</h3>
@@ -325,6 +416,8 @@ const thermalReceiptPrintStyles = `
 .pawn-ticket-thermal{padding:5mm 4mm;color:#111827;font-size:11px;line-height:1.4}
 .pawn-ticket-shop{display:grid;justify-items:center;gap:3px;padding-bottom:9px;border-bottom:2px solid #111827;text-align:center}
 .pawn-ticket-shop h1{margin:0;font-size:18px}.pawn-ticket-shop strong{font-size:11px}.pawn-ticket-shop span{font-size:9px}
+.pawn-ticket-logo{max-width:54px;max-height:54px;object-fit:contain;margin-bottom:4px;display:block}
+.pawn-ticket-date-note{margin:0 0 9px;padding:7px 8px;border:1px solid #d1d5db;border-radius:4px;color:#374151;background:#f9fafb;font-size:8px;line-height:1.4;text-align:center}
 .pawn-ticket-reference{display:grid;justify-items:center;gap:2px;padding:9px 0;border-bottom:1px dashed #6b7280;text-align:center}
 .pawn-ticket-reference strong{font-size:12px;text-transform:uppercase}.pawn-ticket-reference span{font:700 11px monospace}.pawn-ticket-reference small{color:#6b7280;font-size:8px}
 .pawn-ticket-fields{display:grid;gap:6px;padding:10px 0}.pawn-ticket-fields .receipt-row{padding-bottom:5px;border-bottom:1px dotted #d1d5db}.pawn-ticket-fields .receipt-row span{color:#374151}.pawn-ticket-fields .receipt-row strong{max-width:58%}

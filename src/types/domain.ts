@@ -123,6 +123,7 @@ export type Pawn = {
   dailyFeeRate?: number
   termDays?: number
   startDate?: string
+  issueDate?: string
   currentTermStartDate?: string
   accruedPawnFee?: number
   pawnFeePaid?: number
@@ -453,4 +454,3 @@ export type OperationalReportData = {
   filterOptions?: { actions?: string[]; entities?: string[] }
   notes?: string[]
 }
-

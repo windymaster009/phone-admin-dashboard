@@ -929,3 +929,73 @@ test('POST /trades (SELL): rejects non-existent customer (404)', async () => {
     Customer.exists = origCustExists
   }
 })
+
+test('POST /trades (BUY): sanitizes "NULL" SKU and auto-generates clean BUY code for phone purchase', async () => {
+  const originalItemCreate = InventoryItem.create
+  const originalTradeCreate = Trade.create
+  let stock, trade
+  InventoryItem.create = async ([data]) => { stock = { _id: new mongoose.Types.ObjectId(), ...data }; return [stock] }
+  Trade.create = async ([data]) => {
+    trade = { _id: new mongoose.Types.ObjectId(), ...data, populate: async function () { return this } }
+    return [trade]
+  }
+  try {
+    const res = await callRouter(apiRouter, {
+      method: 'POST',
+      url: '/trades',
+      user: mockManager,
+      body: {
+        type: 'BUY',
+        sellerType: 'WALK_IN',
+        seller: { name: 'Customer seller' },
+        currency: 'USD',
+        exchangeRate: 4100,
+        amountPaid: 500,
+        items: [{
+          category: 'PHONE',
+          brand: 'Samsung',
+          model: 'Galaxy S24',
+          storage: '256GB',
+          color: 'Black',
+          imei: '358912345678901',
+          sku: 'NULL',
+          purchasePrice: 500,
+        }],
+      },
+    })
+    assert.equal(res.status, 201)
+    assert.notEqual(stock.sku, 'NULL', 'Must not store literal string "NULL" as SKU')
+    assert.match(stock.sku, /^BUY-/, 'Auto-generates clean BUY- SKU')
+    assert.notEqual(stock.barcode, 'NULL', 'Must not store literal string "NULL" as barcode')
+    assert.match(stock.barcode, /^PF-/, 'Auto-generates clean PF- barcode')
+  } finally {
+    InventoryItem.create = originalItemCreate
+    Trade.create = originalTradeCreate
+  }
+})
+
+test('POST /trades (BUY): rejects literal "NULL" SKU for ACCESSORY where SKU is required', async () => {
+  const res = await callRouter(apiRouter, {
+    method: 'POST',
+    url: '/trades',
+    user: mockManager,
+    body: {
+      type: 'BUY',
+      sellerType: 'WALK_IN',
+      seller: { name: 'Customer seller' },
+      currency: 'USD',
+      exchangeRate: 4100,
+      amountPaid: 20,
+      items: [{
+        category: 'ACCESSORY',
+        name: 'Case',
+        brand: 'Spigen',
+        sku: 'NULL',
+        quantity: 1,
+        purchasePrice: 20,
+      }],
+    },
+  })
+  assert.equal(res.status, 400)
+  assert.match(res.body.message, /valid SKU are required/i)
+})

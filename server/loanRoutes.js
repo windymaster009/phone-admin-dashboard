@@ -468,7 +468,10 @@ router.post('/:id/payments', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIE
     },
   })
 
-  res.status(201).json(await getLoanDetail(result.loan._id, req.user.role))
+  res.status(201).json({
+    ...await getLoanDetail(result.loan._id, req.user.role),
+    recordedPaymentId: result.payment._id.toString(),
+  })
 }))
 
 router.post('/:id/cancel', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {

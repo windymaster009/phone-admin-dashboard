@@ -27,7 +27,7 @@ const SecurityWorkspacePage = lazy(() => import('../features/security/SecurityWo
 const SettingsPage = lazy(() => import('../features/settings/SettingsPage'))
 const BackupStatusCard = lazy(() => import('../features/backup/BackupStatusCard'))
 const OperationModalBridge = lazy(() => import('../features/operations/OperationModalBridge'))
-const ReceiptCenterBridge = lazy(() => import('../features/receipts/ReceiptCenterBridge'))
+import ReceiptCenterBridge from '../features/receipts/ReceiptCenterBridge'
 
 function App({
   user,
@@ -327,9 +327,9 @@ function App({
       </div>
 
       <ErrorBoundary boundaryName="GlobalOverlays" compact>
+        <ReceiptCenterBridge />
         <Suspense fallback={null}>
           <OperationModalBridge />
-          <ReceiptCenterBridge />
         </Suspense>
       </ErrorBoundary>
     </div>

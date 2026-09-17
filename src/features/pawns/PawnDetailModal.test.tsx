@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import PawnDetailModal from './PawnDetailModal'
 import { mockPawnRecord } from '../../test/testUtils'
 import type { Pawn } from '../../types/domain'
+import * as barcodeModule from '../inventory/barcode'
+import { dateText } from '../../lib/presentation'
 
 describe('PawnDetailModal component', () => {
   beforeEach(() => {
@@ -256,9 +258,8 @@ describe('PawnDetailModal component', () => {
     await waitFor(() => {
       expect(handleDelete).toHaveBeenCalledTimes(1)
       expect(handleClose).toHaveBeenCalledTimes(1)
-    })
   })
-
+})
   it('prevents duplicate submissions by disabling the Delete button while request is running', async () => {
     let resolveDeletePromise!: () => void
     const deletePromise = new Promise<void>((resolve) => {
@@ -369,6 +370,234 @@ describe('PawnDetailModal component', () => {
       />,
     )
 
+    expect(screen.getByRole('button', { name: /Claim collateral/i })).toBeInTheDocument()
+  })
+
+  it('enforces 5-day minimum claim timing: disabled before, enabled exactly at, and enabled after claim time', () => {
+    const baseNow = 1789000000000
+    vi.spyOn(Date, 'now').mockReturnValue(baseNow)
+
+    try {
+      // 1. Before: 4 days overdue (< 5 full days)
+      const beforePawn: Pawn = {
+        ...mockPawnRecord,
+        status: 'OVERDUE',
+        dueDate: new Date(baseNow - 4 * 86_400_000).toISOString(),
+      }
+      const { rerender } = render(
+        <PawnDetailModal
+          pawn={beforePawn}
+          onClose={vi.fn()}
+          onAction={vi.fn()}
+        />,
+      )
+      expect(screen.getByRole('button', { name: /Claim collateral/i })).toBeDisabled()
+      expect(screen.getByText(/Claim available/i)).toBeInTheDocument()
+
+      // 2. Exactly at: 5 days overdue (exactly 5 full days)
+      const exactPawn: Pawn = {
+        ...mockPawnRecord,
+        status: 'OVERDUE',
+        dueDate: new Date(baseNow - 5 * 86_400_000).toISOString(),
+      }
+      rerender(
+        <PawnDetailModal
+          pawn={exactPawn}
+          onClose={vi.fn()}
+          onAction={vi.fn()}
+        />,
+      )
+      expect(screen.getByRole('button', { name: /Claim collateral/i })).toBeEnabled()
+      expect(screen.getByText('Claim is available')).toBeInTheDocument()
+
+      // 3. After: 6 days overdue (> 5 full days)
+      const afterPawn: Pawn = {
+        ...mockPawnRecord,
+        status: 'OVERDUE',
+        dueDate: new Date(baseNow - 6 * 86_400_000).toISOString(),
+      }
+      rerender(
+        <PawnDetailModal
+          pawn={afterPawn}
+          onClose={vi.fn()}
+          onAction={vi.fn()}
+        />,
+      )
+      expect(screen.getByRole('button', { name: /Claim collateral/i })).toBeEnabled()
+      expect(screen.getByText('Claim is available')).toBeInTheDocument()
+    } finally {
+      vi.restoreAllMocks()
+    }
+  })
+
+  it('older contract with 2-day graceEndsAt enforces 5-day minimum (before, exactly at, and after)', () => {
+    const baseNow = 1789000000000
+    vi.spyOn(Date, 'now').mockReturnValue(baseNow)
+
+    try {
+      // 1. Before: 3 days overdue (2-day grace passed, but 5-day minimum has not)
+      const dueDateBefore = new Date(baseNow - 3 * 86_400_000).toISOString()
+      const graceEndsAt2Day = new Date(baseNow - 1 * 86_400_000).toISOString()
+      const olderPawnBefore: Pawn = {
+        ...mockPawnRecord,
+        status: 'OVERDUE',
+        dueDate: dueDateBefore,
+        graceEndsAt: graceEndsAt2Day,
+      }
+      const { rerender } = render(
+        <PawnDetailModal
+          pawn={olderPawnBefore}
+          onClose={vi.fn()}
+          onAction={vi.fn()}
+        />,
+      )
+      expect(screen.getByRole('button', { name: /Claim collateral/i })).toBeDisabled()
+      expect(screen.getByText(/Claim available/i)).toBeInTheDocument()
+
+      // 2. Exactly at: 5 days overdue (reaches 5-day minimum)
+      const dueDateExact = new Date(baseNow - 5 * 86_400_000).toISOString()
+      const olderPawnExact: Pawn = {
+        ...mockPawnRecord,
+        status: 'OVERDUE',
+        dueDate: dueDateExact,
+        graceEndsAt: new Date(baseNow - 3 * 86_400_000).toISOString(),
+      }
+      rerender(
+        <PawnDetailModal
+          pawn={olderPawnExact}
+          onClose={vi.fn()}
+          onAction={vi.fn()}
+        />,
+      )
+      expect(screen.getByRole('button', { name: /Claim collateral/i })).toBeEnabled()
+      expect(screen.getByText('Claim is available')).toBeInTheDocument()
+
+      // 3. After: 6 days overdue
+      const dueDateAfter = new Date(baseNow - 6 * 86_400_000).toISOString()
+      const olderPawnAfter: Pawn = {
+        ...mockPawnRecord,
+        status: 'OVERDUE',
+        dueDate: dueDateAfter,
+        graceEndsAt: new Date(baseNow - 4 * 86_400_000).toISOString(),
+      }
+      rerender(
+        <PawnDetailModal
+          pawn={olderPawnAfter}
+          onClose={vi.fn()}
+          onAction={vi.fn()}
+        />,
+      )
+      expect(screen.getByRole('button', { name: /Claim collateral/i })).toBeEnabled()
+      expect(screen.getByText('Claim is available')).toBeInTheDocument()
+    } finally {
+      vi.restoreAllMocks()
+    }
+  })
+
+  it('honors later saved graceEndsAt when later than 5 days (before, exactly at, and after)', () => {
+    const baseNow = 1789000000000
+    vi.spyOn(Date, 'now').mockReturnValue(baseNow)
+
+    try {
+      // 1. Before: 6 days overdue (past 5 days, but before 7-day graceEndsAt)
+      const dueDateBefore = new Date(baseNow - 6 * 86_400_000).toISOString()
+      const graceEndsAt7Day = new Date(baseNow + 1 * 86_400_000).toISOString()
+      const pawnBefore: Pawn = {
+        ...mockPawnRecord,
+        status: 'OVERDUE',
+        dueDate: dueDateBefore,
+        graceEndsAt: graceEndsAt7Day,
+      }
+      const { rerender } = render(
+        <PawnDetailModal
+          pawn={pawnBefore}
+          onClose={vi.fn()}
+          onAction={vi.fn()}
+        />,
+      )
+      expect(screen.getByRole('button', { name: /Claim collateral/i })).toBeDisabled()
+      expect(screen.getByText(/Claim available/i)).toBeInTheDocument()
+
+      // 2. Exactly at: 7 days overdue (reaches 7-day graceEndsAt)
+      const dueDateExact = new Date(baseNow - 7 * 86_400_000).toISOString()
+      const pawnExact: Pawn = {
+        ...mockPawnRecord,
+        status: 'OVERDUE',
+        dueDate: dueDateExact,
+        graceEndsAt: new Date(baseNow).toISOString(),
+      }
+      rerender(
+        <PawnDetailModal
+          pawn={pawnExact}
+          onClose={vi.fn()}
+          onAction={vi.fn()}
+        />,
+      )
+      expect(screen.getByRole('button', { name: /Claim collateral/i })).toBeEnabled()
+      expect(screen.getByText('Claim is available')).toBeInTheDocument()
+
+      // 3. After: 8 days overdue
+      const dueDateAfter = new Date(baseNow - 8 * 86_400_000).toISOString()
+      const pawnAfter: Pawn = {
+        ...mockPawnRecord,
+        status: 'OVERDUE',
+        dueDate: dueDateAfter,
+        graceEndsAt: new Date(baseNow - 1 * 86_400_000).toISOString(),
+      }
+      rerender(
+        <PawnDetailModal
+          pawn={pawnAfter}
+          onClose={vi.fn()}
+          onAction={vi.fn()}
+        />,
+      )
+      expect(screen.getByRole('button', { name: /Claim collateral/i })).toBeEnabled()
+      expect(screen.getByText('Claim is available')).toBeInTheDocument()
+    } finally {
+      vi.restoreAllMocks()
+    }
+  })
+
+  it('restricts claim collateral to authorized staff while keeping Redeem item separate and accessible', async () => {
+    const overduePawn: Pawn = {
+      ...mockPawnRecord,
+      status: 'OVERDUE',
+      dueDate: '2026-08-10',
+    }
+
+    // 1. Unauthorized staff (canClaim = false, e.g. Cashier):
+    // Claim banner is hidden, but Redeem item is available
+    const { rerender } = render(
+      <PawnDetailModal
+        pawn={overduePawn}
+        onClose={vi.fn()}
+        onAction={vi.fn()}
+        canClaim={false}
+      />,
+    )
+
+    expect(screen.queryByRole('button', { name: /Claim collateral/i })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Claim is available/i)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Redeem item/i })).toBeInTheDocument()
+
+    // Clicking Redeem item opens redemption form for customer collection
+    fireEvent.click(screen.getByRole('button', { name: /Redeem item/i }))
+    expect(screen.getByText(/Confirm the amount collected and return the collateral to the customer/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Confirm redemption/i })).toBeInTheDocument()
+
+    // Canceling the form returns to modal view with Redeem item button intact
+    fireEvent.click(screen.getByRole('button', { name: /^Cancel$/i }))
+    expect(screen.getByRole('button', { name: /Redeem item/i })).toBeInTheDocument()
+
+    // 2. Authorized staff (canClaim = true, e.g. Owner/Manager):
+    rerender(
+      <PawnDetailModal
+        pawn={overduePawn}
+        onClose={vi.fn()}
+        onAction={vi.fn()}
+        canClaim={true}
+      />,
+    )
     expect(screen.getByRole('button', { name: /Claim collateral/i })).toBeInTheDocument()
   })
 
@@ -607,5 +836,224 @@ describe('PawnDetailModal component', () => {
 
     expect(deleteCount).toBe(1)
     await act(async () => { resolveDelete!() })
+  })
+
+  it('prints label immediately after pawn creation when inventoryItem is populated in the new pawn', async () => {
+    const printSpy = vi.spyOn(barcodeModule, 'printInventoryLabel').mockReturnValue(true)
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+
+    const createdPawn: Pawn = {
+      ...mockPawnRecord,
+      pawnNo: 'PW-20260917-NEW01',
+      inventoryItem: {
+        _id: 'item-new-1',
+        sku: 'PWN-20260917-ABC01',
+        barcode: 'PW-20260917-NEW01',
+        name: 'iPhone 15 Pro Max',
+        brand: 'Apple',
+        model: 'iPhone 15 Pro Max',
+        storage: '256GB',
+        color: 'Natural Titanium',
+        imei1: '359876543210987',
+        sellPrice: 0,
+        status: 'PAWNED',
+      } as any,
+      itemSnapshot: {
+        name: 'iPhone 15 Pro Max',
+        brand: 'Apple',
+        model: 'iPhone 15 Pro Max',
+        storage: '256GB',
+        color: 'Natural Titanium',
+        imei: '359876543210987',
+      },
+    }
+
+    const user = userEvent.setup()
+    render(
+      <PawnDetailModal
+        pawn={createdPawn}
+        onClose={vi.fn()}
+      />,
+    )
+
+    const printButton = screen.getByRole('button', { name: /Print label/i })
+    await user.click(printButton)
+
+    expect(alertSpy).not.toHaveBeenCalled()
+    expect(printSpy).toHaveBeenCalledWith({
+      sku: 'PWN-20260917-ABC01',
+      barcode: 'PW-20260917-NEW01',
+      name: 'iPhone 15 Pro Max',
+      brand: 'Apple',
+      model: 'iPhone 15 Pro Max 256GB Natural Titanium',
+      imei1: '359876543210987',
+      sellPrice: 0,
+    })
+  })
+
+  it('prints label successfully after page reload even if inventoryItem is an ID string or unpopulated', async () => {
+    const printSpy = vi.spyOn(barcodeModule, 'printInventoryLabel').mockReturnValue(true)
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+
+    const reloadedPawn: Pawn = {
+      ...mockPawnRecord,
+      pawnNo: 'PW-20260917-RELOAD',
+      inventoryItem: 'raw-mongo-id-string-123' as any,
+      itemSnapshot: {
+        name: 'Samsung Galaxy S23 Ultra',
+        brand: 'Samsung',
+        model: 'Galaxy S23 Ultra',
+        storage: '512GB',
+        color: 'Phantom Black',
+        imei: '351234567890123',
+      },
+    }
+
+    const user = userEvent.setup()
+    render(
+      <PawnDetailModal
+        pawn={reloadedPawn}
+        onClose={vi.fn()}
+      />,
+    )
+
+    const printButton = screen.getByRole('button', { name: /Print label/i })
+    await user.click(printButton)
+
+    expect(alertSpy).not.toHaveBeenCalled()
+    expect(printSpy).toHaveBeenCalledWith({
+      sku: 'PW-20260917-RELOAD',
+      barcode: 'PW-20260917-RELOAD',
+      name: 'Samsung Galaxy S23 Ultra',
+      brand: 'Samsung',
+      model: 'Galaxy S23 Ultra 512GB Phantom Black',
+      imei1: '351234567890123',
+      sellPrice: 0,
+    })
+  })
+
+  it('renders Print ticket button, shows preparing state on click, and dispatches phoneflow:open-pawn-ticket', async () => {
+    const user = userEvent.setup()
+    const ticketHandler = vi.fn()
+    window.addEventListener('phoneflow:open-pawn-ticket', ticketHandler)
+
+    render(
+      <PawnDetailModal
+        pawn={mockPawnRecord}
+        onClose={vi.fn()}
+      />,
+    )
+
+    const ticketBtn = screen.getByRole('button', { name: /Print ticket/i })
+    expect(ticketBtn).toBeInTheDocument()
+
+    await user.click(ticketBtn)
+    expect(ticketHandler).toHaveBeenCalled()
+    const customEvent = ticketHandler.mock.calls[0][0] as CustomEvent
+    expect(customEvent.detail).toEqual({
+      reference: mockPawnRecord.pawnNo,
+      sourceSubId: 'latest-contract',
+    })
+
+    // Shows loading feedback and clears on phoneflow:documents-opened
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:documents-opened'))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /Print ticket/i })).not.toBeDisabled()
+    })
+
+    window.removeEventListener('phoneflow:open-pawn-ticket', ticketHandler)
+  })
+
+  it('displays error banner when document preparation fails', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <PawnDetailModal
+        pawn={mockPawnRecord}
+        onClose={vi.fn()}
+      />,
+    )
+
+    const docsBtn = screen.getByRole('button', { name: /Documents/i })
+    await user.click(docsBtn)
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:documents-error', {
+        detail: { message: 'Unable to load contract documents from server' },
+      }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Unable to load contract documents from server')
+    })
+  })
+
+  it('renders Part 1 in history when renewals exist and allows printing older Part 1 and renewal parts from history', async () => {
+    const user = userEvent.setup()
+    const ticketHandler = vi.fn()
+    window.addEventListener('phoneflow:open-pawn-ticket', ticketHandler)
+
+    const pawnWithRenewals: Pawn = {
+      ...mockPawnRecord,
+      renewals: [
+        {
+          _id: 'renewal-id-1',
+          renewedAt: '2026-09-15T10:00:00.000Z',
+          previousDueDate: '2026-09-15T10:00:00.000Z',
+          newDueDate: '2026-10-15T10:00:00.000Z',
+          termDays: 30,
+          ticketPart: 2,
+          feePaid: 20,
+          paymentAmount: 20,
+          dailyFeeAmount: 0.67,
+          contractLengthDays: 60,
+        },
+      ],
+    }
+
+    render(
+      <PawnDetailModal
+        pawn={pawnWithRenewals}
+        onClose={vi.fn()}
+      />,
+    )
+
+    // History contains both Part 1 and Part 2
+    expect(screen.getByText(/Extension history/i)).toBeInTheDocument()
+    expect(screen.getByText(/Part 1 ·/i)).toBeInTheDocument()
+    expect(screen.getByText(/Original contract/i)).toBeInTheDocument()
+    expect(screen.getByText(/Part 2 ·/i)).toBeInTheDocument()
+    const originalHistory = screen.getByText(/Original contract/i).closest('p')
+    expect(originalHistory?.textContent).toContain(`Due ${dateText(pawnWithRenewals.renewals![0].previousDueDate)}`)
+    expect(originalHistory?.textContent).not.toContain(`Due ${dateText(pawnWithRenewals.renewals![0].newDueDate)}`)
+
+    // Clicking Print Part 1 dispatches ticket event with sourceSubId: 'contract'
+    const printPart1Btn = screen.getByRole('button', { name: /Print Part 1/i })
+    await user.click(printPart1Btn)
+    expect(ticketHandler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        detail: {
+          reference: pawnWithRenewals.pawnNo,
+          sourceSubId: 'contract',
+        },
+      }),
+    )
+
+    // Clicking Print Part 2 dispatches ticket event with sourceSubId: 'renewal:renewal-id-1'
+    const printPart2Btn = screen.getByRole('button', { name: /Print Part 2/i })
+    await user.click(printPart2Btn)
+    expect(ticketHandler).toHaveBeenCalledWith(
+      expect.objectContaining({
+        detail: {
+          reference: pawnWithRenewals.pawnNo,
+          sourceSubId: 'renewal:renewal-id-1',
+        },
+      }),
+    )
+
+    window.removeEventListener('phoneflow:open-pawn-ticket', ticketHandler)
   })
 })

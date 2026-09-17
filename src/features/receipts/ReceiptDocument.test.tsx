@@ -279,6 +279,134 @@ describe('ReceiptDocument component', () => {
     expect(screen.getByText(/If this pawn ticket is lost/i)).toBeInTheDocument()
   })
 
+  it('renders a PAWN_CONTRACT in 80mm THERMAL format with shop logo when configured', () => {
+    const pawnThermalWithLogo: ReceiptRecord = {
+      _id: 'rec-pawn-logo',
+      receiptNo: 'RCP-PW-LOGO',
+      documentType: 'PAWN_CONTRACT',
+      sourceType: 'PAWN',
+      sourceId: 'pawn-logo',
+      sourceSubId: 'contract',
+      referenceNo: 'PW-2026-LOGO',
+      partyName: 'Chann Borey',
+      currency: 'USD',
+      total: 330,
+      issuedAt: '2026-09-10T08:00:00.000Z',
+      printCount: 0,
+      createdAt: '2026-09-10T08:00:00.000Z',
+      snapshot: {
+        schemaVersion: 1,
+        documentType: 'PAWN_CONTRACT',
+        title: 'Pawn Contract',
+        shop: {
+          name: 'PhoneFlow Pawn',
+          phone: '023888999',
+          address: 'Corner St. 271, Phnom Penh',
+          logoUrl: 'https://example.com/shop-logo.png',
+        },
+        referenceNo: 'PW-2026-LOGO',
+        issuedAt: '2026-09-10T08:00:00.000Z',
+        startDate: '2026-09-10T08:00:00.000Z',
+        dueDate: '2026-10-10T08:00:00.000Z',
+        graceEndsAt: '2026-10-17T08:00:00.000Z',
+        ticketPart: 1,
+        feeModel: 'DAILY_SIMPLE',
+        contractLengthDays: 30,
+        principal: 300,
+        dailyFeeRate: 0.33,
+        dailyFeeAmount: 1,
+        pawnFeeAtDue: 30,
+        total: 330,
+        party: {
+          name: 'Chann Borey',
+        },
+        currency: 'USD',
+        items: [
+          {
+            name: 'iPhone 15 Pro',
+            quantity: 1,
+            unitPrice: 300,
+            total: 300,
+          },
+        ],
+      },
+    }
+
+    render(<ReceiptDocument receipt={pawnThermalWithLogo} layout="THERMAL" />)
+
+    const logo = screen.getByRole('img', { name: /PhoneFlow Pawn/i })
+    expect(logo).toBeInTheDocument()
+    expect(logo).toHaveAttribute('src', 'https://example.com/shop-logo.png')
+    expect(logo).toHaveClass('pawn-ticket-logo')
+  })
+
+  it('renders an extension PAWN_CONTRACT (Part 2) in 80mm THERMAL format with extension period, previous due date, and new fee due date', () => {
+    const pawnPart2Thermal: ReceiptRecord = {
+      _id: 'rec-pawn-part2',
+      receiptNo: 'RCP-PW-PART2',
+      documentType: 'PAWN_CONTRACT',
+      sourceType: 'PAWN',
+      sourceId: 'pawn-1',
+      sourceSubId: 'renewal:renewal-123',
+      referenceNo: 'PW-2026-0001',
+      partyName: 'Chann Borey',
+      partyPhone: '012999888',
+      currency: 'USD',
+      total: 345,
+      issuedAt: '2026-09-17T08:00:00.000Z',
+      printCount: 0,
+      createdAt: '2026-09-17T08:00:00.000Z',
+      snapshot: {
+        schemaVersion: 1,
+        documentType: 'PAWN_CONTRACT',
+        title: 'Pawn Contract - Part 2',
+        shop: {
+          name: 'PhoneFlow Pawn',
+          phone: '023888999',
+          address: 'Corner St. 271, Phnom Penh',
+        },
+        referenceNo: 'PW-2026-0001',
+        issuedAt: '2026-09-17T08:00:00.000Z',
+        startDate: '2026-09-10T08:00:00.000Z',
+        previousDueDate: '2026-09-17T08:00:00.000Z',
+        dueDate: '2026-09-24T08:00:00.000Z',
+        graceEndsAt: '2026-09-29T08:00:00.000Z',
+        ticketPart: 2,
+        feeModel: 'DAILY_SIMPLE',
+        termDays: 7,
+        extensionTermDays: 7,
+        contractLengthDays: 14,
+        principal: 300,
+        dailyFeeRate: 0.33,
+        dailyFeeAmount: 1,
+        pawnFeeAtDue: 7,
+        total: 307,
+        party: {
+          name: 'Chann Borey',
+          phone: '012999888',
+        },
+        currency: 'USD',
+        items: [
+          {
+            name: 'MacBook Pro M2 14-inch',
+            quantity: 1,
+            unitPrice: 300,
+            total: 300,
+            imei: 'SERIAL-MBP-9922',
+          },
+        ],
+      },
+    }
+
+    render(<ReceiptDocument receipt={pawnPart2Thermal} layout="THERMAL" />)
+
+    expect(screen.getByText(/Pawn ticket · Part 2/i)).toBeInTheDocument()
+    expect(screen.getByText('Extension period')).toBeInTheDocument()
+    expect(screen.getByText('7 days added')).toBeInTheDocument()
+    expect(screen.getByText('Previous due date')).toBeInTheDocument()
+    expect(screen.getByText('New fee due date')).toBeInTheDocument()
+  })
+
   it('renders PAWN_CONTRACT in A4 layout with agreement details and optional national ID status', () => {
     const pawnA4Receipt: ReceiptRecord = {
       _id: 'rec-pawn-a4',
@@ -463,5 +591,95 @@ describe('ReceiptDocument component', () => {
     expect(screen.getAllByText('Bank Transfer').length).toBeGreaterThan(0)
     expect(screen.getByText('$1,050')).toBeInTheDocument()
     expect(screen.getAllByText('$550').length).toBeGreaterThan(0)
+  })
+
+  it('renders 80mm thermal LOAN_AGREEMENT with barcode and ticket layout', () => {
+    const loanAgreementReceipt: ReceiptRecord = {
+      _id: 'rec-loan-thermal',
+      receiptNo: 'RCP-LN-TH-01',
+      documentType: 'LOAN_AGREEMENT',
+      sourceType: 'LOAN',
+      sourceId: 'loan-1',
+      sourceSubId: 'agreement',
+      referenceNo: 'LN-20260917-SPP3M0',
+      currency: 'USD',
+      total: 200,
+      issuedAt: '2026-09-17T08:00:00.000Z',
+      printCount: 0,
+      createdAt: '2026-09-17T08:00:00.000Z',
+      snapshot: {
+        schemaVersion: 1,
+        documentType: 'LOAN_AGREEMENT',
+        title: 'Loan Agreement',
+        shop: { name: 'PhoneFlow Shop', phone: '012345678' },
+        referenceNo: 'LN-20260917-SPP3M0',
+        issuedAt: '2026-09-17T08:00:00.000Z',
+        party: { name: 'tra', role: 'Borrower' },
+        currency: 'USD',
+        principal: 200,
+        interestType: 'NONE',
+        total: 200,
+        balance: 200,
+        dueDate: '2026-10-23T08:00:00.000Z',
+        status: 'ACTIVE',
+        items: [{ name: 'Money loan', quantity: 1, unitPrice: 200, total: 200 }],
+      },
+    }
+
+    render(<ReceiptDocument receipt={loanAgreementReceipt} layout="THERMAL" />)
+    expect(screen.getByText('Loan Agreement')).toBeInTheDocument()
+    expect(screen.getAllByText('LN-20260917-SPP3M0').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByLabelText(/Barcode for loan agreement LN-20260917-SPP3M0/i)).toBeInTheDocument()
+    expect(screen.getByText('tra')).toBeInTheDocument()
+    expect(screen.getByText(/Keep this official 80mm loan receipt/i)).toBeInTheDocument()
+    expect(screen.getByText('Borrower signature / thumbprint')).toBeInTheDocument()
+  })
+
+  it('renders 80mm thermal LOAN_PAYMENT with barcode and ticket layout', () => {
+    const loanPaymentReceipt: ReceiptRecord = {
+      _id: 'rec-loan-pay-th',
+      receiptNo: 'RCP-LN-TH-PAY-01',
+      documentType: 'LOAN_PAYMENT',
+      sourceType: 'LOAN',
+      sourceId: 'loan-1',
+      sourceSubId: 'pay-1',
+      referenceNo: 'LN-20260917-SPP3M0',
+      currency: 'USD',
+      total: 100,
+      issuedAt: '2026-09-18T08:00:00.000Z',
+      printCount: 0,
+      createdAt: '2026-09-18T08:00:00.000Z',
+      snapshot: {
+        schemaVersion: 1,
+        documentType: 'LOAN_PAYMENT',
+        title: 'Loan Repayment Receipt',
+        shop: { name: 'PhoneFlow Shop', phone: '012345678' },
+        referenceNo: 'LN-20260917-SPP3M0',
+        paymentReference: 'LP-001',
+        issuedAt: '2026-09-18T08:00:00.000Z',
+        party: { name: 'tra', role: 'Borrower' },
+        currency: 'USD',
+        paymentMethod: 'CASH',
+        contractPrincipal: 200,
+        contractTotal: 200,
+        amountPaid: 100,
+        balance: 100,
+        dueDate: '2026-10-23T08:00:00.000Z',
+        status: 'ACTIVE',
+        total: 100,
+        items: [{ name: 'Loan repayment', quantity: 1, unitPrice: 100, total: 100 }],
+      },
+    }
+
+    render(<ReceiptDocument receipt={loanPaymentReceipt} layout="THERMAL" />)
+    expect(screen.getByText('Loan Repayment Receipt')).toBeInTheDocument()
+    expect(screen.getAllByText('LN-20260917-SPP3M0').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByLabelText(/Barcode for loan repayment LN-20260917-SPP3M0/i)).toBeInTheDocument()
+    expect(screen.getByText('Cash')).toBeInTheDocument()
+    expect(screen.getByText('Paid on')).toBeInTheDocument()
+    expect(screen.queryByText('Loan date')).not.toBeInTheDocument()
+    expect(screen.getByText('Total agreement').closest('.receipt-row')).toHaveTextContent('$200')
+    expect(screen.getByText('Amount paid').closest('.receipt-row')).toHaveTextContent('$100')
+    expect(screen.getAllByText('$100').length).toBeGreaterThan(0)
   })
 })

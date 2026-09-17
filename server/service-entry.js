@@ -1,9 +1,20 @@
 import { spawnSync } from 'node:child_process'
+import { constants } from 'node:fs'
+import { access } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const serverDirectory = path.dirname(fileURLToPath(import.meta.url))
 const migrationScript = path.join(serverDirectory, 'migrate.js')
+
+if (process.env.DOTENV_CONFIG_PATH) {
+  try {
+    await access(process.env.DOTENV_CONFIG_PATH, constants.R_OK)
+  } catch (error) {
+    console.error(`Cannot read PhoneFlow configuration file ${process.env.DOTENV_CONFIG_PATH}: ${error.message}`)
+    process.exit(1)
+  }
+}
 
 console.log('Checking PhoneFlow database migrations...')
 const migration = spawnSync(process.execPath, [migrationScript, 'up'], {

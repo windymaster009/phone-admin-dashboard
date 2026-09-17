@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PawnManagementPage from './PawnManagementPage'
 import { mockOwnerUser, mockPawnRecord } from '../../test/testUtils'
 import { PAWN_CREATED_EVENT, type PawnCreatedEventDetail } from './pawnEvents'
+import * as barcodeModule from '../inventory/barcode'
 
 function mockPawnFetch(options?: { deleteError?: string; pawns?: typeof mockPawnRecord[] }) {
   return vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -394,6 +395,8 @@ describe('PawnManagementPage feature integration', () => {
     }
     const fetchSpy = mockPawnFetch({ pawns: [renewablePawn] })
     const user = userEvent.setup()
+    const ticketSpy = vi.fn()
+    window.addEventListener('phoneflow:open-pawn-ticket', ticketSpy)
     render(<PawnManagementPage user={mockOwnerUser} />)
 
     await waitFor(() => {
@@ -432,5 +435,109 @@ describe('PawnManagementPage feature integration', () => {
     const key = requestHeaders instanceof Headers ? requestHeaders.get('Idempotency-Key') : (requestHeaders as Record<string, string>)?.['Idempotency-Key']
     expect(typeof key).toBe('string')
     expect(key!.length).toBeGreaterThan(5)
+
+    // Assert that the extension pawn ticket event was dispatched with the specific renewal sub ID
+    expect(ticketSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        detail: {
+          reference: mockPawnRecord.pawnNo,
+          sourceSubId: 'renewal:renewal-1',
+        },
+      }),
+    )
+    window.removeEventListener('phoneflow:open-pawn-ticket', ticketSpy)
+  })
+
+  it('allows printing label immediately after new pawn is registered via PAWN_CREATED_EVENT without refresh, and again after reload', async () => {
+    const printSpy = vi.spyOn(barcodeModule, 'printInventoryLabel').mockReturnValue(true)
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+
+    mockPawnFetch({ pawns: [] })
+    const user = userEvent.setup()
+    const { unmount } = render(<PawnManagementPage user={mockOwnerUser} />)
+
+    await waitFor(() => {
+      expect(screen.getAllByText(/No pawn contracts match these filters/i).length).toBeGreaterThan(0)
+    })
+
+    const newlyCreatedPawn = {
+      ...mockPawnRecord,
+      _id: 'pawn-just-created-123',
+      pawnNo: 'PW-20260917-CREATED',
+      inventoryItem: {
+        _id: 'item-created-123',
+        sku: 'PWN-20260917-ABC',
+        barcode: 'PW-20260917-CREATED',
+        name: 'Google Pixel 8 Pro',
+        brand: 'Google',
+        model: 'Pixel 8 Pro 128GB Obsidian',
+        imei1: '359999999999999',
+        sellPrice: 0,
+        status: 'PAWNED',
+      } as any,
+      itemSnapshot: {
+        name: 'Google Pixel 8 Pro',
+        brand: 'Google',
+        model: 'Pixel 8 Pro 128GB Obsidian',
+        imei: '359999999999999',
+      },
+    }
+
+    // 1. Dispatch PAWN_CREATED_EVENT with the new contract
+    act(() => {
+      window.dispatchEvent(new CustomEvent<PawnCreatedEventDetail>(PAWN_CREATED_EVENT, {
+        detail: { pawn: newlyCreatedPawn },
+      }))
+    })
+
+    expect(screen.getByText('PW-20260917-CREATED')).toBeInTheDocument()
+
+    // 2. Open detail modal immediately without refreshing
+    const openBtns = screen.getAllByRole('button', { name: /View.*PW-20260917-CREATED/i })
+    await user.click(openBtns[0])
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // 3. Click "Print label" immediately
+    const printBtn = screen.getByRole('button', { name: /Print label/i })
+    await user.click(printBtn)
+
+    expect(alertSpy).not.toHaveBeenCalled()
+    expect(printSpy).toHaveBeenCalledWith({
+      sku: 'PWN-20260917-ABC',
+      barcode: 'PW-20260917-CREATED',
+      name: 'Google Pixel 8 Pro',
+      brand: 'Google',
+      model: 'Pixel 8 Pro 128GB Obsidian',
+      imei1: '359999999999999',
+      sellPrice: 0,
+    })
+
+    // Close modal and unmount
+    await user.click(screen.getByRole('button', { name: /Close/i }))
+    unmount()
+
+    // 4. Simulate page reload where GET /pawns returns the contract
+    mockPawnFetch({ pawns: [newlyCreatedPawn] })
+    render(<PawnManagementPage user={mockOwnerUser} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('PW-20260917-CREATED')).toBeInTheDocument()
+    })
+
+    const reloadOpenBtns = screen.getAllByRole('button', { name: /View.*PW-20260917-CREATED/i })
+    await user.click(reloadOpenBtns[0])
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    const reloadPrintBtn = screen.getByRole('button', { name: /Print label/i })
+    await user.click(reloadPrintBtn)
+
+    expect(alertSpy).not.toHaveBeenCalled()
+    expect(printSpy).toHaveBeenCalledTimes(2)
   })
 })
