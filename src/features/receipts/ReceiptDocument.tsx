@@ -294,12 +294,14 @@ const baseReceiptPrintStyles = `
 const thermalReceiptPrintStyles = `
 .receipt-paper-thermal{box-sizing:border-box;min-height:0;overflow:hidden;line-height:1.35}
 .receipt-paper-thermal *{box-sizing:border-box}
-.receipt-paper-thermal .receipt-document-header{display:grid;justify-items:center;gap:8px;text-align:center}
-.receipt-paper-thermal .receipt-shop{display:grid;justify-items:center;gap:5px}
+.receipt-paper-thermal .receipt-document-header{display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;gap:8px;text-align:center}
+.receipt-paper-thermal .receipt-shop,.receipt-paper-thermal .receipt-title{width:100%;min-width:0;margin-inline:auto;text-align:center;overflow-wrap:anywhere}
+.receipt-paper-thermal .receipt-shop{display:grid;grid-template-columns:minmax(0,1fr);justify-items:center;gap:5px}
+.receipt-paper-thermal .receipt-shop>div{min-width:0;max-width:100%;text-align:center}
 .receipt-paper-thermal .receipt-shop>span,.receipt-paper-thermal .receipt-shop img{width:34px;height:34px}
 .receipt-paper-thermal .receipt-shop h1{font-size:16px}
 .receipt-paper-thermal .receipt-shop p{margin-top:1px;font-size:8px}
-.receipt-paper-thermal .receipt-title{min-width:0;justify-items:center;text-align:center}
+.receipt-paper-thermal .receipt-title{grid-template-columns:minmax(0,1fr);justify-items:center;text-align:center}
 .receipt-paper-thermal .receipt-title strong{font-size:11px}
 .receipt-paper-thermal .receipt-title span{max-width:100%;font-size:9px;overflow-wrap:anywhere}
 .receipt-paper-thermal .receipt-shop-info{justify-content:center;gap:3px 8px;text-align:center}

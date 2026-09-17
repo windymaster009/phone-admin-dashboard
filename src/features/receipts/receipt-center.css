@@ -176,16 +176,25 @@
 .receipt-paper-thermal .receipt-shop,
 .receipt-paper-thermal .receipt-title {
   width: 100%;
+  min-width: 0;
   margin-inline: auto;
   text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.receipt-paper-thermal .receipt-title {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .receipt-paper-thermal .receipt-shop {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   justify-items: center;
 }
 
 .receipt-paper-thermal .receipt-shop > div {
+  min-width: 0;
+  max-width: 100%;
   text-align: center;
 }
 
