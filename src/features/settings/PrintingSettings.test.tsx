@@ -1,14 +1,10 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import PrintingSettings from './PrintingSettings'
 
 describe('PrintingSettings component', () => {
-  let mockDoc: {
-    write: ReturnType<typeof vi.fn>
-    close: ReturnType<typeof vi.fn>
-    open: ReturnType<typeof vi.fn>
-  }
+  let mockDoc: Document
   let mockWindow: {
     document: typeof mockDoc
     print: ReturnType<typeof vi.fn>
@@ -18,11 +14,9 @@ describe('PrintingSettings component', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks()
-    mockDoc = {
-      write: vi.fn(),
-      close: vi.fn(),
-      open: vi.fn(),
-    }
+    mockDoc = document.implementation.createHTMLDocument()
+    vi.spyOn(mockDoc, 'write')
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ height: 400 } as DOMRect)
     mockWindow = {
       document: mockDoc,
       print: vi.fn(),
@@ -104,14 +98,9 @@ describe('PrintingSettings component', () => {
     expect(mockDoc.write).toHaveBeenCalledWith(
       expect.stringContaining('TEST RECEIPT — NOT A TRANSACTION')
     )
-    expect(mockDoc.write).toHaveBeenCalledWith(
-      expect.stringContaining('@page{size:80mm')
-    )
-    // Print only after the popup loads, not both immediately and again on load.
-    expect(mockWindow.print).not.toHaveBeenCalled()
-    const html = String(mockDoc.write.mock.calls[0][0])
-    expect(html.match(/window\.print\(\)/g)).toHaveLength(1)
-    expect(html).toContain('window.onload=')
+    expect(mockDoc.getElementById('receipt-page-size')?.textContent).toBe('@page{size:80mm 108mm;margin:0}')
+    expect(mockWindow.print).toHaveBeenCalledTimes(1)
+    expect(mockDoc.querySelector('script')).toBeNull()
 
     const statusNotice = screen.getByRole('status')
     expect(statusNotice).toHaveTextContent(/Print window opened/i)
@@ -160,5 +149,18 @@ describe('PrintingSettings component', () => {
     await user.click(screen.getByRole('button', { name: /Test receipt/i }))
 
     expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it('blocks repeated clicks and format changes while preparing, then cancels on unmount', async () => {
+    Object.defineProperty(mockDoc, 'fonts', { value: { ready: new Promise(() => {}) } })
+    const { unmount } = render(<PrintingSettings />)
+    const button = screen.getByRole('button', { name: /Test receipt/i })
+    act(() => { button.click(); button.click() })
+    expect(window.open).toHaveBeenCalledTimes(1)
+    expect(button).toBeDisabled()
+    expect(screen.getByRole('radio', { name: 'A4' })).toBeDisabled()
+    unmount()
+    await waitFor(() => { expect(mockWindow.close).toHaveBeenCalledOnce() })
+    expect(mockWindow.print).not.toHaveBeenCalled()
   })
 })

@@ -48,6 +48,7 @@ describe('ReceiptCenterBridge component', () => {
     localStorage.clear()
     sessionStorage.clear()
     vi.restoreAllMocks()
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ height: 400 } as DOMRect)
     setStoredSessionUser(mockOwnerUser)
   })
 
@@ -129,13 +130,9 @@ describe('ReceiptCenterBridge component', () => {
       return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
     })
 
-    const mockDoc = {
-      write: vi.fn(),
-      close: vi.fn(),
-      open: vi.fn(),
-      body: document.createElement('body'),
-      head: document.createElement('head'),
-    }
+    const mockDoc = document.implementation.createHTMLDocument()
+    vi.spyOn(mockDoc, 'write')
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ height: 400 } as DOMRect)
     vi.spyOn(window, 'open').mockReturnValue({
       document: mockDoc,
       print: vi.fn(),
@@ -189,7 +186,7 @@ describe('ReceiptCenterBridge component', () => {
       return response
     })
     const popup = {
-      document: { open: vi.fn(), write: vi.fn(), close: vi.fn() },
+      document: document.implementation.createHTMLDocument(),
       focus: vi.fn(), close: vi.fn(), print: vi.fn(() => { throw new Error('Printing unavailable') }),
     }
     vi.spyOn(window, 'open').mockReturnValue(popup as unknown as Window)
@@ -486,16 +483,13 @@ describe('ReceiptCenterBridge component', () => {
     })
 
     // Second deliberate attempt: window.open now succeeds
-    const mockDoc = {
-      write: vi.fn(),
-      close: vi.fn(),
-      open: vi.fn(),
-      body: document.createElement('body'),
-      head: document.createElement('head'),
-    }
+    const mockDoc = document.implementation.createHTMLDocument()
+    vi.spyOn(mockDoc, 'write')
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ height: 400 } as DOMRect)
+    const print = vi.fn()
     openSpy.mockReturnValue({
       document: mockDoc,
-      print: vi.fn(),
+      print,
       close: vi.fn(),
       focus: vi.fn(),
     } as unknown as Window)
@@ -505,6 +499,8 @@ describe('ReceiptCenterBridge component', () => {
     await waitFor(() => {
       expect(screen.getByText('1 print')).toBeInTheDocument()
     })
+    await waitFor(() => { expect(print).toHaveBeenCalledOnce() })
+    expect(mockDoc.getElementById('receipt-page-size')?.textContent).toBe('@page{size:80mm 108mm;margin:0}')
   })
 
   it('directly prepares preview when source has exactly one receipt option', async () => {
@@ -663,13 +659,9 @@ describe('ReceiptCenterBridge component', () => {
       return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
     })
 
-    const mockDoc = {
-      write: vi.fn(),
-      close: vi.fn(),
-      open: vi.fn(),
-      body: document.createElement('body'),
-      head: document.createElement('head'),
-    }
+    const mockDoc = document.implementation.createHTMLDocument()
+    vi.spyOn(mockDoc, 'write')
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ height: 400 } as DOMRect)
     vi.spyOn(window, 'open').mockReturnValue({
       document: mockDoc,
       print: vi.fn(),

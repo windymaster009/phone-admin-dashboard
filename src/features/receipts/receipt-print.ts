@@ -5,21 +5,58 @@ export type PrintReceiptOptions = {
   markup: string
   layout: ReceiptLayout
   title?: string
-  thermalHeightMm?: number
+}
+
+export function writeReceiptPrintDocument(doc: Document, { markup, layout, title = 'PhoneFlow Receipt' }: PrintReceiptOptions) {
+  // Measure only this isolated document, never the responsive or hidden preview.
+  const page = layout === 'A4' ? '@page{size:A4;margin:0}' : '@page{margin:0}'
+  doc.open()
+  doc.write(`<!doctype html><html><head><meta charset="utf-8"><style>${receiptPrintStyles}</style><style id="receipt-page-size">${page}</style></head><body>${markup}</body></html>`)
+  doc.close()
+  doc.title = title
+}
+
+export async function fitReceiptPrintPage(doc: Document, layout: ReceiptLayout, signal?: AbortSignal) {
+  // Fonts and logos can change the receipt height. Bound the wait for offline logos.
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let abort = () => {}
+  try {
+    await Promise.race([
+      Promise.all([
+        doc.fonts?.ready,
+        ...Array.from(doc.images).map((image) => image.decode?.().catch(() => {})),
+      ]),
+      new Promise<void>((resolve) => { timer = setTimeout(resolve, 2000) }),
+      new Promise<void>((resolve) => {
+        abort = resolve
+        if (signal?.aborted) resolve()
+        else signal?.addEventListener('abort', abort, { once: true })
+      }),
+    ])
+  } finally {
+    clearTimeout(timer)
+    signal?.removeEventListener('abort', abort)
+  }
+  if (signal?.aborted) return
+  if (layout === 'A4') return
+  const paper = doc.querySelector<HTMLElement>('.receipt-paper-thermal')
+  const pageStyle = doc.getElementById('receipt-page-size')
+  if (!paper || !pageStyle) throw new Error('Receipt print layout is unavailable.')
+  const heightPx = Math.max(paper.getBoundingClientRect().height, paper.scrollHeight)
+  if (!Number.isFinite(heightPx) || heightPx <= 0) throw new Error('Unable to measure receipt paper. Please try again.')
+  // 2 mm rounding/feed allowance; no fixed minimum or clipping of long receipts.
+  const heightMm = Math.ceil(heightPx * 25.4 / 96) + 2
+  pageStyle.textContent = `@page{size:80mm ${heightMm}mm;margin:0}`
 }
 
 /**
  * Opens a browser print window for the provided receipt markup.
- * Returns true if the popup was opened and printing scheduled after load,
+ * Returns true after requesting the browser print dialog (not proof of printing),
  * or false if the browser blocked the popup.
  */
-export function printReceiptWindow({
-  markup,
-  layout,
-  title = 'PhoneFlow Receipt',
-  thermalHeightMm,
-}: PrintReceiptOptions): boolean {
-  if (!markup) return false
+export async function printReceiptWindow(options: PrintReceiptOptions, signal?: AbortSignal): Promise<boolean> {
+  const { markup, layout } = options
+  if (!markup || signal?.aborted) return false
 
   let popup: Window | null = null
   try {
@@ -32,15 +69,20 @@ export function printReceiptWindow({
     return false
   }
 
-  const height = thermalHeightMm || 110
-  const page = layout === 'THERMAL'
-    ? `@page{size:80mm ${height}mm;margin:0}`
-    : '@page{size:A4;margin:0}'
-
-  popup.document.open()
-  popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>${page}\n${receiptPrintStyles}</style></head><body>${markup}<script>window.onload=()=>{try{window.print()}catch(e){}}</script></body></html>`)
-  popup.document.close()
-  popup.focus()
+  try {
+    writeReceiptPrintDocument(popup.document, options)
+    await fitReceiptPrintPage(popup.document, layout, signal)
+    if (signal?.aborted) {
+      popup.close()
+      return false
+    }
+    if (popup.closed) throw new Error('The print window was closed. Please try again.')
+    popup.focus()
+    popup.print()
+  } catch (error) {
+    popup.close()
+    throw error
+  }
 
   return true
 }

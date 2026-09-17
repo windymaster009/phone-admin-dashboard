@@ -43,6 +43,27 @@ These settings are copied into a receipt when it is first generated. Updating `.
 
 The browser must allow pop-ups for PhoneFlow because printing uses a clean temporary document window.
 
+## Thermal paper setup
+
+Settings test receipts, transaction receipts, and archive reprints share the same
+receipt renderer and print sizing helpers. The print document is measured at its
+actual 80 mm width after fonts and images have had time to load. Its requested
+page height follows the content, plus a small 2 mm allowance, rather than the
+mobile preview height or a fixed A4-length sheet. A4 printing stays A4.
+
+In the browser print dialog, choose the receipt printer, use 100% scale and no
+margins, and disable **Headers and footers** (date, page title, URL, page number).
+Browser settings and Windows driver paper settings can override CSS page size.
+An `80(72.1) × 297 mm` driver form has a fixed 297 mm length; selecting a
+3276 mm form alone is not a fix for blank paper. Check the driver's printing
+preferences for a supported custom form, receipt/roll mode, or blank-space
+suppression. Available options depend on the installed driver. Verify with one
+short test receipt before printing customer transactions.
+
+PhoneFlow cannot configure the driver's cutter or guarantee physical feed length
+through browser printing. If the driver forces a fixed length, it must be
+configured separately. Test receipts never create transactions or print logs.
+
 ## Receipt archive
 
 The **Receipts** menu under **Finance & Control** provides:

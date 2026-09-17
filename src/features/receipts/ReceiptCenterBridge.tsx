@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom'
 import { AlertTriangle, Banknote, ChevronRight, HandCoins, Landmark, LoaderCircle, Printer, ReceiptText, RefreshCcw, Search, ShoppingCart, X } from 'lucide-react'
 import { api, defaultShopProfile, type ShopProfile } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
-import ReceiptDocument, { receiptPrintStyles } from './ReceiptDocument'
+import ReceiptDocument from './ReceiptDocument'
+import { fitReceiptPrintPage, writeReceiptPrintDocument } from './receipt-print'
 import type { ReceiptDocumentType, ReceiptLayout, ReceiptOption, ReceiptOptionResponse, ReceiptRecord, ReceiptSourceType } from './receipt-types'
 
 type SourceContext = { sourceType: ReceiptSourceType; reference: string }
@@ -148,21 +149,14 @@ function Viewer({ initialReceipt, initialLayout = 'A4', onClose, onUpdated }: { 
       onUpdated(result.receipt)
       const markup = paperRef.current?.innerHTML
       if (!markup) throw new Error('Receipt preview is unavailable')
-      const thermalPaper = paperRef.current?.querySelector<HTMLElement>('.receipt-paper-thermal')
-      const thermalHeightMm = thermalPaper
-        ? Math.min(1200, Math.max(110, Math.ceil((thermalPaper.scrollHeight * 25.4) / 96) + 4))
-        : 110
-      const page = layout === 'THERMAL'
-        ? `@page{size:80mm ${thermalHeightMm}mm;margin:0}`
-        : '@page{size:A4;margin:0}'
-      popup.document.open()
-      popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${receipt.receiptNo}</title><style>${page}${receiptPrintStyles}</style></head><body>${markup}</body></html>`)
-      popup.document.close()
+      writeReceiptPrintDocument(popup.document, { markup, layout, title: receipt.receiptNo })
       popup.focus()
       await new Promise<void>((resolve) => {
         resume = resolve
         timer = window.setTimeout(resolve, 220)
       })
+      if (cancelled) return
+      await fitReceiptPrintPage(popup.document, layout, controller.signal)
       if (cancelled) return
       if (popup.closed || typeof popup.print !== 'function') throw new Error('The print window is unavailable. Please try again.')
       popup.print()
@@ -182,7 +176,7 @@ function Viewer({ initialReceipt, initialLayout = 'A4', onClose, onUpdated }: { 
   return <Modal title={receipt.receiptNo} description={`${documentLabel(receipt.documentType)} · ${receipt.referenceNo}`} onClose={onClose} wide>
     {error && <div className="receipt-error" role="alert"><AlertTriangle size={16} /> {error}</div>}
     <div className="receipt-viewer-toolbar">
-      <div className="receipt-layout-switch"><button type="button" className={layout === 'A4' ? 'active' : ''} aria-pressed={layout === 'A4'} onClick={() => setLayout('A4')}>A4 invoice</button><button type="button" className={layout === 'THERMAL' ? 'active' : ''} aria-pressed={layout === 'THERMAL'} onClick={() => setLayout('THERMAL')}>80mm thermal</button></div>
+      <div className="receipt-layout-switch"><button type="button" disabled={busy} className={layout === 'A4' ? 'active' : ''} aria-pressed={layout === 'A4'} onClick={() => setLayout('A4')}>A4 invoice</button><button type="button" disabled={busy} className={layout === 'THERMAL' ? 'active' : ''} aria-pressed={layout === 'THERMAL'} onClick={() => setLayout('THERMAL')}>80mm thermal</button></div>
       <div className="receipt-print-meta"><span>{receipt.printCount ? `${receipt.printCount} print${receipt.printCount === 1 ? '' : 's'}` : 'Not printed yet'}</span>{receipt.lastPrintedAt && <small>Last: {dateText(receipt.lastPrintedAt, true)}</small>}</div>
       <button className="primary-button" onClick={() => void printReceipt()} disabled={busy}><Printer size={16} /> {busy ? 'Preparing...' : 'Print / Save PDF'}</button>
     </div>

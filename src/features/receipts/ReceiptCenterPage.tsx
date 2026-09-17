@@ -16,7 +16,8 @@ import {
 import { api } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
 import SummaryStats from '../../components/SummaryStats'
-import ReceiptDocument, { receiptPrintStyles } from './ReceiptDocument'
+import ReceiptDocument from './ReceiptDocument'
+import { fitReceiptPrintPage, writeReceiptPrintDocument } from './receipt-print'
 import type {
   ReceiptDocumentType,
   ReceiptLayout,
@@ -154,11 +155,11 @@ function ViewerModal({ viewer, onClose }: { viewer: ViewerState; onClose: () => 
 
       const doc = iframe.contentWindow?.document
       if (!doc) throw new Error('Cannot open print preview')
-      doc.open()
-      doc.write(`<!doctype html><html><head><title>${receipt.receiptNo}</title><style>${receiptPrintStyles}</style></head><body>${printNode.innerHTML}</body></html>`)
-      doc.close()
+      writeReceiptPrintDocument(doc, { markup: printNode.innerHTML, layout, title: receipt.receiptNo })
 
       await pause(250)
+      if (cancelled) return
+      await fitReceiptPrintPage(doc, layout, controller.signal)
       if (cancelled) return
       const printWindow = iframe.contentWindow
       if (!printWindow || typeof printWindow.print !== 'function') throw new Error('Printing is unavailable in this browser')
@@ -182,8 +183,8 @@ function ViewerModal({ viewer, onClose }: { viewer: ViewerState; onClose: () => 
       {error && <div className="receipt-error" role="alert"><AlertTriangle size={16} /> {error}</div>}
       <div className="receipt-viewer-toolbar">
         <div className="receipt-layout-switch">
-          <button type="button" className={layout === 'A4' ? 'active' : ''} aria-pressed={layout === 'A4'} onClick={() => setLayout('A4')}>A4 invoice</button>
-          <button type="button" className={layout === 'THERMAL' ? 'active' : ''} aria-pressed={layout === 'THERMAL'} onClick={() => setLayout('THERMAL')}>80mm thermal</button>
+          <button type="button" disabled={busy} className={layout === 'A4' ? 'active' : ''} aria-pressed={layout === 'A4'} onClick={() => setLayout('A4')}>A4 invoice</button>
+          <button type="button" disabled={busy} className={layout === 'THERMAL' ? 'active' : ''} aria-pressed={layout === 'THERMAL'} onClick={() => setLayout('THERMAL')}>80mm thermal</button>
         </div>
         <div className="receipt-print-meta">
           <span>{receipt.printCount ? `${receipt.printCount} print${receipt.printCount === 1 ? '' : 's'}` : 'Not printed yet'}</span>

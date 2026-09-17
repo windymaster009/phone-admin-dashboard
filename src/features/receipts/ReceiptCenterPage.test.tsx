@@ -206,6 +206,34 @@ describe('ReceiptCenterPage component', () => {
     })
   })
 
+  it('fits archive thermal reprints in the isolated print document', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => ({
+      ok: true, status: 200, headers: new Headers(),
+      json: async () => String(input).includes('/receipts/rec-1')
+        ? { receipt: mockReceipt } : { receipts: [mockReceipt] },
+    } as Response))
+    const printDoc = document.implementation.createHTMLDocument()
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ height: 400 } as DOMRect)
+    const print = vi.fn()
+    const create = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation((tag, options) => {
+      const element = create(tag, options)
+      if (tag === 'iframe') Object.defineProperty(element, 'contentWindow', {
+        value: { document: printDoc, focus: vi.fn(), print },
+      })
+      return element
+    })
+    const user = userEvent.setup()
+    render(<ReceiptCenterPage />)
+    await user.click(await screen.findByRole('button', { name: 'Open receipt RCP-2026-0001' }))
+    await user.click(screen.getByRole('button', { name: '80mm thermal' }))
+    await user.click(screen.getByRole('button', { name: /Print \/ Save PDF/ }))
+    await waitFor(() => { expect(print).toHaveBeenCalledOnce() })
+    expect(printDoc.getElementById('receipt-page-size')?.textContent).toBe('@page{size:80mm 108mm;margin:0}')
+    expect(printDoc.body.textContent).toContain('iPhone 13 128GB')
+    expect(printDoc.body.textContent).toContain('$450')
+  })
+
   it('displays role="alert" notice when print API fails', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input)
@@ -395,7 +423,7 @@ describe('ReceiptCenterPage component', () => {
     vi.spyOn(document, 'createElement').mockImplementation((tagName: string, options?: ElementCreationOptions) => {
       const element = createElement(tagName, options)
       if (tagName === 'iframe') Object.defineProperty(element, 'contentWindow', { value: {
-        document: { open: vi.fn(), write: vi.fn(), close: vi.fn() }, focus: vi.fn(), print,
+        document: document.implementation.createHTMLDocument(), focus: vi.fn(), print,
       } })
       return element
     })

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Barcode, CheckCircle2, Printer, ReceiptText } from 'lucide-react'
 import { printInventoryLabel, type LabelItem } from '../inventory/barcode'
 import ReceiptDocument from '../receipts/ReceiptDocument'
@@ -24,6 +24,10 @@ export default function PrintingSettings() {
   const [receiptLayout, setReceiptLayout] = useState<ReceiptLayout>('THERMAL')
   const [feedback, setFeedback] = useState<Feedback | null>(null)
   const receiptPaperRef = useRef<HTMLDivElement>(null)
+  const printingRef = useRef(false)
+  const [printingReceipt, setPrintingReceipt] = useState(false)
+  const printControllerRef = useRef<AbortController | null>(null)
+  useEffect(() => () => printControllerRef.current?.abort(), [])
 
   const handleTestLabel = () => {
     setFeedback(null)
@@ -48,7 +52,12 @@ export default function PrintingSettings() {
     }
   }
 
-  const handleTestReceipt = () => {
+  const handleTestReceipt = async () => {
+    if (printingRef.current) return
+    printingRef.current = true
+    const controller = new AbortController()
+    printControllerRef.current = controller
+    setPrintingReceipt(true)
     setFeedback(null)
     try {
       const paperNode = receiptPaperRef.current
@@ -61,17 +70,13 @@ export default function PrintingSettings() {
         return
       }
 
-      const thermalPaper = paperNode.querySelector<HTMLElement>('.receipt-paper-thermal')
-      const thermalHeightMm = thermalPaper
-        ? Math.min(1200, Math.max(110, Math.ceil((thermalPaper.scrollHeight * 25.4) / 96) + 4))
-        : 110
-
-      const opened = printReceiptWindow({
+      const opened = await printReceiptWindow({
         markup,
         layout: receiptLayout,
         title: 'PhoneFlow Test Receipt',
-        thermalHeightMm,
-      })
+      }, controller.signal)
+
+      if (controller.signal.aborted) return
 
       if (!opened) {
         setFeedback({
@@ -85,10 +90,15 @@ export default function PrintingSettings() {
         })
       }
     } catch (err) {
+      if (controller.signal.aborted) return
       setFeedback({
         type: 'error',
         message: err instanceof Error ? err.message : 'The browser blocked the print window.',
       })
+    } finally {
+      printingRef.current = false
+      printControllerRef.current = null
+      if (!controller.signal.aborted) setPrintingReceipt(false)
     }
   }
 
@@ -140,6 +150,7 @@ export default function PrintingSettings() {
                 aria-checked={receiptLayout === 'THERMAL'}
                 className={receiptLayout === 'THERMAL' ? 'active' : ''}
                 onClick={() => setReceiptLayout('THERMAL')}
+                disabled={printingReceipt}
               >
                 80 mm thermal
               </button>
@@ -149,6 +160,7 @@ export default function PrintingSettings() {
                 aria-checked={receiptLayout === 'A4'}
                 className={receiptLayout === 'A4' ? 'active' : ''}
                 onClick={() => setReceiptLayout('A4')}
+                disabled={printingReceipt}
               >
                 A4
               </button>
@@ -157,6 +169,7 @@ export default function PrintingSettings() {
               type="button"
               className="ghost-button"
               onClick={handleTestReceipt}
+              disabled={printingReceipt}
             >
               <Printer size={14} />Test receipt
             </button>
@@ -175,7 +188,10 @@ export default function PrintingSettings() {
       )}
 
       <div className="settings-card-footer">
-        <p>Choose your printer in the browser’s print dialog.</p>
+        <div>
+          <p>Choose your printer in the browser’s print dialog.</p>
+          <p>Thermal receipts: use 80 mm roll paper, 100% scale, no margins, and turn off headers and footers.</p>
+        </div>
       </div>
 
       {/* Hidden offscreen container to render ReceiptDocument with live barcodes for print extraction */}
