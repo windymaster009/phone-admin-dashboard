@@ -1889,6 +1889,15 @@ router.get('/customers', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'),
   res.json({ customers })
 }))
 
+router.get('/customers/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) throw requestError(400, 'Customer ID is invalid')
+  const query = Customer.findById(req.params.id)
+  if (req.user.role === 'CASHIER') query.select('name phone active createdAt updatedAt')
+  const customer = await query
+  if (!customer) throw requestError(404, 'Customer was not found')
+  res.json({ customer })
+}))
+
 router.get('/customers/:id/activity-report', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) throw requestError(400, 'Customer ID is invalid')
   const customer = await Customer.findById(req.params.id)
@@ -2031,6 +2040,13 @@ router.get('/suppliers', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), a
   res.json({ suppliers })
 }))
 
+router.get('/suppliers/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) throw requestError(400, 'Supplier ID is invalid')
+  const supplier = await Supplier.findById(req.params.id)
+  if (!supplier) throw requestError(404, 'Supplier was not found')
+  res.json({ supplier })
+}))
+
 router.get('/suppliers/:id/activity-report', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) throw requestError(400, 'Supplier ID is invalid')
   const supplier = await Supplier.findById(req.params.id)
@@ -2140,6 +2156,14 @@ router.get('/inventory', requireAuth, asyncRoute(async (req, res) => {
       relatedPawn: pawnByInventoryId.get(String(item._id)) || null,
     })),
   })
+}))
+
+router.get('/inventory/:id', requireAuth, asyncRoute(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) throw requestError(400, 'Inventory ID is invalid')
+  const item = await InventoryItem.findById(req.params.id)
+  if (!item) throw requestError(404, 'Inventory item was not found')
+  const relatedPawn = await Pawn.findOne({ inventoryItem: item._id }).select('pawnNo status').lean()
+  res.json({ item: { ...item.toObject(), relatedPawn: relatedPawn || null } })
 }))
 
 router.get('/inventory/scan/:code', requireAuth, asyncRoute(async (req, res) => {
@@ -2494,6 +2518,18 @@ router.get('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asy
     .limit(300)
   const asOf = new Date()
   res.json({ pawns: pawns.map((pawn) => pawnResponse(pawn, asOf)) })
+}))
+
+router.get('/pawns/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) throw requestError(400, 'Pawn ID is invalid')
+  await refreshPawnStatuses()
+  const customerFields = req.user.role === 'CASHIER' ? 'name phone' : 'name phone nationalIdNumber'
+  const pawn = await Pawn.findById(req.params.id)
+    .populate('customer', customerFields)
+    .populate('inventoryItem', 'sku barcode name brand model storage color imei1 sellPrice status')
+    .populate('renewals.renewedBy', 'name role')
+  if (!pawn) throw requestError(404, 'Pawn contract was not found')
+  res.json({ pawn: pawnResponse(pawn) })
 }))
 
 router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {

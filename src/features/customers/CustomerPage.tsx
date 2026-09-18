@@ -184,22 +184,60 @@ export default function CustomerPage() {
   const [deleting, setDeleting] = useState<Customer | null>(null)
   const submittingRef = useRef(false)
 
+  const openCreate = useCallback(() => { setEditing(null); setModalError(''); setShowModal(true) }, [])
+  const openEdit = useCallback((customer: Customer) => { setEditing(customer); setModalError(''); setShowModal(true) }, [])
+
   const loadCustomers = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
       const result = await api<{ customers: Customer[] }>('/customers?includeInactive=true')
       setCustomers(result.customers)
+      const openParam = new URLSearchParams(window.location.search).get('openCustomer')
+      if (openParam) {
+        const matched = result.customers.find((c) => c._id === openParam)
+          || (await api<{ customer: Customer }>(`/customers/${encodeURIComponent(openParam)}`)).customer
+        if (matched) {
+          openEdit(matched)
+          window.history.replaceState(window.history.state, '', window.location.pathname)
+        }
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to load customers')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [openEdit])
 
   useEffect(() => {
     void loadCustomers()
   }, [loadCustomers])
+
+  useEffect(() => {
+    function handleOpenCustomerDetail(event: Event) {
+      const detail = (event as CustomEvent<{ customer?: Customer; id?: string }>).detail
+      let customer = detail?.customer
+      if (!customer && detail?.id) {
+        customer = customers.find((c) => c._id === detail.id)
+      }
+      if (customer) {
+        openEdit(customer)
+        if (new URLSearchParams(window.location.search).has('openCustomer')) {
+          window.history.replaceState(window.history.state, '', window.location.pathname)
+        }
+      } else if (detail?.id) {
+        void api<{ customer: Customer }>(`/customers/${encodeURIComponent(detail.id)}`)
+          .then((result) => {
+            openEdit(result.customer)
+            window.history.replaceState(window.history.state, '', window.location.pathname)
+          })
+          .catch((reason: Error) => setError(reason.message))
+      }
+    }
+
+    window.addEventListener('phoneflow:open-customer-detail', handleOpenCustomerDetail)
+    return () => window.removeEventListener('phoneflow:open-customer-detail', handleOpenCustomerDetail)
+  }, [customers, openEdit])
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -267,9 +305,6 @@ export default function CustomerPage() {
       setBusy(false)
     }
   }
-
-  const openCreate = () => { setEditing(null); setModalError(''); setShowModal(true) }
-  const openEdit = (customer: Customer) => { setEditing(customer); setModalError(''); setShowModal(true) }
 
   return (
     <div className="customer-workspace-bridge">

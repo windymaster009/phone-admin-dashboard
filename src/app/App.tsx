@@ -7,6 +7,7 @@ import LoadingState from '../components/LoadingState'
 import NotFoundView from '../components/NotFoundView'
 import DashboardPage from '../features/dashboard/DashboardPage'
 import ActivityReportDropdown from '../features/activity/ActivityReportDropdown'
+import GlobalSearch from '../components/search/GlobalSearch'
 import { getNavGroups, useRouter } from './routing'
 import type { AppFontSize } from './types'
 
@@ -261,6 +262,7 @@ function App({
       <div className="app-shell">
         <header className="topbar">
           <button ref={mobileMenuButtonRef} type="button" className="mobile-menu" onClick={() => setMobileOpen(true)} aria-label="Open navigation menu" aria-controls="primary-sidebar" aria-expanded={mobileOpen}><Menu size={21} aria-hidden="true" /></button>
+          <GlobalSearch onNavigate={changePage} />
           <div className="topbar-actions">
             <button
               className="icon-button theme-toggle"

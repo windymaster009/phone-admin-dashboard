@@ -169,20 +169,61 @@ export default function SupplierWorkspace() {
   const [modalOpen, setModalOpen] = useState(false)
   const submittingRef = useRef(false)
 
+  const openEditSupplier = useCallback((supplier: Supplier) => {
+    setEditing(supplier)
+    setModalError('')
+    setModalOpen(true)
+  }, [])
+
   const loadSuppliers = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
       const result = await api<{ suppliers: Supplier[] }>('/suppliers?includeInactive=true')
       setSuppliers(result.suppliers)
+      const openParam = new URLSearchParams(window.location.search).get('openSupplier')
+      if (openParam) {
+        const matched = result.suppliers.find((s) => s._id === openParam || s.name.toLowerCase() === openParam.toLowerCase())
+          || (await api<{ supplier: Supplier }>(`/suppliers/${encodeURIComponent(openParam)}`)).supplier
+        if (matched) {
+          openEditSupplier(matched)
+          window.history.replaceState(window.history.state, '', window.location.pathname)
+        }
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to load suppliers')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [openEditSupplier])
 
   useEffect(() => { void loadSuppliers() }, [loadSuppliers])
+
+  useEffect(() => {
+    function handleOpenSupplierDetail(event: Event) {
+      const detail = (event as CustomEvent<{ supplier?: Supplier; id?: string }>).detail
+      let supplier = detail?.supplier
+      if (!supplier && detail?.id) {
+        supplier = suppliers.find((s) => s._id === detail.id)
+      }
+      if (supplier) {
+        openEditSupplier(supplier)
+        if (new URLSearchParams(window.location.search).has('openSupplier')) {
+          window.history.replaceState(window.history.state, '', window.location.pathname)
+        }
+      } else if (detail?.id) {
+        void api<{ supplier: Supplier }>(`/suppliers/${encodeURIComponent(detail.id)}`)
+          .then((result) => {
+            openEditSupplier(result.supplier)
+            window.history.replaceState(window.history.state, '', window.location.pathname)
+          })
+          .catch((reason: Error) => setError(reason.message))
+      }
+    }
+
+    window.addEventListener('phoneflow:open-supplier-detail', handleOpenSupplierDetail)
+    return () => window.removeEventListener('phoneflow:open-supplier-detail', handleOpenSupplierDetail)
+  }, [suppliers, openEditSupplier])
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase()

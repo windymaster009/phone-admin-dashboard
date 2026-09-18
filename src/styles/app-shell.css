@@ -220,6 +220,8 @@
   background: color-mix(in srgb, var(--bg) 78%, transparent);
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(18px);
+  gap: 12px;
+  flex-wrap: nowrap;
 }
 
 .topbar-actions {
@@ -227,6 +229,8 @@
   align-items: center;
   gap: 9px;
   margin-left: auto;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
 }
 
 .notification-button {

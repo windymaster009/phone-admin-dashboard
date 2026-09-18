@@ -28,10 +28,48 @@ export default function PawnView({ user }: { user: SessionUser }) {
 
   useEffect(() => {
     api<{ pawns: Pawn[] }>('/pawns')
-      .then((result) => setPawns(Array.isArray(result?.pawns) ? result.pawns : []))
+      .then(async (result) => {
+        const list = Array.isArray(result?.pawns) ? result.pawns : []
+        setPawns(list)
+        const openParam = new URLSearchParams(window.location.search).get('openPawn')
+        if (openParam) {
+          const matched = list.find((p) => p._id === openParam || p.pawnNo === openParam)
+            || (await api<{ pawn: Pawn }>(`/pawns/${encodeURIComponent(openParam)}`)).pawn
+          if (matched) {
+            setSelectedPawn(matched)
+            window.history.replaceState(window.history.state, '', window.location.pathname)
+          }
+        }
+      })
       .catch((reason: Error) => setError(reason.message))
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    function handleOpenPawnDetail(event: Event) {
+      const detail = (event as CustomEvent<{ pawn?: Pawn; id?: string; pawnNo?: string }>).detail
+      let pawn = detail?.pawn
+      if (!pawn && (detail?.id || detail?.pawnNo)) {
+        pawn = pawns.find((p) => p._id === detail.id || p.pawnNo === detail.pawnNo || p._id === detail.pawnNo)
+      }
+      if (pawn) {
+        setSelectedPawn(pawn)
+        if (new URLSearchParams(window.location.search).has('openPawn')) {
+          window.history.replaceState(window.history.state, '', window.location.pathname)
+        }
+      } else if (detail?.id) {
+        void api<{ pawn: Pawn }>(`/pawns/${encodeURIComponent(detail.id)}`)
+          .then((result) => {
+            setSelectedPawn(result.pawn)
+            window.history.replaceState(window.history.state, '', window.location.pathname)
+          })
+          .catch((reason: Error) => setError(reason.message))
+      }
+    }
+
+    window.addEventListener('phoneflow:open-pawn-detail', handleOpenPawnDetail)
+    return () => window.removeEventListener('phoneflow:open-pawn-detail', handleOpenPawnDetail)
+  }, [pawns])
 
   useEffect(() => {
     const addCreatedPawn = (event: Event) => {

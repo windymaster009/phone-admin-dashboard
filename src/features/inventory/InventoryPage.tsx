@@ -82,29 +82,53 @@ export default function InventoryView({ user }: { user?: SessionUser } = {}) {
 
   useEffect(() => {
     api<{ items: InventoryItem[] }>('/inventory')
-      .then((result) => setItems(Array.isArray(result?.items) ? result.items : []))
+      .then(async (result) => {
+        const list = Array.isArray(result?.items) ? result.items : []
+        setItems(list)
+        const openId = new URLSearchParams(window.location.search).get('openItem')
+        if (openId) {
+          const matched = list.find((row) => row._id === openId || row.sku === openId || row.barcode === openId)
+            || (await api<{ item: InventoryItem }>(`/inventory/${encodeURIComponent(openId)}`)).item
+          if (matched) {
+            setSelectedItem(matched)
+            window.history.replaceState(window.history.state, '', window.location.pathname)
+          }
+        }
+      })
       .catch((reason: Error) => setCatalogError(reason.message))
       .finally(() => setLoading(false))
   }, [])
 
   useEffect(() => {
     function openScannedStock(event: Event) {
-      const detail = (event as CustomEvent<{ item?: InventoryItem }>).detail
-      const item = detail?.item
+      const detail = (event as CustomEvent<{ item?: InventoryItem; id?: string }>).detail
+      let item = detail?.item
+      if (!item && detail?.id) {
+        item = items.find((row) => row._id === detail.id || row.sku === detail.id || row.barcode === detail.id)
+      }
+      if (!item?._id && detail?.id) {
+        void api<{ item: InventoryItem }>(`/inventory/${encodeURIComponent(detail.id)}`)
+          .then((result) => window.dispatchEvent(new CustomEvent('phoneflow:open-stock-item', { detail: { item: result.item } })))
+          .catch((reason: Error) => setCatalogError(reason.message))
+        return
+      }
       if (!item?._id) return
-      setItems((current) => current.some((row) => row._id === item._id)
-        ? current.map((row) => row._id === item._id ? item : row)
-        : [item, ...current])
+      setItems((current) => current.some((row) => row._id === item!._id)
+        ? current.map((row) => row._id === item!._id ? item! : row)
+        : [item!, ...current])
       setSearch('')
       setCategoryFilter('ALL')
       setStatusFilter('ALL')
       setEditingPrice(false)
       setSelectedItem(item)
+      if (new URLSearchParams(window.location.search).has('openItem')) {
+        window.history.replaceState(window.history.state, '', window.location.pathname)
+      }
     }
 
     window.addEventListener('phoneflow:open-stock-item', openScannedStock)
     return () => window.removeEventListener('phoneflow:open-stock-item', openScannedStock)
-  }, [])
+  }, [items])
 
   const phoneCount = items.filter((item) => item.category === 'PHONE').reduce((sum, item) => sum + item.quantity, 0)
   const tabletCount = items.filter((item) => item.category === 'TABLET').reduce((sum, item) => sum + item.quantity, 0)

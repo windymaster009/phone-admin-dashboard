@@ -282,4 +282,27 @@ describe('App component composition and navigation', () => {
       expect(window.location.pathname).toBe('/pawn-management')
     })
   })
+
+  it('renders global search in the topbar alongside theme, notification, and profile controls', () => {
+    renderApp()
+
+    // Global search input and mobile trigger are present in topbar
+    expect(screen.getByRole('combobox', { name: /Global record search/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Open search panel/i })).toBeInTheDocument()
+
+    // Topbar controls are all present alongside it
+    expect(screen.getByRole('button', { name: /Switch to/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Notifications/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Sophea/i })).toBeInTheDocument()
+  })
+
+  it('preserves the internal search inside Stock Information (/stock) for table filtering alongside global search', async () => {
+    renderApp(mockOwnerUser, '/stock')
+
+    // Global search in topbar
+    expect(screen.getByRole('combobox', { name: /Global record search/i })).toBeInTheDocument()
+
+    // Internal stock table filter search field
+    expect(await screen.findByPlaceholderText(/Search SKU, product, IMEI/i)).toBeInTheDocument()
+  })
 })

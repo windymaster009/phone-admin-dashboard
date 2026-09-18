@@ -60,18 +60,19 @@ export function RouterProvider({ children }: { children: ReactNode }) {
   const isUnknownRoute = routeKey === 'not-found'
 
   const navigate = useCallback((to: string, options?: NavigateOptions) => {
-    const targetPath = to.startsWith('/')
-      ? normalizePathname(to)
-      : (ROUTES.find((r) => r.key === to)?.pathname || normalizePathname(`/${to}`))
+    const target = to.startsWith('/') ? to : (ROUTES.find((r) => r.key === to)?.pathname || `/${to}`)
+    const url = new URL(target, window.location.origin)
+    const targetPath = normalizePathname(url.pathname)
+    const targetUrl = `${targetPath}${url.search}${url.hash}`
     const state = options?.state || { path: targetPath }
 
     if (options?.replace) {
-      if (window.location.pathname !== targetPath) {
-        window.history.replaceState(state, '', targetPath)
+      if (`${window.location.pathname}${window.location.search}${window.location.hash}` !== targetUrl) {
+        window.history.replaceState(state, '', targetUrl)
       }
     } else {
-      if (window.location.pathname !== targetPath) {
-        window.history.pushState(state, '', targetPath)
+      if (`${window.location.pathname}${window.location.search}${window.location.hash}` !== targetUrl) {
+        window.history.pushState(state, '', targetUrl)
       }
     }
 

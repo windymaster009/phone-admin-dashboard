@@ -1067,6 +1067,23 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
       setLoans(result.loans)
       setInternalSummary(result.summary)
       onSummary?.(result.summary)
+      const openParam = new URLSearchParams(window.location.search).get('openLoan')
+      if (openParam) {
+        const matched = result.loans.find((l) => l._id === openParam || l.loanNo === openParam)
+        if (matched) {
+          void openDetail(matched)
+          window.history.replaceState(window.history.state, '', window.location.pathname)
+        } else {
+          void api<{ loan: Loan }>(`/loans/${encodeURIComponent(openParam)}`)
+            .then((response) => {
+              if (response.loan) {
+                void openDetail(response.loan)
+                window.history.replaceState(window.history.state, '', window.location.pathname)
+              }
+            })
+            .catch((reason: Error) => setError(reason.message))
+        }
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to load loans')
     } finally {
@@ -1076,6 +1093,34 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
 
   useEffect(() => { void api<{ user: SessionUser }>('/auth/me').then((result) => setUser(result.user)).catch(() => undefined) }, [])
   useEffect(() => { const timer = window.setTimeout(() => void loadLoans(), 180); return () => window.clearTimeout(timer) }, [loadLoans])
+
+  useEffect(() => {
+    function handleOpenLoanDetail(event: Event) {
+      const customDetail = (event as CustomEvent<{ loan?: Loan; id?: string; loanNo?: string }>).detail
+      let targetLoan = customDetail?.loan
+      if (!targetLoan && (customDetail?.id || customDetail?.loanNo)) {
+        targetLoan = loans.find((l) => l._id === customDetail.id || l.loanNo === customDetail.loanNo || l._id === customDetail.loanNo)
+      }
+      if (targetLoan) {
+        void openDetail(targetLoan)
+        if (new URLSearchParams(window.location.search).has('openLoan')) {
+          window.history.replaceState(window.history.state, '', window.location.pathname)
+        }
+      } else if (customDetail?.id) {
+        void api<{ loan: Loan }>(`/loans/${customDetail.id}`)
+          .then((res) => {
+            if (res?.loan) {
+              void openDetail(res.loan)
+              window.history.replaceState(window.history.state, '', window.location.pathname)
+            }
+          })
+          .catch(() => undefined)
+      }
+    }
+
+    window.addEventListener('phoneflow:open-loan-detail', handleOpenLoanDetail)
+    return () => window.removeEventListener('phoneflow:open-loan-detail', handleOpenLoanDetail)
+  }, [loans])
 
   async function createLoan(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()

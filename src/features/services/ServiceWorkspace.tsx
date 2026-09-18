@@ -131,6 +131,14 @@ export default function ServiceWorkspace() {
       setCustomers(customerResult.customers)
       setCharges(chargeResult.charges)
       setSelected((current) => current ? catalog.services.find((item) => item._id === current._id) || null : null)
+      const openParam = new URLSearchParams(window.location.search).get('openService')
+      if (openParam) {
+        const matched = catalog.services.find((s) => s._id === openParam || s.code === openParam || s.name.toLowerCase() === openParam.toLowerCase())
+        if (matched) {
+          setSelected(matched)
+          window.history.replaceState(window.history.state, '', window.location.pathname)
+        }
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to load services')
     } finally {
@@ -139,6 +147,25 @@ export default function ServiceWorkspace() {
   }
 
   useEffect(() => { void load() }, [])
+
+  useEffect(() => {
+    function handleOpenServiceDetail(event: Event) {
+      const detail = (event as CustomEvent<{ service?: ServiceOffering; id?: string; code?: string }>).detail
+      let service = detail?.service
+      if (!service && (detail?.id || detail?.code)) {
+        service = services.find((s) => s._id === detail.id || s.code === detail.code)
+      }
+      if (service) {
+        setSelected(service)
+        if (new URLSearchParams(window.location.search).has('openService')) {
+          window.history.replaceState(window.history.state, '', window.location.pathname)
+        }
+      }
+    }
+
+    window.addEventListener('phoneflow:open-service-detail', handleOpenServiceDetail)
+    return () => window.removeEventListener('phoneflow:open-service-detail', handleOpenServiceDetail)
+  }, [services])
 
   const filtered = useMemo(() => services.filter((service) => {
     const matchesCategory = category === 'ALL' || service.category === category

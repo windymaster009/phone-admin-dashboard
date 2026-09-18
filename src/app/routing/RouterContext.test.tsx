@@ -12,6 +12,7 @@ function TestConsumer() {
       <span data-testid="route-key">{routeKey}</span>
       <span data-testid="is-unknown">{isUnknownRoute ? 'yes' : 'no'}</span>
       <button type="button" onClick={() => navigate('/stock')}>Go to Stock</button>
+      <button type="button" onClick={() => navigate('/stock?openItem=abc-123')}>Open Stock Item</button>
       <button type="button" onClick={() => navigate('/non-existent-route')}>Go to Missing</button>
       <button type="button" onClick={() => navigate('pawn')}>Go to Pawn via Key</button>
       <button type="button" onClick={() => navigate('/settings', { replace: true })}>Replace with Settings</button>
@@ -73,6 +74,18 @@ describe('RouterContext & RouterProvider', () => {
 
     expect(screen.getByTestId('current-path')).toHaveTextContent('/pawn-management')
     expect(screen.getByTestId('route-key')).toHaveTextContent('pawn')
+  })
+
+  it('keeps search parameters in history without treating them as part of the route', async () => {
+    window.history.replaceState(null, '', '/dashboard')
+    const user = userEvent.setup()
+    render(<RouterProvider><TestConsumer /></RouterProvider>)
+
+    await user.click(screen.getByRole('button', { name: 'Open Stock Item' }))
+
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/stock')
+    expect(screen.getByTestId('route-key')).toHaveTextContent('inventory')
+    expect(window.location.search).toBe('?openItem=abc-123')
   })
 
   it('supports replace navigation option', async () => {
