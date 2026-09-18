@@ -250,6 +250,39 @@ describe('OperationModalBridge component', () => {
     })
   })
 
+  it('does not preselect a stale stock item still linked to an active pawn', async () => {
+    const pawnedItem = { ...mockInventoryItem, _id: 'pawned-item', name: 'Pawned Phone', relatedPawn: { status: 'ACTIVE' } }
+    const availableItem = { ...mockInventoryItem, _id: 'available-item', name: 'Available Phone' }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      const body = url.includes('/inventory/pawned-item')
+        ? { item: pawnedItem }
+        : url.includes('/inventory?status=IN_STOCK')
+          ? { items: [pawnedItem, availableItem] }
+          : url.includes('/customers')
+            ? { customers: [] }
+            : url.includes('/exchange-rates')
+              ? { usdKhr: 4100 }
+              : url.includes('/payway/config')
+                ? { enabled: false, configured: false }
+                : {}
+      return { ok: true, status: 200, headers: new Headers(), json: async () => body } as Response
+    })
+
+    renderModalBridge()
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', {
+        detail: { kind: 'sale', itemId: pawnedItem._id, item: pawnedItem },
+      }))
+    })
+
+    await waitFor(() => expect(screen.getByText(/no longer available for sale/i)).toBeInTheDocument())
+    const itemSelect = screen.getByRole('combobox', { name: /inventory item/i })
+    expect(itemSelect).toHaveValue('')
+    expect(within(itemSelect).queryByText(/Pawned Phone/)).not.toBeInTheDocument()
+    expect(within(itemSelect).getByText(/Available Phone/)).toBeInTheDocument()
+  })
+
   it('opens pawn modal and purchase modal via event triggers', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
@@ -785,14 +818,7 @@ describe('OperationModalBridge component', () => {
       expect(screen.getByRole('heading', { name: /^New purchase$/i })).toBeInTheDocument()
     })
 
-    // 1. Initial WALK_IN mode: Seller name empty -> Continue should fail
-    fireEvent.click(screen.getByRole('button', { name: /Continue to items/i }))
-    await waitFor(() => {
-      expect(screen.getByText(/Complete the required seller information/i)).toBeInTheDocument()
-    })
-    // Enter Walk-in name and continue
-    const sellerNameInput = screen.getByPlaceholderText(/Customer name/i)
-    fireEvent.change(sellerNameInput, { target: { value: 'Walk-in John' } })
+    // 1. Initial WALK_IN mode: Seller name is optional -> Continue succeeds directly even with empty name
     fireEvent.click(screen.getByRole('button', { name: /Continue to items/i }))
     await waitFor(() => {
       expect(screen.getByLabelText(/Step 2 of 2: Items & payment/i)).toBeInTheDocument()
@@ -1001,7 +1027,7 @@ describe('OperationModalBridge component', () => {
     fireEvent.change(khrPriceInput, { target: { value: '150' } })
     fireEvent.click(screen.getByRole('button', { name: /Complete (required fields|purchase)/i }))
     await waitFor(() => {
-      expect(screen.getByText(/Use a whole KHR amount in increments of 100/i)).toBeInTheDocument()
+      expect(screen.getAllByText(/Use a whole KHR amount in increments of 100/i).length).toBeGreaterThanOrEqual(1)
     })
 
     // Valid KHR increment of 100
@@ -1073,7 +1099,7 @@ describe('OperationModalBridge component', () => {
     expect(screen.getByPlaceholderText(/Anker/i)).toHaveValue('Apple')
     // Fill required accessory fields
     fireEvent.change(screen.getByPlaceholderText(/USB-C charger/i), { target: { value: '20W USB-C Adapter' } })
-    fireEvent.change(screen.getByPlaceholderText(/Required SKU/i), { target: { value: 'APL-20W-PWR' } })
+    fireEvent.change(screen.getByPlaceholderText(/Optional — generated if empty/i), { target: { value: 'APL-20W-PWR' } })
 
     // Change category to SPARE_PART
     fireEvent.click(screen.getByRole('button', { name: /^SPARE PART$/i }))
@@ -2856,17 +2882,11 @@ describe('OperationModalBridge component', () => {
       expect(screen.getByText(/Sokha Meng/)).toBeInTheDocument()
     })
 
-    // 3. Click "Sell product"
+    // An item still linked to an active pawn cannot enter a new sale.
     const sellButton = screen.getByRole('button', { name: /Sell product/i })
+    expect(sellButton).toBeDisabled()
     fireEvent.click(sellButton)
-
-    // Transitions to Sale modal with Samsung Galaxy S24 pre-selected
-    await waitFor(() => {
-      expect(screen.getByText(/New sale/i)).toBeInTheDocument()
-      expect(screen.getAllByText(/Samsung Galaxy S24/).length).toBeGreaterThanOrEqual(1)
-    })
-
-    fireEvent.click(screen.getByRole('button', { name: /Cancel/i }))
+    expect(screen.getByText(/^Scan product$/i)).toBeInTheDocument()
   })
 
   it('ignores a pending scanner error after switching to another operation', async () => {
@@ -3408,6 +3428,129 @@ describe('OperationModalBridge component', () => {
     window.removeEventListener('phoneflow:open-pawn-ticket', ticketHandler)
   })
 
+  it('prints collateral physical label immediately after pawn creation encoding linked item PWN SKU', async () => {
+    let capturedPawn: any = null
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      if (url.includes('/pawns') && init?.method === 'POST') {
+        const payload = JSON.parse(String(init.body))
+        capturedPawn = {
+          _id: 'pawn-test-print-1',
+          pawnNo: 'PW-2026-TICKET01',
+          principal: 300,
+          currency: 'USD',
+          inventoryItem: {
+            _id: 'inv-item-collateral-1',
+            sku: 'PWN-20260918-COLLATERAL',
+            barcode: 'PWN-20260918-COLLATERAL',
+            name: payload.itemSnapshot.name,
+            brand: payload.itemSnapshot.brand,
+            model: payload.itemSnapshot.model,
+            storage: payload.itemSnapshot.storage,
+            color: payload.itemSnapshot.color,
+            imei1: payload.itemSnapshot.imei,
+            sellPrice: 0,
+            status: 'PAWNED',
+          },
+          itemSnapshot: {
+            sku: 'PWN-20260918-COLLATERAL',
+            name: payload.itemSnapshot.name,
+            brand: payload.itemSnapshot.brand,
+            model: payload.itemSnapshot.model,
+            imei: payload.itemSnapshot.imei,
+          },
+        }
+        return {
+          ok: true,
+          status: 201,
+          headers: new Headers(),
+          json: async () => ({ pawn: capturedPawn }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    const valuationSnapshot = {
+      id: 'VAL-TEST-PRINT-1',
+      eligible: true,
+      currency: 'USD',
+      estimatedValue: 600,
+      marketPrice: 700,
+      repairCost: 0,
+      ageMonths: 3,
+      pawnRate: 45,
+      maximumPawn: 300,
+      batteryHealth: 95,
+      condition: 'excellent',
+      lockStatus: 'unlocked',
+      accessoriesIncluded: ['BOX', 'CHARGER'],
+      calculationMode: 'AUTO',
+    }
+    sessionStorage.setItem('phoneflow_last_valuation', JSON.stringify(valuationSnapshot))
+
+    const popupMock = {
+      document: { open: vi.fn(), write: vi.fn(), close: vi.fn() },
+      focus: vi.fn(),
+      print: vi.fn(),
+    }
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(popupMock as any)
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-pawn'))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /New pawn contract/i })).toBeInTheDocument()
+    })
+
+    // Step 1: Customer details & verification
+    fireEvent.click(screen.getByRole('tab', { name: /New customer/i }))
+    fireEvent.change(screen.getByPlaceholderText(/Full name/i), { target: { value: 'Collateral Owner' } })
+    fireEvent.click(screen.getByRole('checkbox', { name: /Customer identity and collateral ownership confirmed/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Continue to collateral/i }))
+
+    await waitFor(() => {
+      expect(screen.getByPlaceholderText(/15-digit IMEI/i)).toBeInTheDocument()
+    })
+
+    // Step 2: Collateral & loan details
+    fireEvent.change(screen.getByPlaceholderText(/15-digit IMEI/i), { target: { value: '359123456789012' } })
+    fireEvent.change(screen.getByPlaceholderText(/Apple/i), { target: { value: 'Apple' } })
+    fireEvent.change(screen.getByPlaceholderText(/iPhone 13 Pro/i), { target: { value: 'iPhone 15 Pro' } })
+    fireEvent.change(screen.getByPlaceholderText(/128/i), { target: { value: '256' } })
+    fireEvent.change(screen.getByPlaceholderText(/Blue/i), { target: { value: 'Black Titanium' } })
+
+    const submitBtn = screen.getByRole('button', { name: /Create pawn contract/i })
+    fireEvent.click(submitBtn)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Pawn contract created/i)).toBeInTheDocument()
+    })
+
+    // Verify contract number is PW-2026-TICKET01
+    expect(screen.getByText('PW-2026-TICKET01')).toBeInTheDocument()
+
+    // Click "Print label"
+    const printLabelBtn = screen.getByRole('button', { name: /Print label/i })
+    fireEvent.click(printLabelBtn)
+
+    expect(openSpy).toHaveBeenCalledWith('', 'phoneflow-label', 'width=520,height=640')
+    const htmlCalls = popupMock.document.write.mock.calls
+    expect(htmlCalls.length).toBeGreaterThan(0)
+    const labelHtml = htmlCalls[0][0]
+    // The physical label must encode and display the PWN SKU, NOT the pawn contract number PW-
+    expect(labelHtml).toContain('PWN-20260918-COLLATERAL')
+    expect(labelHtml).not.toContain('<p class="scan-value">PW-2026-TICKET01</p>')
+  })
+
   it('handles invalid or ineligible calculator valuation in sessionStorage, displaying error inside dialog', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input)
@@ -3621,7 +3764,8 @@ describe('OperationModalBridge component', () => {
     fireEvent.click(accessoryBtn)
     fireEvent.change(screen.getByPlaceholderText(/USB-C charger/i), { target: { value: 'Fast GaN Charger' } })
     fireEvent.change(screen.getByPlaceholderText(/Anker/i), { target: { value: 'Anker' } })
-    fireEvent.change(screen.getByPlaceholderText(/Required SKU/i), { target: { value: 'ACC-ANK-65W' } })
+    const skuInputs = screen.getAllByPlaceholderText(/Optional — generated if empty/i)
+    fireEvent.change(skuInputs[skuInputs.length - 1], { target: { value: 'ACC-ANK-65W' } })
     const item2Qty = screen.getByRole('spinbutton', { name: /Quantity/i })
     fireEvent.change(item2Qty, { target: { value: '5' } })
     const item2Price = screen.getByRole('textbox', { name: /Unit purchase price \(USD\)/i })
@@ -4688,5 +4832,415 @@ describe('OperationModalBridge component', () => {
         expect(screen.getByRole('heading', { level: 3, name: /Phone collateral/i })).toBeInTheDocument()
       })
     })
+  })
+
+  it('handles blank walk-in seller: allows continuing to Step 2 and saves with blank name without creating customer', async () => {
+    let savedPayload: any = null
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/trades') && init?.method === 'POST') {
+        savedPayload = JSON.parse(String(init.body))
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ trade: { items: [] } }),
+        } as Response
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ customers: [], suppliers: [], items: [], usdKhr: 4100 }),
+      } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'purchase' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: /^New purchase$/i })).toBeInTheDocument()
+    })
+
+    // In WALK_IN mode, Seller name input is blank and has Optional indicator
+    const sellerInput = screen.getByPlaceholderText(/Customer name/i)
+    expect(sellerInput).toHaveValue('')
+    expect(screen.getAllByText(/Optional/i).length).toBeGreaterThanOrEqual(1)
+
+    // Continue to items succeeds without required-field error
+    fireEvent.click(screen.getByRole('button', { name: /Continue to items/i }))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Step 2 of 2: Items & payment/i)).toBeInTheDocument()
+    })
+
+    // Fill valid phone fields
+    fireEvent.change(screen.getByPlaceholderText(/15-digit IMEI/i), { target: { value: '860123456789012' } })
+    fireEvent.change(screen.getByPlaceholderText(/Apple/i), { target: { value: 'Apple' } })
+    fireEvent.change(screen.getByPlaceholderText(/iPhone 13 Pro/i), { target: { value: 'iPhone 15' } })
+    fireEvent.change(screen.getByPlaceholderText(/128/i), { target: { value: '256' } })
+    fireEvent.change(screen.getByPlaceholderText(/Blue/i), { target: { value: 'Black' } })
+    fireEvent.change(screen.getByRole('textbox', { name: /Unit purchase price \(USD\)/i }), { target: { value: '240' } })
+
+    // Submit purchase
+    fireEvent.click(screen.getByRole('button', { name: /Complete purchase/i }))
+
+    await waitFor(() => {
+      expect(savedPayload).not.toBeNull()
+    })
+
+    expect(savedPayload.type).toBe('BUY')
+    expect(savedPayload.sellerType).toBe('WALK_IN')
+    expect(savedPayload.seller).toEqual({ name: '', phone: '', nationalIdNumber: '' })
+    expect(savedPayload.customer).toBeUndefined()
+    expect(savedPayload.supplier).toBeUndefined()
+  })
+
+  it('defaults Amount paid to calculated total, auto-updates when total changes, and preserves manual 0 or partial payments', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({ customers: [], suppliers: [], items: [], usdKhr: 4100 }),
+    } as Response)
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'purchase' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // Advance to Step 2
+    fireEvent.click(screen.getByRole('button', { name: /Continue to items/i }))
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Step 2 of 2: Items & payment/i)).toBeInTheDocument()
+    })
+
+    const priceInput = screen.getByRole('textbox', { name: /Unit purchase price \(USD\)/i })
+    const paidInput = screen.getByRole('textbox', { name: /Amount paid \(USD\)/i })
+
+    // 1. Enter $240 price -> Amount paid automatically defaults to 240 and balance is $0
+    fireEvent.change(priceInput, { target: { value: '240' } })
+
+    await waitFor(() => {
+      expect(paidInput).toHaveValue('240')
+      expect(screen.getAllByText('$240.00').length).toBeGreaterThanOrEqual(2)
+      expect(screen.getByText('$0.00')).toBeInTheDocument()
+      expect(screen.getByText('PAID')).toBeInTheDocument()
+    })
+
+    // 2. Change total to $300 -> Amount paid automatically follows because user has not manually edited it
+    fireEvent.change(priceInput, { target: { value: '300' } })
+
+    await waitFor(() => {
+      expect(paidInput).toHaveValue('300')
+      expect(screen.getAllByText('$300.00').length).toBeGreaterThanOrEqual(2)
+      expect(screen.getByText('$0.00')).toBeInTheDocument()
+    })
+
+    // 3. Manually enter 0 in Amount paid -> preserves 0 and changes payment status to UNPAID
+    fireEvent.change(paidInput, { target: { value: '0' } })
+
+    await waitFor(() => {
+      expect(paidInput).toHaveValue('0')
+      expect(screen.getByText('UNPAID')).toBeInTheDocument()
+    })
+
+    // Now change the item price to $400 -> Amount paid MUST remain 0! Not overwritten!
+    fireEvent.change(priceInput, { target: { value: '400' } })
+
+    await waitFor(() => {
+      expect(paidInput).toHaveValue('0')
+      expect(screen.getByText('UNPAID')).toBeInTheDocument()
+    })
+
+    // 4. Manually enter partial payment of $150 -> preserves 150 and status PARTIAL
+    fireEvent.change(paidInput, { target: { value: '150' } })
+
+    await waitFor(() => {
+      expect(paidInput).toHaveValue('150')
+      expect(screen.getByText('PARTIAL')).toBeInTheDocument()
+    })
+
+    // Change item price to $500 -> Amount paid MUST remain 150! Balance updates to 500 - 150 = $350.00
+    fireEvent.change(priceInput, { target: { value: '500' } })
+
+    await waitFor(() => {
+      expect(paidInput).toHaveValue('150')
+      expect(screen.getByText('$350.00')).toBeInTheDocument()
+      expect(screen.getByText('PARTIAL')).toBeInTheDocument()
+    })
+  })
+
+  it('handles currency changes safely by resetting amount paid auto-sync', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({ customers: [], suppliers: [], items: [], usdKhr: 4100 }),
+    } as Response)
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'purchase' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // Switch to KHR in Step 1
+    const currencySelect = screen.getByRole('combobox', { name: /Currency/i })
+    fireEvent.change(currencySelect, { target: { value: 'KHR' } })
+
+    // Advance to Step 2
+    fireEvent.click(screen.getByRole('button', { name: /Continue to items/i }))
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Step 2 of 2: Items & payment/i)).toBeInTheDocument()
+    })
+
+    const khrPriceInput = screen.getByRole('textbox', { name: /Unit purchase price \(KHR\)/i })
+    const khrPaidInput = screen.getByRole('textbox', { name: /Amount paid \(KHR\)/i })
+
+    // Enter 1,000,000 KHR -> auto-fills 1,000,000 KHR
+    fireEvent.change(khrPriceInput, { target: { value: '1000000' } })
+
+    await waitFor(() => {
+      expect(khrPaidInput).toHaveValue('1,000,000')
+      expect(screen.getAllByText('1,000,000 ៛').length).toBeGreaterThanOrEqual(2)
+      expect(screen.getByText('0 ៛')).toBeInTheDocument()
+      expect(screen.getByText('PAID')).toBeInTheDocument()
+    })
+
+    // Manually enter partial 400,000 KHR
+    fireEvent.change(khrPaidInput, { target: { value: '400000' } })
+
+    await waitFor(() => {
+      expect(khrPaidInput).toHaveValue('400,000')
+      expect(screen.getByText('PARTIAL')).toBeInTheDocument()
+      expect(screen.getByText('600,000 ៛')).toBeInTheDocument()
+    })
+  })
+
+  it('makes SKU optional for a NEW accessory with label and placeholder "Optional — generated if empty", and allows submission with blank SKU', async () => {
+    let savedPayload: Record<string, unknown> | null = null
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/trades') && init?.method === 'POST') {
+        savedPayload = JSON.parse(String(init.body))
+        return {
+          ok: true,
+          status: 201,
+          headers: new Headers(),
+          json: async () => ({
+            trade: {
+              _id: 'trd-acc-1',
+              tradeNo: 'BY-2026-001',
+              items: [{
+                inventoryItem: {
+                  _id: 'inv-acc-1',
+                  name: 'GaN 65W Fast Charger',
+                  category: 'ACCESSORY',
+                  sku: 'BUY-20260918-99999',
+                  barcode: 'PF-20260918-11111',
+                },
+              }],
+            },
+          }),
+        } as Response
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ customers: [], suppliers: [], items: [], usdKhr: 4100 }),
+      } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'purchase' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // Advance to Step 2
+    fireEvent.click(screen.getByRole('button', { name: /Continue to items/i }))
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Step 2 of 2: Items & payment/i)).toBeInTheDocument()
+    })
+
+    // Switch to ACCESSORY
+    fireEvent.click(screen.getByRole('button', { name: /^ACCESSORY$/i }))
+
+    // Verify SKU label has "Optional — generated if empty"
+    expect(screen.getByText(/Optional — generated if empty/i)).toBeInTheDocument()
+
+    // Verify SKU input has placeholder "Optional — generated if empty" and is not required
+    const skuInput = screen.getByPlaceholderText(/Optional — generated if empty/i)
+    expect(skuInput).not.toBeRequired()
+    expect(skuInput).toHaveValue('')
+
+    // Fill only Item name, Brand, and Price (leave SKU blank)
+    fireEvent.change(screen.getByPlaceholderText(/USB-C charger/i), { target: { value: 'GaN 65W Fast Charger' } })
+    fireEvent.change(screen.getByPlaceholderText(/Anker/i), { target: { value: 'Baseus' } })
+    fireEvent.change(screen.getByRole('textbox', { name: /Unit purchase price \(USD\)/i }), { target: { value: '18.00' } })
+
+    // Submit purchase
+    fireEvent.click(screen.getByRole('button', { name: /Complete purchase/i }))
+
+    await waitFor(() => {
+      expect(savedPayload).not.toBeNull()
+    })
+
+    expect((savedPayload as any).items[0].category).toBe('ACCESSORY')
+    expect((savedPayload as any).items[0].name).toBe('GaN 65W Fast Charger')
+    expect((savedPayload as any).items[0].brand).toBe('Baseus')
+    expect((savedPayload as any).items[0].sku).toBeUndefined()
+
+    // Barcode label preview is displayed with the generated SKU
+    await waitFor(() => {
+      expect(screen.getByText(/Print barcode labels now\?/i)).toBeInTheDocument()
+      expect(screen.getByText('BUY-20260918-99999')).toBeInTheDocument()
+    })
+  })
+
+  it('preserves owner-supplied SKU for NEW accessory and displays it on barcode label preview', async () => {
+    let savedPayload: Record<string, unknown> | null = null
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/trades') && init?.method === 'POST') {
+        savedPayload = JSON.parse(String(init.body))
+        return {
+          ok: true,
+          status: 201,
+          headers: new Headers(),
+          json: async () => ({
+            trade: {
+              _id: 'trd-acc-2',
+              tradeNo: 'BY-2026-002',
+              items: [{
+                inventoryItem: {
+                  _id: 'inv-acc-2',
+                  name: 'Spigen Tough Armor',
+                  category: 'ACCESSORY',
+                  sku: 'SPG-TA-15P',
+                  barcode: 'PF-20260918-22222',
+                },
+              }],
+            },
+          }),
+        } as Response
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ customers: [], suppliers: [], items: [], usdKhr: 4100 }),
+      } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'purchase' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // Advance to Step 2
+    fireEvent.click(screen.getByRole('button', { name: /Continue to items/i }))
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Step 2 of 2: Items & payment/i)).toBeInTheDocument()
+    })
+
+    // Switch to ACCESSORY
+    fireEvent.click(screen.getByRole('button', { name: /^ACCESSORY$/i }))
+
+    // Fill Item name, Brand, Owner-supplied SKU, and Price
+    fireEvent.change(screen.getByPlaceholderText(/USB-C charger/i), { target: { value: 'Spigen Tough Armor' } })
+    fireEvent.change(screen.getByPlaceholderText(/Anker/i), { target: { value: 'Spigen' } })
+    fireEvent.change(screen.getByPlaceholderText(/Optional — generated if empty/i), { target: { value: 'spg-ta-15p' } })
+    fireEvent.change(screen.getByRole('textbox', { name: /Unit purchase price \(USD\)/i }), { target: { value: '14.50' } })
+
+    // Submit purchase
+    fireEvent.click(screen.getByRole('button', { name: /Complete purchase/i }))
+
+    await waitFor(() => {
+      expect(savedPayload).not.toBeNull()
+    })
+
+    expect((savedPayload as any).items[0].sku).toBe('SPG-TA-15P')
+
+    // Barcode label preview shows the owner-supplied SKU
+    await waitFor(() => {
+      expect(screen.getByText(/Print barcode labels now\?/i)).toBeInTheDocument()
+      expect(screen.getByText('SPG-TA-15P')).toBeInTheDocument()
+    })
+  })
+
+  it('displays duplicate SKU error returned by server and keeps form usable on mobile layout', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/trades') && init?.method === 'POST') {
+        return {
+          ok: false,
+          status: 409,
+          headers: new Headers(),
+          json: async () => ({ message: 'The same SKU appears more than once in this purchase' }),
+        } as Response
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ customers: [], suppliers: [], items: [], usdKhr: 4100 }),
+      } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'purchase' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Continue to items/i }))
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Step 2 of 2: Items & payment/i)).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /^ACCESSORY$/i }))
+    fireEvent.change(screen.getByPlaceholderText(/USB-C charger/i), { target: { value: 'Magnetic Stand' } })
+    fireEvent.change(screen.getByPlaceholderText(/Anker/i), { target: { value: 'UGREEN' } })
+    fireEvent.change(screen.getByPlaceholderText(/Optional — generated if empty/i), { target: { value: 'UGR-STD-01' } })
+    fireEvent.change(screen.getByRole('textbox', { name: /Unit purchase price \(USD\)/i }), { target: { value: '12.00' } })
+
+    fireEvent.click(screen.getByRole('button', { name: /Complete purchase/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/The same SKU appears more than once in this purchase/i)).toBeInTheDocument()
+    })
+
+    // Verify modal has proper mobile layout class
+    const modal = screen.getByRole('dialog')
+    expect(modal).toHaveClass('operation-modal-purchase')
   })
 })

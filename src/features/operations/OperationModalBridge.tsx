@@ -38,7 +38,7 @@ import SegmentedControl, { type SegmentedControlOption } from '../../components/
 import KeyValueSummary from '../../components/KeyValueSummary'
 import SerializedDeviceFields from '../../components/SerializedDeviceFields'
 import { getPawnAutoCalculatePreference, PAWN_AUTO_CALCULATE_EVENT, savePawnAutoCalculatePreference } from '../../lib/pawnPreferences'
-import { BarcodeGraphic, printInventoryLabels, sanitizeCode } from '../inventory/barcode'
+import { BarcodeGraphic, pawnInventoryLabelCode, printInventoryLabel, printInventoryLabels, sanitizeCode } from '../inventory/barcode'
 import OperationModalShell from './OperationModalShell'
 import CameraBarcodeReader from '../../components/scanner/CameraBarcodeReader'
 import ScannerWorkflow from '../../components/scanner/ScannerWorkflow'
@@ -56,6 +56,13 @@ function parsePlaceholderAlert(message?: string): ModalKind | null {
   if (value.startsWith('new pawn')) return 'pawn'
   return null
 }
+
+function canOfferForSale(item: InventoryItem) {
+  return item.status === 'IN_STOCK'
+    && item.quantity > 0
+    && (!item.relatedPawn || item.relatedPawn.status === 'FORFEITED')
+}
+
 export default function OperationModalBridge() {
   const { navigate } = useRouter()
   const [kind, setKind] = useState<ModalKind | null>(null)
@@ -146,6 +153,7 @@ export default function OperationModalBridge() {
   const [purchasePaymentMethod, setPurchasePaymentMethod] = useState('CASH')
   const [purchaseCurrency, setPurchaseCurrency] = useState<PurchaseCurrency>('USD')
   const [purchaseAmountPaid, setPurchaseAmountPaid] = useState('0')
+  const [purchaseAmountPaidTouched, setPurchaseAmountPaidTouched] = useState(false)
   const [purchaseNotes, setPurchaseNotes] = useState('')
   const [purchaseDevices, setPurchaseDevices] = useState<PurchaseDevice[]>(() => [newPurchaseDevice()])
   const [purchaseStep, setPurchaseStep] = useState<1 | 2>(1)
@@ -164,6 +172,7 @@ export default function OperationModalBridge() {
   const submittingStockRef = useRef(false)
   const scanRequestSeqRef = useRef(0)
   const scanInFlightRef = useRef(false)
+  const pendingSaleItemIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     // A lookup belongs to the dialog that started it, not the next operation.
@@ -274,6 +283,14 @@ export default function OperationModalBridge() {
     () => purchaseDevices.reduce((sum, item) => sum + Math.max(0, Number(item.purchasePrice) || 0) * (item.category === 'PHONE' ? 1 : Math.max(1, Number(item.quantity) || 1)), 0),
     [purchaseDevices],
   )
+  useEffect(() => {
+    if (!purchaseAmountPaidTouched) {
+      const formatted = purchaseTotal > 0
+        ? (purchaseCurrency === 'KHR' ? String(Math.round(purchaseTotal)) : String(Number(purchaseTotal.toFixed(2))))
+        : '0'
+      setPurchaseAmountPaid(formatted)
+    }
+  }, [purchaseTotal, purchaseCurrency, purchaseAmountPaidTouched])
   const purchasePaid = Math.max(0, Number(purchaseAmountPaid) || 0)
   const purchaseBalance = Math.max(0, purchaseTotal - purchasePaid)
   const purchasePaymentStatus = purchasePaid <= 0 ? 'UNPAID' : purchasePaid < purchaseTotal ? 'PARTIAL' : 'PAID'
@@ -379,9 +396,29 @@ export default function OperationModalBridge() {
 
   useEffect(() => {
     const handleOpenOperation = (event: Event) => {
-      const detail = (event as CustomEvent<{ kind?: ModalKind }>).detail
+      const detail = (event as CustomEvent<{ kind?: ModalKind; itemId?: string; item?: InventoryItem }>).detail
       if (detail?.kind) {
         setError('')
+        if (detail.kind === 'purchase') {
+          setSellerType('WALK_IN')
+          setSupplierId('')
+          setSellerCustomerId('')
+          setSellerName('')
+          setSellerPhone('')
+          setSellerNationalId('')
+          setPurchaseDate(localDateValue())
+          setPurchasePaymentMethod('CASH')
+          setPurchaseCurrency('USD')
+          setPurchaseAmountPaid('0')
+          setPurchaseAmountPaidTouched(false)
+          setPurchaseNotes('')
+          setPurchaseDevices([newPurchaseDevice()])
+          setPurchaseStep(1)
+          setPurchaseAttempted(false)
+          setCurrencyNotice('')
+          setImeiScanDeviceId(null)
+          setImeiScanError('')
+        }
         if (detail.kind === 'pawn') {
           setPawnCreated(null)
           setPawnAttempted(false)
@@ -392,6 +429,44 @@ export default function OperationModalBridge() {
           setPawnStorage('')
           setPawnRam('')
           setPawnColor('')
+        }
+        if (detail.kind === 'sale') {
+          setSaleCompleted(null)
+          setSaleDraft(null)
+          setSalePaymentPhase('WAITING')
+          setSalePaymentStatus('Waiting for payment')
+          setSaleKhqr(null)
+          setSaleNotes('')
+          setSaleNotesOpen(false)
+          setSaleScannerOpen(false)
+          setSaleScannerError('')
+
+          const preselectedId = detail.itemId || detail.item?._id || ''
+          pendingSaleItemIdRef.current = preselectedId || null
+
+          if (preselectedId) {
+            setSaleItemId(preselectedId)
+            if (detail.item) {
+              setSaleCurrency(detail.item.pricingCurrency === 'KHR' ? 'KHR' : 'USD')
+            }
+            setSaleQuantity('1')
+            setSaleDiscount('0')
+            setSaleManualPriceEnabled(false)
+            setSaleManualPrice('')
+            setSaleWarrantyDays('')
+            setSaleAmountPaid('')
+            setSalePaymentMethod('CASH')
+          } else {
+            setSaleItemId('')
+            setSaleQuantity('1')
+            setSaleDiscount('0')
+            setSaleManualPriceEnabled(false)
+            setSaleManualPrice('')
+            setSaleWarrantyDays('')
+            setSaleAmountPaid('')
+            setSalePaymentMethod('CASH')
+            setSaleCurrency('USD')
+          }
         }
         setKind(detail.kind)
       }
@@ -462,10 +537,35 @@ export default function OperationModalBridge() {
     if (kind === 'sale') {
       setSaleInventoryLoading(true)
       api<{ items: InventoryItem[] }>('/inventory?status=IN_STOCK')
-        .then((result) => {
+        .then(async (result) => {
           if (!active) return
           const items = Array.isArray(result?.items) ? result.items : []
-          setInventory(items.filter((item) => item.quantity > 0))
+          let available = items.filter(canOfferForSale)
+          const targetId = pendingSaleItemIdRef.current
+          if (targetId) {
+            let found = available.find((item) => item._id === targetId)
+            if (!found) {
+              try {
+                const result = await api<{ item: InventoryItem }>(`/inventory/${encodeURIComponent(targetId)}`)
+                if (!active) return
+                if (result.item && canOfferForSale(result.item)) {
+                  found = result.item
+                  available = [result.item, ...available]
+                }
+              } catch {
+                // The item may have been sold or archived since the stock modal opened.
+              }
+            }
+            if (found) {
+              setSaleItemId(found._id)
+              setSaleCurrency(found.pricingCurrency === 'KHR' ? 'KHR' : 'USD')
+            } else {
+              setSaleItemId('')
+              setError('This product is no longer available for sale. Choose another item.')
+            }
+          }
+          if (!active) return
+          setInventory(available)
         })
         .catch((reason: Error) => {
           if (active) setError(reason.message)
@@ -637,6 +737,7 @@ export default function OperationModalBridge() {
     setScannedItem(null)
     setScannedPawn(null)
     setLabelItems([])
+    pendingSaleItemIdRef.current = null
     setSaleItemId('')
     setSaleCustomerId('')
     setSaleQuantity('1')
@@ -676,6 +777,7 @@ export default function OperationModalBridge() {
     setPurchasePaymentMethod('CASH')
     setPurchaseCurrency('USD')
     setPurchaseAmountPaid('0')
+    setPurchaseAmountPaidTouched(false)
     setPurchaseNotes('')
     setPurchaseDevices([newPurchaseDevice()])
     setPurchaseStep(1)
@@ -756,6 +858,26 @@ export default function OperationModalBridge() {
     })
   }
 
+  const printCreatedPawnLabel = () => {
+    if (!pawnCreated?.pawn) return
+    const p = pawnCreated.pawn
+    const linkedItem = typeof p.inventoryItem === 'object' ? p.inventoryItem : null
+    const labelCode = pawnInventoryLabelCode(linkedItem?.sku, p.itemSnapshot?.sku, linkedItem?.barcode)
+    if (!labelCode) {
+      window.alert('This pawn has no valid stock SKU or barcode. Open its stock record before printing a label.')
+      return
+    }
+    printInventoryLabel({
+      sku: labelCode,
+      barcode: labelCode,
+      name: linkedItem?.name || p.itemSnapshot?.name || 'Collateral Phone',
+      brand: linkedItem?.brand || p.itemSnapshot?.brand,
+      model: [linkedItem?.model || p.itemSnapshot?.model, linkedItem?.storage || p.itemSnapshot?.storage, linkedItem?.color || p.itemSnapshot?.color].filter(Boolean).join(' '),
+      imei1: linkedItem?.imei1 || p.itemSnapshot?.imei,
+      sellPrice: 0,
+    })
+  }
+
   const printCompletedSaleReceipt = () => {
     if (!saleCompleted) return
     const { tradeNo: reference, currency } = saleCompleted
@@ -801,7 +923,8 @@ export default function OperationModalBridge() {
   const handleCameraError = useCallback((message: string) => setError(message), [])
 
   function sellScannedProduct() {
-    if (!scannedItem || scannedItem.status !== 'IN_STOCK' || scannedItem.quantity < 1 || scannedItem.sellPrice <= 0) return
+    if (!scannedItem || !canOfferForSale({ ...scannedItem, relatedPawn: scannedPawn }) || scannedItem.sellPrice <= 0) return
+    pendingSaleItemIdRef.current = scannedItem._id
     setInventory((current) => current.some((item) => item._id === scannedItem._id) ? current : [scannedItem, ...current])
     setSaleItemId(scannedItem._id)
     setSaleCurrency(scannedItem.pricingCurrency === 'KHR' ? 'KHR' : 'USD')
@@ -942,6 +1065,7 @@ export default function OperationModalBridge() {
     if (nextCurrency === purchaseCurrency) return
     const hasEnteredPrices = purchaseDevices.some((item) => item.purchasePrice.trim() !== '') || (purchaseAmountPaid.trim() !== '' && purchaseAmountPaid !== '0')
     setPurchaseCurrency(nextCurrency)
+    setPurchaseAmountPaidTouched(false)
     if (hasEnteredPrices) {
       setPurchaseDevices((current) => current.map((item) => ({ ...item, purchasePrice: '' })))
       setPurchaseAmountPaid('0')
@@ -1015,7 +1139,6 @@ export default function OperationModalBridge() {
     } else {
       if (!item.name.trim()) errors.name = item.category === 'SPARE_PART' ? 'Part name is required' : 'Item name is required'
       if (item.category === 'ACCESSORY' && !item.brand.trim()) errors.brand = 'Brand is required'
-      if (item.category === 'ACCESSORY' && !item.sku.trim()) errors.sku = 'SKU is required'
       if (item.category === 'SPARE_PART' && !item.compatibleModels.trim()) errors.compatibleModels = 'Compatible models are required'
       if (item.category === 'SPARE_PART' && !item.oemQuality) errors.oemQuality = 'Select OEM quality'
     }
@@ -1070,7 +1193,7 @@ export default function OperationModalBridge() {
         ...common,
         name: device.name.trim(),
         brand: device.brand.trim(),
-        sku: sanitizeCode(device.sku),
+        sku: sanitizeCode(device.sku) || undefined,
         quantity: Math.max(1, Number(device.quantity) || 1),
       }
     }
@@ -1096,7 +1219,9 @@ export default function OperationModalBridge() {
     ? Boolean(supplierId)
     : sellerType === 'EXISTING_CUSTOMER'
       ? Boolean(sellerCustomerId)
-      : Boolean(sellerName.trim()) && (sellerType !== 'NEW_CUSTOMER' || Boolean(sellerPhone.trim()))
+      : sellerType === 'WALK_IN'
+        ? true
+        : Boolean(sellerName.trim()) && (sellerType !== 'NEW_CUSTOMER' || Boolean(sellerPhone.trim()))
   const existingPurchaseIds = purchaseDevices.filter((item) => item.inventoryMode === 'EXISTING').map((item) => item.existingInventoryItem).filter(Boolean)
   const purchaseItemsValid = purchaseDevices.length > 0
     && new Set(existingPurchaseIds).size === existingPurchaseIds.length
@@ -1523,7 +1648,7 @@ export default function OperationModalBridge() {
     }
     try {
       const result = await api<{ pawn: Pawn }>('/pawns', { method: 'POST', body: JSON.stringify(payload) })
-      setPawnCreated({ pawnNo: result.pawn.pawnNo, principal: result.pawn.principal, currency: result.pawn.currency || pawnCurrency })
+      setPawnCreated({ pawnNo: result.pawn.pawnNo, principal: result.pawn.principal, currency: result.pawn.currency || pawnCurrency, pawn: result.pawn })
       notifyPawnCreated(result.pawn)
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to create pawn contract')
@@ -1681,7 +1806,7 @@ export default function OperationModalBridge() {
                 {!customersLoading && customers.length === 0 && <small className="field-hint">Add customers in the Customers section first, or choose Walk-in / New customer.</small>}
               </label>
             ) : <>
-              <label className={purchaseAttempted && !sellerName.trim() ? 'field-invalid' : ''}>Seller name<input required value={sellerName} onChange={(event) => setSellerName(event.target.value)} placeholder={sellerType === 'NEW_SUPPLIER' ? 'Supplier or business name' : 'Customer name'} />{purchaseAttempted && !sellerName.trim() && <small>Seller name is required</small>}</label>
+              <label className={purchaseAttempted && sellerType !== 'WALK_IN' && !sellerName.trim() ? 'field-invalid' : ''}>Seller name {sellerType === 'WALK_IN' && <small className="optional-marker">Optional</small>}<input required={sellerType !== 'WALK_IN'} value={sellerName} onChange={(event) => setSellerName(event.target.value)} placeholder={sellerType === 'NEW_SUPPLIER' ? 'Supplier or business name' : 'Customer name'} />{purchaseAttempted && sellerType !== 'WALK_IN' && !sellerName.trim() && <small>Seller name is required</small>}</label>
               <label className={purchaseAttempted && sellerType === 'NEW_CUSTOMER' && !sellerPhone.trim() ? 'field-invalid' : ''}>Phone number {sellerType !== 'NEW_CUSTOMER' && <small className="optional-marker">Optional</small>}<input required={sellerType === 'NEW_CUSTOMER'} value={sellerPhone} onChange={(event) => setSellerPhone(event.target.value)} placeholder="012 345 678" />{purchaseAttempted && sellerType === 'NEW_CUSTOMER' && !sellerPhone.trim() && <small>Phone number is required for a new customer</small>}</label>
               <label>National ID <small className="optional-marker">Optional</small><input value={sellerNationalId} onChange={(event) => setSellerNationalId(event.target.value)} /></label>
             </>}
@@ -1795,13 +1920,13 @@ export default function OperationModalBridge() {
                     errors={purchaseAttempted ? itemErrors : undefined}
                     onChange={(field, value) => updatePurchaseDevice(device.id, { [field]: value })}
                   >
-                    <label>SKU <small className="optional-marker">Optional</small><input value={device.sku} onChange={(event) => updatePurchaseDevice(device.id, { sku: event.target.value.toUpperCase() })} placeholder="Generated if empty" /></label>
+                    <label>SKU <small className="optional-marker">Optional — generated if empty</small><input value={device.sku} onChange={(event) => updatePurchaseDevice(device.id, { sku: event.target.value.toUpperCase() })} placeholder="Optional — generated if empty" /></label>
                     <label className={purchaseAttempted && itemErrors.quantity ? 'field-invalid' : ''}>Quantity<input required type="number" min="1" step="1" value={device.quantity} onChange={(event) => updatePurchaseDevice(device.id, { quantity: event.target.value })} />{purchaseAttempted && itemErrors.quantity && <small>{itemErrors.quantity}</small>}</label>
                   </SerializedDeviceFields>
                 ) : <>
                   <label className={purchaseAttempted && itemErrors.name ? 'field-invalid' : ''}>{device.category === 'SPARE_PART' ? 'Part name' : 'Item name'}<input required value={device.name} onChange={(event) => updatePurchaseDevice(device.id, { name: event.target.value })} placeholder={device.category === 'ACCESSORY' ? 'USB-C charger' : device.category === 'SPARE_PART' ? 'OLED display assembly' : 'Product name'} />{purchaseAttempted && itemErrors.name && <small>{itemErrors.name}</small>}</label>
                   {device.category === 'ACCESSORY' && <label className={purchaseAttempted && itemErrors.brand ? 'field-invalid' : ''}>Brand<input required value={device.brand} onChange={(event) => updatePurchaseDevice(device.id, { brand: event.target.value })} placeholder="Anker" />{purchaseAttempted && itemErrors.brand && <small>{itemErrors.brand}</small>}</label>}
-                  <label className={purchaseAttempted && itemErrors.sku ? 'field-invalid' : ''}>SKU {device.category !== 'ACCESSORY' && <small className="optional-marker">Optional</small>}<input required={device.category === 'ACCESSORY'} value={device.sku} onChange={(event) => updatePurchaseDevice(device.id, { sku: event.target.value.toUpperCase() })} placeholder={device.category === 'ACCESSORY' ? 'Required SKU' : 'Generated if empty'} />{purchaseAttempted && itemErrors.sku && <small>{itemErrors.sku}</small>}</label>
+                  <label className={purchaseAttempted && itemErrors.sku ? 'field-invalid' : ''}>SKU <small className="optional-marker">Optional — generated if empty</small><input value={device.sku} onChange={(event) => updatePurchaseDevice(device.id, { sku: event.target.value.toUpperCase() })} placeholder="Optional — generated if empty" />{purchaseAttempted && itemErrors.sku && <small>{itemErrors.sku}</small>}</label>
                   {device.category === 'SPARE_PART' && <><label className={purchaseAttempted && itemErrors.compatibleModels ? 'field-invalid' : ''}>Compatible models<input required value={device.compatibleModels} onChange={(event) => updatePurchaseDevice(device.id, { compatibleModels: event.target.value })} placeholder="iPhone 13, iPhone 13 Pro" />{purchaseAttempted && itemErrors.compatibleModels && <small>{itemErrors.compatibleModels}</small>}</label><label className={purchaseAttempted && itemErrors.oemQuality ? 'field-invalid' : ''}>OEM quality<select required value={device.oemQuality} onChange={(event) => updatePurchaseDevice(device.id, { oemQuality: event.target.value })}><option value="" disabled>Select quality</option><option value="OEM">OEM</option><option value="ORIGINAL">Original</option><option value="AFTERMARKET_PREMIUM">Aftermarket premium</option><option value="AFTERMARKET">Aftermarket</option></select>{purchaseAttempted && itemErrors.oemQuality && <small>{itemErrors.oemQuality}</small>}</label></>}
                   <label className={purchaseAttempted && itemErrors.quantity ? 'field-invalid' : ''}>Quantity<input required type="number" min="1" step="1" value={device.quantity} onChange={(event) => updatePurchaseDevice(device.id, { quantity: event.target.value })} />{purchaseAttempted && itemErrors.quantity && <small>{itemErrors.quantity}</small>}</label>
                 </>}
@@ -1821,7 +1946,7 @@ export default function OperationModalBridge() {
           description="Confirm what was paid after reviewing the complete purchase total."
           className="purchase-settlement-card"
         >
-          <div className="operation-form-grid purchase-fields-grid"><label className={purchasePaidInvalid ? 'field-invalid' : ''}>Amount paid ({purchaseCurrency})<MoneyInput currency={purchaseCurrency} minimum={0} maximum={purchaseTotal || undefined} value={purchaseAmountPaid} onValueChange={setPurchaseAmountPaid} placeholder={purchaseCurrency === 'KHR' ? '0' : '0.00'} />{purchasePaid > purchaseTotal ? <small>Amount paid cannot exceed the total</small> : purchaseCurrency === 'KHR' && purchasePaidInvalid ? <small>Use a whole KHR amount in increments of 100</small> : null}</label></div>
+          <div className="operation-form-grid purchase-fields-grid"><label className={purchasePaidInvalid ? 'field-invalid' : ''}>Amount paid ({purchaseCurrency})<MoneyInput currency={purchaseCurrency} minimum={0} maximum={purchaseTotal || undefined} value={purchaseAmountPaid} onValueChange={(nextValue) => { setPurchaseAmountPaidTouched(true); setPurchaseAmountPaid(nextValue) }} placeholder={purchaseCurrency === 'KHR' ? '0' : '0.00'} />{purchasePaid > purchaseTotal ? <small>Amount paid cannot exceed the total</small> : purchaseCurrency === 'KHR' && purchasePaidInvalid ? <small>Use a whole KHR amount in increments of 100</small> : null}</label></div>
           <KeyValueSummary
             className="purchase-payment-summary"
             columns={4}
@@ -1932,7 +2057,7 @@ export default function OperationModalBridge() {
               <div className="price-group"><span>Shop price</span><strong>{scannedItem.sellPrice > 0 ? `$${scannedItem.sellPrice.toFixed(2)}` : 'Not set'}</strong><small>{scannedItem.sellPrice > 0 ? 'Current selling price' : 'Set a price in Stock Information first'}</small></div>
             </div>
             {scannedPawn && <div className="scanned-pawn-link" role="note"><span><HandCoins size={18} /></span><div><small>Linked pawn contract</small><strong>{scannedPawn.pawnNo}</strong><p>This product is collateral for {scannedPawn.customer?.name || 'a pawn customer'}.</p></div><b>{scannedPawn.status.replaceAll('_', ' ')}</b></div>}
-            <footer className="scanner-result-actions"><ScannerTriggerButton label="Scan another" onClick={() => { setScannedItem(null); setScannedPawn(null); setScanCode(''); setError('') }} /><div><button type="button" className="ghost-button" onClick={close}>Close</button><button type="button" className="primary-button" onClick={sellScannedProduct} disabled={scannedItem.status !== 'IN_STOCK' || scannedItem.quantity < 1 || scannedItem.sellPrice <= 0}><ShoppingCart size={17} /> Sell product</button></div></footer>
+            <footer className="scanner-result-actions"><ScannerTriggerButton label="Scan another" onClick={() => { setScannedItem(null); setScannedPawn(null); setScanCode(''); setError('') }} /><div><button type="button" className="ghost-button" onClick={close}>Close</button><button type="button" className="primary-button" onClick={sellScannedProduct} disabled={!canOfferForSale({ ...scannedItem, relatedPawn: scannedPawn }) || scannedItem.sellPrice <= 0}><ShoppingCart size={17} /> Sell product</button></div></footer>
           </article>
       </div>)}
 
@@ -1957,6 +2082,7 @@ export default function OperationModalBridge() {
         </div>
         <footer className="operation-modal-actions record-created-actions">
           <button type="button" className="secondary-button" onClick={printCreatedPawnTicket}><Printer size={16} /> Print 80mm pawn ticket</button>
+          <button type="button" className="secondary-button pawn-label-print" onClick={printCreatedPawnLabel}><ScanLine size={16} /> Print label</button>
           <button type="button" className="primary-button record-created-done" onClick={() => resetAndClose()}><CheckCircle2 size={16} /> Done</button>
         </footer>
       </section>}

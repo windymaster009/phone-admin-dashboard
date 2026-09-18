@@ -507,7 +507,7 @@ describe('PawnManagementPage feature integration', () => {
     expect(alertSpy).not.toHaveBeenCalled()
     expect(printSpy).toHaveBeenCalledWith({
       sku: 'PWN-20260917-ABC',
-      barcode: 'PW-20260917-CREATED',
+      barcode: 'PWN-20260917-ABC',
       name: 'Google Pixel 8 Pro',
       brand: 'Google',
       model: 'Pixel 8 Pro 128GB Obsidian',

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import JsBarcode from 'jsbarcode'
 import {
   barcodeValue,
+  pawnInventoryLabelCode,
   printInventoryLabel,
   printInventoryLabels,
   sanitizeCode,
@@ -40,6 +41,20 @@ describe('barcode module', () => {
       expect(sanitizeCode('SKU-123')).toBe('SKU-123')
   })
 })
+  describe('pawnInventoryLabelCode', () => {
+    it('prefers the stock SKU over an old pawn-number barcode', () => {
+      expect(pawnInventoryLabelCode('PWN-20260917-M7U1V', '', 'PW-20260917-1S1C1')).toBe('PWN-20260917-M7U1V')
+    })
+
+    it('uses the stored snapshot SKU when the linked stock record is unavailable', () => {
+      expect(pawnInventoryLabelCode(null, 'PWN-20260917-M7U1V', 'PW-20260917-1S1C1')).toBe('PWN-20260917-M7U1V')
+    })
+
+    it('never substitutes a pawn contract number for a stock code', () => {
+      expect(pawnInventoryLabelCode('NULL', undefined, 'PW-20260917-1S1C1')).toBe('')
+    })
+  })
+
   describe('barcodeValue', () => {
     it('returns valid non-legacy barcode PF-20260917-KNT7I when SKU is literal "NULL"', () => {
       const item: LabelItem = {
@@ -127,6 +142,36 @@ describe('barcode module', () => {
         sellPrice: 50,
       }
       expect(barcodeValue(item)).toBe('VALID-SKU-001')
+    })
+
+    it('encodes linked inventory item SKU for newly created pawn items with matching PWN barcode', () => {
+      const item: LabelItem = {
+        sku: 'PWN-20260918-M7U1V',
+        barcode: 'PWN-20260918-M7U1V',
+        name: 'iPhone 15 Pro Max',
+        sellPrice: 0,
+      }
+      expect(barcodeValue(item)).toBe('PWN-20260918-M7U1V')
+    })
+
+    it('encodes linked inventory item SKU for legacy pawn records that stored PW-... in their barcode field', () => {
+      const legacyPawnItem: LabelItem = {
+        sku: 'PWN-20260917-LEGACY',
+        barcode: 'PW-20260917-0099',
+        name: 'Samsung Galaxy S24 Ultra',
+        sellPrice: 0,
+      }
+      expect(barcodeValue(legacyPawnItem)).toBe('PWN-20260917-LEGACY')
+    })
+
+    it('falls back to PW-... barcode only when pawn item has no SKU', () => {
+      const noSkuPawnItem: LabelItem = {
+        sku: '',
+        barcode: 'PW-20260917-NOSKU',
+        name: 'Ancient Collateral',
+        sellPrice: 0,
+      }
+      expect(barcodeValue(noSkuPawnItem)).toBe('PW-20260917-NOSKU')
     })
   })
 
@@ -456,9 +501,10 @@ describe('barcode module', () => {
       expect(writtenHtml).toContain('<p class="scan-value">PF-20260917-ABC12</p>')
       expect(writtenHtml).toContain('<p class="price">$799.00</p>')
 
-      // Pawn item checks: encodes pawn number barcode, shows scan-value, hides $0.00 price
+      // Pawn item checks: encodes linked inventory item SKU, shows scan-value, hides $0.00 price
       expect(writtenHtml).toContain('MacBook Air M2 256GB')
-      expect(writtenHtml).toContain('<p class="scan-value">PW-20260917-XYZ99</p>')
+      expect(writtenHtml).toContain('<p class="scan-value">PWN-20260917-XYZ99</p>')
+      expect(writtenHtml).not.toContain('<p class="scan-value">PW-20260917-XYZ99</p>')
       expect(writtenHtml).not.toContain('<p class="price">$0.00</p>')
       expect(writtenHtml).toContain('IMEI C02G1234MD6R')
     })

@@ -587,6 +587,18 @@ async function buildSaleQuote(lines, session, role, currency = 'USD', exchangeRa
     if (!item || item.status !== 'IN_STOCK' || item.quantity < quantity) {
       throw requestError(409, `${line.name || 'Item'} does not have enough available stock`)
     }
+    const pawnQuery = Pawn.findOne({
+      inventoryItem: item._id,
+      status: { $ne: 'FORFEITED' },
+    }).select('pawnNo status')
+    if (session && typeof pawnQuery.session === 'function') pawnQuery.session(session)
+    const pledgedPawn = await pawnQuery
+    if (pledgedPawn) {
+      const linkState = openPawnStatuses.includes(pledgedPawn.status)
+        ? 'currently pledged to active'
+        : `linked to ${String(pledgedPawn.status).toLowerCase()}`
+      throw requestError(409, `Cannot sell ${item.name}: ${linkState} pawn contract #${pledgedPawn.pawnNo}`)
+    }
     const { unitPrice: savedUnitPrice, minimumUnitPrice } = salePricing(item, role, currency, exchangeRate)
     const tolerance = currency === 'KHR' ? 0 : 0.001
     const requestedPriceDiffers = line.unitPrice !== undefined
@@ -2159,8 +2171,30 @@ router.get('/inventory', requireAuth, asyncRoute(async (req, res) => {
 }))
 
 router.get('/inventory/:id', requireAuth, asyncRoute(async (req, res) => {
-  if (!mongoose.isValidObjectId(req.params.id)) throw requestError(400, 'Inventory ID is invalid')
-  const item = await InventoryItem.findById(req.params.id)
+  let item = null
+  if (mongoose.isValidObjectId(req.params.id)) {
+    item = await InventoryItem.findById(req.params.id)
+  }
+  if (!item) {
+    const rawCode = clean(decodeURIComponent(req.params.id || ''))
+    if (rawCode && !isInvalidCode(rawCode)) {
+      const exactCode = new RegExp('^' + escapeRegex(rawCode) + '$', 'i')
+      item = await InventoryItem.findOne({
+        $or: [
+          { sku: exactCode },
+          { barcode: exactCode },
+          { imei1: exactCode },
+          { serialNumber: exactCode },
+        ],
+      })
+      if (!item) {
+        const relatedPawn = await Pawn.findOne({ pawnNo: exactCode }).select('inventoryItem').lean()
+        if (relatedPawn?.inventoryItem) {
+          item = await InventoryItem.findById(relatedPawn.inventoryItem)
+        }
+      }
+    }
+  }
   if (!item) throw requestError(404, 'Inventory item was not found')
   const relatedPawn = await Pawn.findOne({ inventoryItem: item._id }).select('pawnNo status').lean()
   res.json({ item: { ...item.toObject(), relatedPawn: relatedPawn || null } })
@@ -2591,8 +2625,9 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
       pawnCustomerId = createdCustomer._id
     }
     const pawnNo = makeCode('PW')
+    const itemSku = makeCode('PWN')
     const [inventoryItem] = await InventoryItem.create([{
-      sku: makeCode('PWN'), barcode: pawnNo, category: 'PHONE', name: clean(itemSnapshot.name),
+      sku: itemSku, barcode: itemSku, category: 'PHONE', name: clean(itemSnapshot.name),
       brand: clean(itemSnapshot.brand), model: clean(itemSnapshot.model), imei1: clean(itemSnapshot.imei),
       condition: itemSnapshot.condition || 'GOOD', color: clean(itemSnapshot.color), storage: normalizeGigabytes(itemSnapshot.storage),
       ram: normalizeGigabytes(itemSnapshot.ram), batteryHealth: itemSnapshot.batteryHealth,
@@ -2607,6 +2642,7 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
       pawnNo, customer: pawnCustomerId, inventoryItem: inventoryItem._id,
       itemSnapshot: {
         ...itemSnapshot,
+        sku: itemSku,
         imei: clean(itemSnapshot.imei),
         storage: normalizeGigabytes(itemSnapshot.storage),
         ram: normalizeGigabytes(itemSnapshot.ram),
@@ -3020,7 +3056,7 @@ async function createMultiDevicePurchase(req, res) {
       if (!brand || !model || !storage || !color) throw requestError(400, `${label}: brand, model, storage, and color are required`)
       name = `${brand} ${model} ${storage}`
     } else if (category === 'ACCESSORY') {
-      if (!name || !brand || !sku) throw requestError(400, `${label}: item name, brand, and valid SKU are required`)
+      if (!name || !brand) throw requestError(400, `${label}: item name and brand are required`)
     } else if (category === 'SPARE_PART') {
       if (!name) throw requestError(400, `${label}: part name is required`)
       if (!clean(item.compatibleModels)) throw requestError(400, `${label}: compatible models are required`)
@@ -3100,8 +3136,8 @@ async function createMultiDevicePurchase(req, res) {
         if (!customer) throw requestError(404, 'Customer was not found')
         sellerSnapshot = { name: customer.name, phone: customer.phone, nationalIdNumber: customer.nationalIdNumber }
       } else {
-        const sellerName = clean(seller.name)
-        if (!sellerName) throw requestError(400, 'Seller name is required')
+        const sellerName = clean(seller.name) || ''
+        if (!sellerName && sellerType !== 'WALK_IN') throw requestError(400, 'Seller name is required')
         sellerSnapshot = { name: sellerName, phone: clean(seller.phone), nationalIdNumber: clean(seller.nationalIdNumber) }
         if (sellerType === 'NEW_SUPPLIER') {
           ;[supplier] = await Supplier.create([{
@@ -3336,6 +3372,16 @@ router.post('/payway/khqr', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER
 
   if (!item || item.status !== 'IN_STOCK' || item.quantity < quantity) {
     throw requestError(409, 'The selected item is no longer available')
+  }
+  const pledgedPawn = await Pawn.findOne({
+    inventoryItem: item._id,
+    status: { $ne: 'FORFEITED' },
+  }).select('pawnNo status')
+  if (pledgedPawn) {
+    const linkState = openPawnStatuses.includes(pledgedPawn.status)
+      ? 'currently pledged to active'
+      : `linked to ${String(pledgedPawn.status).toLowerCase()}`
+    throw requestError(409, `Cannot sell ${item.name}: ${linkState} pawn contract #${pledgedPawn.pawnNo}`)
   }
   if (!Number.isInteger(quantity) || quantity < 1) throw requestError(400, 'Quantity must be a whole number greater than zero')
   const { unitPrice: savedUnitPrice, minimumUnitPrice } = salePricing(item, req.user.role)

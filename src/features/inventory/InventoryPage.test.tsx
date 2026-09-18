@@ -4,11 +4,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import InventoryPage from './InventoryPage'
 import { RouterProvider } from '../../app/routing'
 import { mockInventoryItem, mockOwnerUser, mockManagerUser, mockCashierUser, mockStockUser } from '../../test/testUtils'
+import { setStoredInventoryView } from '../../lib/storage'
 import * as barcodeModule from './barcode'
 
 describe('InventoryPage feature integration', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    localStorage.clear()
+    setStoredInventoryView('large')
   })
 
   it('renders loading state initially while fetching inventory', () => {
@@ -865,11 +868,12 @@ describe('InventoryPage feature integration', () => {
     await user.click(screen.getByRole('button', { name: new RegExp(accessoryItem.name, 'i') }))
     const dialog = screen.getByRole('dialog')
 
-    // Verifies quantity-based attributes
+    // Verifies quantity-based attributes and category-awareness
     expect(within(dialog).getByText('25')).toBeInTheDocument()
     expect(within(dialog).getByText('iPhone 15, iPhone 15 Pro')).toBeInTheDocument()
     expect(within(dialog).getByText('Original Grade A')).toBeInTheDocument()
-    expect(within(dialog).getByText('No IMEI 1')).toBeInTheDocument()
+    expect(within(dialog).queryByText('No IMEI 1')).not.toBeInTheDocument()
+    expect(within(dialog).queryByText('Battery not recorded')).not.toBeInTheDocument()
   })
 
   it.each(['upload', 'remove'] as const)('blocks same-render %s duplicates and releases the photo guard after failure', async (operation) => {
@@ -1022,7 +1026,7 @@ describe('InventoryPage feature integration', () => {
     // Modal opens automatically displaying scanned item
     await waitFor(() => {
       const dialog = screen.getByRole('dialog')
-      expect(within(dialog).getByText(scannedItem.name)).toBeInTheDocument()
+      expect(within(dialog).getByRole('heading', { name: scannedItem.name })).toBeInTheDocument()
     })
   })
 
@@ -1406,5 +1410,736 @@ describe('InventoryPage feature integration', () => {
     expect(screen.getByText('Delete stock record?')).toBeInTheDocument()
     expect(within(confirmModal).getByRole('button', { name: /Delete stock record/i })).not.toBeDisabled()
     expect(within(confirmModal).getByRole('button', { name: /Cancel/i })).not.toBeDisabled()
+  })
+
+  describe('Stock detail modal actions: View pawn contract and New sale', () => {
+    it('renders View pawn contract and hides New sale when item is linked to an active pawn', async () => {
+      const activePawnItem = {
+        ...mockInventoryItem,
+        _id: 'item-active-pawn',
+        name: 'Active Pawn Phone',
+        status: 'PAWNED',
+        relatedPawn: { _id: 'pawn-act-123', pawnNo: 'PW-2026-0123', status: 'ACTIVE' },
+      }
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ items: [activePawnItem] }),
+      } as Response)
+
+      const user = userEvent.setup()
+      render(
+        <RouterProvider>
+          <InventoryPage />
+        </RouterProvider>,
+      )
+
+      await waitFor(() => expect(screen.getByText('Active Pawn Phone')).toBeInTheDocument())
+      await user.click(screen.getByRole('button', { name: /Active Pawn Phone/i }))
+
+      const dialog = screen.getByRole('dialog')
+      expect(dialog).toBeInTheDocument()
+
+      expect(within(dialog).getByRole('button', { name: 'View pawn contract' })).toBeInTheDocument()
+      expect(within(dialog).queryByRole('button', { name: 'New sale' })).not.toBeInTheDocument()
+    })
+
+    it('hides New sale even if status is IN_STOCK when an active pawn blocks the item', async () => {
+      const inconsistentItem = {
+        ...mockInventoryItem,
+        _id: 'item-inconsistent-pawn',
+        name: 'Inconsistent Pawn Phone',
+        status: 'IN_STOCK',
+        quantity: 1,
+        relatedPawn: { _id: 'pawn-act-456', pawnNo: 'PW-2026-0456', status: 'DUE_SOON' },
+      }
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ items: [inconsistentItem] }),
+      } as Response)
+
+      const user = userEvent.setup()
+      render(
+        <RouterProvider>
+          <InventoryPage />
+        </RouterProvider>,
+      )
+
+      await waitFor(() => expect(screen.getByText('Inconsistent Pawn Phone')).toBeInTheDocument())
+      await user.click(screen.getByRole('button', { name: /Inconsistent Pawn Phone/i }))
+
+      const dialog = screen.getByRole('dialog')
+      expect(within(dialog).getByRole('button', { name: 'View pawn contract' })).toBeInTheDocument()
+      expect(within(dialog).queryByRole('button', { name: 'New sale' })).not.toBeInTheDocument()
+    })
+
+    it('renders both View pawn contract and New sale for an IN_STOCK item with a forfeited pawn', async () => {
+      const forfeitedItem = {
+        ...mockInventoryItem,
+        _id: 'item-forfeited-pawn',
+        name: 'Forfeited Pawn Phone',
+        status: 'IN_STOCK',
+        quantity: 1,
+        relatedPawn: { _id: 'pawn-forfeit-789', pawnNo: 'PW-2026-0789', status: 'FORFEITED' },
+      }
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ items: [forfeitedItem] }),
+      } as Response)
+
+      const user = userEvent.setup()
+      render(
+        <RouterProvider>
+          <InventoryPage />
+        </RouterProvider>,
+      )
+
+      await waitFor(() => expect(screen.getByText('Forfeited Pawn Phone')).toBeInTheDocument())
+      await user.click(screen.getByRole('button', { name: /Forfeited Pawn Phone/i }))
+
+      const dialog = screen.getByRole('dialog')
+      expect(within(dialog).getByRole('button', { name: 'View pawn contract' })).toBeInTheDocument()
+      const newSaleBtn = within(dialog).getByRole('button', { name: 'New sale' })
+      expect(newSaleBtn).toBeInTheDocument()
+      expect(newSaleBtn).toHaveClass('primary-button')
+    })
+
+    it('renders View pawn contract and hides New sale for a redeemed item', async () => {
+      const redeemedItem = {
+        ...mockInventoryItem,
+        _id: 'item-redeemed-pawn',
+        name: 'Redeemed Pawn Phone',
+        status: 'ARCHIVED',
+        quantity: 0,
+        relatedPawn: { _id: 'pawn-redeem-101', pawnNo: 'PW-2026-0101', status: 'REDEEMED' },
+      }
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ items: [redeemedItem] }),
+      } as Response)
+
+      const user = userEvent.setup()
+      render(
+        <RouterProvider>
+          <InventoryPage />
+        </RouterProvider>,
+      )
+
+      await waitFor(() => expect(screen.getByText('Redeemed Pawn Phone')).toBeInTheDocument())
+      await user.click(screen.getByRole('button', { name: /Redeemed Pawn Phone/i }))
+
+      const dialog = screen.getByRole('dialog')
+      expect(within(dialog).getByRole('button', { name: 'View pawn contract' })).toBeInTheDocument()
+      expect(within(dialog).queryByRole('button', { name: 'New sale' })).not.toBeInTheDocument()
+    })
+
+    it('hides New sale for redeemed item even if stock status is inconsistent', async () => {
+      const inconsistentRedeemed = {
+        ...mockInventoryItem,
+        _id: 'item-inconsistent-redeem',
+        name: 'Inconsistent Redeemed Phone',
+        status: 'IN_STOCK',
+        quantity: 1,
+        relatedPawn: { _id: 'pawn-redeem-102', pawnNo: 'PW-2026-0102', status: 'REDEEMED' },
+      }
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ items: [inconsistentRedeemed] }),
+      } as Response)
+
+      const user = userEvent.setup()
+      render(
+        <RouterProvider>
+          <InventoryPage />
+        </RouterProvider>,
+      )
+
+      await waitFor(() => expect(screen.getByText('Inconsistent Redeemed Phone')).toBeInTheDocument())
+      await user.click(screen.getByRole('button', { name: /Inconsistent Redeemed Phone/i }))
+
+      const dialog = screen.getByRole('dialog')
+      expect(within(dialog).queryByRole('button', { name: 'New sale' })).not.toBeInTheDocument()
+    })
+
+    it('renders New sale and dispatches phoneflow:open-operation with preselected item for normal in-stock product', async () => {
+      const normalItem = {
+        ...mockInventoryItem,
+        _id: 'item-normal-sale',
+        name: 'Normal In-Stock Phone',
+        status: 'IN_STOCK',
+        quantity: 3,
+        relatedPawn: null,
+      }
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ items: [normalItem] }),
+      } as Response)
+
+      const openOperationListener = vi.fn()
+      window.addEventListener('phoneflow:open-operation', openOperationListener)
+
+      const user = userEvent.setup()
+      render(
+        <RouterProvider>
+          <InventoryPage />
+        </RouterProvider>,
+      )
+
+      await waitFor(() => expect(screen.getByText('Normal In-Stock Phone')).toBeInTheDocument())
+      await user.click(screen.getByRole('button', { name: /Normal In-Stock Phone/i }))
+
+      const dialog = screen.getByRole('dialog')
+      expect(within(dialog).queryByRole('button', { name: 'View pawn contract' })).not.toBeInTheDocument()
+
+      const newSaleBtn = within(dialog).getByRole('button', { name: 'New sale' })
+      expect(newSaleBtn).toBeInTheDocument()
+
+      await user.click(newSaleBtn)
+
+      // Modal closes and event is dispatched with preselected item
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(openOperationListener).toHaveBeenCalledTimes(1)
+      const event = openOperationListener.mock.calls[0][0] as CustomEvent
+      expect(event.detail).toEqual({
+        kind: 'sale',
+        itemId: 'item-normal-sale',
+        item: expect.objectContaining({ _id: 'item-normal-sale', name: 'Normal In-Stock Phone' }),
+      })
+
+      window.removeEventListener('phoneflow:open-operation', openOperationListener)
+    })
+
+    it('opens exact pawn contract in /pawn-management on View pawn contract click', async () => {
+      const pawnItem = {
+        ...mockInventoryItem,
+        _id: 'item-nav-pawn',
+        name: 'Pawn Nav Phone',
+        status: 'PAWNED',
+        relatedPawn: { _id: 'pawn-exact-999', pawnNo: 'PW-2026-0999', status: 'ACTIVE' },
+      }
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ items: [pawnItem] }),
+      } as Response)
+
+      const openPawnDetailListener = vi.fn()
+      window.addEventListener('phoneflow:open-pawn-detail', openPawnDetailListener)
+
+      const user = userEvent.setup()
+      render(
+        <RouterProvider>
+          <InventoryPage />
+        </RouterProvider>,
+      )
+
+      await waitFor(() => expect(screen.getByText('Pawn Nav Phone')).toBeInTheDocument())
+      await user.click(screen.getByRole('button', { name: /Pawn Nav Phone/i }))
+
+      const dialog = screen.getByRole('dialog')
+      const viewContractBtn = within(dialog).getByRole('button', { name: 'View pawn contract' })
+      await user.click(viewContractBtn)
+
+      // Modal is closed
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+      // Navigated to /pawn-management?openPawn=pawn-exact-999
+      expect(window.location.pathname).toBe('/pawn-management')
+      expect(new URLSearchParams(window.location.search).get('openPawn')).toBe('pawn-exact-999')
+
+      // Dispatched phoneflow:open-pawn-detail event with exact pawn ID and pawnNo
+      expect(openPawnDetailListener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          detail: {
+            id: 'pawn-exact-999',
+            pawnNo: 'PW-2026-0999',
+          },
+        }),
+      )
+
+      window.removeEventListener('phoneflow:open-pawn-detail', openPawnDetailListener)
+    })
+  })
+
+  describe('Stock record UI for accessories and focused price editor', () => {
+    it('sanitizes legacy "NULL", blank, and missing SKUs to display real barcode or "No SKU" without mutating stored items', async () => {
+      const itemWithLegacyNullAndBarcode = {
+        ...mockInventoryItem,
+        _id: 'acc-null-barcode',
+        name: 'Screen Protector',
+        sku: 'NULL',
+        barcode: 'BAR-PROT-100',
+        category: 'ACCESSORY' as const,
+        quantity: 12,
+      }
+      const itemWithNullSkuNoBarcode = {
+        ...mockInventoryItem,
+        _id: 'acc-null-nobarcode',
+        name: 'Clear Case',
+        sku: 'NULL',
+        barcode: '',
+        category: 'ACCESSORY' as const,
+        quantity: 8,
+      }
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ items: [itemWithLegacyNullAndBarcode, itemWithNullSkuNoBarcode] }),
+      } as Response)
+
+      const user = userEvent.setup()
+      render(
+        <RouterProvider>
+          <InventoryPage />
+        </RouterProvider>,
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText('Screen Protector')).toBeInTheDocument()
+        expect(screen.getByText('Clear Case')).toBeInTheDocument()
+      })
+
+      // Switch to details view to inspect table cells
+      await user.click(screen.getByRole('button', { name: 'Details' }))
+
+      // Item 1 uses barcode fallback; Item 2 displays "No SKU"; literal "NULL" is never rendered
+      expect(screen.getByText('BAR-PROT-100')).toBeInTheDocument()
+      expect(screen.getByText('No SKU')).toBeInTheDocument()
+      expect(screen.queryByText('NULL')).not.toBeInTheDocument()
+
+      // Open detail modal for item 2
+      await user.click(within(screen.getByRole('table')).getByRole('button', { name: 'View No SKU' }))
+      const dialog = screen.getByRole('dialog')
+
+      // Modal description should display 'No SKU · Accessory' and NOT 'NULL · Accessory'
+      expect(within(dialog).getByText('No SKU · Accessory')).toBeInTheDocument()
+      expect(within(dialog).queryByText(/NULL/i)).not.toBeInTheDocument()
+
+      // Barcode row in overview should say 'No barcode', not 'NULL'
+      expect(within(dialog).getByText('No barcode')).toBeInTheDocument()
+
+      // Ensure stored record was not silently mutated
+      expect(itemWithNullSkuNoBarcode.sku).toBe('NULL')
+    })
+
+    it('renders category-aware details for accessories: hides IMEI and battery health, and omits empty accessory info cards', async () => {
+      const plainAccessory = {
+        ...mockInventoryItem,
+        _id: 'acc-plain',
+        name: 'Braided Cable',
+        sku: 'CABLE-01',
+        category: 'ACCESSORY' as const,
+        color: 'Black',
+        condition: 'NEW',
+        compatibleModels: [],
+        oemQuality: '',
+        accessoriesIncluded: [],
+        imei1: undefined,
+        imei2: undefined,
+        batteryHealth: undefined,
+      }
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ items: [plainAccessory] }),
+      } as Response)
+
+      const user = userEvent.setup()
+      render(
+        <RouterProvider>
+          <InventoryPage />
+        </RouterProvider>,
+      )
+
+      await waitFor(() => expect(screen.getByText('Braided Cable')).toBeInTheDocument())
+      await user.click(screen.getByRole('button', { name: /Braided Cable/i }))
+      const dialog = screen.getByRole('dialog')
+
+      // Product specs shown cleanly
+      const productCard = within(dialog).getByText('Product').closest('article')!
+      expect(within(productCard).getByText('Braided Cable')).toBeInTheDocument()
+      expect(within(dialog).getByText('Black · New')).toBeInTheDocument()
+
+      // Phone fields MUST NOT appear
+      expect(within(dialog).queryByText('No IMEI 1')).not.toBeInTheDocument()
+      expect(within(dialog).queryByText('No IMEI 2')).not.toBeInTheDocument()
+      expect(within(dialog).queryByText('Battery not recorded')).not.toBeInTheDocument()
+      expect(within(dialog).queryByText(/battery/i)).not.toBeInTheDocument()
+
+      // Empty accessory info cards MUST NOT appear (no "not recorded" cards filling page)
+      expect(within(dialog).queryByText('Accessory info')).not.toBeInTheDocument()
+      expect(within(dialog).queryByText('No compatible models recorded')).not.toBeInTheDocument()
+      expect(within(dialog).queryByText('Quality not recorded')).not.toBeInTheDocument()
+      expect(within(dialog).queryByText('Included accessories not recorded')).not.toBeInTheDocument()
+    })
+
+    it('renders focused Change price view inside existing modal with clear header, item context, and Cancel/Save footer', async () => {
+      const accessory = {
+        ...mockInventoryItem,
+        _id: 'acc-price-focus',
+        name: 'Fast Wireless Charger',
+        sku: 'CHARGER-W15',
+        category: 'ACCESSORY' as const,
+        quantity: 15,
+        buyPrice: 8,
+        sellPrice: 20,
+        minimumSellPrice: 16,
+        khrSellPrice: 82000,
+        khrMinimumSellPrice: 65600,
+      }
+
+      vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+        const url = String(input)
+        const method = init?.method || 'GET'
+        if (url.includes(`/inventory/${accessory._id}`) && method === 'PATCH') {
+          return {
+            ok: true,
+            status: 200,
+            headers: new Headers(),
+            json: async () => ({
+              item: {
+                ...accessory,
+                sellPrice: 25,
+                minimumSellPrice: 20,
+                khrSellPrice: 102500,
+                khrMinimumSellPrice: 82000,
+              },
+            }),
+          } as Response
+        }
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ items: [accessory] }),
+        } as Response
+      })
+
+      const user = userEvent.setup()
+      render(
+        <RouterProvider>
+          <InventoryPage />
+        </RouterProvider>,
+      )
+
+      await waitFor(() => expect(screen.getByText('Fast Wireless Charger')).toBeInTheDocument())
+      await user.click(screen.getByRole('button', { name: /Fast Wireless Charger/i }))
+      const dialog = screen.getByRole('dialog')
+
+      // Initially shows standard stock record view
+      expect(within(dialog).getByRole('heading', { level: 3, name: 'Fast Wireless Charger' })).toBeInTheDocument()
+      expect(within(dialog).getByText('Stock and pricing')).toBeInTheDocument()
+      expect(within(dialog).getByText('Product details')).toBeInTheDocument()
+
+      // Click "Change price"
+      await user.click(within(dialog).getByRole('button', { name: 'Change price' }))
+
+      // Switched to focused pricing view
+      expect(within(dialog).getByRole('heading', { level: 3, name: 'Change selling price' })).toBeInTheDocument()
+      expect(within(dialog).getByText('Fast Wireless Charger · CHARGER-W15')).toBeInTheDocument()
+
+      // Overview grid and product details are no longer stacked
+      expect(within(dialog).queryByText('Stock and pricing')).not.toBeInTheDocument()
+      expect(within(dialog).queryByText('Product details')).not.toBeInTheDocument()
+
+      // Context strip displays stock on hand and buy cost
+      expect(within(dialog).getByText('15')).toBeInTheDocument()
+      expect(within(dialog).getByText('$8')).toBeInTheDocument()
+
+      // Dual-currency pricing form is focused and readable
+      expect(within(dialog).getByRole('heading', { level: 4, name: 'Set selling prices' })).toBeInTheDocument()
+      const usdRegularInput = within(dialog).getByLabelText('Regular selling price in US dollars')
+      const usdMinInput = within(dialog).getByLabelText('Minimum selling price in US dollars')
+      const khrRegularInput = within(dialog).getByLabelText('Regular selling price in Cambodian riel')
+      const khrMinInput = within(dialog).getByLabelText('Minimum selling price in Cambodian riel')
+
+      expect(usdRegularInput).toHaveValue('20')
+      expect(usdMinInput).toHaveValue('16')
+      expect(khrRegularInput).toHaveValue('82,000')
+      expect(khrMinInput).toHaveValue('65,600')
+
+      // Cancel button exits price editing back to stock record
+      const cancelBtn = within(dialog).getByRole('button', { name: 'Cancel' })
+      await user.click(cancelBtn)
+
+      expect(within(dialog).getByRole('heading', { level: 3, name: 'Fast Wireless Charger' })).toBeInTheDocument()
+      expect(within(dialog).getByText('Stock and pricing')).toBeInTheDocument()
+
+      // Re-enter and save updated prices
+      await user.click(within(dialog).getByRole('button', { name: 'Change price' }))
+      await user.clear(within(dialog).getByLabelText('Regular selling price in US dollars'))
+      await user.type(within(dialog).getByLabelText('Regular selling price in US dollars'), '25')
+      await user.clear(within(dialog).getByLabelText('Minimum selling price in US dollars'))
+      await user.type(within(dialog).getByLabelText('Minimum selling price in US dollars'), '20')
+
+      await user.click(within(dialog).getByRole('button', { name: 'Save prices' }))
+
+      await waitFor(() => {
+        expect(within(dialog).getByText('$25 · 102,500 KHR')).toBeInTheDocument()
+      })
+    })
+
+    it('supports selecting "Open first" currency in focused price editor without cramped controls', async () => {
+      const item = {
+        ...mockInventoryItem,
+        _id: 'acc-open-first',
+        name: 'USB Adapter',
+        sku: 'USB-ADPT',
+        category: 'ACCESSORY' as const,
+        sellPrice: 5,
+        pricingCurrency: 'USD' as const,
+      }
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ items: [item] }),
+      } as Response)
+
+      const user = userEvent.setup()
+      render(
+        <RouterProvider>
+          <InventoryPage />
+        </RouterProvider>,
+      )
+
+      await waitFor(() => expect(screen.getByText('USB Adapter')).toBeInTheDocument())
+      await user.click(screen.getByRole('button', { name: /USB Adapter/i }))
+      const dialog = screen.getByRole('dialog')
+
+      await user.click(within(dialog).getByRole('button', { name: 'Change price' }))
+
+      const openFirstRadios = within(dialog).getAllByRole('radio', { name: 'Open first' })
+      expect(openFirstRadios).toHaveLength(2)
+      expect(openFirstRadios[0]).toBeChecked() // USD is default
+      expect(openFirstRadios[1]).not.toBeChecked() // KHR
+
+      await user.click(openFirstRadios[1])
+      expect(openFirstRadios[1]).toBeChecked()
+      expect(openFirstRadios[0]).not.toBeChecked()
+    })
+
+    it('cancels price editing via header close button and returns to stock details view', async () => {
+      const item = {
+        ...mockInventoryItem,
+        _id: 'acc-cancel-header',
+        name: 'USB-C Cable',
+        sku: 'CABLE-USB-C',
+        category: 'ACCESSORY' as const,
+        sellPrice: 12,
+      }
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ items: [item] }),
+      } as Response)
+
+      const user = userEvent.setup()
+      render(
+        <RouterProvider>
+          <InventoryPage />
+        </RouterProvider>,
+      )
+
+      await waitFor(() => expect(screen.getByText('USB-C Cable')).toBeInTheDocument())
+      await user.click(screen.getByRole('button', { name: /USB-C Cable/i }))
+      const dialog = screen.getByRole('dialog')
+
+      await user.click(within(dialog).getByRole('button', { name: 'Change price' }))
+      expect(within(dialog).getByRole('heading', { level: 3, name: 'Change selling price' })).toBeInTheDocument()
+
+      // Header has close button with aria-label="Cancel price editing"
+      const headerCloseBtn = within(dialog).getByRole('button', { name: 'Cancel price editing' })
+      await user.click(headerCloseBtn)
+
+      // Returns to stock details modal without closing it completely
+      expect(within(dialog).getByRole('heading', { level: 3, name: 'USB-C Cable' })).toBeInTheDocument()
+      expect(within(dialog).getByText('Stock and pricing')).toBeInTheDocument()
+    })
+  })
+
+  describe('Pawn collateral stock records and navigation', () => {
+    it('opens stock record when searching or scanning PWN SKU and navigates to linked pawn contract', async () => {
+      const pawnId = 'pawn-12345'
+      const pawnNo = 'PW-20260918-ABCD'
+      const pawnSku = 'PWN-20260918-XYZW'
+      const collateralItem = {
+        ...mockInventoryItem,
+        _id: 'item-pawn-1',
+        name: 'iPhone 14 Pro Max',
+        sku: pawnSku,
+        barcode: pawnSku,
+        category: 'PHONE' as const,
+        status: 'PAWNED' as const,
+        relatedPawn: {
+          _id: pawnId,
+          pawnNo,
+          status: 'ACTIVE',
+        },
+      }
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ items: [collateralItem] }),
+      } as Response)
+
+      const pawnDetailListener = vi.fn()
+      window.addEventListener('phoneflow:open-pawn-detail', pawnDetailListener)
+
+      const user = userEvent.setup()
+      render(
+        <RouterProvider>
+          <InventoryPage />
+        </RouterProvider>,
+      )
+
+      await waitFor(() => expect(screen.getByText('iPhone 14 Pro Max')).toBeInTheDocument())
+
+      // Search by PWN SKU and press Enter
+      const searchInput = screen.getByPlaceholderText(/Search SKU, product/i)
+      await user.type(searchInput, `${pawnSku}{enter}`)
+
+      // Stock record details modal should open
+      const dialog = await screen.findByRole('dialog')
+      expect(within(dialog).getByRole('heading', { level: 3, name: 'iPhone 14 Pro Max' })).toBeInTheDocument()
+      expect(within(dialog).getAllByText(new RegExp(pawnSku)).length).toBeGreaterThanOrEqual(1)
+
+      // "View pawn contract" button should be visible
+      const viewPawnBtn = within(dialog).getByRole('button', { name: 'View pawn contract' })
+      expect(viewPawnBtn).toBeInTheDocument()
+
+      // Click "View pawn contract"
+      await user.click(viewPawnBtn)
+
+      // Should dispatch phoneflow:open-pawn-detail event with exact pawn ID and pawnNo
+      expect(pawnDetailListener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          detail: { id: pawnId, pawnNo },
+        }),
+      )
+
+      window.removeEventListener('phoneflow:open-pawn-detail', pawnDetailListener)
+    })
+
+    it('resolves legacy pawnNo search to collateral item and opens contract', async () => {
+      const pawnId = 'pawn-legacy-99'
+      const legacyPawnNo = 'PW-20260917-OLD'
+      const legacySku = 'PWN-20260917-OLD'
+      const legacyItem = {
+        ...mockInventoryItem,
+        _id: 'item-legacy-pawn',
+        name: 'Samsung Galaxy S23',
+        sku: legacySku,
+        barcode: legacyPawnNo, // legacy item stored PW- contract number in barcode
+        category: 'PHONE' as const,
+        status: 'PAWNED' as const,
+        relatedPawn: {
+          _id: pawnId,
+          pawnNo: legacyPawnNo,
+          status: 'ACTIVE',
+        },
+      }
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ items: [legacyItem] }),
+      } as Response)
+
+      const user = userEvent.setup()
+      render(
+        <RouterProvider>
+          <InventoryPage />
+        </RouterProvider>,
+      )
+
+      await waitFor(() => expect(screen.getByText('Samsung Galaxy S23')).toBeInTheDocument())
+
+      // Searching by legacy PW-... contract number matches the item
+      const searchInput = screen.getByPlaceholderText(/Search SKU, product/i)
+      await user.type(searchInput, legacyPawnNo)
+
+      expect(screen.getByText('Samsung Galaxy S23')).toBeInTheDocument()
+
+      // Click the card to open details
+      await user.click(screen.getByRole('button', { name: /Samsung Galaxy S23/i }))
+      const dialog = await screen.findByRole('dialog')
+      expect(within(dialog).getByRole('button', { name: 'View pawn contract' })).toBeInTheDocument()
+    })
+
+    it('opens collateral record via phoneflow:open-stock-item event with PWN SKU', async () => {
+      const pawnId = 'pawn-scanned-1'
+      const pawnNo = 'PW-20260918-SCANNED'
+      const pawnSku = 'PWN-20260918-SCANNED'
+      const item = {
+        ...mockInventoryItem,
+        _id: 'item-scanned-1',
+        name: 'Google Pixel 8',
+        sku: pawnSku,
+        barcode: pawnSku,
+        category: 'PHONE' as const,
+        status: 'PAWNED' as const,
+        relatedPawn: {
+          _id: pawnId,
+          pawnNo,
+          status: 'ACTIVE',
+        },
+      }
+
+      vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ items: [item] }),
+      } as Response)
+
+      render(
+        <RouterProvider>
+          <InventoryPage />
+        </RouterProvider>,
+      )
+
+      await waitFor(() => expect(screen.getByText('Google Pixel 8')).toBeInTheDocument())
+
+      // Simulate scanner dispatching open-stock-item with SKU
+      act(() => {
+        window.dispatchEvent(new CustomEvent('phoneflow:open-stock-item', {
+          detail: { id: pawnSku },
+        }))
+      })
+
+      const dialog = await screen.findByRole('dialog')
+      expect(within(dialog).getByRole('heading', { level: 3, name: 'Google Pixel 8' })).toBeInTheDocument()
+      expect(within(dialog).getByRole('button', { name: 'View pawn contract' })).toBeInTheDocument()
+    })
   })
 })

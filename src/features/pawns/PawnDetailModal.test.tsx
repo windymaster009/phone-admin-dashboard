@@ -882,11 +882,55 @@ describe('PawnDetailModal component', () => {
     expect(alertSpy).not.toHaveBeenCalled()
     expect(printSpy).toHaveBeenCalledWith({
       sku: 'PWN-20260917-ABC01',
-      barcode: 'PW-20260917-NEW01',
+      barcode: 'PWN-20260917-ABC01',
       name: 'iPhone 15 Pro Max',
       brand: 'Apple',
       model: 'iPhone 15 Pro Max 256GB Natural Titanium',
       imei1: '359876543210987',
+      sellPrice: 0,
+    })
+  })
+
+  it('reprints label for legacy pawn record using the linked item SKU even when barcode stored PW-...', async () => {
+    const printSpy = vi.spyOn(barcodeModule, 'printInventoryLabel').mockReturnValue(true)
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+
+    const legacyPawn: Pawn = {
+      ...mockPawnRecord,
+      pawnNo: 'PW-2026-LEGACY99',
+      inventoryItem: {
+        _id: 'item-leg-1',
+        sku: 'PWN-20260917-M7U1V',
+        barcode: 'PW-2026-LEGACY99',
+        name: 'Samsung Galaxy S22',
+        brand: 'Samsung',
+        model: 'Galaxy S22 128GB Black',
+        imei1: '359123456789012',
+        sellPrice: 0,
+        status: 'PAWNED',
+      } as any,
+      itemSnapshot: {
+        name: 'Samsung Galaxy S22',
+        brand: 'Samsung',
+        model: 'Galaxy S22 128GB Black',
+        imei: '359123456789012',
+      },
+    }
+
+    const user = userEvent.setup()
+    render(<PawnDetailModal pawn={legacyPawn} onClose={vi.fn()} />)
+
+    const printButton = screen.getByRole('button', { name: /Print label/i })
+    await user.click(printButton)
+
+    expect(alertSpy).not.toHaveBeenCalled()
+    expect(printSpy).toHaveBeenCalledWith({
+      sku: 'PWN-20260917-M7U1V',
+      barcode: 'PWN-20260917-M7U1V',
+      name: 'Samsung Galaxy S22',
+      brand: 'Samsung',
+      model: 'Galaxy S22 128GB Black',
+      imei1: '359123456789012',
       sellPrice: 0,
     })
   })
@@ -900,6 +944,7 @@ describe('PawnDetailModal component', () => {
       pawnNo: 'PW-20260917-RELOAD',
       inventoryItem: 'raw-mongo-id-string-123' as any,
       itemSnapshot: {
+        sku: 'PWN-20260917-RELOAD',
         name: 'Samsung Galaxy S23 Ultra',
         brand: 'Samsung',
         model: 'Galaxy S23 Ultra',
@@ -922,14 +967,33 @@ describe('PawnDetailModal component', () => {
 
     expect(alertSpy).not.toHaveBeenCalled()
     expect(printSpy).toHaveBeenCalledWith({
-      sku: 'PW-20260917-RELOAD',
-      barcode: 'PW-20260917-RELOAD',
+      sku: 'PWN-20260917-RELOAD',
+      barcode: 'PWN-20260917-RELOAD',
       name: 'Samsung Galaxy S23 Ultra',
       brand: 'Samsung',
       model: 'Galaxy S23 Ultra 512GB Phantom Black',
       imei1: '351234567890123',
       sellPrice: 0,
     })
+  })
+
+  it('does not print a pawn contract number when a legacy stock code is unavailable', async () => {
+    const printSpy = vi.spyOn(barcodeModule, 'printInventoryLabel').mockReturnValue(true)
+    const alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {})
+    const pawn: Pawn = {
+      ...mockPawnRecord,
+      pawnNo: 'PW-20260917-NOCODE',
+      inventoryItem: {
+        _id: 'item-no-code', sku: 'NULL', barcode: 'PW-20260917-NOCODE',
+      } as any,
+      itemSnapshot: { name: 'Legacy phone' },
+    }
+
+    render(<PawnDetailModal pawn={pawn} onClose={vi.fn()} />)
+    await userEvent.setup().click(screen.getByRole('button', { name: /Print label/i }))
+
+    expect(printSpy).not.toHaveBeenCalled()
+    expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('no valid stock SKU or barcode'))
   })
 
   it('renders Print ticket button, shows preparing state on click, and dispatches phoneflow:open-pawn-ticket', async () => {

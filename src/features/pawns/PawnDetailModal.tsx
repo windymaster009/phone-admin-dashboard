@@ -9,7 +9,7 @@ import DetailModalShell from '../../components/DetailModalShell'
 import DetailModalHeader from '../../components/DetailModalHeader'
 import DetailModalBody from '../../components/DetailModalBody'
 import DetailModalFooter from '../../components/DetailModalFooter'
-import { printInventoryLabel } from '../inventory/barcode'
+import { pawnInventoryLabelCode, printInventoryLabel } from '../inventory/barcode'
 import './pawn-management.css'
 
 export function pawnOutstanding(pawn: Pawn) {
@@ -152,9 +152,14 @@ export default function PawnDetailModal({
 
   function printPawnProductLabel() {
     const linkedItem = typeof pawn.inventoryItem === 'object' ? pawn.inventoryItem : null
+    const labelCode = pawnInventoryLabelCode(linkedItem?.sku, pawn.itemSnapshot?.sku, linkedItem?.barcode)
+    if (!labelCode) {
+      window.alert('This pawn has no valid stock SKU or barcode. Open its stock record before printing a label.')
+      return
+    }
     printInventoryLabel({
-      sku: linkedItem?.sku || pawn.pawnNo,
-      barcode: pawn.pawnNo,
+      sku: labelCode,
+      barcode: labelCode,
       name: linkedItem?.name || pawn.itemSnapshot.name,
       brand: linkedItem?.brand || pawn.itemSnapshot.brand,
       model: [linkedItem?.model || pawn.itemSnapshot.model, linkedItem?.storage || pawn.itemSnapshot.storage, linkedItem?.color || pawn.itemSnapshot.color].filter(Boolean).join(' '),

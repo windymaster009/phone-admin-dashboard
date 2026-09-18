@@ -30,7 +30,7 @@ export interface RouterContextValue {
   isUnknownRoute: boolean
 }
 
-const RouterContext = createContext<RouterContextValue | null>(null)
+export const RouterContext = createContext<RouterContextValue | null>(null)
 
 export function RouterProvider({ children }: { children: ReactNode }) {
   const [currentPath, setCurrentPath] = useState<string>(() => {

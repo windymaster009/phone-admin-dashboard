@@ -1,3 +1,5 @@
+import type { Pawn } from '../../types/domain'
+
 export type ModalKind = 'stock' | 'purchase' | 'sale' | 'pawn' | 'scan' | 'label'
 export type StockCategory = 'PHONE' | 'TABLET' | 'ACCESSORY' | 'SPARE_PART' | 'OTHER'
 
@@ -29,6 +31,7 @@ export type InventoryItem = {
   condition?: string
   status: string
   imei1?: string
+  relatedPawn?: { status: string } | null
 }
 
 export type RelatedPawn = {
@@ -87,6 +90,7 @@ export type CreatedPawn = {
   pawnNo: string
   principal: number
   currency: PawnCurrency
+  pawn?: Pawn
 }
 
 export type CompletedStockAdjustment = {
@@ -261,4 +265,3 @@ export function inventoryNativeSalePriceText(item: InventoryItem) {
   const rate = Number(item.pricingExchangeRate) > 0 ? Number(item.pricingExchangeRate) : 4100
   return saleAmountText(inventorySalePrice(item, currency, rate), currency)
 }
-

@@ -21,9 +21,23 @@ export function sanitizeCode(value: unknown): string {
   return str
 }
 
+export function pawnInventoryLabelCode(sku: unknown, snapshotSku: unknown, barcode: unknown): string {
+  for (const candidate of [sku, snapshotSku, barcode]) {
+    const code = sanitizeCode(candidate)
+    if (code && !/^PW-/i.test(code)) return code
+  }
+  return ''
+}
+
 export function barcodeValue(item: LabelItem): string {
   const barcode = sanitizeCode(item.barcode)
   const sku = sanitizeCode(item.sku)
+
+  // Pawn collateral labels must encode and display the linked inventory item's SKU (e.g. PWN-...),
+  // never the pawn contract number (PW-...), even if an existing record stored PW-... in its barcode field.
+  if (sku && (/^PWN-/i.test(sku) || /^PW-/i.test(barcode))) {
+    return sku
+  }
 
   // For a valid non-legacy barcode, encode that barcode
   if (barcode && !barcode.startsWith('PF-LEGACY-')) {

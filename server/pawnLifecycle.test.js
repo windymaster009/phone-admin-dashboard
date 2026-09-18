@@ -467,11 +467,15 @@ test('Pawn creation: successfully creates customer, collateral inventory item, a
     assert.equal(createdPawn.graceEndsAt.getTime(), createdPawn.dueDate.getTime() + 5 * 86400000)
 
     // Verify linked inventory item details returned immediately in creation response
-    assert.equal(createdItem.barcode, createdPawn.pawnNo)
-    assert.ok(createdItem.sku)
+    // Physical phone label uses PWN SKU as the barcode, NOT the pawn contract number PW-...
+    assert.equal(createdItem.barcode, createdItem.sku)
+    assert.match(createdItem.sku, /^PWN-/)
+    assert.match(createdPawn.pawnNo, /^PW-/)
+    assert.notEqual(createdItem.barcode, createdPawn.pawnNo)
+    assert.equal(createdPawn.itemSnapshot?.sku, createdItem.sku)
     assert.ok(res.body.pawn.inventoryItem)
     assert.equal(typeof res.body.pawn.inventoryItem, 'object')
-    assert.equal(res.body.pawn.inventoryItem.barcode, createdPawn.pawnNo)
+    assert.equal(res.body.pawn.inventoryItem.barcode, createdItem.sku)
     assert.equal(res.body.pawn.inventoryItem.sku, createdItem.sku)
     assert.equal(res.body.pawn.inventoryItem.name, 'Samsung S22')
     assert.equal(res.body.pawn.inventoryItem.status, 'PAWNED')
@@ -481,7 +485,6 @@ test('Pawn creation: successfully creates customer, collateral inventory item, a
     Pawn.create = origPawnCreate
   }
 })
-
 // ---------------------------------------------------------------------------
 // 3. Pawn Listing Customer Redaction
 // ---------------------------------------------------------------------------
@@ -1332,6 +1335,178 @@ test('Inventory scan: fallback resolves collateral when code matches pawnNo dire
     assert.equal(res.body.relatedPawn.pawnNo, pawnNo)
   } finally {
     InventoryItem.findOne = origItemFindOne
+    Pawn.findOne = origPawnFindOne
+  }
+})
+
+test('Inventory scan: resolves collateral item and related pawn when scanning PWN SKU', async () => {
+  const origItemFindOne = InventoryItem.findOne
+  const origPawnFindOne = Pawn.findOne
+  const itemId = new mongoose.Types.ObjectId()
+  const pawnId = new mongoose.Types.ObjectId()
+  const pawnSku = 'PWN-20260918-COLLAT1'
+  const pawnNo = 'PW-20260918-CONTRACT1'
+
+  const mockItem = {
+    _id: itemId,
+    sku: pawnSku,
+    barcode: pawnSku,
+    name: 'iPhone 15 Pro Max',
+    brand: 'Apple',
+    model: 'iPhone 15 Pro Max',
+    imei1: '358901234567899',
+    status: 'PAWNED',
+  }
+
+  const mockPawn = {
+    _id: pawnId,
+    pawnNo,
+    status: 'ACTIVE',
+    customer: { name: 'Vannak Lim' },
+    inventoryItem: mockItem,
+  }
+
+  InventoryItem.findOne = (query) => {
+    if (query.$or && query.$or.some((c) => (c.sku && c.sku.test && c.sku.test(pawnSku)) || (c.barcode && c.barcode.test && c.barcode.test(pawnSku)))) {
+      return Promise.resolve(mockItem)
+    }
+    return Promise.resolve(null)
+  }
+  Pawn.findOne = () => ({
+    select: () => ({
+      populate: () => ({
+        lean: () => Promise.resolve(mockPawn),
+      }),
+    }),
+  })
+
+  try {
+    const res = await callRouter(apiRouter, {
+      method: 'GET',
+      url: `/inventory/scan/${pawnSku}`,
+      user: mockOwner,
+    })
+    assert.equal(res.status, 200)
+    assert.ok(res.body.item)
+    assert.equal(res.body.item.sku, pawnSku)
+    assert.equal(res.body.item.barcode, pawnSku)
+    assert.ok(res.body.relatedPawn)
+    assert.equal(res.body.relatedPawn.pawnNo, pawnNo)
+    assert.equal(res.body.relatedPawn.customer.name, 'Vannak Lim')
+  } finally {
+    InventoryItem.findOne = origItemFindOne
+    Pawn.findOne = origPawnFindOne
+  }
+})
+
+test('Inventory lookup GET /inventory/:id: resolves collateral item and related pawn when querying by PWN SKU', async () => {
+  const origItemFindOne = InventoryItem.findOne
+  const origPawnFindOne = Pawn.findOne
+  const itemId = new mongoose.Types.ObjectId()
+  const pawnId = new mongoose.Types.ObjectId()
+  const pawnSku = 'PWN-20260918-COLLAT2'
+  const pawnNo = 'PW-20260918-CONTRACT2'
+
+  const mockItem = {
+    _id: itemId,
+    sku: pawnSku,
+    barcode: pawnSku,
+    name: 'Samsung S24 Ultra',
+    status: 'PAWNED',
+    toObject() { return { ...mockItem } },
+  }
+
+  const mockPawn = {
+    _id: pawnId,
+    pawnNo,
+    status: 'ACTIVE',
+  }
+
+  InventoryItem.findOne = (query) => {
+    if (query.$or && query.$or.some((c) => (c.sku && c.sku.test && c.sku.test(pawnSku)) || (c.barcode && c.barcode.test && c.barcode.test(pawnSku)))) {
+      return Promise.resolve(mockItem)
+    }
+    return Promise.resolve(null)
+  }
+  Pawn.findOne = () => ({
+    select: () => ({
+      lean: () => Promise.resolve(mockPawn),
+    }),
+  })
+
+  try {
+    const res = await callRouter(apiRouter, {
+      method: 'GET',
+      url: `/inventory/${pawnSku}`,
+      user: mockOwner,
+    })
+    assert.equal(res.status, 200)
+    assert.ok(res.body.item)
+    assert.equal(res.body.item.sku, pawnSku)
+    assert.ok(res.body.item.relatedPawn)
+    assert.equal(res.body.item.relatedPawn.pawnNo, pawnNo)
+  } finally {
+    InventoryItem.findOne = origItemFindOne
+    Pawn.findOne = origPawnFindOne
+  }
+})
+
+test('Inventory lookup GET /inventory/:id: resolves collateral item and related pawn when querying by legacy pawnNo', async () => {
+  const origItemFindOne = InventoryItem.findOne
+  const origItemFindById = InventoryItem.findById
+  const origPawnFindOne = Pawn.findOne
+  const itemId = new mongoose.Types.ObjectId()
+  const pawnId = new mongoose.Types.ObjectId()
+  const pawnSku = 'PWN-20260918-LEGACY'
+  const legacyPawnNo = 'PW-20260918-LEGACY'
+
+  const mockItem = {
+    _id: itemId,
+    sku: pawnSku,
+    barcode: legacyPawnNo,
+    name: 'Google Pixel 8 Pro',
+    status: 'PAWNED',
+    toObject() { return { ...mockItem } },
+  }
+
+  const mockPawn = {
+    _id: pawnId,
+    pawnNo: legacyPawnNo,
+    status: 'ACTIVE',
+    inventoryItem: itemId,
+  }
+
+  InventoryItem.findOne = () => Promise.resolve(null)
+  Pawn.findOne = (query) => {
+    if (query.pawnNo) {
+      return {
+        select: () => ({
+          lean: () => Promise.resolve(mockPawn),
+        }),
+      }
+    }
+    return {
+      select: () => ({
+        lean: () => Promise.resolve({ pawnNo: legacyPawnNo, status: 'ACTIVE' }),
+      }),
+    }
+  }
+  InventoryItem.findById = () => Promise.resolve(mockItem)
+
+  try {
+    const res = await callRouter(apiRouter, {
+      method: 'GET',
+      url: `/inventory/${legacyPawnNo}`,
+      user: mockOwner,
+    })
+    assert.equal(res.status, 200)
+    assert.ok(res.body.item)
+    assert.equal(res.body.item.sku, pawnSku)
+    assert.ok(res.body.item.relatedPawn)
+    assert.equal(res.body.item.relatedPawn.pawnNo, legacyPawnNo)
+  } finally {
+    InventoryItem.findOne = origItemFindOne
+    InventoryItem.findById = origItemFindById
     Pawn.findOne = origPawnFindOne
   }
 })

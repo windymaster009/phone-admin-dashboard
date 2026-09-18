@@ -187,6 +187,7 @@ const pawnSchema = new Schema(
     inventoryItem: { type: Schema.Types.ObjectId, ref: 'InventoryItem' },
     itemSnapshot: {
       name: { type: String, required: true },
+      sku: { type: String, trim: true },
       brand: String,
       model: String,
       imei: String,

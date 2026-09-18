@@ -367,3 +367,47 @@
 :root[data-theme='light'] .receipt-chevron {
   color: var(--muted);
 }
+
+/* Match the bundled Khmer print font and bilingual row wrapping in preview. */
+@font-face {
+  font-family: KhmerPrint;
+  src: url('/fonts/KhmerOSsiemreap.ttf') format('truetype');
+  font-weight: 400;
+}
+
+@font-face {
+  font-family: KhmerPrint;
+  src: url('/fonts/KhmerOSbattambang.ttf') format('truetype');
+  font-weight: 700;
+}
+
+.receipt-paper {
+  font-family: Arial, KhmerPrint, sans-serif;
+}
+
+.receipt-paper-thermal .receipt-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.receipt-paper-thermal .receipt-row span {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 9px;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+}
+
+.receipt-paper-thermal .receipt-row strong {
+  flex: 0 0 auto;
+  max-width: 50%;
+  font-size: 9.5px;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.receipt-paper-thermal .pawn-ticket-fields .receipt-row strong {
+  max-width: 50%;
+}

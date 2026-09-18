@@ -4,7 +4,7 @@ import mongoose from 'mongoose'
 import jwt from 'jsonwebtoken'
 import apiRouter from './routes.js'
 import serviceRouter from './serviceRoutes.js'
-import { ActivityLog, Customer, InventoryItem, Supplier, Trade, User } from './models.js'
+import { ActivityLog, Customer, InventoryItem, Pawn, Supplier, Trade, User } from './models.js'
 import { ServiceCharge, ServiceOffering } from './serviceModels.js'
 import { AuthSession } from './authSessionModels.js'
 
@@ -55,6 +55,7 @@ const origActivityLogCreate = ActivityLog.create
 const origInventoryItemFindOne = InventoryItem.findOne
 const origInventoryItemFindById = InventoryItem.findById
 const origCustomerCreate = Customer.create
+const origPawnFindOne = Pawn.findOne
 
 test.beforeEach(() => {
   currentUser = mockOwner
@@ -84,6 +85,13 @@ test.beforeEach(() => {
     return p
   }
   Customer.create = async ([data]) => [{ _id: new mongoose.Types.ObjectId(), ...data }]
+  Pawn.findOne = () => ({
+    select: () => {
+      const p = Promise.resolve(null)
+      p.session = () => p
+      return p
+    },
+  })
 })
 
 test.afterEach(() => {
@@ -95,6 +103,7 @@ test.afterEach(() => {
   InventoryItem.findOne = origInventoryItemFindOne
   InventoryItem.findById = origInventoryItemFindById
   Customer.create = origCustomerCreate
+  Pawn.findOne = origPawnFindOne
 })
 
 function makeToken(user) {
@@ -889,6 +898,104 @@ test('POST /trades (BUY): NEW_CUSTOMER requires phone number (400)', async () =>
   assert.match(res.body.message, /phone number is required for a new customer/i)
 })
 
+test('POST /trades (BUY): rejects NEW_CUSTOMER or NEW_SUPPLIER when seller name is missing (400)', async () => {
+  const resCust = await callRouter(apiRouter, {
+    method: 'POST',
+    url: '/trades',
+    user: mockManager,
+    body: {
+      type: 'BUY',
+      sellerType: 'NEW_CUSTOMER',
+      seller: { name: '', phone: '012345678' },
+      currency: 'USD',
+      amountPaid: 100,
+      items: [{
+        category: 'ACCESSORY',
+        name: 'Case',
+        brand: 'Spigen',
+        sku: 'SPG-CASE-02',
+        quantity: 1,
+        purchasePrice: 100,
+      }],
+    },
+  })
+  assert.equal(resCust.status, 400)
+  assert.match(resCust.body.message, /seller name is required/i)
+
+  const resSupp = await callRouter(apiRouter, {
+    method: 'POST',
+    url: '/trades',
+    user: mockManager,
+    body: {
+      type: 'BUY',
+      sellerType: 'NEW_SUPPLIER',
+      seller: { name: '', phone: '012345678' },
+      currency: 'USD',
+      amountPaid: 100,
+      items: [{
+        category: 'ACCESSORY',
+        name: 'Cable',
+        brand: 'Anker',
+        sku: 'ANK-CBL-01',
+        quantity: 1,
+        purchasePrice: 100,
+      }],
+    },
+  })
+  assert.equal(resSupp.status, 400)
+  assert.match(resSupp.body.message, /seller name is required/i)
+})
+
+test('POST /trades (BUY): allows WALK_IN with blank seller name, does not create customer, and records empty seller name', async () => {
+  const originalItemCreate = InventoryItem.create
+  const originalTradeCreate = Trade.create
+  const originalCustCreate = Customer.create
+  let stock, trade
+  let customerCreated = false
+  InventoryItem.create = async ([data]) => { stock = { _id: new mongoose.Types.ObjectId(), ...data }; return [stock] }
+  Trade.create = async ([data]) => {
+    trade = { _id: new mongoose.Types.ObjectId(), ...data, populate: async function () { return this } }
+    return [trade]
+  }
+  Customer.create = async () => {
+    customerCreated = true
+    return [{ _id: new mongoose.Types.ObjectId() }]
+  }
+  try {
+    const res = await callRouter(apiRouter, {
+      method: 'POST',
+      url: '/trades',
+      user: mockManager,
+      body: {
+        type: 'BUY',
+        sellerType: 'WALK_IN',
+        seller: { name: '', phone: '', nationalIdNumber: '' },
+        currency: 'USD',
+        exchangeRate: 4100,
+        amountPaid: 240,
+        items: [{
+          category: 'PHONE',
+          brand: 'Apple',
+          model: 'iPhone 15',
+          storage: '256GB',
+          color: 'Black',
+          imei: '869012345678901',
+          purchasePrice: 240,
+        }],
+      },
+    })
+    assert.equal(res.status, 201)
+    assert.equal(customerCreated, false, 'Must not create a customer record for walk-in seller')
+    assert.equal(trade.sellerType, 'WALK_IN')
+    assert.equal(trade.sellerSnapshot?.name, '')
+    assert.equal(trade.customer, undefined)
+  } finally {
+    InventoryItem.create = originalItemCreate
+    Trade.create = originalTradeCreate
+    Customer.create = originalCustCreate
+  }
+})
+
 test('POST /trades (SELL): rejects non-existent customer (404)', async () => {
   const fakeItemId = new mongoose.Types.ObjectId()
   const fakeCustId = new mongoose.Types.ObjectId()
@@ -974,7 +1081,128 @@ test('POST /trades (BUY): sanitizes "NULL" SKU and auto-generates clean BUY code
   }
 })
 
-test('POST /trades (BUY): rejects literal "NULL" SKU for ACCESSORY where SKU is required', async () => {
+test('POST /trades (BUY): allows NEW accessory with blank or "NULL" SKU, auto-generates clean BUY code, and never saves "NULL" or empty SKU', async () => {
+  const originalItemCreate = InventoryItem.create
+  const originalTradeCreate = Trade.create
+  let stock, trade
+  InventoryItem.create = async ([data]) => { stock = { _id: new mongoose.Types.ObjectId(), ...data }; return [stock] }
+  Trade.create = async ([data]) => {
+    trade = { _id: new mongoose.Types.ObjectId(), ...data, populate: async function () { return this } }
+    return [trade]
+  }
+  try {
+    const res = await callRouter(apiRouter, {
+      method: 'POST',
+      url: '/trades',
+      user: mockManager,
+      body: {
+        type: 'BUY',
+        sellerType: 'WALK_IN',
+        seller: { name: 'Customer seller' },
+        currency: 'USD',
+        exchangeRate: 4100,
+        amountPaid: 20,
+        items: [{
+          category: 'ACCESSORY',
+          name: 'Case',
+          brand: 'Spigen',
+          sku: 'NULL',
+          quantity: 1,
+          purchasePrice: 20,
+        }],
+      },
+    })
+    assert.equal(res.status, 201)
+    assert.notEqual(stock.sku, 'NULL', 'Must not store literal string "NULL" as SKU')
+    assert.notEqual(stock.sku, '', 'Must not store empty string as SKU')
+    assert.match(stock.sku, /^BUY-/, 'Auto-generates clean BUY- SKU')
+    assert.notEqual(stock.barcode, 'NULL', 'Must not store literal string "NULL" as barcode')
+    assert.match(stock.barcode, /^PF-/, 'Auto-generates clean PF- barcode')
+  } finally {
+    InventoryItem.create = originalItemCreate
+    Trade.create = originalTradeCreate
+  }
+})
+
+test('POST /trades (BUY): allows NEW accessory with completely blank SKU and generates unique BUY code', async () => {
+  const originalItemCreate = InventoryItem.create
+  const originalTradeCreate = Trade.create
+  let stock, trade
+  InventoryItem.create = async ([data]) => { stock = { _id: new mongoose.Types.ObjectId(), ...data }; return [stock] }
+  Trade.create = async ([data]) => {
+    trade = { _id: new mongoose.Types.ObjectId(), ...data, populate: async function () { return this } }
+    return [trade]
+  }
+  try {
+    const res = await callRouter(apiRouter, {
+      method: 'POST',
+      url: '/trades',
+      user: mockManager,
+      body: {
+        type: 'BUY',
+        sellerType: 'WALK_IN',
+        seller: { name: 'Customer seller' },
+        currency: 'USD',
+        exchangeRate: 4100,
+        amountPaid: 15,
+        items: [{
+          category: 'ACCESSORY',
+          name: 'Fast Cable',
+          brand: 'Anker',
+          sku: '',
+          quantity: 2,
+          purchasePrice: 7.5,
+        }],
+      },
+    })
+    assert.equal(res.status, 201)
+    assert.match(stock.sku, /^BUY-/, 'Auto-generates clean BUY- SKU')
+  } finally {
+    InventoryItem.create = originalItemCreate
+    Trade.create = originalTradeCreate
+  }
+})
+
+test('POST /trades (BUY): preserves owner-supplied SKU for NEW accessory', async () => {
+  const originalItemCreate = InventoryItem.create
+  const originalTradeCreate = Trade.create
+  let stock, trade
+  InventoryItem.create = async ([data]) => { stock = { _id: new mongoose.Types.ObjectId(), ...data }; return [stock] }
+  Trade.create = async ([data]) => {
+    trade = { _id: new mongoose.Types.ObjectId(), ...data, populate: async function () { return this } }
+    return [trade]
+  }
+  try {
+    const res = await callRouter(apiRouter, {
+      method: 'POST',
+      url: '/trades',
+      user: mockManager,
+      body: {
+        type: 'BUY',
+        sellerType: 'WALK_IN',
+        seller: { name: 'Customer seller' },
+        currency: 'USD',
+        exchangeRate: 4100,
+        amountPaid: 25,
+        items: [{
+          category: 'ACCESSORY',
+          name: 'Wireless Charger',
+          brand: 'Baseus',
+          sku: 'bas-wrl-25w',
+          quantity: 1,
+          purchasePrice: 25,
+        }],
+      },
+    })
+    assert.equal(res.status, 201)
+    assert.equal(stock.sku, 'BAS-WRL-25W', 'Preserves and uppercases supplied SKU')
+  } finally {
+    InventoryItem.create = originalItemCreate
+    Trade.create = originalTradeCreate
+  }
+})
+
+test('POST /trades (BUY): rejects duplicate owner-supplied SKU within the same purchase batch (409)', async () => {
   const res = await callRouter(apiRouter, {
     method: 'POST',
     url: '/trades',
@@ -985,17 +1213,268 @@ test('POST /trades (BUY): rejects literal "NULL" SKU for ACCESSORY where SKU is 
       seller: { name: 'Customer seller' },
       currency: 'USD',
       exchangeRate: 4100,
-      amountPaid: 20,
-      items: [{
-        category: 'ACCESSORY',
-        name: 'Case',
-        brand: 'Spigen',
-        sku: 'NULL',
-        quantity: 1,
-        purchasePrice: 20,
-      }],
+      amountPaid: 50,
+      items: [
+        {
+          category: 'ACCESSORY',
+          name: 'Case A',
+          brand: 'Spigen',
+          sku: 'SPG-DUP-01',
+          quantity: 1,
+          purchasePrice: 25,
+        },
+        {
+          category: 'ACCESSORY',
+          name: 'Case B',
+          brand: 'Spigen',
+          sku: 'SPG-DUP-01',
+          quantity: 1,
+          purchasePrice: 25,
+        },
+      ],
     },
   })
-  assert.equal(res.status, 400)
-  assert.match(res.body.message, /valid SKU are required/i)
+  assert.equal(res.status, 409)
+  assert.match(res.body.message, /appears more than once in this purchase/i)
+})
+
+test('POST /trades (BUY): rejects owner-supplied SKU that already exists in inventory (409)', async () => {
+  const origFindOne = InventoryItem.findOne
+  InventoryItem.findOne = (query) => {
+    if (query?.sku) {
+      return { select: async () => ({ sku: 'EXISTING-ANKER-SKU' }) }
+    }
+    return { select: async () => null }
+  }
+
+  try {
+    const res = await callRouter(apiRouter, {
+      method: 'POST',
+      url: '/trades',
+      user: mockManager,
+      body: {
+        type: 'BUY',
+        sellerType: 'WALK_IN',
+        seller: { name: 'Customer seller' },
+        currency: 'USD',
+        exchangeRate: 4100,
+        amountPaid: 30,
+        items: [{
+          category: 'ACCESSORY',
+          name: 'Power Bank',
+          brand: 'Anker',
+          sku: 'EXISTING-ANKER-SKU',
+          quantity: 1,
+          purchasePrice: 30,
+        }],
+      },
+    })
+    assert.equal(res.status, 409)
+    assert.match(res.body.message, /already exists in inventory/i)
+  } finally {
+    InventoryItem.findOne = origFindOne
+  }
+})
+
+test('POST /trades (BUY): allows multiple accessories with blank SKUs, generating distinct codes for each', async () => {
+  const originalItemCreate = InventoryItem.create
+  const originalTradeCreate = Trade.create
+  const createdStocks = []
+  let trade
+  InventoryItem.create = async ([data]) => {
+    const item = { _id: new mongoose.Types.ObjectId(), ...data }
+    createdStocks.push(item)
+    return [item]
+  }
+  Trade.create = async ([data]) => {
+    trade = { _id: new mongoose.Types.ObjectId(), ...data, populate: async function () { return this } }
+    return [trade]
+  }
+  try {
+    const res = await callRouter(apiRouter, {
+      method: 'POST',
+      url: '/trades',
+      user: mockManager,
+      body: {
+        type: 'BUY',
+        sellerType: 'WALK_IN',
+        seller: { name: 'Customer seller' },
+        currency: 'USD',
+        exchangeRate: 4100,
+        amountPaid: 35,
+        items: [
+          {
+            category: 'ACCESSORY',
+            name: 'Cable 1m',
+            brand: 'Anker',
+            sku: '',
+            quantity: 1,
+            purchasePrice: 15,
+          },
+          {
+            category: 'ACCESSORY',
+            name: 'Adapter 20W',
+            brand: 'Apple',
+            sku: '',
+            quantity: 1,
+            purchasePrice: 20,
+          },
+        ],
+      },
+    })
+    assert.equal(res.status, 201)
+    assert.equal(createdStocks.length, 2)
+    assert.match(createdStocks[0].sku, /^BUY-/)
+    assert.match(createdStocks[1].sku, /^BUY-/)
+    assert.notEqual(createdStocks[0].sku, createdStocks[1].sku, 'Both blank-SKU accessories must have unique generated SKUs')
+  } finally {
+    InventoryItem.create = originalItemCreate
+    Trade.create = originalTradeCreate
+  }
+})
+
+test('POST /trades (SELL): rejects sale if an open pawn still owns the item, even if item status is IN_STOCK', async () => {
+  const fakeItemId = new mongoose.Types.ObjectId()
+  const phoneItem = {
+    _id: fakeItemId,
+    name: 'Pawned iPhone 14',
+    category: 'PHONE',
+    status: 'IN_STOCK', // inconsistent stock status
+    quantity: 1,
+    sellPrice: 600,
+    minimumSellPrice: 550,
+    buyPrice: 400,
+    save: async function () { return this },
+  }
+
+  const origFindById = InventoryItem.findById
+  const origPawnFindOne = Pawn.findOne
+
+  InventoryItem.findById = mockItemFindById(phoneItem)
+  Pawn.findOne = () => ({
+    select: () => {
+      const p = Promise.resolve({
+        pawnNo: 'PW-2026-9999',
+        status: 'ACTIVE',
+      })
+      p.session = () => p
+      return p
+    },
+  })
+
+  try {
+    const payload = {
+      type: 'SELL',
+      currency: 'USD',
+      warrantyDays: 0,
+      amountPaid: 600,
+      paymentMethod: 'CASH',
+      items: [{ inventoryItem: fakeItemId.toString(), quantity: 1 }],
+    }
+
+    const res = await callRouter(apiRouter, { method: 'POST', url: '/trades', body: payload, user: mockManager })
+    assert.equal(res.status, 409)
+    assert.match(res.body.message, /currently pledged to active pawn contract #PW-2026-9999/i)
+  } finally {
+    InventoryItem.findById = origFindById
+    Pawn.findOne = origPawnFindOne
+  }
+})
+
+test('POST /trades (SELL): rejects a redeemed pawn item if its stock status is inconsistent', async () => {
+  const fakeItemId = new mongoose.Types.ObjectId()
+  const phoneItem = {
+    _id: fakeItemId,
+    name: 'Redeemed iPhone 14',
+    category: 'PHONE',
+    status: 'IN_STOCK',
+    quantity: 1,
+    sellPrice: 600,
+    minimumSellPrice: 550,
+    buyPrice: 400,
+  }
+  const origFindById = InventoryItem.findById
+  const origPawnFindOne = Pawn.findOne
+  InventoryItem.findById = mockItemFindById(phoneItem)
+  Pawn.findOne = () => ({
+    select: () => {
+      const query = Promise.resolve({ pawnNo: 'PW-2026-REDEEMED', status: 'REDEEMED' })
+      query.session = () => query
+      return query
+    },
+  })
+  try {
+    const res = await callRouter(apiRouter, {
+      method: 'POST',
+      url: '/trades',
+      user: mockManager,
+      body: {
+        type: 'SELL', currency: 'USD', warrantyDays: 0, amountPaid: 600, paymentMethod: 'CASH',
+        items: [{ inventoryItem: fakeItemId.toString(), quantity: 1 }],
+      },
+    })
+    assert.equal(res.status, 409)
+    assert.match(res.body.message, /linked to redeemed pawn contract #PW-2026-REDEEMED/i)
+  } finally {
+    InventoryItem.findById = origFindById
+    Pawn.findOne = origPawnFindOne
+  }
+})
+
+test('POST /trades (SELL): allows sale of IN_STOCK item linked to a FORFEITED pawn contract', async () => {
+  const fakeItemId = new mongoose.Types.ObjectId()
+  const phoneItem = {
+    _id: fakeItemId,
+    name: 'Forfeited iPhone 14',
+    category: 'PHONE',
+    status: 'IN_STOCK',
+    quantity: 1,
+    sellPrice: 600,
+    minimumSellPrice: 550,
+    buyPrice: 400,
+    save: async function () { return this },
+  }
+
+  const origFindById = InventoryItem.findById
+  const origPawnFindOne = Pawn.findOne
+  const origTradeCreate = Trade.create
+
+  InventoryItem.findById = mockItemFindById(phoneItem)
+  Pawn.findOne = () => ({
+    select: () => {
+      const p = Promise.resolve(null)
+      p.session = () => p
+      return p
+    },
+  })
+
+  let createdTrade = null
+  Trade.create = async ([tradeData]) => {
+    createdTrade = {
+      _id: new mongoose.Types.ObjectId(),
+      ...tradeData,
+      populate: async function () { return this },
+    }
+    return [createdTrade]
+  }
+
+  try {
+    const payload = {
+      type: 'SELL',
+      currency: 'USD',
+      warrantyDays: 0,
+      amountPaid: 600,
+      paymentMethod: 'CASH',
+      items: [{ inventoryItem: fakeItemId.toString(), quantity: 1 }],
+    }
+
+    const res = await callRouter(apiRouter, { method: 'POST', url: '/trades', body: payload, user: mockManager })
+    assert.equal(res.status, 201)
+    assert.equal(phoneItem.quantity, 0)
+    assert.equal(phoneItem.status, 'SOLD')
+  } finally {
+    InventoryItem.findById = origFindById
+    Pawn.findOne = origPawnFindOne
+    Trade.create = origTradeCreate
+  }
 })

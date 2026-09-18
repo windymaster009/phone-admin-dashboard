@@ -179,7 +179,7 @@ function ViewerModal({ viewer, onClose }: { viewer: ViewerState; onClose: () => 
   }
 
   return (
-    <Modal title={receipt.receiptNo} description={`${documentLabel(receipt.documentType)} · ${receipt.partyName || 'Walk-in customer'}`} onClose={onClose} wide className="receipt-viewer-modal">
+    <Modal title={receipt.receiptNo} description={`${documentLabel(receipt.documentType)} · ${receipt.partyName || (receipt.documentType === 'PURCHASE_RECEIPT' ? 'Walk-in seller' : 'Walk-in customer')}`} onClose={onClose} wide className="receipt-viewer-modal">
       {error && <div className="receipt-error" role="alert"><AlertTriangle size={16} /> {error}</div>}
       <div className="receipt-viewer-toolbar">
         <div className="receipt-layout-switch">
@@ -316,7 +316,7 @@ export default function ReceiptCenterPage() {
                 <tr key={receipt._id}>
                   <td><strong className="mono">{receipt.receiptNo}</strong></td>
                   <td><span className="receipt-type"><DocumentIcon type={receipt.documentType} /> {documentLabel(receipt.documentType)}</span></td>
-                  <td><strong>{receipt.partyName || 'Walk-in customer'}</strong><small className="table-subtext">{receipt.partyPhone || 'No phone'}</small></td>
+                  <td><strong>{receipt.partyName || (receipt.documentType === 'PURCHASE_RECEIPT' ? 'Walk-in seller' : 'Walk-in customer')}</strong><small className="table-subtext">{receipt.partyPhone || 'No phone'}</small></td>
                   <td className="mono">{receipt.referenceNo}</td>
                   <td><strong>{money(receipt.total, receipt.currency)}</strong></td>
                   <td>{dateText(receipt.issuedAt)}</td>
@@ -334,7 +334,7 @@ export default function ReceiptCenterPage() {
             <button key={receipt._id} onClick={() => void open(receipt)}>
               <span><DocumentIcon type={receipt.documentType} /></span>
               <p>
-                <strong>{receipt.partyName || 'Walk-in customer'}</strong>
+                <strong>{receipt.partyName || (receipt.documentType === 'PURCHASE_RECEIPT' ? 'Walk-in seller' : 'Walk-in customer')}</strong>
                 <small>{receipt.receiptNo} · {receipt.referenceNo}</small>
                 <small>{documentLabel(receipt.documentType)}</small>
               </p>

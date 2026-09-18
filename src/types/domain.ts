@@ -111,7 +111,7 @@ export type Pawn = {
   pawnNo: string
   customer?: Customer
   inventoryItem?: Pick<InventoryItem, '_id' | 'sku' | 'barcode' | 'name' | 'brand' | 'model' | 'storage' | 'color' | 'imei1' | 'sellPrice' | 'status'> | string
-  itemSnapshot: { name: string; brand?: string; model?: string; imei?: string; condition?: string; color?: string; storage?: string }
+  itemSnapshot: { name: string; brand?: string; model?: string; imei?: string; condition?: string; color?: string; storage?: string; sku?: string }
   estimatedValue: number
   pawnPercentage: number
   principal: number
