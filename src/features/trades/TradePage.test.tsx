@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import TradePage from './TradePage'
@@ -91,6 +91,32 @@ describe('TradePage feature integration', () => {
       expect(screen.getByText(new RegExp(mockTradeRecord.tradeNo, 'i'))).toBeInTheDocument()
       expect(screen.getByText('+$1,150')).toBeInTheDocument()
     })
+  })
+
+  it('refreshes recent transactions immediately after a completed buy or sale event', async () => {
+    let requestCount = 0
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      requestCount += 1
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ trades: requestCount === 1 ? [] : [mockPurchaseRecord] }),
+      } as Response
+    })
+
+    render(<TradePage />)
+
+    await waitFor(() => expect(screen.getByText('No transactions yet')).toBeInTheDocument())
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:trades-updated'))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText(new RegExp(mockPurchaseRecord.tradeNo, 'i'))).toBeInTheDocument()
+    })
+    expect(requestCount).toBe(2)
   })
 
   it('opens trade detail modal portaled under document.body with shared DetailModal architecture', async () => {

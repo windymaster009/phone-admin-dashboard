@@ -9,7 +9,12 @@ import type { ReceiptDocumentType, ReceiptLayout, ReceiptOption, ReceiptOptionRe
 import './receipt-center.css'
 
 type SourceContext = { sourceType: ReceiptSourceType; reference: string }
-type ViewerState = { receipt: ReceiptRecord; initialLayout?: ReceiptLayout }
+type ViewerState = {
+  receipt: ReceiptRecord
+  initialLayout?: ReceiptLayout
+  autoPrintWindow?: Window
+  initialError?: string
+}
 
 function money(value: number, currency: 'USD' | 'KHR') {
   return currency === 'KHR'
@@ -169,15 +174,16 @@ function OptionPicker({ response, busy, pendingOptionKey, error, onSelect, onClo
   )
 }
 
-function Viewer({ initialReceipt, initialLayout = 'A4', onClose, onUpdated }: { initialReceipt: ReceiptRecord; initialLayout?: ReceiptLayout; onClose: () => void; onUpdated: (receipt: ReceiptRecord) => void }) {
+function Viewer({ initialReceipt, initialLayout = 'A4', autoPrintWindow, initialError = '', onClose, onUpdated }: { initialReceipt: ReceiptRecord; initialLayout?: ReceiptLayout; autoPrintWindow?: Window; initialError?: string; onClose: () => void; onUpdated: (receipt: ReceiptRecord) => void }) {
   const [receipt, setReceipt] = useState(initialReceipt)
   const [layout, setLayout] = useState<ReceiptLayout>(initialLayout)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(initialError)
   const paperRef = useRef<HTMLDivElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
   const printingRef = useRef(false)
   const cancelPrintRef = useRef<(() => void) | null>(null)
+  const autoPrintScheduledRef = useRef(false)
 
   useEffect(() => () => cancelPrintRef.current?.(), [])
 
@@ -185,21 +191,27 @@ function Viewer({ initialReceipt, initialLayout = 'A4', onClose, onUpdated }: { 
     previewRef.current?.scrollTo?.({ top: 0, left: 0 })
   }, [layout])
 
-  async function printReceipt() {
+  async function printReceipt(preopenedPopup?: Window) {
     if (printingRef.current) return
     printingRef.current = true
     setBusy(true)
     setError('')
-    let popup: Window | null = null
-    try {
-      popup = window.open('', '_blank', 'width=980,height=760')
-    } catch {
+    let popup: Window | null = preopenedPopup || null
+    if (popup?.closed) {
       popup = null
+      setError('The prepared print window was closed. Click Print / Save PDF to try again.')
+    }
+    if (!popup && !preopenedPopup) {
+      try {
+        popup = window.open('', '_blank', 'width=980,height=760')
+      } catch {
+        popup = null
+      }
     }
     if (!popup) {
       printingRef.current = false
       setBusy(false)
-      setError(`The browser blocked the print window. Allow pop-ups for ${receipt.snapshot?.shop.name || 'this shop'} and try again.`)
+      setError((current) => current || `The browser blocked the print window. Allow pop-ups for ${receipt.snapshot?.shop.name || 'this shop'} and try again.`)
       return
     }
 
@@ -215,21 +227,26 @@ function Viewer({ initialReceipt, initialLayout = 'A4', onClose, onUpdated }: { 
       popup?.close()
     }
     try {
-      const result = await api<{ receipt: ReceiptRecord }>(`/receipts/${receipt._id}/printed`, { method: 'POST', body: JSON.stringify({ layout }), signal: controller.signal })
-      if (cancelled) return
-      setReceipt(result.receipt)
-      onUpdated(result.receipt)
       const markup = paperRef.current?.innerHTML
       if (!markup) throw new Error('Receipt preview is unavailable')
       writeReceiptPrintDocument(popup.document, { markup, layout, title: receipt.receiptNo })
       popup.focus()
-      await new Promise<void>((resolve) => {
-        resume = resolve
-        timer = window.setTimeout(resolve, 220)
-      })
+      // Show the receipt in the popup immediately. Record the print attempt and
+      // prepare fonts/page height in parallel instead of making the user wait for both.
+      const fitPage = (async () => {
+        await new Promise<void>((resolve) => {
+          resume = resolve
+          timer = window.setTimeout(resolve, 220)
+        })
+        if (!cancelled) await fitReceiptPrintPage(popup.document, layout, controller.signal)
+      })()
+      const [result] = await Promise.all([
+        api<{ receipt: ReceiptRecord }>(`/receipts/${receipt._id}/printed`, { method: 'POST', body: JSON.stringify({ layout }), signal: controller.signal }),
+        fitPage,
+      ])
       if (cancelled) return
-      await fitReceiptPrintPage(popup.document, layout, controller.signal)
-      if (cancelled) return
+      setReceipt(result.receipt)
+      onUpdated(result.receipt)
       if (popup.closed || typeof popup.print !== 'function') throw new Error('The print window is unavailable. Please try again.')
       popup.print()
     } catch (reason) {
@@ -244,6 +261,18 @@ function Viewer({ initialReceipt, initialLayout = 'A4', onClose, onUpdated }: { 
       if (!cancelled) setBusy(false)
     }
   }
+
+  useEffect(() => {
+    if (!autoPrintWindow || autoPrintScheduledRef.current) return
+    autoPrintScheduledRef.current = true
+    const timer = window.setTimeout(() => void printReceipt(autoPrintWindow), 0)
+    return () => {
+      window.clearTimeout(timer)
+      // React StrictMode re-runs effects in development. Permit the second
+      // setup only when the first scheduled print never started.
+      if (!printingRef.current) autoPrintScheduledRef.current = false
+    }
+  }, [autoPrintWindow])
 
   return <Modal title={receipt.receiptNo} description={`${documentLabel(receipt.documentType)} · ${receipt.referenceNo}`} onClose={onClose} wide>
     {error && <div className="receipt-error" role="alert"><AlertTriangle size={16} /> {error}</div>}
@@ -290,7 +319,7 @@ export default function ReceiptCenterBridge() {
     const loanTitle = loanModal?.querySelector('h2')?.textContent?.trim() || ''
     const loanReference = loanTitle.match(/^(LN-[A-Z0-9-]+)/)?.[1]
     if (loanModal && loanReference) {
-      if (loanModal.querySelector('.loan-detail-footer, .loan-footer-actions, .record-created-workflow')) {
+      if (loanModal.classList.contains('loan-detail-loading') || loanModal.querySelector('.loan-detail-footer, .loan-footer-actions, .record-created-workflow')) {
         setActionTarget(null)
         setContext(null)
         return
@@ -327,9 +356,12 @@ export default function ReceiptCenterBridge() {
     }
   }, [locate])
 
-  const generate = useCallback(async (source: SourceContext, option: ReceiptOption, initialLayout: ReceiptLayout = 'A4') => {
+  const generate = useCallback(async (source: SourceContext, option: ReceiptOption, initialLayout: ReceiptLayout = 'A4', autoPrintRequested = false, autoPrintWindow: Window | null = null) => {
     const generationKey = JSON.stringify([source.sourceType, source.reference, option.documentType, option.sourceSubId])
-    if (generationKeyRef.current === generationKey && generationController.current && !generationController.current.signal.aborted) return
+    if (generationKeyRef.current === generationKey && generationController.current && !generationController.current.signal.aborted) {
+      autoPrintWindow?.close()
+      return
+    }
     generationController.current?.abort()
     const controller = new AbortController()
     generationController.current = controller
@@ -344,11 +376,22 @@ export default function ReceiptCenterBridge() {
         body: JSON.stringify({ sourceType: source.sourceType, reference: source.reference, documentType: option.documentType, sourceSubId: option.sourceSubId }),
         signal: controller.signal,
       })
-      if (controller.signal.aborted || generationController.current !== controller) return
+      if (controller.signal.aborted || generationController.current !== controller) {
+        autoPrintWindow?.close()
+        return
+      }
       if (!result.receipt?._id) throw new Error('The receipt was created without a valid preview. Please try again.')
-      setViewer({ receipt: result.receipt, initialLayout }); setPicker(null); setVersion((value) => value + 1)
+      setViewer({
+        receipt: result.receipt,
+        initialLayout,
+        autoPrintWindow: autoPrintWindow || undefined,
+        initialError: autoPrintRequested && !autoPrintWindow
+          ? `The browser blocked the automatic print window. Allow pop-ups for ${result.receipt.snapshot?.shop.name || 'this shop'}, then click Print / Save PDF.`
+          : undefined,
+      }); setPicker(null); setVersion((value) => value + 1)
       window.dispatchEvent(new CustomEvent('phoneflow:documents-opened', { detail: { receipt: result.receipt } }))
     } catch (reason) {
+      autoPrintWindow?.close()
       if (generationController.current !== controller) return
       let message = 'Unable to generate receipt'
       if (reason instanceof DOMException && reason.name === 'AbortError') {
@@ -401,10 +444,22 @@ export default function ReceiptCenterBridge() {
 
   useEffect(() => {
     const openDocumentsEvent = (event: Event) => {
-      const detail = (event as CustomEvent<{ sourceType?: ReceiptSourceType; reference?: string }>).detail
+      const detail = (event as CustomEvent<{ sourceType?: ReceiptSourceType; reference?: string; options?: ReceiptOption[] }>).detail
       const reference = detail?.reference?.trim()
       const sourceType = detail?.sourceType || 'PAWN'
       if (!reference) return
+      if (sourceType === 'LOAN' && Array.isArray(detail.options) && detail.options.length > 0) {
+        const source: SourceContext = { sourceType, reference }
+        setContext(source)
+        setError('')
+        if (detail.options.length === 1) {
+          void generate(source, detail.options[0], 'THERMAL')
+        } else {
+          setPicker({ sourceType, referenceNo: reference, options: detail.options, source })
+          window.dispatchEvent(new CustomEvent('phoneflow:documents-opened'))
+        }
+        return
+      }
       void openDocumentsForSource({ sourceType, reference })
     }
     const openPawnTicket = (event: Event) => {
@@ -431,13 +486,28 @@ export default function ReceiptCenterBridge() {
       )
     }
     const openTradeReceipt = (event: Event) => {
-      const detail = (event as CustomEvent<{ reference?: string; currency?: 'USD' | 'KHR'; refreshOnClose?: boolean }>).detail
+      const detail = (event as CustomEvent<{ reference?: string; currency?: 'USD' | 'KHR'; autoPrint?: boolean }>).detail
       const reference = detail?.reference?.trim()
       if (!reference) return
+      let printWindow: Window | null = null
+      if (detail?.autoPrint) {
+        try {
+          printWindow = window.open('', '_blank', 'width=980,height=760')
+          if (printWindow) {
+            printWindow.document.open()
+            printWindow.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Preparing receipt</title></head><body style="font:16px system-ui;padding:32px">Preparing receipt for printing...</body></html>')
+            printWindow.document.close()
+          }
+        } catch {
+          printWindow = null
+        }
+      }
       void generate(
         { sourceType: 'TRADE', reference },
         { documentType: 'SALE_RECEIPT', sourceSubId: 'trade', label: 'Sales receipt / invoice', issuedAt: new Date().toISOString(), amount: 0, currency: detail?.currency === 'KHR' ? 'KHR' : 'USD' },
         'THERMAL',
+        Boolean(detail?.autoPrint),
+        printWindow,
       )
     }
     const openRefundReceipt = (event: Event) => {
@@ -484,8 +554,9 @@ export default function ReceiptCenterBridge() {
 
   return <>
     {actionTarget && context && createPortal(<button className="secondary-button receipt-detail-action" onClick={() => void openDocuments()} disabled={busy}><Printer size={15} /> {busy ? 'Loading...' : context.sourceType === 'TRADE' ? 'Print receipt' : 'Documents'}</button>, actionTarget)}
+    {busy && generationController.current && !picker && !viewer && <Modal title="Preparing receipt" description="Loading the saved document for printing." onClose={closePicker}><LoadingState label="Preparing receipt" detail="This may take a moment on a slow connection." /></Modal>}
     {picker && <OptionPicker response={picker} busy={busy} pendingOptionKey={pendingOptionKey} error={error} onSelect={(option) => void generate(picker.source, option, picker.source.sourceType === 'LOAN' || picker.source.sourceType === 'PAWN' ? 'THERMAL' : 'A4')} onClose={closePicker} />}
-    {viewer && <Viewer key={viewer.receipt._id} initialReceipt={viewer.receipt} initialLayout={viewer.initialLayout} onClose={closeViewer} onUpdated={(receipt) => { setViewer((current) => current ? { ...current, receipt } : null); setVersion((value) => value + 1) }} />}
+    {viewer && <Viewer key={viewer.receipt._id} initialReceipt={viewer.receipt} initialLayout={viewer.initialLayout} autoPrintWindow={viewer.autoPrintWindow} initialError={viewer.initialError} onClose={closeViewer} onUpdated={(receipt) => { setViewer((current) => current ? { ...current, receipt, autoPrintWindow: undefined } : null); setVersion((value) => value + 1) }} />}
     {!picker && !viewer && error && createPortal(<div className="receipt-toast" role="alert"><AlertTriangle size={16} /> {error}<button onClick={() => setError('')}><X size={14} /></button></div>, document.body)}
   </>
 }

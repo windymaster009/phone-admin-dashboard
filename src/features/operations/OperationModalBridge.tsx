@@ -60,7 +60,20 @@ function parsePlaceholderAlert(message?: string): ModalKind | null {
 function canOfferForSale(item: InventoryItem) {
   return item.status === 'IN_STOCK'
     && item.quantity > 0
+    && !(item as { pawn?: unknown }).pawn
     && (!item.relatedPawn || item.relatedPawn.status === 'FORFEITED')
+}
+
+function notifyTradeSaved(trade?: unknown) {
+  window.dispatchEvent(new CustomEvent('phoneflow:trades-updated', { detail: { trade } }))
+  window.dispatchEvent(new CustomEvent('phoneflow:inventory-updated'))
+}
+
+export interface SaleCartLine {
+  item: InventoryItem
+  quantity: number
+  manualUnitPriceEnabled: boolean
+  manualUnitPrice: string
 }
 
 export default function OperationModalBridge() {
@@ -118,12 +131,16 @@ export default function OperationModalBridge() {
   const [scannedItem, setScannedItem] = useState<InventoryItem | null>(null)
   const [scannedPawn, setScannedPawn] = useState<RelatedPawn | null>(null)
   const [labelItems, setLabelItems] = useState<InventoryItem[]>([])
-  const [saleItemId, setSaleItemId] = useState('')
+  const [saleCart, setSaleCart] = useState<SaleCartLine[]>([])
+  const [salePriceItemId, setSalePriceItemId] = useState('')
+  const [saleSearchText, setSaleSearchText] = useState('')
+  const [saleDropdownOpen, setSaleDropdownOpen] = useState(false)
+  const [saleActiveIndex, setSaleActiveIndex] = useState(-1)
+  const saleComboboxRef = useRef<HTMLDivElement>(null)
+  const saleSearchInputRef = useRef<HTMLInputElement>(null)
   const [saleCustomerId, setSaleCustomerId] = useState('')
-  const [saleQuantity, setSaleQuantity] = useState('1')
   const [saleDiscount, setSaleDiscount] = useState('0')
-  const [saleManualPriceEnabled, setSaleManualPriceEnabled] = useState(false)
-  const [saleManualPrice, setSaleManualPrice] = useState('')
+  const [saleDiscountType, setSaleDiscountType] = useState<'AMOUNT' | 'PERCENT'>('AMOUNT')
   const [saleWarrantyDays, setSaleWarrantyDays] = useState('')
   const [saleAmountPaid, setSaleAmountPaid] = useState('')
   const [saleNotes, setSaleNotes] = useState('')
@@ -301,7 +318,8 @@ export default function OperationModalBridge() {
   const purchasePaidInvalid = purchasePaid > purchaseTotal
     || (purchaseCurrency === 'KHR' && (!Number.isInteger(purchasePaid) || purchasePaid % 100 !== 0))
     || purchasePaidUsdDecimalsInvalid
-  const selectedSaleItem = inventory.find((item) => item._id === saleItemId)
+  const selectedSaleItem = saleCart[0]?.item || null
+  const saleItemId = selectedSaleItem?._id || ''
   const canManuallyPriceSale = getSessionUser()?.role === 'OWNER'
   const stockMatches = useMemo(() => {
     const search = stockSearch.trim().toLowerCase()
@@ -330,26 +348,97 @@ export default function OperationModalBridge() {
         && requestedStockQuantity >= (stockAdjustmentMode === 'SET' ? 0 : 1)
         && Number(resultingStockQuantity) >= 0),
   )
-  const effectiveSaleQuantity = selectedSaleItem?.category === 'PHONE' ? 1 : Math.max(1, Number(saleQuantity) || 1)
-  const savedSaleUnitPrice = inventorySalePrice(selectedSaleItem, saleCurrency, usdKhrRate)
-  const saleUnitPrice = saleManualPriceEnabled ? Number(saleManualPrice) : savedSaleUnitPrice
-  const saleSubtotal = effectiveSaleQuantity * saleUnitPrice
-  const configuredMinimumSalePrice = inventorySalePrice(selectedSaleItem, saleCurrency, usdKhrRate, true)
-  const effectiveMinimumSalePrice = configuredMinimumSalePrice > 0
-    ? configuredMinimumSalePrice
-    : getSessionUser()?.role === 'CASHIER'
-      ? saleUnitPrice
-      : 0
-  const saleMaximumDiscount = Math.max(0, saleSubtotal - effectiveSaleQuantity * effectiveMinimumSalePrice)
-  const saleDiscountAmount = Math.max(0, Number(saleDiscount) || 0)
+
+  const filteredSaleProducts = useMemo(() => {
+    const search = saleSearchText.trim().toLowerCase()
+    const available = inventory.filter(canOfferForSale)
+    if (!search) return available.slice(0, 50)
+    return available.filter((item) => {
+      return [
+        item.name,
+        item.sku,
+        item.barcode,
+        item.imei1,
+        item.serialNumber,
+        item.brand,
+        item.model,
+      ].some((val) => typeof val === 'string' && val.toLowerCase().includes(search))
+    }).slice(0, 50)
+  }, [inventory, saleSearchText])
+
+  const cartLinesWithCalculations = useMemo(() => {
+    return saleCart.map((line) => {
+      const savedUnitPrice = inventorySalePrice(line.item, saleCurrency, usdKhrRate)
+      const unitPrice = line.manualUnitPriceEnabled
+        ? Number(line.manualUnitPrice)
+        : savedUnitPrice
+      const quantity = line.item.category === 'PHONE' ? 1 : Math.max(1, line.quantity)
+      const lineSubtotal = quantity * unitPrice
+      const configuredMin = inventorySalePrice(line.item, saleCurrency, usdKhrRate, true)
+      const effectiveMin = configuredMin > 0
+        ? configuredMin
+        : getSessionUser()?.role === 'CASHIER'
+          ? unitPrice
+          : 0
+      const lineMinTotal = quantity * effectiveMin
+      const priceInvalid = !Number.isFinite(unitPrice) || unitPrice <= 0
+        || (saleCurrency === 'KHR' && (!Number.isInteger(unitPrice) || unitPrice % 100 !== 0))
+      const belowMinimum = configuredMin > unitPrice
+
+      return {
+        ...line,
+        savedUnitPrice,
+        unitPrice,
+        quantity,
+        lineSubtotal,
+        configuredMin,
+        effectiveMin,
+        lineMinTotal,
+        priceInvalid,
+        belowMinimum,
+      }
+    })
+  }, [saleCart, saleCurrency, usdKhrRate])
+  const priceEditorLine = cartLinesWithCalculations.find((line) => line.item._id === salePriceItemId)
+    || cartLinesWithCalculations.find((line) => line.priceInvalid || line.belowMinimum)
+    || cartLinesWithCalculations[0]
+
+  const saleSubtotal = useMemo(() => {
+    return cartLinesWithCalculations.reduce((sum, line) => sum + line.lineSubtotal, 0)
+  }, [cartLinesWithCalculations])
+
+  const cartMinimumTotal = useMemo(() => {
+    return cartLinesWithCalculations.reduce((sum, line) => sum + line.lineMinTotal, 0)
+  }, [cartLinesWithCalculations])
+
+  const saleMaximumDiscount = Math.max(0, saleSubtotal - cartMinimumTotal)
+  const rawSaleDiscount = Number(String(saleDiscount).replaceAll(',', ''))
+  const saleDiscountNumeric = Number.isFinite(rawSaleDiscount) ? rawSaleDiscount : 0
+  const calculatedPercentDiscount = saleCurrency === 'KHR'
+    ? Math.round((saleSubtotal * (saleDiscountNumeric / 100)) / 100) * 100
+    : Math.round((saleSubtotal * (saleDiscountNumeric / 100) + Number.EPSILON) * 100) / 100
+  const saleDiscountAmount = saleDiscountType === 'PERCENT'
+    ? Math.max(0, calculatedPercentDiscount)
+    : Math.max(0, saleDiscountNumeric)
   const saleTotal = Math.max(0, saleSubtotal - saleDiscountAmount)
   const saleReceivedAmount = saleAmountPaid === '' ? saleTotal : Math.max(0, Number(saleAmountPaid) || 0)
   const saleBalance = Math.max(0, saleTotal - saleReceivedAmount)
   const saleChangeDue = Math.max(0, saleReceivedAmount - saleTotal)
-  const salePriceInvalid = Boolean(selectedSaleItem && (!Number.isFinite(saleUnitPrice) || saleUnitPrice <= 0
-    || (saleCurrency === 'KHR' && (!Number.isInteger(saleUnitPrice) || saleUnitPrice % 100 !== 0))))
-  const saleStockPricingInvalid = configuredMinimumSalePrice > saleUnitPrice
-  const saleDiscountInvalid = saleDiscountAmount > saleMaximumDiscount
+
+  const anyPriceInvalid = cartLinesWithCalculations.some((l) => l.priceInvalid)
+  const anyBelowMinimum = cartLinesWithCalculations.some((l) => l.belowMinimum)
+  const anyQuantityInvalid = cartLinesWithCalculations.some((l) =>
+    !Number.isInteger(l.quantity) || l.quantity < 1 || l.quantity > l.item.quantity
+  )
+
+  const salePercentInvalid = saleDiscountType === 'PERCENT' && (
+    saleDiscount.trim() === ''
+    || !Number.isFinite(saleDiscountNumeric)
+    || saleDiscountNumeric < 0
+    || saleDiscountNumeric > 100
+  )
+  const saleDiscountInvalid = salePercentInvalid
+    || saleDiscountAmount > saleMaximumDiscount
     || (saleCurrency === 'KHR' && (!Number.isInteger(saleDiscountAmount) || saleDiscountAmount % 100 !== 0))
   const salePaidInvalid = salePaymentMethod === 'CASH' && (!Number.isFinite(saleReceivedAmount)
     || (saleCurrency === 'KHR' && (!Number.isInteger(saleReceivedAmount) || saleReceivedAmount % 100 !== 0)))
@@ -358,41 +447,60 @@ export default function OperationModalBridge() {
     || !Number.isInteger(saleWarrantyDayCount)
     || saleWarrantyDayCount < 0
     || saleWarrantyDayCount > 3650
+
+  const hasCartItems = cartLinesWithCalculations.length > 0
+
   const saleActionDisabled = busy
     || saleInventoryLoading
-    || !saleItemId
-    || salePriceInvalid
-    || saleStockPricingInvalid
+    || !hasCartItems
+    || anyPriceInvalid
+    || anyBelowMinimum
+    || anyQuantityInvalid
     || saleDiscountInvalid
     || salePaidInvalid
     || saleWarrantyInvalid
     || saleTotal < (saleCurrency === 'KHR' ? 100 : 0.01)
+
   const saleActionLabel = busy
     ? salePaymentMethod === 'KHQR' ? 'Generating KHQR...' : 'Saving sale...'
     : saleInventoryLoading
       ? 'Loading stock...'
-      : !saleItemId
+      : !hasCartItems
         ? 'Select a product first'
-        : salePriceInvalid
+        : anyPriceInvalid
           ? 'Enter a valid price'
-          : saleStockPricingInvalid
+          : anyBelowMinimum
             ? 'Price is below minimum'
-            : saleDiscountInvalid
-              ? 'Reduce discount'
-              : salePaidInvalid
-                ? 'Check amount paid'
-                : saleWarrantyInvalid
-                  ? 'Enter warranty days'
-                : saleTotal < (saleCurrency === 'KHR' ? 100 : 0.01)
-                  ? 'Enter a valid amount'
-                  : salePaymentMethod === 'KHQR'
-                    ? 'Generate KHQR'
-                    : 'Complete sale'
+            : anyQuantityInvalid
+              ? 'Check item quantities'
+              : saleDiscountInvalid
+                ? 'Reduce discount'
+                : salePaidInvalid
+                  ? 'Check amount paid'
+                  : saleWarrantyInvalid
+                    ? 'Enter warranty days'
+                    : saleTotal < (saleCurrency === 'KHR' ? 100 : 0.01)
+                      ? 'Enter a valid amount'
+                      : salePaymentMethod === 'KHQR'
+                        ? 'Generate KHQR'
+                        : 'Complete sale'
 
   useEffect(() => {
-    if (kind !== 'sale' || salePaymentMethod !== 'CASH' || !saleItemId) return
+    if (kind !== 'sale' || salePaymentMethod !== 'CASH' || !hasCartItems) return
     setSaleAmountPaid(saleTotal > 0 ? String(saleTotal) : '')
-  }, [kind, saleItemId, salePaymentMethod, saleTotal])
+  }, [kind, hasCartItems, salePaymentMethod, saleTotal])
+
+  useEffect(() => {
+    if (!saleDropdownOpen) return
+    const handlePointerDown = (event: MouseEvent | TouchEvent) => {
+      if (saleComboboxRef.current && !saleComboboxRef.current.contains(event.target as Node)) {
+        setSaleDropdownOpen(false)
+        setSaleActiveIndex(-1)
+      }
+    }
+    document.addEventListener('pointerdown', handlePointerDown)
+    return () => document.removeEventListener('pointerdown', handlePointerDown)
+  }, [saleDropdownOpen])
 
   useEffect(() => {
     const handleOpenOperation = (event: Event) => {
@@ -440,28 +548,37 @@ export default function OperationModalBridge() {
           setSaleNotesOpen(false)
           setSaleScannerOpen(false)
           setSaleScannerError('')
+          setSaleSearchText('')
+          setSaleDropdownOpen(false)
+          setSaleActiveIndex(-1)
+          setSalePriceItemId('')
 
           const preselectedId = detail.itemId || detail.item?._id || ''
           pendingSaleItemIdRef.current = preselectedId || null
 
           if (preselectedId) {
-            setSaleItemId(preselectedId)
-            if (detail.item) {
+            if (detail.item && canOfferForSale(detail.item)) {
+              setSaleCart([{
+                item: detail.item,
+                quantity: 1,
+                manualUnitPriceEnabled: false,
+                manualUnitPrice: '',
+              }])
+              setSaleSearchText(detail.item._id)
               setSaleCurrency(detail.item.pricingCurrency === 'KHR' ? 'KHR' : 'USD')
+            } else {
+              setSaleCart([])
+              setSaleSearchText('')
             }
-            setSaleQuantity('1')
             setSaleDiscount('0')
-            setSaleManualPriceEnabled(false)
-            setSaleManualPrice('')
+            setSaleDiscountType('AMOUNT')
             setSaleWarrantyDays('')
             setSaleAmountPaid('')
             setSalePaymentMethod('CASH')
           } else {
-            setSaleItemId('')
-            setSaleQuantity('1')
+            setSaleCart([])
             setSaleDiscount('0')
-            setSaleManualPriceEnabled(false)
-            setSaleManualPrice('')
+            setSaleDiscountType('AMOUNT')
             setSaleWarrantyDays('')
             setSaleAmountPaid('')
             setSalePaymentMethod('CASH')
@@ -557,10 +674,17 @@ export default function OperationModalBridge() {
               }
             }
             if (found) {
-              setSaleItemId(found._id)
+              setSaleCart([{
+                item: found,
+                quantity: 1,
+                manualUnitPriceEnabled: false,
+                manualUnitPrice: '',
+              }])
+              setSaleSearchText(found._id)
               setSaleCurrency(found.pricingCurrency === 'KHR' ? 'KHR' : 'USD')
             } else {
-              setSaleItemId('')
+              setSaleCart([])
+              setSaleSearchText('')
               setError('This product is no longer available for sale. Choose another item.')
             }
           }
@@ -687,7 +811,6 @@ export default function OperationModalBridge() {
   }, [kind])
 
   const resetAndClose = () => {
-    const shouldRefresh = kind === 'label' && labelItems.length > 0
     setKind(null)
     setError('')
     setStockSearch('')
@@ -738,12 +861,14 @@ export default function OperationModalBridge() {
     setScannedPawn(null)
     setLabelItems([])
     pendingSaleItemIdRef.current = null
-    setSaleItemId('')
+    setSaleCart([])
+    setSalePriceItemId('')
+    setSaleSearchText('')
+    setSaleDropdownOpen(false)
+    setSaleActiveIndex(-1)
     setSaleCustomerId('')
-    setSaleQuantity('1')
     setSaleDiscount('0')
-    setSaleManualPriceEnabled(false)
-    setSaleManualPrice('')
+    setSaleDiscountType('AMOUNT')
     setSaleWarrantyDays('')
     setSaleAmountPaid('')
     setSaleNotes('')
@@ -833,10 +958,10 @@ export default function OperationModalBridge() {
     resetAndClose()
   }
 
-  const openSelectedSaleItemPricing = () => {
-    if (!selectedSaleItem) return
+  const openSelectedSaleItemPricing = (itemToOpen?: InventoryItem | null) => {
+    const item = itemToOpen || selectedSaleItem
+    if (!item) return
 
-    const item = selectedSaleItem
     resetAndClose()
     navigate('/stock')
     window.setTimeout(() => {
@@ -882,12 +1007,12 @@ export default function OperationModalBridge() {
     if (!saleCompleted) return
     const { tradeNo: reference, currency } = saleCompleted
 
+    // Dispatch synchronously from the click so ReceiptCenterBridge can reserve
+    // a print window before the browser's user-activation permission expires.
+    window.dispatchEvent(new CustomEvent('phoneflow:open-trade-receipt', {
+      detail: { reference, currency, autoPrint: true },
+    }))
     resetAndClose()
-    window.requestAnimationFrame(() => {
-      window.dispatchEvent(new CustomEvent('phoneflow:open-trade-receipt', {
-        detail: { reference, currency, refreshOnClose: true },
-      }))
-    })
   }
 
   const findScannedProduct = useCallback(async (rawCode: string) => {
@@ -922,15 +1047,179 @@ export default function OperationModalBridge() {
 
   const handleCameraError = useCallback((message: string) => setError(message), [])
 
+  const addProductToCart = (item: InventoryItem) => {
+    if (!canOfferForSale(item)) {
+      setError(`"${item.name}" is not available for sale.`)
+      return
+    }
+    if (saleCart.some((line) => line.item._id === item._id)) {
+      setError(`"${item.name}" is already in your cart.`)
+      return
+    }
+
+    setError('')
+    if (saleCart.length === 0 && item.pricingCurrency) {
+      setSaleCurrency(item.pricingCurrency === 'KHR' ? 'KHR' : 'USD')
+    }
+    setSaleCart((prev) => [
+      ...prev,
+      {
+        item,
+        quantity: 1,
+        manualUnitPriceEnabled: false,
+        manualUnitPrice: '',
+      },
+    ])
+    setSalePriceItemId(item._id)
+    setSaleDiscount('0')
+    setSaleAmountPaid('')
+  }
+
+  const removeCartLine = useCallback((itemId: string) => {
+    setSaleCart((prev) => prev.filter((line) => line.item._id !== itemId))
+    setSalePriceItemId((current) => current === itemId ? '' : current)
+    setSaleDiscount('0')
+    setSaleAmountPaid('')
+    setError('')
+  }, [])
+
+  const updateCartLineQuantity = (itemId: string, newQty: number | string) => {
+    const qty = typeof newQty === 'string' ? Number(newQty) : newQty
+    const currentLine = saleCart.find((line) => line.item._id === itemId)
+    if (!currentLine || currentLine.item.category === 'PHONE') return
+    const parsed = Number.isInteger(qty) ? qty : 1
+    const clamped = Math.max(1, Math.min(parsed, currentLine.item.quantity))
+    setError(parsed > currentLine.item.quantity
+      ? `Cannot sell more than ${currentLine.item.quantity} units of "${currentLine.item.name}".`
+      : '')
+    setSaleCart((prev) =>
+      prev.map((line) => line.item._id === itemId ? { ...line, quantity: clamped } : line)
+    )
+    setSaleDiscount('0')
+    setSaleAmountPaid('')
+  }
+
+  const toggleCartLineManualPrice = useCallback((itemId: string) => {
+    setSaleCart((prev) =>
+      prev.map((line) => {
+        if (line.item._id !== itemId) return line
+        return {
+          ...line,
+          manualUnitPriceEnabled: !line.manualUnitPriceEnabled,
+          manualUnitPrice: !line.manualUnitPriceEnabled
+            ? String(inventorySalePrice(line.item, saleCurrency, usdKhrRate))
+            : '',
+        }
+      })
+    )
+    setSaleDiscount('0')
+    setSaleAmountPaid('')
+  }, [saleCurrency, usdKhrRate])
+
+  const updateCartLineManualPrice = useCallback((itemId: string, price: string) => {
+    setSaleCart((prev) =>
+      prev.map((line) => {
+        if (line.item._id !== itemId) return line
+        return {
+          ...line,
+          manualUnitPrice: price,
+        }
+      })
+    )
+    setSaleDiscount('0')
+    setSaleAmountPaid('')
+  }, [])
+
+  const handleSaleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const value = event.target.value
+    setSaleSearchText(value)
+    setSaleDropdownOpen(true)
+    setSaleActiveIndex(0)
+    setError('')
+
+    // Backwards compatibility for tests that simulate selecting an inventory item by its _id
+    const exactIdMatch = inventory.find((item) => item._id === value)
+    if (exactIdMatch && canOfferForSale(exactIdMatch)) {
+      addProductToCart(exactIdMatch)
+    }
+  }
+
+  const handleSaleSearchKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'ArrowDown') {
+      event.preventDefault()
+      if (!saleDropdownOpen) {
+        setSaleDropdownOpen(true)
+        setSaleActiveIndex(0)
+      } else if (filteredSaleProducts.length > 0) {
+        setSaleActiveIndex((prev) => (prev < 0 ? 0 : (prev + 1) % filteredSaleProducts.length))
+      }
+      return
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault()
+      if (!saleDropdownOpen) {
+        setSaleDropdownOpen(true)
+        setSaleActiveIndex(filteredSaleProducts.length - 1)
+      } else if (filteredSaleProducts.length > 0) {
+        setSaleActiveIndex((prev) => (prev <= 0 ? filteredSaleProducts.length - 1 : prev - 1))
+      }
+      return
+    }
+    if (event.key === 'Enter') {
+      if (saleDropdownOpen && saleActiveIndex >= 0 && filteredSaleProducts[saleActiveIndex]) {
+        event.preventDefault()
+        addProductToCart(filteredSaleProducts[saleActiveIndex])
+        setSaleDropdownOpen(false)
+        setSaleSearchText('')
+        setSaleActiveIndex(-1)
+        return
+      }
+      if (saleSearchText.trim()) {
+        event.preventDefault()
+        const search = saleSearchText.trim().toLowerCase()
+        const exact = inventory.find(
+          (i) => canOfferForSale(i) && (
+            i._id === search ||
+            i.sku?.toLowerCase() === search ||
+            i.barcode?.toLowerCase() === search ||
+            i.serialNumber?.toLowerCase() === search ||
+            i.imei1?.toLowerCase() === search
+          )
+        )
+        if (exact) {
+          addProductToCart(exact)
+          setSaleDropdownOpen(false)
+          setSaleSearchText('')
+          setSaleActiveIndex(-1)
+          return
+        }
+        if (filteredSaleProducts.length === 1) {
+          addProductToCart(filteredSaleProducts[0])
+          setSaleDropdownOpen(false)
+          setSaleSearchText('')
+          setSaleActiveIndex(-1)
+          return
+        }
+      }
+    }
+    if (event.key === 'Escape') {
+      if (saleDropdownOpen) {
+        event.preventDefault()
+        event.stopPropagation()
+        setSaleDropdownOpen(false)
+        setSaleActiveIndex(-1)
+      }
+    }
+  }
+
   function sellScannedProduct() {
     if (!scannedItem || !canOfferForSale({ ...scannedItem, relatedPawn: scannedPawn }) || scannedItem.sellPrice <= 0) return
     pendingSaleItemIdRef.current = scannedItem._id
     setInventory((current) => current.some((item) => item._id === scannedItem._id) ? current : [scannedItem, ...current])
-    setSaleItemId(scannedItem._id)
-    setSaleCurrency(scannedItem.pricingCurrency === 'KHR' ? 'KHR' : 'USD')
+    addProductToCart(scannedItem)
+    setSaleSearchText(scannedItem._id)
     setSaleDiscount('0')
-    setSaleManualPriceEnabled(false)
-    setSaleManualPrice('')
+    setSaleDiscountType('AMOUNT')
     setSaleWarrantyDays('')
     setSaleAmountPaid('')
     setError('')
@@ -943,25 +1232,19 @@ export default function OperationModalBridge() {
     const found = inventory.find((item) =>
       (item.barcode && item.barcode.toLowerCase() === cleaned.toLowerCase()) ||
       (item.sku && item.sku.toLowerCase() === cleaned.toLowerCase()) ||
+      (item.serialNumber && item.serialNumber.toLowerCase() === cleaned.toLowerCase()) ||
       (item.imei1 && (item.imei1 === cleaned || (digitsOnly.length === 15 && item.imei1 === digitsOnly)))
     )
     if (!found) {
       setSaleScannerError(`No available stock item matched code "${cleaned}".`)
       return
     }
-    if (found.status !== 'IN_STOCK' || found.quantity < 1) {
+    if (!canOfferForSale(found)) {
       setSaleScannerError(`"${found.name}" is not available to sell (${found.quantity} in stock).`)
       return
     }
-    setSaleItemId(found._id)
-    setSaleCurrency(found.pricingCurrency === 'KHR' ? 'KHR' : 'USD')
-    setSalePaymentMethod('CASH')
-    setSaleQuantity('1')
-    setSaleDiscount('0')
-    setSaleManualPriceEnabled(false)
-    setSaleManualPrice('')
-    setSaleWarrantyDays('')
-    setSaleAmountPaid('')
+    addProductToCart(found)
+    setSaleSearchText(found._id)
     setSaleScannerOpen(false)
     setSaleScannerError('')
     setError('')
@@ -1331,6 +1614,7 @@ export default function OperationModalBridge() {
     }
     try {
       const result = await api<{ trade?: { items?: { inventoryItem?: InventoryItem }[] } }>('/trades', { method: 'POST', body: JSON.stringify(payload) })
+      notifyTradeSaved(result?.trade)
       if (sellerType === 'NEW_CUSTOMER') {
         window.dispatchEvent(new CustomEvent('phoneflow:customers-updated'))
       } else if (sellerType === 'NEW_SUPPLIER') {
@@ -1357,50 +1641,59 @@ export default function OperationModalBridge() {
     event.preventDefault()
     if (submittingSaleRef.current || busy) return
     setError('')
-    const selected = inventory.find((item) => item._id === saleItemId)
-    if (!selected) {
+    if (cartLinesWithCalculations.length === 0) {
       setError('Select an available inventory item')
       return
     }
-    const quantity = selected.category === 'PHONE' ? 1 : Number(saleQuantity || 1)
-    const unitPrice = saleManualPriceEnabled
-      ? Number(saleManualPrice)
-      : inventorySalePrice(selected, saleCurrency, usdKhrRate)
-    const discount = Number(saleDiscount || 0)
-    const total = Math.max(0, quantity * unitPrice - discount)
-    const configuredMinimum = inventorySalePrice(selected, saleCurrency, usdKhrRate, true)
-    const minimumUnitPrice = configuredMinimum > 0
-      ? configuredMinimum
-      : getSessionUser()?.role === 'CASHIER'
-        ? unitPrice
-        : 0
-    const maximumDiscount = Math.max(0, quantity * (unitPrice - minimumUnitPrice))
-    if (!Number.isInteger(quantity) || quantity < 1 || quantity > selected.quantity) {
-      setError(`Quantity must be between 1 and ${selected.quantity}`)
+    for (const line of cartLinesWithCalculations) {
+      if (!Number.isInteger(line.quantity) || line.quantity < 1 || line.quantity > line.item.quantity) {
+        setError(`Quantity must be between 1 and ${line.item.quantity}`)
+        return
+      }
+      if (line.configuredMin > line.unitPrice) {
+        setError("Fix this product's minimum selling price in Stock Information before completing the sale")
+        return
+      }
+      if (!Number.isFinite(line.unitPrice) || line.unitPrice <= 0) {
+        setError('Set a valid selling price in Stock Information before completing this sale')
+        return
+      }
+      if (saleCurrency === 'KHR' && (!Number.isInteger(line.unitPrice) || line.unitPrice % 100 !== 0)) {
+        setError('KHR prices and discounts must use whole 100 KHR increments')
+        return
+      }
+    }
+    if (saleDiscountType === 'PERCENT' && (salePercentInvalid || saleDiscount.trim() === '')) {
+      setError('Discount percentage must be between 0 and 100%')
       return
     }
-    const invalidKhrAmount = saleCurrency === 'KHR' && (!Number.isInteger(unitPrice) || unitPrice % 100 !== 0 || !Number.isInteger(discount) || discount % 100 !== 0)
-    if (!Number.isFinite(unitPrice) || unitPrice <= 0 || minimumUnitPrice > unitPrice || !Number.isFinite(discount) || discount < 0 || discount > maximumDiscount || invalidKhrAmount) {
-      setError(minimumUnitPrice > unitPrice
-        ? 'Fix this product\'s minimum selling price in Stock Information before completing the sale'
-        : discount > maximumDiscount
-        ? `Discount cannot exceed ${saleAmountText(maximumDiscount, saleCurrency)}`
-        : invalidKhrAmount
-          ? 'KHR prices and discounts must use whole 100 KHR increments'
-          : 'Set a valid selling price in Stock Information before completing this sale')
+    if (!Number.isFinite(saleDiscountAmount) || saleDiscountAmount < 0 || saleDiscountAmount > saleMaximumDiscount) {
+      setError(`Discount cannot exceed ${saleAmountText(saleMaximumDiscount, saleCurrency)}`)
       return
     }
+    if (saleCurrency === 'KHR' && (!Number.isInteger(saleDiscountAmount) || saleDiscountAmount % 100 !== 0)) {
+      setError('KHR prices and discounts must use whole 100 KHR increments')
+      return
+    }
+    const total = saleTotal
     const amountReceived = salePaymentMethod === 'KHQR' ? total : saleAmountPaid === '' ? total : Number(saleAmountPaid)
     if (!Number.isFinite(amountReceived) || amountReceived < 0 || (saleCurrency === 'KHR' && (!Number.isInteger(amountReceived) || amountReceived % 100 !== 0))) {
       setError(saleCurrency === 'KHR' ? 'Amount received must use whole 100 KHR increments' : 'Enter a valid amount received')
       return
     }
     const amountPaid = Math.min(total, amountReceived)
+    const tradeItems = cartLinesWithCalculations.map((line) => ({
+      inventoryItem: line.item._id,
+      name: line.item.name,
+      quantity: line.quantity,
+      unitPrice: line.unitPrice,
+      manualUnitPrice: line.manualUnitPriceEnabled || undefined,
+    }))
     const payload: SaleDraft = {
       type: 'SELL' as const,
       customer: saleCustomerId || undefined,
-      items: [{ inventoryItem: selected._id, name: selected.name, quantity, unitPrice, manualUnitPrice: saleManualPriceEnabled || undefined }],
-      discount,
+      items: tradeItems,
+      discount: saleDiscountAmount,
       amountPaid,
       amountReceived,
       paymentMethod: salePaymentMethod,
@@ -1418,12 +1711,13 @@ export default function OperationModalBridge() {
         const result = await api<SaleKhqr>('/payway/khqr', {
           method: 'POST',
           body: JSON.stringify({
-            inventoryItem: selected._id,
+            inventoryItem: tradeItems[0]?.inventoryItem,
+            quantity: tradeItems[0]?.quantity,
+            unitPrice: tradeItems[0]?.unitPrice,
+            manualUnitPrice: tradeItems[0]?.manualUnitPrice,
+            items: tradeItems,
             customer: saleCustomerId || undefined,
-            quantity,
-            unitPrice,
-            manualUnitPrice: saleManualPriceEnabled || undefined,
-            discount,
+            discount: saleDiscountAmount,
           }),
         })
         setSaleDraft(payload)
@@ -1433,11 +1727,13 @@ export default function OperationModalBridge() {
       } else {
         if (payload.amountPaid > total) throw new Error('Amount paid cannot be greater than the sale total')
         const result = await api<{ trade: CreatedSaleTrade }>('/trades', { method: 'POST', body: JSON.stringify(payload) })
+        notifyTradeSaved(result.trade)
         setSaleCompleted(completedSaleFromTrade(result.trade, {
           currency: saleCurrency,
           paymentMethod: 'CASH',
-          itemName: selected.name,
-          quantity,
+          itemName: tradeItems[0]?.name || 'Sold item',
+          quantity: tradeItems.reduce((acc, i) => acc + i.quantity, 0),
+          items: tradeItems.map((i) => ({ name: i.name, quantity: i.quantity, unitPrice: i.unitPrice })),
         }))
         setSalePaymentPhase('COMPLETED')
       }
@@ -1490,11 +1786,13 @@ export default function OperationModalBridge() {
           paywayTransactionId: saleKhqr.transactionId,
         }),
       })
+      notifyTradeSaved(result.trade)
       setSaleCompleted(completedSaleFromTrade(result.trade, {
         currency: saleDraft.currency,
         paymentMethod: 'KHQR',
         itemName: saleDraft.items[0]?.name || 'Sold item',
-        quantity: saleDraft.items[0]?.quantity || 1,
+        quantity: saleDraft.items.reduce((acc, i) => acc + (i.quantity || 1), 0),
+        items: saleDraft.items.map((i) => ({ name: i.name, quantity: i.quantity || 1, unitPrice: i.unitPrice })),
       }))
       setSalePaymentStatus('Payment successful')
       setSalePaymentPhase('COMPLETED')
@@ -2064,7 +2362,7 @@ export default function OperationModalBridge() {
       {kind === 'label' && labelItems.length > 0 && <div className="label-prompt">
         <div className="label-success"><span><Printer size={21} /></span><div><h3>Print barcode labels now?</h3><p>{labelItems.length} inventory item{labelItems.length === 1 ? ' was' : 's were'} added. You can also print later from Stock Information.</p></div></div>
         <div className="barcode-label-preview-list">{labelItems.slice(0, 3).map((item) => <article className="barcode-label-preview" key={item._id || item.sku || item.barcode}><strong>{item.name}</strong><small>{item.imei1 || sanitizeCode(item.sku) || sanitizeCode(item.barcode)}</small><BarcodeGraphic item={item} compact /></article>)}{labelItems.length > 3 && <p>+ {labelItems.length - 3} more label{labelItems.length - 3 === 1 ? '' : 's'}</p>}</div>
-        <footer className="operation-modal-actions"><button type="button" className="ghost-button" onClick={close}>Print later</button><button type="button" className="primary-button" onClick={() => { printInventoryLabels(labelItems); close() }}><Printer size={17} /> Print labels</button></footer>
+        <footer className="operation-modal-actions"><button type="button" className="ghost-button" onClick={close}>Print later</button><button type="button" className="primary-button" onClick={() => { if (printInventoryLabels(labelItems)) close() }}><Printer size={17} /> Print labels</button></footer>
       </div>}
 
       {kind === 'pawn' && pawnCreated && <section className="record-created-workflow" role="status" aria-live="polite">
@@ -2316,7 +2614,24 @@ export default function OperationModalBridge() {
             <div><dt>Received</dt><dd>{saleAmountText(saleCompleted.amountPaid, saleCompleted.currency)}</dd></div>
             <div><dt>Balance</dt><dd><span>{saleAmountText(saleCompleted.balance, saleCompleted.currency)}</span></dd></div>
           </dl>
-          <div className="sale-complete-item"><strong>{saleCompleted.itemName} × {saleCompleted.quantity}</strong><small>{saleCompleted.paymentMethod === 'KHQR' ? 'ABA KHQR payment' : 'Cash payment'}</small></div>
+          {Array.isArray(saleCompleted.items) && saleCompleted.items.length > 0 ? (
+            <div className="sale-complete-items-list" aria-label="Sale items">
+              {saleCompleted.items.map((item, idx) => (
+                <div key={idx} className="sale-complete-item-row">
+                  <strong>{item.name} × {item.quantity}</strong>
+                  {item.unitPrice ? <small>{saleAmountText(item.unitPrice * item.quantity, saleCompleted.currency)}</small> : null}
+                </div>
+              ))}
+              <div className="sale-complete-item">
+                <small>{saleCompleted.paymentMethod === 'KHQR' ? 'ABA KHQR payment' : 'Cash payment'}</small>
+              </div>
+            </div>
+          ) : (
+            <div className="sale-complete-item">
+              <strong>{saleCompleted.itemName} × {saleCompleted.quantity}</strong>
+              <small>{saleCompleted.paymentMethod === 'KHQR' ? 'ABA KHQR payment' : 'Cash payment'}</small>
+            </div>
+          )}
         </div>
         <OperationWorkflowFooter
           className="record-created-actions"
@@ -2337,9 +2652,17 @@ export default function OperationModalBridge() {
         <div className="sale-form-scroll">
           <div className="operation-form-grid">
             <label className="sale-customer-field">Customer<select value={saleCustomerId} onChange={(event) => setSaleCustomerId(event.target.value)}><option value="">Walk-in customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name}{customer.phone ? ` — ${customer.phone}` : ' — No phone recorded'}</option>)}</select></label>
+            <label>Currency<select value={saleCurrency} onChange={(event) => {
+              const nextCurrency = event.target.value as SaleCurrency
+              setSaleCurrency(nextCurrency)
+              setSalePaymentMethod('CASH')
+              setSaleDiscount('0')
+              setSaleAmountPaid('')
+              setSaleCart((prev) => prev.map((l) => ({ ...l, manualUnitPriceEnabled: false, manualUnitPrice: '' })))
+            }}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Cambodian Riel</option></select><small>1 USD = {riel.format(usdKhrRate)} KHR</small></label>
             <div className="operation-wide sale-inventory-field">
               <div className="sale-inventory-heading">
-                <label htmlFor="sale-inventory-select">Inventory item</label>
+                <label id="sale-inventory-label" htmlFor="sale-inventory-select">Inventory item</label>
                 <ScannerTriggerButton
                   label="Scan item"
                   onClick={() => {
@@ -2348,57 +2671,329 @@ export default function OperationModalBridge() {
                   }}
                 />
               </div>
-              <select
-                id="sale-inventory-select"
-                data-modal-initial-focus
-                required
-                value={saleItemId}
-                disabled={saleInventoryLoading || (!saleInventoryLoading && inventory.length === 0)}
-                onChange={(event) => {
-                  const nextId = event.target.value
-                  const nextItem = inventory.find((item) => item._id === nextId)
-                  setSaleItemId(nextId)
-                  setSaleCurrency(nextItem?.pricingCurrency === 'KHR' ? 'KHR' : 'USD')
-                  setSalePaymentMethod('CASH')
-                  setSaleQuantity('1')
-                  setSaleDiscount('0')
-                  setSaleManualPriceEnabled(false)
-                  setSaleManualPrice('')
-                  setSaleWarrantyDays('')
-                  setSaleAmountPaid('')
-                }}
-              >
-                <option value="" disabled>
-                  {saleInventoryLoading ? 'Loading available stock...' : inventory.length === 0 ? 'No stock available to sell' : 'Select available stock'}
-                </option>
-                {inventory.map((item) => (
-                  <option key={item._id} value={item._id}>
-                    {item.name}{item.imei1 ? ` — ${item.imei1}` : ''} — Qty {item.quantity} — {inventoryNativeSalePriceText(item)}
-                  </option>
-                ))}
-              </select>
+              <div className="sale-product-search-combobox" ref={saleComboboxRef}>
+                <div className="sale-product-search-input-wrapper">
+                  <Search size={16} className="sale-search-icon" aria-hidden="true" />
+                  <input
+                    id="sale-inventory-select"
+                    ref={saleSearchInputRef}
+                    role="combobox"
+                    type="text"
+                    autoComplete="off"
+                    aria-autocomplete="list"
+                    aria-expanded={saleDropdownOpen}
+                    aria-controls="sale-product-results"
+                    aria-activedescendant={
+                      saleActiveIndex >= 0 && filteredSaleProducts[saleActiveIndex]
+                        ? `sale-option-${filteredSaleProducts[saleActiveIndex]._id}`
+                        : undefined
+                    }
+                    aria-label="Inventory item"
+                    placeholder={
+                      saleInventoryLoading
+                        ? 'Loading available stock...'
+                        : inventory.length === 0
+                          ? 'No stock available to sell'
+                          : 'Search by product name, SKU, barcode, IMEI, serial number...'
+                    }
+                    disabled={saleInventoryLoading || (!saleInventoryLoading && inventory.length === 0)}
+                    value={saleSearchText}
+                    onChange={handleSaleSearchChange}
+                    onFocus={() => {
+                      if (filteredSaleProducts.length > 0) {
+                        setSaleDropdownOpen(true)
+                      }
+                    }}
+                    onKeyDown={handleSaleSearchKeyDown}
+                  />
+                  {saleSearchText && (
+                    <button
+                      type="button"
+                      className="sale-search-clear-btn"
+                      aria-label="Clear search"
+                      onClick={() => {
+                        setSaleSearchText('')
+                        setSaleActiveIndex(-1)
+                        saleSearchInputRef.current?.focus()
+                      }}
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                {saleDropdownOpen && (
+                  <div
+                    id="sale-product-results"
+                    role="listbox"
+                    aria-label="Available products"
+                    className="sale-product-results-dropdown"
+                  >
+                    {filteredSaleProducts.length === 0 ? (
+                      <div className="sale-search-empty">
+                        <Package size={20} />
+                        <span>No matching available inventory</span>
+                      </div>
+                    ) : (
+                      filteredSaleProducts.map((item, index) => {
+                        const isInCart = saleCart.some((l) => l.item._id === item._id)
+                        const isSelected = index === saleActiveIndex
+                        return (
+                          <div
+                            key={item._id}
+                            id={`sale-option-${item._id}`}
+                            role="option"
+                            aria-selected={isSelected}
+                            className={`sale-product-option${isSelected ? ' is-active' : ''}${isInCart ? ' is-in-cart' : ''}`}
+                            onClick={() => {
+                              addProductToCart(item)
+                              setSaleDropdownOpen(false)
+                              setSaleSearchText('')
+                              setSaleActiveIndex(-1)
+                            }}
+                            onMouseEnter={() => setSaleActiveIndex(index)}
+                          >
+                            <div className={`sale-option-icon ${item.category === 'PHONE' ? 'is-phone' : ''}`}>
+                              {item.category === 'PHONE' ? <Smartphone size={16} /> : <Package size={16} />}
+                            </div>
+                            <div className="sale-option-info">
+                              <strong>{item.name}</strong>
+                              <small>
+                                {[
+                                  item.category === 'PHONE' ? 'Phone' : item.category,
+                                  item.brand,
+                                  item.model,
+                                  item.storage,
+                                  item.color,
+                                  item.imei1 ? `IMEI: ${item.imei1}` : item.sku ? `SKU: ${item.sku}` : item.barcode ? `Barcode: ${item.barcode}` : item.serialNumber ? `SN: ${item.serialNumber}` : '',
+                                ].filter(Boolean).join(' · ')}
+                              </small>
+                            </div>
+                            <div className="sale-option-meta">
+                              <span className="sale-option-stock">Qty: {item.quantity}</span>
+                              <span className="sale-option-price">{saleAmountText(inventorySalePrice(item, saleCurrency, usdKhrRate), saleCurrency)}</span>
+                            </div>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
               {!saleInventoryLoading && inventory.length === 0 && <small>Add an in-stock product before creating a sale.</small>}
             </div>
-            <label>Currency<select value={saleCurrency} onChange={(event) => {
-              setSaleCurrency(event.target.value as SaleCurrency)
-              setSalePaymentMethod('CASH')
-              setSaleDiscount('0')
-              setSaleManualPriceEnabled(false)
-              setSaleManualPrice('')
-              setSaleAmountPaid('')
-            }}><option value="USD">USD — US Dollar</option><option value="KHR">KHR — Cambodian Riel</option></select><small>1 USD = {riel.format(usdKhrRate)} KHR</small></label>
-            <label>Quantity<input type="number" min="1" max={selectedSaleItem?.quantity} value={effectiveSaleQuantity} disabled={!saleItemId || selectedSaleItem?.category === 'PHONE'} onChange={(event) => { setSaleQuantity(event.target.value); setSaleDiscount('0'); setSaleAmountPaid('') }} /></label>
-            <div className={`sale-price-display${salePriceInvalid || saleStockPricingInvalid ? ' needs-price' : ''}${saleManualPriceEnabled ? ' manual-price' : ''}`} role="group" aria-label={`Selling price in ${saleCurrency}`}>
-              <div className="sale-price-heading"><span>Selling price ({saleCurrency})</span>{canManuallyPriceSale && selectedSaleItem && <button type="button" className="sale-price-mode-button" aria-pressed={saleManualPriceEnabled} onClick={() => { const next = !saleManualPriceEnabled; setSaleManualPriceEnabled(next); setSaleManualPrice(next ? String(savedSaleUnitPrice) : ''); setSaleDiscount('0'); setSaleAmountPaid('') }}>{saleManualPriceEnabled ? 'Use saved price' : 'Enter manually'}</button>}</div>
-              {saleManualPriceEnabled ? <MoneyInput required currency={saleCurrency} minimum={configuredMinimumSalePrice > 0 ? configuredMinimumSalePrice : 0} value={saleManualPrice} onValueChange={(value) => { setSaleManualPrice(value); setSaleDiscount('0'); setSaleAmountPaid('') }} placeholder={saleCurrency === 'KHR' ? '0' : '0.00'} /> : <strong>{selectedSaleItem ? saleAmountText(saleUnitPrice, saleCurrency) : 'Select a product'}</strong>}
-              {selectedSaleItem
-                ? salePriceInvalid || saleStockPricingInvalid
-                  ? <button type="button" className="sale-price-configure" onClick={openSelectedSaleItemPricing}><Banknote size={13} aria-hidden="true" />{saleStockPricingInvalid ? 'Fix price' : 'Set price'}</button>
-                  : <small>{saleManualPriceEnabled ? `Manual price for this sale only${configuredMinimumSalePrice > 0 ? ` · Minimum ${saleAmountText(configuredMinimumSalePrice, saleCurrency)}` : ''}` : 'Configured in Stock Information'}</small>
+
+            <section className="sale-cart-section operation-wide" aria-label="Cart items">
+              <div className="sale-cart-header">
+                <h4>Cart items ({saleCart.length})</h4>
+                <span>{cartLinesWithCalculations.reduce((acc, l) => acc + l.quantity, 0)} total unit{cartLinesWithCalculations.reduce((acc, l) => acc + l.quantity, 0) === 1 ? '' : 's'}</span>
+              </div>
+              {saleCart.length === 0 ? (
+                <div className="sale-cart-empty">
+                  <ShoppingCart size={20} />
+                  <span>Cart is empty. Search above or scan to add products to this sale.</span>
+                </div>
+              ) : (
+                <div className="sale-cart-list" role="list">
+                  {cartLinesWithCalculations.map((line) => {
+                    const isPhone = line.item.category === 'PHONE'
+                    return (
+                      <div key={line.item._id} className="sale-cart-item-card" role="listitem">
+                        <div className={`sale-cart-item-icon ${isPhone ? 'is-phone' : ''}`}>
+                          {isPhone ? <Smartphone size={16} /> : <Package size={16} />}
+                        </div>
+                        <div className="sale-cart-item-info">
+                          <strong>{line.item.name}</strong>
+                          <small>
+                            {[
+                              isPhone ? 'Phone' : line.item.category,
+                              line.item.imei1 ? `IMEI: ${line.item.imei1}` : line.item.sku ? `SKU: ${line.item.sku}` : '',
+                              `Available: ${line.item.quantity}`,
+                            ].filter(Boolean).join(' · ')}
+                          </small>
+                        </div>
+                        <div className="sale-cart-item-quantity">
+                          {isPhone ? (
+                            <span className="phone-fixed-qty-tag" title="Serialized phones are fixed at quantity 1">
+                              <input
+                                type="number"
+                                disabled
+                                value="1"
+                                aria-label={saleCart.length === 1 ? 'Quantity' : `Quantity for ${line.item.name}`}
+                                style={{ display: 'none' }}
+                                readOnly
+                              />
+                              Qty: 1
+                            </span>
+                          ) : (
+                            <div className="sale-cart-qty-wrapper">
+                              <span className="sale-cart-qty-label" id={`qty-lbl-${line.item._id}`}>Qty</span>
+                              <div className="sale-cart-qty-stepper" role="group" aria-labelledby={`qty-lbl-${line.item._id}`}>
+                                <button
+                                  type="button"
+                                  className="sale-cart-qty-btn sale-cart-qty-btn-minus"
+                                  aria-label={saleCart.length === 1 ? 'Decrease' : `Decrease ${line.item.name}`}
+                                  title="Decrease quantity"
+                                  disabled={line.quantity <= 1}
+                                  onClick={() => updateCartLineQuantity(line.item._id, String(Math.max(1, line.quantity - 1)))}
+                                >
+                                  <Minus size={12} aria-hidden="true" />
+                                </button>
+                                <input
+                                  type="number"
+                                  id={`qty-input-${line.item._id}`}
+                                  min="1"
+                                  max={line.item.quantity}
+                                  aria-label={saleCart.length === 1 ? 'Quantity' : `Quantity for ${line.item.name}`}
+                                  value={line.quantity}
+                                  onChange={(e) => updateCartLineQuantity(line.item._id, e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'ArrowUp') {
+                                      e.preventDefault()
+                                      if (line.quantity < line.item.quantity) {
+                                        updateCartLineQuantity(line.item._id, String(line.quantity + 1))
+                                      }
+                                    } else if (e.key === 'ArrowDown') {
+                                      e.preventDefault()
+                                      if (line.quantity > 1) {
+                                        updateCartLineQuantity(line.item._id, String(line.quantity - 1))
+                                      }
+                                    }
+                                  }}
+                                  className="sale-cart-qty-input"
+                                />
+                                <button
+                                  type="button"
+                                  className="sale-cart-qty-btn sale-cart-qty-btn-plus"
+                                  aria-label={saleCart.length === 1 ? 'Increase' : `Increase ${line.item.name}`}
+                                  title="Increase quantity"
+                                  disabled={line.quantity >= line.item.quantity}
+                                  onClick={() => updateCartLineQuantity(line.item._id, String(Math.min(line.item.quantity, line.quantity + 1)))}
+                                >
+                                  <Plus size={12} aria-hidden="true" />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="sale-cart-item-pricing">
+                          <button
+                            type="button"
+                            className={`sale-cart-price-button${priceEditorLine?.item._id === line.item._id ? ' selected' : ''}${line.priceInvalid || line.belowMinimum ? ' invalid' : ''}`}
+                            aria-label={`Edit selling price for ${line.item.name}`}
+                            aria-pressed={priceEditorLine?.item._id === line.item._id}
+                            onClick={() => setSalePriceItemId(line.item._id)}
+                          >
+                            <strong>{saleAmountText(line.lineSubtotal, saleCurrency)}</strong>
+                            <small>{line.quantity > 1 ? `${saleAmountText(line.unitPrice, saleCurrency)} ea` : `${saleAmountText(line.unitPrice, saleCurrency)}`}</small>
+                          </button>
+                        </div>
+                        <button
+                          type="button"
+                          className="sale-cart-remove-button"
+                          aria-label={`Remove ${line.item.name} from sale`}
+                          title={`Remove ${line.item.name}`}
+                          onClick={() => removeCartLine(line.item._id)}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </section>
+
+            <div className={`sale-price-display${priceEditorLine?.priceInvalid || priceEditorLine?.belowMinimum ? ' needs-price' : ''}${priceEditorLine?.manualUnitPriceEnabled ? ' manual-price' : ''}`} role="group" aria-label={`Selling price in ${saleCurrency}`}>
+              <div className="sale-price-heading"><span>Selling price ({saleCurrency}){saleCart.length > 1 && priceEditorLine ? ` · ${priceEditorLine.item.name}` : ''}</span>{canManuallyPriceSale && priceEditorLine && <button type="button" className="sale-price-mode-button" aria-pressed={priceEditorLine.manualUnitPriceEnabled} onClick={() => toggleCartLineManualPrice(priceEditorLine.item._id)}>{priceEditorLine.manualUnitPriceEnabled ? 'Use saved price' : 'Enter manually'}</button>}</div>
+              {priceEditorLine?.manualUnitPriceEnabled ? <MoneyInput required currency={saleCurrency} minimum={priceEditorLine.configuredMin > 0 ? priceEditorLine.configuredMin : 0} value={priceEditorLine.manualUnitPrice} onValueChange={(value) => updateCartLineManualPrice(priceEditorLine.item._id, value)} placeholder={saleCurrency === 'KHR' ? '0' : '0.00'} /> : <strong>{priceEditorLine ? saleAmountText(priceEditorLine.unitPrice, saleCurrency) : 'Select a product'}</strong>}
+              {priceEditorLine
+                ? priceEditorLine.priceInvalid || priceEditorLine.belowMinimum
+                  ? <button type="button" className="sale-price-configure" onClick={() => openSelectedSaleItemPricing(priceEditorLine.item)}><Banknote size={13} aria-hidden="true" />{priceEditorLine.belowMinimum ? 'Fix price' : 'Set price'}</button>
+                  : <small>{priceEditorLine.manualUnitPriceEnabled ? `Manual price for this sale only${priceEditorLine.configuredMin > 0 ? ` · Minimum ${saleAmountText(priceEditorLine.configuredMin, saleCurrency)}` : ''}` : 'Configured in Stock Information'}</small>
                 : <small>Choose inventory first</small>}
             </div>
-            <label className={saleDiscountInvalid ? 'field-invalid' : ''}>Discount ({saleCurrency})<MoneyInput currency={saleCurrency} minimum={0} maximum={saleMaximumDiscount} value={saleDiscount} disabled={!saleItemId} onValueChange={setSaleDiscount} placeholder={saleCurrency === 'KHR' ? '0' : '0.00'} />{selectedSaleItem && <small>{saleCurrency === 'KHR' && saleDiscountAmount % 100 !== 0 ? 'Use a whole KHR amount in increments of 100' : `${saleDiscountInvalid ? 'Maximum discount is' : 'Maximum allowed:'} ${saleAmountText(saleMaximumDiscount, saleCurrency)}`}</small>}</label>
             <label className={`sale-warranty-field${saleWarrantyInvalid && saleWarrantyDays !== '' ? ' field-invalid' : ''}`}>Warranty period<div className="sale-warranty-input"><CalendarRange size={16} aria-hidden="true" /><input required type="number" inputMode="numeric" min="0" max="3650" step="1" value={saleWarrantyDays} onChange={(event) => setSaleWarrantyDays(event.target.value)} placeholder="Enter days" /><span>days</span></div><small>{saleWarrantyDays === '' ? 'Enter 0 when this sale has no refund warranty.' : saleWarrantyInvalid ? 'Use a whole number from 0 to 3650.' : saleWarrantyDayCount === 0 ? 'No refund warranty for this sale.' : `Refundable for ${saleWarrantyDayCount} day${saleWarrantyDayCount === 1 ? '' : 's'} after the sale.`}</small></label>
+            <div className="sale-discount-mode">
+              <span>Discount method</span>
+              <div role="group" aria-label="Method">
+                <button
+                  type="button"
+                  className={saleDiscountType === 'AMOUNT' ? 'selected' : ''}
+                  disabled={!hasCartItems}
+                  onClick={() => {
+                    setSaleDiscountType('AMOUNT')
+                    setSaleDiscount('0')
+                    setSaleAmountPaid('')
+                  }}
+                >
+                  Money
+                </button>
+                <button
+                  type="button"
+                  className={saleDiscountType === 'PERCENT' ? 'selected' : ''}
+                  disabled={!hasCartItems}
+                  onClick={() => {
+                    setSaleDiscountType('PERCENT')
+                    setSaleDiscount('0')
+                    setSaleAmountPaid('')
+                  }}
+                >
+                  Percent
+                </button>
+              </div>
+            </div>
+            <label className={`sale-discount-field${saleDiscountInvalid ? ' field-invalid' : ''}`}>
+              <span>{saleDiscountType === 'PERCENT' ? 'Discount (%)' : `Discount (${saleCurrency})`}</span>
+              {saleDiscountType === 'PERCENT' ? (
+                <div className="sale-discount-input-wrapper">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="any"
+                    inputMode="decimal"
+                    disabled={!hasCartItems}
+                    value={saleDiscount}
+                    onChange={(event) => {
+                      setSaleDiscount(event.target.value.replace(/[^\d.]/g, ''))
+                      setSaleAmountPaid('')
+                    }}
+                    placeholder="0"
+                    aria-label="Discount percentage"
+                  />
+                  <span className={`sale-calculated-discount${saleDiscountInvalid ? ' invalid' : ''}`} aria-live="polite">
+                    − {saleAmountText(saleDiscountAmount, saleCurrency)}
+                  </span>
+                </div>
+              ) : (
+                <MoneyInput
+                  currency={saleCurrency}
+                  minimum={0}
+                  maximum={saleMaximumDiscount}
+                  value={saleDiscount}
+                  disabled={!hasCartItems}
+                  onValueChange={(value) => {
+                    setSaleDiscount(value)
+                    setSaleAmountPaid('')
+                  }}
+                  placeholder={saleCurrency === 'KHR' ? '0' : '0.00'}
+                />
+              )}
+              {selectedSaleItem && (
+                <small>
+                  {saleDiscountType === 'PERCENT'
+                    ? salePercentInvalid
+                      ? 'Enter a percentage between 0 and 100%'
+                      : saleDiscountAmount > saleMaximumDiscount
+                        ? `Maximum discount is ${saleAmountText(saleMaximumDiscount, saleCurrency)}`
+                        : `${saleDiscountNumeric}% = ${saleAmountText(saleDiscountAmount, saleCurrency)} · Maximum allowed: ${saleAmountText(saleMaximumDiscount, saleCurrency)}`
+                    : saleCurrency === 'KHR' && saleDiscountAmount % 100 !== 0
+                      ? 'Use a whole KHR amount in increments of 100'
+                      : `${saleDiscountInvalid ? 'Maximum discount is' : 'Maximum allowed:'} ${saleAmountText(saleMaximumDiscount, saleCurrency)}`}
+                </small>
+              )}
+            </label>
             {paywayAvailable && saleCurrency === 'USD' && <fieldset className="sale-payment-method operation-wide">
               <legend>How will the customer pay?</legend>
               <button type="button" className={salePaymentMethod === 'CASH' ? 'active cash' : 'cash'} onClick={() => setSalePaymentMethod('CASH')}>
@@ -2410,7 +3005,29 @@ export default function OperationModalBridge() {
             </fieldset>}
             {salePaymentMethod === 'CASH' && <label className={`sale-amount-received operation-wide${salePaidInvalid ? ' field-invalid' : ''}`}>Amount received ({saleCurrency}) <small className="optional-marker">Change is calculated automatically</small><MoneyInput currency={saleCurrency} minimum={0} value={saleAmountPaid} onValueChange={setSaleAmountPaid} placeholder={saleCurrency === 'KHR' ? riel.format(Math.round(saleTotal)) : saleTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} />{salePaidInvalid ? <small>Use a valid {saleCurrency === 'KHR' ? 'whole KHR amount in increments of 100' : 'cash amount'}.</small> : saleChangeDue > 0 ? <small>Change due: {saleAmountText(saleChangeDue, saleCurrency)}</small> : null}</label>}
             <section className="sale-summary operation-wide" aria-labelledby="sale-summary-title">
-              <header><div><span>Sale summary</span><strong id="sale-summary-title">{selectedSaleItem ? `${selectedSaleItem.name} × ${effectiveSaleQuantity}` : 'No item selected'}</strong></div><b>{salePaymentMethod === 'KHQR' ? 'KHQR' : 'Cash'}</b></header>
+              <header>
+                <div>
+                  <span>Sale summary</span>
+                  <strong id="sale-summary-title">
+                    {saleCart.length === 0
+                      ? 'No item selected'
+                      : saleCart.length === 1
+                        ? `${saleCart[0].item.name} × ${cartLinesWithCalculations[0].quantity}`
+                        : `${saleCart.length} products (${cartLinesWithCalculations.reduce((acc, l) => acc + l.quantity, 0)} items)`}
+                  </strong>
+                </div>
+                <b>{salePaymentMethod === 'KHQR' ? 'KHQR' : 'Cash'}</b>
+              </header>
+              {saleCart.length > 0 && (
+                <div className="sale-summary-lines" role="table" aria-label="Sale summary items">
+                  {cartLinesWithCalculations.map((line) => (
+                    <div key={line.item._id} className="sale-summary-line-item">
+                      <span>{line.item.name} × {line.quantity}</span>
+                      <strong>{saleAmountText(line.lineSubtotal, saleCurrency)}</strong>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="sale-summary-calculation">
                 <span><small>Subtotal</small><strong>{saleAmountText(saleSubtotal, saleCurrency)}</strong></span>
                 <span><small>Discount</small><strong>− {saleAmountText(saleDiscountAmount, saleCurrency)}</strong></span>
@@ -2461,14 +3078,14 @@ export default function OperationModalBridge() {
       {kind === 'sale' && saleKhqr && !saleCompleted && <section className={`sale-khqr-workflow payment-${salePaymentPhase.toLowerCase()}`}>
         <div className="khqr-heading">
           <span><img src={khqrLogo} alt="" /></span>
-          <div><span className="eyebrow">ABA KHQR</span><h3>{salePaymentPhase === 'COMPLETED' ? 'Payment successful' : salePaymentPhase === 'CANCELLED' ? 'Payment cancelled' : `Scan to pay $${saleKhqr.amount.toFixed(2)}`}</h3>{salePaymentPhase !== 'COMPLETED' && <p>{salePaymentPhase === 'CANCELLED' ? 'This QR has been closed and can no longer accept payment.' : 'Keep this window open. The sale completes automatically after PayWay approves the payment.'}</p>}</div>
+          <div><span className="eyebrow">ABA KHQR</span><h3>{salePaymentPhase === 'COMPLETED' ? 'Payment successful' : salePaymentPhase === 'CANCELLED' ? 'Payment cancelled' : `Scan to pay $${Number(saleKhqr.amount || 0).toFixed(2)}`}</h3>{salePaymentPhase !== 'COMPLETED' && <p>{salePaymentPhase === 'CANCELLED' ? 'This QR has been closed and can no longer accept payment.' : 'Keep this window open. The sale completes automatically after PayWay approves the payment.'}</p>}</div>
           <b>{saleKhqr.environment === 'sandbox' ? 'SANDBOX TEST' : 'LIVE'}</b>
         </div>
         {salePaymentPhase === 'COMPLETED' ? <div className="khqr-success-card" role="status">
           <div className="khqr-success-confetti" aria-hidden="true">{Array.from({ length: 18 }, (_, index) => <i key={index} />)}</div>
           <span className="khqr-success-check"><CheckCircle2 size={46} /></span>
           <strong>Payment Successful</strong>
-          <p>Your payment of <b>${saleKhqr.amount.toFixed(2)}</b> has been confirmed through ABA PayWay.</p>
+          <p>Your payment of <b>${Number(saleKhqr.amount || 0).toFixed(2)}</b> has been confirmed through ABA PayWay.</p>
         </div> : <div className={`khqr-payment-card ${salePaymentPhase === 'CANCELLED' ? 'is-cancelled' : ''}`} role="button" tabIndex={salePaymentPhase === 'CANCELLED' ? -1 : 0} aria-label="Enlarge ABA KHQR payment card" onClick={() => { if (salePaymentPhase !== 'CANCELLED') setSaleQrZoomed(true) }} onKeyDown={(event) => { if (salePaymentPhase !== 'CANCELLED' && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); setSaleQrZoomed(true) } }}>
           <article className="khqr-native-card" aria-label={`KHQR payment for $${saleKhqr.amount.toFixed(2)}`}>
             {saleKhqr.qrImage

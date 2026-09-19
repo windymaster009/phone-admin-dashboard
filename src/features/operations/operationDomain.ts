@@ -28,6 +28,9 @@ export type InventoryItem = {
   barcode?: string
   brand?: string
   model?: string
+  serialNumber?: string
+  storage?: string
+  color?: string
   condition?: string
   status: string
   imei1?: string
@@ -145,12 +148,16 @@ export type CompletedSale = {
   paymentMethod: SalePaymentMethod
   itemName: string
   quantity: number
+  items?: Array<{ name: string; quantity: number; unitPrice?: number }>
 }
 
 export function completedSaleFromTrade(
   trade: CreatedSaleTrade,
-  fallback: Pick<CompletedSale, 'currency' | 'paymentMethod' | 'itemName' | 'quantity'>,
+  fallback: Pick<CompletedSale, 'currency' | 'paymentMethod' | 'itemName' | 'quantity'> & { items?: Array<{ name: string; quantity: number; unitPrice?: number }> },
 ): CompletedSale {
+  const tradeItems = trade.items && trade.items.length > 0
+    ? trade.items.map((it) => ({ name: it.name || 'Product', quantity: Number(it.quantity) || 1 }))
+    : fallback.items
   return {
     tradeNo: trade.tradeNo,
     currency: trade.currency === 'KHR' || trade.currency === 'USD' ? trade.currency : fallback.currency,
@@ -160,6 +167,7 @@ export function completedSaleFromTrade(
     paymentMethod: trade.paymentMethod === 'KHQR' ? 'KHQR' : fallback.paymentMethod,
     itemName: trade.items?.[0]?.name || fallback.itemName,
     quantity: Number(trade.items?.[0]?.quantity) || fallback.quantity,
+    items: tradeItems,
   }
 }
 

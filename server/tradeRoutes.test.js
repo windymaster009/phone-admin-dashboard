@@ -93,7 +93,6 @@ test.beforeEach(() => {
     },
   })
 })
-
 test.afterEach(() => {
   AuthSession.findOne = origAuthSessionFindOne
   AuthSession.updateOne = origAuthSessionUpdateOne
@@ -1472,6 +1471,94 @@ test('POST /trades (SELL): allows sale of IN_STOCK item linked to a FORFEITED pa
     assert.equal(res.status, 201)
     assert.equal(phoneItem.quantity, 0)
     assert.equal(phoneItem.status, 'SOLD')
+  } finally {
+    InventoryItem.findById = origFindById
+    Pawn.findOne = origPawnFindOne
+    Trade.create = origTradeCreate
+  }
+})
+
+test('POST /trades (SELL): executes multi-item cart sale and deducts inventory for all items', async () => {
+  const origFindById = InventoryItem.findById
+  const origPawnFindOne = Pawn.findOne
+  const origTradeCreate = Trade.create
+
+  const phoneId = new mongoose.Types.ObjectId()
+  const accessoryId = new mongoose.Types.ObjectId()
+
+  const phoneItem = {
+    _id: phoneId,
+    name: 'iPhone 13',
+    category: 'PHONE',
+    status: 'IN_STOCK',
+    quantity: 1,
+    sellPrice: 500,
+    minimumSellPrice: 450,
+    buyPrice: 400,
+    save: async () => phoneItem,
+  }
+
+  const accessoryItem = {
+    _id: accessoryId,
+    name: 'USB-C Cable',
+    category: 'ACCESSORY',
+    status: 'IN_STOCK',
+    quantity: 10,
+    sellPrice: 15,
+    minimumSellPrice: 10,
+    buyPrice: 5,
+    save: async () => accessoryItem,
+  }
+
+  InventoryItem.findById = (id) => {
+    const idStr = String(id)
+    const item = idStr === phoneId.toString() ? phoneItem : idStr === accessoryId.toString() ? accessoryItem : null
+    const p = Promise.resolve(item)
+    p.session = () => p
+    p.select = () => p
+    return p
+  }
+
+  Pawn.findOne = () => ({
+    select: () => {
+      const p = Promise.resolve(null)
+      p.session = () => p
+      return p
+    },
+  })
+
+  let createdTrade = null
+  Trade.create = async ([tradeData]) => {
+    createdTrade = {
+      _id: new mongoose.Types.ObjectId(),
+      ...tradeData,
+      populate: async function () { return this },
+    }
+    return [createdTrade]
+  }
+
+  try {
+    const payload = {
+      type: 'SELL',
+      currency: 'USD',
+      warrantyDays: 7,
+      amountPaid: 530,
+      paymentMethod: 'CASH',
+      discount: 0,
+      items: [
+        { inventoryItem: phoneId.toString(), quantity: 1 },
+        { inventoryItem: accessoryId.toString(), quantity: 2 },
+      ],
+    }
+
+    const res = await callRouter(apiRouter, { method: 'POST', url: '/trades', body: payload, user: mockCashier })
+    assert.equal(res.status, 201)
+    assert.equal(createdTrade.items.length, 2)
+    assert.equal(phoneItem.quantity, 0)
+    assert.equal(phoneItem.status, 'SOLD')
+    assert.equal(accessoryItem.quantity, 8)
+    assert.equal(createdTrade.transactionSubtotal, 530)
+    assert.equal(createdTrade.transactionTotal, 530)
   } finally {
     InventoryItem.findById = origFindById
     Pawn.findOne = origPawnFindOne

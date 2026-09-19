@@ -26,6 +26,13 @@ function renderModalBridge() {
   )
 }
 
+async function openSaleProductPicker() {
+  const input = screen.getByRole('combobox', { name: /inventory item/i })
+  await waitFor(() => expect(input).not.toBeDisabled())
+  fireEvent.focus(input)
+  return input
+}
+
 describe('OperationModalBridge component', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -279,8 +286,11 @@ describe('OperationModalBridge component', () => {
     await waitFor(() => expect(screen.getByText(/no longer available for sale/i)).toBeInTheDocument())
     const itemSelect = screen.getByRole('combobox', { name: /inventory item/i })
     expect(itemSelect).toHaveValue('')
-    expect(within(itemSelect).queryByText(/Pawned Phone/)).not.toBeInTheDocument()
-    expect(within(itemSelect).getByText(/Available Phone/)).toBeInTheDocument()
+    expect(screen.queryByRole('listbox', { name: /available products/i })).not.toBeInTheDocument()
+    fireEvent.focus(itemSelect)
+    const results = screen.getByRole('listbox', { name: /available products/i })
+    expect(within(results).queryByText(/Pawned Phone/)).not.toBeInTheDocument()
+    expect(within(results).getByText(/Available Phone/)).toBeInTheDocument()
   })
 
   it('opens pawn modal and purchase modal via event triggers', async () => {
@@ -1487,7 +1497,8 @@ describe('OperationModalBridge component', () => {
     const customerSelect = screen.getByLabelText(/Customer/i)
     fireEvent.change(customerSelect, { target: { value: 'cust-1' } })
 
-    // Wait for inventory options to load and select inventory item
+    // Wait for inventory options to load, then open the picker explicitly.
+    await openSaleProductPicker()
     await waitFor(() => {
       expect(screen.getByRole('option', { name: /iPhone 15 Pro Max/i })).toBeInTheDocument()
     })
@@ -1628,6 +1639,7 @@ describe('OperationModalBridge component', () => {
       window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
     })
 
+    await openSaleProductPicker()
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument()
       expect(screen.getByRole('option', { name: /iPhone 15 Pro Max/i })).toBeInTheDocument()
@@ -1756,6 +1768,7 @@ describe('OperationModalBridge component', () => {
       window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
     })
 
+    await openSaleProductPicker()
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument()
       expect(screen.getByRole('option', { name: /iPhone 15 Pro Max/i })).toBeInTheDocument()
@@ -1938,6 +1951,7 @@ describe('OperationModalBridge component', () => {
       window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
     })
 
+    await openSaleProductPicker()
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument()
       expect(screen.getByRole('option', { name: /iPhone 15 Pro Max/i })).toBeInTheDocument()
@@ -2117,6 +2131,7 @@ describe('OperationModalBridge component', () => {
       window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
     })
 
+    await openSaleProductPicker()
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument()
       expect(screen.getByRole('option', { name: /iPhone 15 Pro Max/i })).toBeInTheDocument()
@@ -2608,6 +2623,7 @@ describe('OperationModalBridge component', () => {
       window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
     })
 
+    await openSaleProductPicker()
     await waitFor(() => {
       expect(screen.getByText(/New sale/i)).toBeInTheDocument()
       expect(screen.getByText(/Active iPhone/)).toBeInTheDocument()
@@ -3093,6 +3109,7 @@ describe('OperationModalBridge component', () => {
       window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
     })
 
+    await openSaleProductPicker()
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument()
       expect(screen.getByText(/KHQR Demo Phone/)).toBeInTheDocument()
@@ -3226,6 +3243,7 @@ describe('OperationModalBridge component', () => {
       window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
     })
 
+    await openSaleProductPicker()
     await waitFor(() => {
       expect(screen.getByText(/Printed iPhone/)).toBeInTheDocument()
     })
@@ -3249,7 +3267,7 @@ describe('OperationModalBridge component', () => {
       expect(capturedReceiptDetail).toEqual({
         reference: 'SL-2026-5555',
         currency: 'USD',
-        refreshOnClose: true,
+        autoPrint: true,
       })
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
@@ -3945,6 +3963,7 @@ describe('OperationModalBridge component', () => {
       window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
     })
 
+    await openSaleProductPicker()
     await waitFor(() => {
       expect(screen.getByText(/Protected Price iPhone/)).toBeInTheDocument()
     })
@@ -4027,6 +4046,7 @@ describe('OperationModalBridge component', () => {
       window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
     })
 
+    await openSaleProductPicker()
     await waitFor(() => {
       expect(screen.getByText(/KHR Case/)).toBeInTheDocument()
     })
@@ -4134,6 +4154,7 @@ describe('OperationModalBridge component', () => {
       window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
     })
 
+    await openSaleProductPicker()
     await waitFor(() => {
       expect(screen.getByText(/KHQR Lifecycle Phone/)).toBeInTheDocument()
     })
@@ -4251,6 +4272,7 @@ describe('OperationModalBridge component', () => {
       window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
     })
 
+    await openSaleProductPicker()
     await waitFor(() => {
       expect(screen.getByText(/KHQR Cancel Fail Phone/)).toBeInTheDocument()
     })
@@ -4430,6 +4452,7 @@ describe('OperationModalBridge component', () => {
       window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
     })
 
+    await openSaleProductPicker()
     await waitFor(() => {
       expect(screen.getByText(/Sale Note Phone/)).toBeInTheDocument()
     })
@@ -5242,5 +5265,1029 @@ describe('OperationModalBridge component', () => {
     // Verify modal has proper mobile layout class
     const modal = screen.getByRole('dialog')
     expect(modal).toHaveClass('operation-modal-purchase')
+  })
+
+  it('supports Money and Percent discount methods, calculates percent from subtotal, handles quantity changes and resets safely', async () => {
+    const mockItem = {
+      ...mockInventoryItem,
+      _id: 'inv-accessory-1',
+      name: 'Anker 65W GaN Charger',
+      category: 'ACCESSORY' as const,
+      sellPrice: 120,
+      minimumSellPrice: 0,
+      pricingCurrency: 'USD' as const,
+      quantity: 10,
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [mockItem] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      if (url.includes('/payway/config')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ enabled: false, configured: false }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    // Select product after opening the search picker.
+    await openSaleProductPicker()
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: /Anker 65W GaN Charger/i })).toBeInTheDocument()
+    })
+    fireEvent.change(screen.getByLabelText(/Inventory item/i), { target: { value: 'inv-accessory-1' } })
+
+    // Defaults to Money method
+    const moneyBtn = screen.getByRole('button', { name: /^Money$/i })
+    const percentBtn = screen.getByRole('button', { name: /^Percent$/i })
+    expect(moneyBtn).toHaveClass('selected')
+    expect(percentBtn).not.toHaveClass('selected')
+    expect(screen.getByRole('textbox', { name: /Discount \(USD\)/i })).toBeInTheDocument()
+
+    // Change quantity to 2 -> subtotal = 2 * 120 = $240
+    const qtyInput = screen.getByLabelText(/Quantity/i)
+    fireEvent.change(qtyInput, { target: { value: '2' } })
+
+    // Switch to Percent method
+    fireEvent.click(percentBtn)
+    expect(percentBtn).toHaveClass('selected')
+    expect(moneyBtn).not.toHaveClass('selected')
+
+    // In Percent mode, discount input has label "Discount (%)" and placeholder "0"
+    const percentInput = screen.getByRole('spinbutton', { name: /Discount percentage/i })
+    expect(percentInput).toHaveValue(0)
+
+    // Apply 10% discount -> 10% of $240 = $24 discount, total = $216
+    fireEvent.change(percentInput, { target: { value: '10' } })
+
+    // Displays calculated discount beside input
+    const calculatedDiscount = document.querySelector('.sale-calculated-discount')
+    expect(calculatedDiscount).toHaveTextContent('− $24.00')
+
+    // Updates footer total immediately
+    const totalEl = document.querySelector('.sale-total strong')
+    expect(totalEl).toHaveTextContent('$216.00')
+
+    // Updates sale summary immediately
+    const summaryEl = document.querySelector<HTMLElement>('.sale-summary-calculation')!
+    expect(within(summaryEl).getByText('$240.00')).toBeInTheDocument()
+    expect(within(summaryEl).getByText('− $24.00')).toBeInTheDocument()
+    expect(within(summaryEl).getAllByText('$216.00').length).toBeGreaterThanOrEqual(2)
+
+    // Changing quantity resets discount to 0
+    fireEvent.change(qtyInput, { target: { value: '3' } })
+    expect(percentInput).toHaveValue(0)
+    expect(document.querySelector('.sale-total strong')).toHaveTextContent('$360.00')
+
+    // Reapply 10% on 3 items ($360 subtotal) -> $36 discount, $324 total
+    fireEvent.change(percentInput, { target: { value: '10' } })
+    expect(document.querySelector('.sale-calculated-discount')).toHaveTextContent('− $36.00')
+    expect(document.querySelector('.sale-total strong')).toHaveTextContent('$324.00')
+
+    // Switching back to Money method resets discount to 0
+    fireEvent.click(moneyBtn)
+    expect(moneyBtn).toHaveClass('selected')
+    expect(percentBtn).not.toHaveClass('selected')
+    expect(screen.getByRole('textbox', { name: /Discount \(USD\)/i })).toHaveValue('0')
+    expect(document.querySelector('.sale-total strong')).toHaveTextContent('$360.00')
+  })
+
+  it('enforces minimum-selling-price protection in percent mode without silently clamping percentage', async () => {
+    const mockItem = {
+      ...mockInventoryItem,
+      _id: 'inv-accessory-min-price',
+      name: 'Wireless Earbuds',
+      category: 'ACCESSORY' as const,
+      sellPrice: 120,
+      minimumSellPrice: 100,
+      pricingCurrency: 'USD' as const,
+      quantity: 5,
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [mockItem] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({ enabled: false }) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    await waitFor(() => expect(screen.getByRole('combobox', { name: /Inventory item/i })).not.toBeDisabled())
+    fireEvent.focus(screen.getByRole('combobox', { name: /Inventory item/i }))
+    await screen.findByRole('option', { name: /Wireless Earbuds/i })
+    fireEvent.change(screen.getByLabelText(/Inventory item/i), { target: { value: 'inv-accessory-min-price' } })
+    fireEvent.change(screen.getByPlaceholderText(/Enter days/i), { target: { value: '0' } })
+
+    // Qty = 2 -> subtotal = $240, max discount = 2 * (120 - 100) = $40.00
+    fireEvent.change(await screen.findByLabelText(/Quantity/i), { target: { value: '2' } })
+
+    // Switch to Percent
+    fireEvent.click(screen.getByRole('button', { name: /^Percent$/i }))
+
+    const percentInput = screen.getByRole('spinbutton', { name: /Discount percentage/i })
+
+    // Enter 20% -> 20% of $240 = $48 discount, which exceeds maximum allowed discount of $40
+    fireEvent.change(percentInput, { target: { value: '20' } })
+
+    // Percentage value is NOT silently altered or clamped
+    expect(percentInput).toHaveValue(20)
+
+    // Shows calculated discount with invalid styling
+    const calculatedDiscount = document.querySelector('.sale-calculated-discount')
+    expect(calculatedDiscount).toHaveTextContent('− $48.00')
+    expect(calculatedDiscount).toHaveClass('invalid')
+
+    // Shows clear validation message
+    expect(screen.getByText(/Maximum discount is \$40\.00/i)).toBeInTheDocument()
+
+    // Action button shows "Reduce discount" and is disabled
+    const submitBtn = screen.getByRole('button', { name: /Reduce discount/i })
+    expect(submitBtn).toBeDisabled()
+
+    // Submitting form directly displays error
+    const form = screen.getByRole('dialog').querySelector('form')!
+    fireEvent.submit(form)
+    await waitFor(() => {
+      expect(screen.getByText('Discount cannot exceed $40.00')).toBeInTheDocument()
+    })
+
+    // Reduce discount to 15% -> 15% of $240 = $36 discount <= $40 -> valid
+    fireEvent.change(percentInput, { target: { value: '15' } })
+    expect(percentInput).toHaveValue(15)
+    expect(screen.getByRole('button', { name: /Complete sale/i })).toBeEnabled()
+  })
+
+  it('applies USD cent rounding and KHR 100-riel rounding rules in percent mode', async () => {
+    const mockUsdItem = {
+      ...mockInventoryItem,
+      _id: 'inv-odd-usd',
+      name: 'Screen Protector',
+      category: 'ACCESSORY' as const,
+      sellPrice: 19.99,
+      minimumSellPrice: 0,
+      pricingCurrency: 'USD' as const,
+      quantity: 5,
+    }
+    const mockKhrItem = {
+      ...mockInventoryItem,
+      _id: 'inv-khr-item',
+      name: 'Power Bank',
+      category: 'ACCESSORY' as const,
+      sellPrice: 245300,
+      minimumSellPrice: 0,
+      khrSellPrice: 245300,
+      khrMinimumSellPrice: 0,
+      pricingCurrency: 'KHR' as const,
+      quantity: 5,
+    }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [mockUsdItem, mockKhrItem] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({ enabled: false }) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    await waitFor(() => expect(screen.getByRole('combobox', { name: /Inventory item/i })).not.toBeDisabled())
+    fireEvent.focus(screen.getByRole('combobox', { name: /Inventory item/i }))
+    await screen.findByRole('option', { name: /Screen Protector/i })
+    // 1. USD cent rounding: $19.99 with 15% discount -> 19.99 * 0.15 = 2.9985 -> $3.00
+    fireEvent.change(screen.getByLabelText(/Inventory item/i), { target: { value: 'inv-odd-usd' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Percent$/i }))
+    const percentInput = screen.getByRole('spinbutton', { name: /Discount percentage/i })
+    fireEvent.change(percentInput, { target: { value: '15' } })
+
+    expect(document.querySelector('.sale-calculated-discount')).toHaveTextContent('− $3.00')
+    expect(document.querySelector('.sale-total strong')).toHaveTextContent('$16.99')
+
+    // 2. KHR 100-riel rounding: 245,300 KHR with 10% discount -> 24,530 -> 24,500 KHR
+    fireEvent.click(screen.getByRole('button', { name: /Remove Screen Protector from sale/i }))
+    fireEvent.change(screen.getByLabelText(/Inventory item/i), { target: { value: 'inv-khr-item' } })
+    fireEvent.click(screen.getByRole('button', { name: /^Percent$/i }))
+    const khrPercentInput = screen.getByRole('spinbutton', { name: /Discount percentage/i })
+    fireEvent.change(khrPercentInput, { target: { value: '10' } })
+
+    // 245,300 * 0.10 = 24,530 -> rounded to nearest 100 = 24,500
+    expect(document.querySelector('.sale-calculated-discount')).toHaveTextContent('− 24,500 KHR')
+    // Total = 245,300 - 24,500 = 220,800 KHR
+    expect(document.querySelector('.sale-total strong')).toHaveTextContent('220,800 KHR')
+  })
+
+  it('submits calculated money discount for cash and KHQR sales in percent mode', async () => {
+    const mockItem = {
+      ...mockInventoryItem,
+      _id: 'inv-sale-payload',
+      name: 'AirPods Pro',
+      category: 'ACCESSORY' as const,
+      sellPrice: 120,
+      minimumSellPrice: 0,
+      khrSellPrice: 0,
+      khrMinimumSellPrice: 0,
+      pricingCurrency: 'USD' as const,
+      quantity: 5,
+    }
+
+    let lastTradePayload: any = null
+    let lastKhqrPayload: any = null
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+      }
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [mockItem] }) } as Response
+      }
+      if (url.includes('/exchange-rates')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+      }
+      if (url.includes('/payway/config')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ enabled: true, configured: true }) } as Response
+      }
+      if (url.includes('/trades') && init?.method === 'POST') {
+        lastTradePayload = JSON.parse(String(init.body))
+        return {
+          ok: true,
+          status: 201,
+          headers: new Headers(),
+          json: async () => ({
+            trade: {
+              _id: 'trade-cash-1',
+              type: 'SELL',
+              total: 216,
+              amountPaid: 216,
+              amountReceived: 216,
+              currency: 'USD',
+              createdAt: new Date().toISOString(),
+              items: [{ name: mockItem.name, quantity: 2, unitPrice: 120 }],
+            },
+          }),
+        } as Response
+      }
+      if (url.includes('/payway/khqr') && init?.method === 'POST') {
+        lastKhqrPayload = JSON.parse(String(init.body))
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            qrString: 'dummy-qr-string',
+            md5: 'dummy-md5',
+            amount: 216,
+            currency: 'USD',
+            transactionId: 'trx-1',
+          }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    renderModalBridge()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByLabelText(/Inventory item/i), { target: { value: 'inv-sale-payload' } })
+    fireEvent.change(screen.getByLabelText(/Quantity/i), { target: { value: '2' } })
+    fireEvent.change(screen.getByPlaceholderText(/Enter days/i), { target: { value: '30' } })
+
+    // Switch to Percent and enter 10%
+    fireEvent.click(screen.getByRole('button', { name: /^Percent$/i }))
+    fireEvent.change(screen.getByRole('spinbutton', { name: /Discount percentage/i }), { target: { value: '10' } })
+
+    // 1. Submit Cash sale
+    fireEvent.click(screen.getByRole('button', { name: /Complete sale/i }))
+
+    await waitFor(() => {
+      expect(lastTradePayload).not.toBeNull()
+    })
+
+    // Expect discount to be the money amount 24, NOT the percentage 10
+    expect(lastTradePayload.discount).toBe(24)
+    expect(lastTradePayload.amountPaid).toBe(216)
+    expect(lastTradePayload.amountReceived).toBe(216)
+
+    // Reset and test KHQR submission
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByLabelText(/Inventory item/i), { target: { value: 'inv-sale-payload' } })
+    fireEvent.change(screen.getByLabelText(/Quantity/i), { target: { value: '2' } })
+    fireEvent.change(screen.getByPlaceholderText(/Enter days/i), { target: { value: '30' } })
+
+    // Select KHQR payment method
+    const khqrBtn = screen.getByRole('button', { name: /Pay with KHQR/i })
+    fireEvent.click(khqrBtn)
+
+    // Switch to Percent and enter 10%
+    fireEvent.click(screen.getByRole('button', { name: /^Percent$/i }))
+    fireEvent.change(screen.getByRole('spinbutton', { name: /Discount percentage/i }), { target: { value: '10' } })
+
+    // Submit KHQR sale
+    fireEvent.click(screen.getByRole('button', { name: /Generate KHQR/i }))
+
+    await waitFor(() => {
+      expect(lastKhqrPayload).not.toBeNull()
+    })
+
+    // Expect discount to be the money amount 24, NOT the percentage 10
+    expect(lastKhqrPayload.discount).toBe(24)
+    expect(lastKhqrPayload.quantity).toBe(2)
+    expect(lastKhqrPayload.unitPrice).toBe(120)
+  })
+
+  describe('New sale multi-product cart and searchable picker', () => {
+    const phoneProduct = {
+      _id: 'inv-phone-s24',
+      name: 'Samsung Galaxy S24 Ultra',
+      sku: 'SAM-S24U-256',
+      barcode: '8801234567890',
+      category: 'PHONE' as const,
+      brand: 'Samsung',
+      model: 'Galaxy S24 Ultra',
+      storage: '256GB',
+      color: 'Titanium Black',
+      condition: 'EXCELLENT',
+      quantity: 1,
+      sellPrice: 1200,
+      minimumSellPrice: 1100,
+      khrSellPrice: 4920000,
+      khrMinimumSellPrice: 4510000,
+      pricingCurrency: 'USD' as const,
+      status: 'IN_STOCK' as const,
+      imei1: '359999999999999',
+      serialNumber: 'SN-S24U-001',
+    }
+
+    const accessoryProduct = {
+      _id: 'inv-acc-charger',
+      name: 'Anker 65W Fast Charger',
+      sku: 'ANK-65W-BLK',
+      barcode: '8809999999999',
+      category: 'ACCESSORY' as const,
+      brand: 'Anker',
+      model: 'PowerPort',
+      condition: 'NEW',
+      quantity: 8,
+      sellPrice: 40,
+      minimumSellPrice: 30,
+      khrSellPrice: 164000,
+      khrMinimumSellPrice: 123000,
+      pricingCurrency: 'USD' as const,
+      status: 'IN_STOCK' as const,
+      serialNumber: 'SN-ANK-002',
+    }
+
+    const pawnedStaleProduct = {
+      _id: 'inv-pawned-collateral',
+      name: 'Pawned Locked Phone',
+      sku: 'PWN-LOCKED-01',
+      category: 'PHONE' as const,
+      quantity: 1,
+      sellPrice: 500,
+      status: 'IN_STOCK' as const,
+      pawn: 'pawn-active-999',
+      relatedPawn: { _id: 'pawn-999', pawnNo: 'PW-999', status: 'ACTIVE' },
+    }
+
+    function setupMultiProductFetch(opts?: {
+      inventoryItems?: any[]
+      onTradePost?: (body: any) => void
+      onKhqrPost?: (body: any) => void
+    }) {
+      const items = opts?.inventoryItems ?? [phoneProduct, accessoryProduct, pawnedStaleProduct]
+      vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+        const url = String(input)
+        if (url.includes('/customers')) {
+          return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
+        }
+        if (url.includes('/inventory?status=IN_STOCK') || (url.includes('/inventory') && !url.includes('/inventory/'))) {
+          return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items }) } as Response
+        }
+        if (url.includes('/exchange-rates')) {
+          return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+        }
+        if (url.includes('/payway/config')) {
+          return { ok: true, status: 200, headers: new Headers(), json: async () => ({ enabled: true, configured: true }) } as Response
+        }
+        if (url.includes('/trades') && init?.method === 'POST') {
+          const body = JSON.parse(String(init.body))
+          opts?.onTradePost?.(body)
+          return {
+            ok: true,
+            status: 201,
+            headers: new Headers(),
+            json: async () => ({
+              trade: {
+                _id: 'trade-multi-01',
+                tradeNo: 'SL-2026-MULTI01',
+                type: 'SELL',
+                status: 'COMPLETED',
+                total: body.amountPaid || body.total || 1200,
+                amountPaid: body.amountPaid || 1200,
+                amountReceived: body.amountReceived || 1200,
+                currency: body.currency,
+                items: (body.items || []).map((it: any) => {
+                  const itemId = it.inventoryItem || it.inventoryItemId
+                  return {
+                    inventoryItemId: itemId,
+                    inventoryItem: itemId,
+                    name: itemId === phoneProduct._id ? phoneProduct.name : accessoryProduct.name,
+                    quantity: it.quantity,
+                    unitPrice: it.unitPrice,
+                  }
+                }),
+                paymentMethod: body.paymentMethod || 'CASH',
+                createdAt: new Date().toISOString(),
+              },
+            }),
+          } as Response
+        }
+        if (url.includes('/payway/khqr') && init?.method === 'POST') {
+          const body = JSON.parse(String(init.body))
+          opts?.onKhqrPost?.(body)
+          return {
+            ok: true,
+            status: 200,
+            headers: new Headers(),
+            json: async () => ({
+              qrString: 'dummy-multi-qr-string',
+              md5: 'dummy-multi-md5',
+              amount: body.amount ?? 1240,
+              currency: body.currency,
+              transactionId: 'trx-multi-1',
+            }),
+          } as Response
+        }
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+      })
+    }
+
+    it('filters inventory by product name, SKU, barcode, IMEI, serial number, and avoids invented results', async () => {
+      setupMultiProductFetch()
+      renderModalBridge()
+
+      act(() => {
+        window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+      })
+
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument()
+      })
+
+      const searchInput = screen.getByRole('combobox', { name: /inventory item/i })
+
+      await waitFor(() => expect(searchInput).not.toBeDisabled())
+      expect(searchInput).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.queryByRole('listbox', { name: /available products/i })).not.toBeInTheDocument()
+
+      // The list opens only when the owner interacts with the search box.
+      fireEvent.focus(searchInput)
+      const listbox = screen.getByRole('listbox', { name: /available products/i })
+      expect(listbox).toBeInTheDocument()
+
+      // Pawned item must NEVER appear in available products
+      expect(within(listbox).queryByText(/Pawned Locked Phone/i)).not.toBeInTheDocument()
+      // Real available items appear
+      expect(within(listbox).getByText(/Samsung Galaxy S24 Ultra/i)).toBeInTheDocument()
+      expect(within(listbox).getByText(/Anker 65W Fast Charger/i)).toBeInTheDocument()
+
+      // 1. Search by product name
+      fireEvent.change(searchInput, { target: { value: 'Galaxy' } })
+      expect(within(listbox).getByText(/Samsung Galaxy S24 Ultra/i)).toBeInTheDocument()
+      expect(within(listbox).queryByText(/Anker 65W Fast Charger/i)).not.toBeInTheDocument()
+      // Verify result card details: name, code, available quantity, price
+      expect(within(listbox).getByText(/Qty: 1/i)).toBeInTheDocument()
+      expect(within(listbox).getByText(/\$1,200\.00/i)).toBeInTheDocument()
+      expect(within(listbox).getByText(/IMEI: 359999999999999/i)).toBeInTheDocument()
+
+      // 2. Search by SKU
+      fireEvent.change(searchInput, { target: { value: 'ANK-65W' } })
+      expect(within(listbox).getByText(/Anker 65W Fast Charger/i)).toBeInTheDocument()
+      expect(within(listbox).queryByText(/Samsung Galaxy/i)).not.toBeInTheDocument()
+      expect(within(listbox).getByText(/Qty: 8/i)).toBeInTheDocument()
+      expect(within(listbox).getByText(/\$40\.00/i)).toBeInTheDocument()
+
+      // 3. Search by barcode
+      fireEvent.change(searchInput, { target: { value: '8801234567890' } })
+      expect(within(listbox).getByText(/Samsung Galaxy S24 Ultra/i)).toBeInTheDocument()
+      expect(within(listbox).queryByText(/Anker 65W/i)).not.toBeInTheDocument()
+
+      // 4. Search by IMEI
+      fireEvent.change(searchInput, { target: { value: '359999999999999' } })
+      expect(within(listbox).getByText(/Samsung Galaxy S24 Ultra/i)).toBeInTheDocument()
+
+      // 5. Search by serial number
+      fireEvent.change(searchInput, { target: { value: 'SN-ANK-002' } })
+      expect(within(listbox).getByText(/Anker 65W Fast Charger/i)).toBeInTheDocument()
+
+      // Clear search button
+      const clearBtn = screen.getByRole('button', { name: /clear search/i })
+      fireEvent.click(clearBtn)
+      expect(searchInput).toHaveValue('')
+
+      // Single item isolation test: when only 1 product is in inventory, show only that one and never invent results
+      fireEvent.click(screen.getByRole('button', { name: /close/i }))
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+
+      setupMultiProductFetch({ inventoryItems: [phoneProduct] })
+      act(() => {
+        window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+      })
+      await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+
+      const newSearchInput = screen.getByRole('combobox', { name: /inventory item/i })
+      fireEvent.focus(newSearchInput)
+      const singleListbox = screen.getByRole('listbox', { name: /available products/i })
+      const singleOptions = within(singleListbox).getAllByRole('option')
+      expect(singleOptions).toHaveLength(1)
+      expect(singleOptions[0]).toHaveTextContent('Samsung Galaxy S24 Ultra')
+    })
+
+    it('supports keyboard navigation (ArrowDown/Up, Enter, Escape) and barcode scanner input', async () => {
+      setupMultiProductFetch()
+      renderModalBridge()
+
+      act(() => {
+        window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+      })
+
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument()
+      })
+
+      const searchInput = screen.getByRole('combobox', { name: /inventory item/i })
+      fireEvent.focus(searchInput)
+      fireEvent.change(searchInput, { target: { value: 'a' } }) // matches both products
+
+      const listbox = screen.getByRole('listbox', { name: /available products/i })
+      const options = within(listbox).getAllByRole('option')
+      expect(options).toHaveLength(2)
+      // Active index starts at 0
+      expect(options[0]).toHaveAttribute('aria-selected', 'true')
+      expect(options[1]).toHaveAttribute('aria-selected', 'false')
+
+      // Navigate down with ArrowDown
+      fireEvent.keyDown(searchInput, { key: 'ArrowDown' })
+      expect(options[0]).toHaveAttribute('aria-selected', 'false')
+      expect(options[1]).toHaveAttribute('aria-selected', 'true')
+
+      // Navigate up with ArrowUp
+      fireEvent.keyDown(searchInput, { key: 'ArrowUp' })
+      expect(options[0]).toHaveAttribute('aria-selected', 'true')
+
+      // Press Enter to select active item (Galaxy S24)
+      fireEvent.keyDown(searchInput, { key: 'Enter' })
+      const cartSection = screen.getByLabelText('Cart items')
+      expect(within(cartSection).getByText('Samsung Galaxy S24 Ultra')).toBeInTheDocument()
+      expect(searchInput).toHaveValue('')
+
+      // Dropdown escape test: typing open dropdown and pressing Escape closes dropdown without closing modal
+      fireEvent.change(searchInput, { target: { value: 'Anker' } })
+      expect(screen.getByRole('listbox', { name: /available products/i })).toBeInTheDocument()
+      fireEvent.keyDown(searchInput, { key: 'Escape' })
+      expect(screen.queryByRole('listbox', { name: /available products/i })).not.toBeInTheDocument()
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+
+      // Scanner input: scanning barcode of next product adds it without replacing the first
+      fireEvent.change(searchInput, { target: { value: '8809999999999' } })
+      fireEvent.keyDown(searchInput, { key: 'Enter' })
+
+      // Cart now holds BOTH products
+      expect(within(cartSection).getByText('Samsung Galaxy S24 Ultra')).toBeInTheDocument()
+      expect(within(cartSection).getByText('Anker 65W Fast Charger')).toBeInTheDocument()
+      expect(within(cartSection).getByText(/Cart items \(2\)/i)).toBeInTheDocument()
+    })
+
+    it('enforces multi-product cart limits: phone quantity locked at 1, stock limits, duplicate prevention, and line removal', async () => {
+      setupMultiProductFetch()
+      renderModalBridge()
+
+      act(() => {
+        window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+      })
+
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument()
+      })
+
+      const searchInput = screen.getByRole('combobox', { name: /inventory item/i })
+
+      // Add phone
+      fireEvent.change(searchInput, { target: { value: 'SAM-S24U-256' } })
+      fireEvent.keyDown(searchInput, { key: 'Enter' })
+
+      // Add accessory
+      fireEvent.change(searchInput, { target: { value: 'ANK-65W-BLK' } })
+      fireEvent.keyDown(searchInput, { key: 'Enter' })
+
+      const cartSection = screen.getByLabelText('Cart items')
+      expect(within(cartSection).getByText(/Cart items \(2\)/i)).toBeInTheDocument()
+
+      // 1. Phone quantity locked at 1
+      const phoneItem = within(cartSection).getByText('Samsung Galaxy S24 Ultra').closest('.sale-cart-item-card') as HTMLElement
+      expect(within(phoneItem).getByText(/Qty: 1/i)).toBeInTheDocument()
+      const phoneInput = phoneItem.querySelector('input[type="number"]') as HTMLInputElement
+      expect(phoneInput).toBeDisabled()
+      expect(phoneInput.value).toBe('1')
+
+      // 2. Accessory quantity stepper, typing, keyboard controls, and stock limit (8)
+      const accItem = within(cartSection).getByText('Anker 65W Fast Charger').closest('.sale-cart-item-card') as HTMLElement
+      const accInput = within(accItem).getByRole('spinbutton', { name: /quantity/i }) as HTMLInputElement
+      const minusBtn = within(accItem).getByRole('button', { name: /decrease/i })
+      const plusBtn = within(accItem).getByRole('button', { name: /increase/i })
+
+      expect(accInput.value).toBe('1')
+      expect(accInput).toHaveClass('sale-cart-qty-input')
+      expect(minusBtn).toBeDisabled()
+      expect(plusBtn).toBeEnabled()
+
+      // Click + button increments to 2
+      fireEvent.click(plusBtn)
+      expect(accInput.value).toBe('2')
+      expect(minusBtn).toBeEnabled()
+
+      // Click - button decrements back to 1
+      fireEvent.click(minusBtn)
+      expect(accInput.value).toBe('1')
+      expect(minusBtn).toBeDisabled()
+
+      // Keyboard ArrowUp increments to 2, ArrowDown decrements to 1
+      fireEvent.keyDown(accInput, { key: 'ArrowUp' })
+      expect(accInput.value).toBe('2')
+      fireEvent.keyDown(accInput, { key: 'ArrowDown' })
+      expect(accInput.value).toBe('1')
+
+      // Direct typing increases to 5
+      fireEvent.change(accInput, { target: { value: '5' } })
+      expect(accInput.value).toBe('5')
+
+      // Attempt to exceed available stock (e.g. 15 > 8) -> clamps to max available (8)
+      fireEvent.change(accInput, { target: { value: '15' } })
+      expect(accInput.value).toBe('8')
+      expect(plusBtn).toBeDisabled()
+
+      // 3. Prevent duplicate lines
+      fireEvent.change(searchInput, { target: { value: 'Samsung Galaxy S24 Ultra' } })
+      fireEvent.keyDown(searchInput, { key: 'Enter' })
+      expect(screen.getByRole('alert')).toHaveTextContent(/already in your cart/i)
+      expect(within(cartSection).getByText(/Cart items \(2\)/i)).toBeInTheDocument()
+
+      // 4. Remove line from cart
+      const removePhoneBtn = within(cartSection).getByRole('button', { name: /Remove Samsung Galaxy S24 Ultra from sale/i })
+      fireEvent.click(removePhoneBtn)
+      expect(within(cartSection).queryByText('Samsung Galaxy S24 Ultra')).not.toBeInTheDocument()
+      expect(within(cartSection).getByText(/Cart items \(1\)/i)).toBeInTheDocument()
+    })
+
+    it('edits the selected cart line price without changing the first product', async () => {
+      let submittedTradePayload: any = null
+      setupMultiProductFetch({ onTradePost: (body) => { submittedTradePayload = body } })
+      renderModalBridge()
+
+      act(() => {
+        window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+      })
+      const searchInput = await screen.findByRole('combobox', { name: /inventory item/i })
+      await waitFor(() => expect(searchInput).not.toBeDisabled())
+      fireEvent.change(searchInput, { target: { value: phoneProduct._id } })
+      fireEvent.change(searchInput, { target: { value: accessoryProduct._id } })
+
+      const priceGroup = screen.getByRole('group', { name: /Selling price in USD/i })
+      expect(within(priceGroup).getByText(/Anker 65W Fast Charger/)).toBeInTheDocument()
+      fireEvent.click(within(priceGroup).getByRole('button', { name: /Enter manually/i }))
+      fireEvent.change(priceGroup.querySelector('input')!, { target: { value: '35.00' } })
+      expect(within(screen.getByRole('table', { name: /Sale summary items/i })).getByText('$35.00')).toBeInTheDocument()
+
+      fireEvent.click(screen.getByRole('button', { name: `Edit selling price for ${phoneProduct.name}` }))
+      expect(within(priceGroup).getByText(/Samsung Galaxy S24 Ultra/)).toBeInTheDocument()
+      expect(within(priceGroup).getByText('$1,200.00')).toBeInTheDocument()
+
+      fireEvent.change(screen.getByPlaceholderText(/Enter days/i), { target: { value: '0' } })
+      fireEvent.click(screen.getByRole('button', { name: /Complete sale/i }))
+      await waitFor(() => expect(submittedTradePayload).not.toBeNull())
+      expect(submittedTradePayload.items.map((item: any) => item.unitPrice)).toEqual([1200, 35])
+    })
+
+    it('keeps existing cart products when adding an item saved in another currency', async () => {
+      const khrAccessory = {
+        ...accessoryProduct,
+        _id: 'inv-acc-khr',
+        name: 'KHR Charger',
+        pricingCurrency: 'KHR' as const,
+        sellPrice: 10,
+        minimumSellPrice: 5,
+        khrSellPrice: 41000,
+        khrMinimumSellPrice: 20500,
+      }
+      setupMultiProductFetch({ inventoryItems: [phoneProduct, khrAccessory] })
+      renderModalBridge()
+      act(() => {
+        window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+      })
+      const searchInput = await screen.findByRole('combobox', { name: /inventory item/i })
+      await waitFor(() => expect(searchInput).not.toBeDisabled())
+      fireEvent.change(searchInput, { target: { value: phoneProduct._id } })
+      fireEvent.change(searchInput, { target: { value: khrAccessory._id } })
+
+      const cartSection = screen.getByLabelText('Cart items')
+      expect(within(cartSection).getByText(phoneProduct.name)).toBeInTheDocument()
+      expect(within(cartSection).getByText(khrAccessory.name)).toBeInTheDocument()
+      expect(within(cartSection).getByText(/Cart items \(2\)/i)).toBeInTheDocument()
+      const currencySelect = screen.getByText('Currency').closest('label')?.querySelector('select')
+      expect(currencySelect).toHaveValue('USD')
+    })
+
+    it('opens the unpriced second cart product when setting its stock price', async () => {
+      const unpricedAccessory = { ...accessoryProduct, sellPrice: 0, minimumSellPrice: 0, khrSellPrice: 0, khrMinimumSellPrice: 0 }
+      setupMultiProductFetch({ inventoryItems: [phoneProduct, unpricedAccessory] })
+      const stockItemHandler = vi.fn()
+      window.addEventListener('phoneflow:open-stock-item', stockItemHandler)
+      renderModalBridge()
+
+      act(() => {
+        window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+      })
+      const searchInput = await screen.findByRole('combobox', { name: /inventory item/i })
+      await waitFor(() => expect(searchInput).not.toBeDisabled())
+      fireEvent.change(searchInput, { target: { value: phoneProduct._id } })
+      fireEvent.change(searchInput, { target: { value: unpricedAccessory._id } })
+
+      const priceGroup = screen.getByRole('group', { name: /Selling price in USD/i })
+      expect(within(priceGroup).getByText(/Anker 65W Fast Charger/)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Enter a valid price/i })).toBeDisabled()
+      fireEvent.click(within(priceGroup).getByRole('button', { name: /Set price/i }))
+      await waitFor(() => expect(stockItemHandler).toHaveBeenCalledWith(expect.objectContaining({
+        detail: { item: unpricedAccessory },
+      })))
+      window.removeEventListener('phoneflow:open-stock-item', stockItemHandler)
+    })
+
+    it('calculates line totals, subtotal, money/percent discounts, and minimum allowed total across cart', async () => {
+      setupMultiProductFetch()
+      renderModalBridge()
+
+      act(() => {
+        window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+      })
+
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument()
+      })
+
+      const searchInput = screen.getByRole('combobox', { name: /inventory item/i })
+
+      // Add phone: unitPrice $1,200, minimumSellPrice $1,100, qty 1 -> line total $1,200
+      fireEvent.change(searchInput, { target: { value: 'SAM-S24U-256' } })
+      fireEvent.keyDown(searchInput, { key: 'Enter' })
+
+      // Add accessory: unitPrice $40, minimumSellPrice $30, qty 2 -> line total $80
+      fireEvent.change(searchInput, { target: { value: 'ANK-65W-BLK' } })
+      fireEvent.keyDown(searchInput, { key: 'Enter' })
+
+      const cartSection = screen.getByLabelText('Cart items')
+      const accItem = within(cartSection).getByText('Anker 65W Fast Charger').closest('.sale-cart-item-card') as HTMLElement
+      const accInput = within(accItem).getByRole('spinbutton', { name: /quantity/i })
+      fireEvent.change(accInput, { target: { value: '2' } })
+
+      // Set warranty days
+      fireEvent.change(screen.getByPlaceholderText(/Enter days/i), { target: { value: '30' } })
+
+      // Subtotal = $1,200 + $80 = $1,280.00
+      // Minimum allowed total = $1,100 + (2 * $30) = $1,160.00
+      // Maximum allowed discount = $1,280 - $1,160 = $120.00
+      const summaryTable = screen.getByRole('table', { name: /Sale summary items/i })
+      expect(within(summaryTable).getByText(/Samsung Galaxy S24 Ultra × 1/i)).toBeInTheDocument()
+      expect(within(summaryTable).getByText(/Anker 65W Fast Charger × 2/i)).toBeInTheDocument()
+
+      expect(screen.getByText(/Maximum allowed: \$120\.00/i)).toBeInTheDocument()
+
+      // Money discount test: $100 discount is allowed
+      const discountInput = screen.getByPlaceholderText('0.00')
+      fireEvent.change(discountInput, { target: { value: '100' } })
+      // Total = $1,280 - $100 = $1,180.00
+      const totalSpan = screen.getByText((content, element) => {
+        return element?.tagName.toLowerCase() === 'small' && content === 'Total'
+      }).closest('span')!
+      expect(within(totalSpan).getByText('$1,180.00')).toBeInTheDocument()
+
+      // Exceeding discount limit in Money mode: $150 > $120
+      fireEvent.change(discountInput, { target: { value: '150' } })
+      expect(screen.getByText(/Maximum discount is \$120\.00/i)).toBeInTheDocument()
+      const reduceDiscountBtn = screen.getByRole('button', { name: /Reduce discount/i })
+      expect(reduceDiscountBtn).toBeDisabled()
+
+      // Switch to Percent mode
+      fireEvent.click(screen.getByRole('button', { name: /^Percent$/i }))
+      const percentInput = screen.getByRole('spinbutton', { name: /discount percentage/i })
+      // 5% of $1,280 = $64.00 (allowed)
+      fireEvent.change(percentInput, { target: { value: '5' } })
+      const discountWrapper = percentInput.closest('.sale-discount-input-wrapper') as HTMLElement
+      expect(within(discountWrapper).getByText(/− \$64\.00/i)).toBeInTheDocument()
+      expect(screen.getByText(/5% = \$64\.00 · Maximum allowed: \$120\.00/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Complete sale/i })).toBeEnabled()
+
+      // 15% of $1,280 = $192.00 (exceeds $120 maximum discount)
+      fireEvent.change(percentInput, { target: { value: '15' } })
+      expect(screen.getByText(/Maximum discount is \$120\.00/i)).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Reduce discount/i })).toBeDisabled()
+    })
+
+    it('submits multi-item cash and KHQR sales and dispatches receipt printing event with all cart items', async () => {
+      let submittedTradePayload: any = null
+      let submittedKhqrPayload: any = null
+      setupMultiProductFetch({
+        onTradePost: (body) => { submittedTradePayload = body },
+        onKhqrPost: (body) => { submittedKhqrPayload = body },
+      })
+
+      const receiptHandler = vi.fn()
+      window.addEventListener('phoneflow:open-trade-receipt', receiptHandler)
+
+      renderModalBridge()
+
+      act(() => {
+        window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+      })
+
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument()
+      })
+
+      const searchInput = screen.getByRole('combobox', { name: /inventory item/i })
+
+      // Add phone ($1,200) and accessory ($40 * 2 = $80)
+      fireEvent.change(searchInput, { target: { value: 'SAM-S24U-256' } })
+      fireEvent.keyDown(searchInput, { key: 'Enter' })
+
+      fireEvent.change(searchInput, { target: { value: 'ANK-65W-BLK' } })
+      fireEvent.keyDown(searchInput, { key: 'Enter' })
+
+      const cartSection = screen.getByLabelText('Cart items')
+      const accItem = within(cartSection).getByText('Anker 65W Fast Charger').closest('.sale-cart-item-card') as HTMLElement
+      fireEvent.change(within(accItem).getByRole('spinbutton', { name: /quantity/i }), { target: { value: '2' } })
+
+      // Set warranty days
+      fireEvent.change(screen.getByPlaceholderText(/Enter days/i), { target: { value: '30' } })
+
+      // Set $80 money discount -> Subtotal $1,280 - $80 = $1,200 Total
+      const discountInput = screen.getByPlaceholderText('0.00')
+      fireEvent.change(discountInput, { target: { value: '80' } })
+
+      // 1. Submit Cash sale
+      fireEvent.click(screen.getByRole('button', { name: /Complete sale/i }))
+
+      await waitFor(() => {
+        expect(submittedTradePayload).not.toBeNull()
+      })
+
+      expect(submittedTradePayload.items).toHaveLength(2)
+      expect(submittedTradePayload.items[0]).toEqual(
+        expect.objectContaining({
+          inventoryItem: phoneProduct._id,
+          name: phoneProduct.name,
+          quantity: 1,
+          unitPrice: 1200,
+        }),
+      )
+      expect(submittedTradePayload.items[1]).toEqual(
+        expect.objectContaining({
+          inventoryItem: accessoryProduct._id,
+          name: accessoryProduct.name,
+          quantity: 2,
+          unitPrice: 40,
+        }),
+      )
+      expect(submittedTradePayload.discount).toBe(80)
+      expect(submittedTradePayload.amountPaid).toBe(1200)
+      expect(submittedTradePayload.amountReceived).toBe(1200)
+
+      // Verify Completed Sale card displays both line items
+      await waitFor(() => {
+        expect(screen.getByText(/Payment successful/i)).toBeInTheDocument()
+      })
+      const completeList = screen.getByLabelText(/Sale items/i)
+      expect(within(completeList).getByText(/Samsung Galaxy S24 Ultra × 1/i)).toBeInTheDocument()
+      expect(within(completeList).getByText(/Anker 65W Fast Charger × 2/i)).toBeInTheDocument()
+
+      // Click Print receipt button and verify event
+      const printBtn = screen.getByRole('button', { name: /Print receipt/i })
+      fireEvent.click(printBtn)
+
+      await waitFor(() => {
+        expect(receiptHandler).toHaveBeenCalledTimes(1)
+        const detail = (receiptHandler.mock.calls[0][0] as CustomEvent).detail
+        expect(detail).toEqual(
+          expect.objectContaining({
+            reference: 'SL-2026-MULTI01',
+            currency: 'USD',
+            autoPrint: true,
+          }),
+        )
+      })
+
+      window.removeEventListener('phoneflow:open-trade-receipt', receiptHandler)
+
+      // 2. KHQR flow for multi-item cart
+      act(() => {
+        window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+      })
+
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument()
+      })
+
+      const searchInputKhqr = screen.getByRole('combobox', { name: /inventory item/i })
+      fireEvent.change(searchInputKhqr, { target: { value: 'SAM-S24U-256' } })
+      fireEvent.keyDown(searchInputKhqr, { key: 'Enter' })
+
+      fireEvent.change(searchInputKhqr, { target: { value: 'ANK-65W-BLK' } })
+      fireEvent.keyDown(searchInputKhqr, { key: 'Enter' })
+
+      fireEvent.change(screen.getByPlaceholderText(/Enter days/i), { target: { value: '14' } })
+
+      // Select KHQR payment method
+      fireEvent.click(screen.getByRole('button', { name: /Pay with KHQR/i }))
+      fireEvent.click(screen.getByRole('button', { name: /Generate KHQR/i }))
+
+      await waitFor(() => {
+        expect(submittedKhqrPayload).not.toBeNull()
+      })
+
+      expect(submittedKhqrPayload.items).toHaveLength(2)
+      expect(submittedKhqrPayload.items[0]).toEqual(
+        expect.objectContaining({
+          inventoryItem: phoneProduct._id,
+          quantity: 1,
+          unitPrice: 1200,
+        }),
+      )
+      expect(submittedKhqrPayload.items[1]).toEqual(
+        expect.objectContaining({
+          inventoryItem: accessoryProduct._id,
+          quantity: 1,
+          unitPrice: 40,
+        }),
+      )
+    })
   })
 })

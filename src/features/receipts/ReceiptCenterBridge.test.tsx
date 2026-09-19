@@ -159,6 +159,7 @@ describe('ReceiptCenterBridge component', () => {
 
     expect(printCalls).toBe(1)
     expect(window.open).toHaveBeenCalledTimes(1)
+    expect(mockDoc.write).toHaveBeenCalledTimes(1)
 
     // Immediate second click while busy
     await user.click(printBtn)
@@ -416,6 +417,19 @@ describe('ReceiptCenterBridge component', () => {
     loanModal.remove()
   })
 
+  it('does not add a second receipt action while loan details are loading', async () => {
+    const loanModal = document.createElement('div')
+    loanModal.className = 'loan-modal loan-detail-loading'
+    loanModal.innerHTML = '<h2>LN-2026-9999 · Borrower Alice</h2><header class="operation-modal-header"><div></div></header>'
+    document.body.appendChild(loanModal)
+
+    render(<ReceiptCenterBridge />)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(screen.queryByRole('button', { name: 'Documents' })).not.toBeInTheDocument()
+
+    loanModal.remove()
+  })
+
   it('handles phoneflow:open-loan-receipt custom event and opens 80mm thermal viewer', async () => {
     let generatedBody: any = null
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -458,6 +472,58 @@ describe('ReceiptCenterBridge component', () => {
     })
   })
 
+  it('opens loan receipt choices immediately from loaded loan details without fetching options again', async () => {
+    let generatedBody: Record<string, string> | null = null
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      if (String(input).includes('/receipts/generate') && init?.method === 'POST') {
+        generatedBody = JSON.parse(String(init.body))
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ receipt: { ...mockRefundReceipt, documentType: 'LOAN_PAYMENT', sourceType: 'LOAN' } }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    render(<ReceiptCenterBridge />)
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-documents', {
+        detail: {
+          sourceType: 'LOAN', reference: 'LN-1', options: [
+            { documentType: 'LOAN_AGREEMENT', sourceSubId: 'agreement', label: 'Loan agreement', issuedAt: '2026-09-01T00:00:00.000Z', amount: 200, currency: 'USD' },
+            { documentType: 'LOAN_PAYMENT', sourceSubId: 'payment-1', label: 'Loan repayment receipt', issuedAt: '2026-09-02T00:00:00.000Z', amount: 50, currency: 'USD' },
+          ],
+        },
+      }))
+    })
+
+    const picker = screen.getByRole('dialog', { name: 'LN-1' })
+    expect(within(picker).getByRole('button', { name: /Loan agreement/i })).toBeInTheDocument()
+    expect(within(picker).getByRole('button', { name: /Loan repayment receipt/i })).toBeInTheDocument()
+    expect(fetchSpy).not.toHaveBeenCalled()
+
+    await userEvent.setup().click(within(picker).getByRole('button', { name: /Loan repayment receipt/i }))
+    await waitFor(() => expect(generatedBody).toMatchObject({ sourceType: 'LOAN', reference: 'LN-1', documentType: 'LOAN_PAYMENT', sourceSubId: 'payment-1' }))
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows receipt preparation immediately while the single loan receipt is loading', async () => {
+    let finish!: (response: Response) => void
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Promise<Response>((resolve) => { finish = resolve }))
+    render(<ReceiptCenterBridge />)
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-documents', {
+        detail: { sourceType: 'LOAN', reference: 'LN-1', options: [
+          { documentType: 'LOAN_AGREEMENT', sourceSubId: 'agreement', label: 'Loan agreement', issuedAt: '2026-09-01T00:00:00.000Z', amount: 200, currency: 'USD' },
+        ] },
+      }))
+    })
+    expect(screen.getByRole('dialog', { name: 'Preparing receipt' })).toBeInTheDocument()
+
+    await act(async () => {
+      finish({ ok: true, status: 200, headers: new Headers(), json: async () => ({ receipt: { ...mockRefundReceipt, documentType: 'LOAN_AGREEMENT', sourceType: 'LOAN' } }) } as Response)
+    })
+    expect(screen.getByRole('dialog', { name: mockRefundReceipt.receiptNo })).toBeInTheDocument()
+  })
+
   it('handles phoneflow:open-pawn-ticket and phoneflow:open-trade-receipt custom events', async () => {
     let generatedDocType = ''
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -486,7 +552,7 @@ describe('ReceiptCenterBridge component', () => {
 
     await waitFor(() => {
       expect(generatedDocType).toBe('PAWN_CONTRACT')
-      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByRole('dialog', { name: mockRefundReceipt.receiptNo })).toBeInTheDocument()
     })
 
     // Close modal
@@ -506,8 +572,48 @@ describe('ReceiptCenterBridge component', () => {
 
     await waitFor(() => {
       expect(generatedDocType).toBe('SALE_RECEIPT')
-      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      expect(screen.getByRole('dialog', { name: mockRefundReceipt.receiptNo })).toBeInTheDocument()
     })
+  })
+
+  it('reserves the sale receipt popup synchronously and automatically opens print after generation', async () => {
+    const printedReceipt = { ...mockRefundReceipt, documentType: 'SALE_RECEIPT' as const, printCount: 1 }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/receipts/generate') && init?.method === 'POST') {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ receipt: printedReceipt }) } as Response
+      }
+      if (url.includes(`/receipts/${printedReceipt._id}/printed`) && init?.method === 'POST') {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ receipt: printedReceipt }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    const popupDocument = document.implementation.createHTMLDocument()
+    const print = vi.fn()
+    const popup = {
+      document: popupDocument,
+      closed: false,
+      focus: vi.fn(),
+      print,
+      close: vi.fn(),
+    } as unknown as Window
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(popup)
+
+    render(<ReceiptCenterBridge />)
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-trade-receipt', {
+        detail: { reference: 'SL-2026-AUTOPRINT', currency: 'USD', autoPrint: true },
+      }))
+      // The popup must be opened inside the original click/event call stack,
+      // before asynchronous receipt generation loses browser permission.
+      expect(openSpy).toHaveBeenCalledTimes(1)
+    })
+
+    await waitFor(() => expect(print).toHaveBeenCalledTimes(1))
+    expect(screen.getByRole('dialog', { name: printedReceipt.receiptNo })).toBeInTheDocument()
+    expect(screen.getByText('1 print')).toBeInTheDocument()
   })
 
   it('opens document picker for multi-part pawn contracts and previews selected extension ticket', async () => {

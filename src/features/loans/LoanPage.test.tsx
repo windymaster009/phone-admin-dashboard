@@ -514,7 +514,7 @@ describe('LoanPage component and shared component adoption', () => {
       expect(screen.getByRole('dialog', { name: /Payment recorded/i })).toBeInTheDocument()
       expect(screen.getByText('Loan payment recorded')).toBeInTheDocument()
     })
-    await user.click(screen.getByRole('button', { name: /Print 80mm receipt/i }))
+    await user.click(screen.getByRole('button', { name: /^Print receipt$/i }))
     await waitFor(() => {
       expect(receiptHandler).toHaveBeenCalledWith(expect.objectContaining({
         detail: expect.objectContaining({ documentType: 'LOAN_PAYMENT', sourceSubId: 'pay-1' }),
@@ -1679,6 +1679,8 @@ describe('LoanPage component and shared component adoption', () => {
 
     // 1. Click loan 1 (slow response)
     await user.click(screen.getByLabelText(`View ${mockLoanRecord.loanNo}`))
+    expect(screen.getByRole('dialog', { name: /LN-2026-001/i })).toBeInTheDocument()
+    expect(screen.getByText('Opening loan')).toBeInTheDocument()
 
     // 2. Click loan 2 (fast response)
     await user.click(screen.getByLabelText(`View ${loanRecord2.loanNo}`))
@@ -2377,7 +2379,7 @@ describe('LoanPage component and shared component adoption', () => {
     })
   })
 
-  it('renders Print 80mm receipt button on loan creation and dispatches open-loan-receipt', async () => {
+  it('renders Print receipt button on loan creation and dispatches open-loan-receipt', async () => {
     let dispatchedDetail: any = null
     const receiptHandler = (e: Event) => {
       dispatchedDetail = (e as CustomEvent).detail
@@ -2457,10 +2459,10 @@ describe('LoanPage component and shared component adoption', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Loan record created')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /Print 80mm receipt/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^Print receipt$/i })).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('button', { name: /Print 80mm receipt/i }))
+    await user.click(screen.getByRole('button', { name: /^Print receipt$/i }))
 
     await waitFor(() => {
       expect(dispatchedDetail).toMatchObject({
@@ -2472,16 +2474,11 @@ describe('LoanPage component and shared component adoption', () => {
     window.removeEventListener('phoneflow:open-loan-receipt', receiptHandler)
   })
 
-  it('renders Print 80mm receipt and Documents buttons in loan detail footer', async () => {
-    let receiptDetail: any = null
+  it('renders one Print receipt action with agreement and repayment options in the loan detail footer', async () => {
     let docsDetail: any = null
-    const receiptHandler = (e: Event) => {
-      receiptDetail = (e as CustomEvent).detail
-    }
     const docsHandler = (e: Event) => {
       docsDetail = (e as CustomEvent).detail
     }
-    window.addEventListener('phoneflow:open-loan-receipt', receiptHandler)
     window.addEventListener('phoneflow:open-documents', docsHandler)
 
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL) => {
@@ -2499,7 +2496,7 @@ describe('LoanPage component and shared component adoption', () => {
           ok: true,
           status: 200,
           headers: new Headers(),
-          json: async () => ({ loan: mockLoanRecord, payments: [] }),
+          json: async () => ({ loan: mockLoanRecord, payments: [{ _id: 'payment-1', paymentNo: 'LP-1', amount: 300, paymentMethod: 'CASH', paidAt: '2026-09-01T00:00:00.000Z' }] }),
         } as Response
       }
       return {
@@ -2523,24 +2520,20 @@ describe('LoanPage component and shared component adoption', () => {
       expect(screen.getByRole('dialog', { name: new RegExp(mockLoanRecord.loanNo, 'i') })).toBeInTheDocument()
     })
 
-    const printBtn = screen.getByRole('button', { name: /Print 80mm receipt/i })
-    const docsBtn = screen.getByRole('button', { name: /Documents/i })
+    const printBtn = screen.getByRole('button', { name: /^Print receipt$/i })
     expect(printBtn).toBeInTheDocument()
-    expect(docsBtn).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Documents$/i })).not.toBeInTheDocument()
 
     await user.click(printBtn)
-    expect(receiptDetail).toMatchObject({
-      reference: mockLoanRecord.loanNo,
-      layout: 'THERMAL',
-    })
-
-    await user.click(docsBtn)
     expect(docsDetail).toMatchObject({
       sourceType: 'LOAN',
       reference: mockLoanRecord.loanNo,
+      options: [
+        { documentType: 'LOAN_AGREEMENT', sourceSubId: 'agreement' },
+        { documentType: 'LOAN_PAYMENT', sourceSubId: 'payment-1' },
+      ],
     })
 
-    window.removeEventListener('phoneflow:open-loan-receipt', receiptHandler)
     window.removeEventListener('phoneflow:open-documents', docsHandler)
   })
 

@@ -451,6 +451,43 @@ test('Loan queries: CASHIER requests projections excluding borrower nationalIdNu
   }
 })
 
+test('GET loan detail refreshes only the displayed status without scanning every loan', async () => {
+  const originalFind = Loan.find
+  const originalFindById = Loan.findById
+  const originalPaymentFind = LoanPayment.find
+  const loanId = new mongoose.Types.ObjectId()
+  Loan.find = () => { throw new Error('Detail request must not scan the full loan collection') }
+  Loan.findById = () => {
+    const query = {
+      populate() { return query },
+      then(resolve) {
+        return Promise.resolve({
+          _id: loanId,
+          loanNo: 'LN-DETAIL-FAST',
+          status: 'ACTIVE',
+          dueDate: new Date('2020-01-01T00:00:00.000Z'),
+          reminderDays: 3,
+          totalDue: 200,
+          amountPaid: 0,
+          remainingBalance: 200,
+        }).then(resolve)
+      },
+    }
+    return query
+  }
+  LoanPayment.find = () => ({ sort: () => ({ populate: async () => [] }) })
+
+  try {
+    const response = await callRouter(loanRouter, { method: 'GET', url: `/${loanId}` })
+    assert.equal(response.status, 200)
+    assert.equal(response.body.loan.status, 'OVERDUE')
+  } finally {
+    Loan.find = originalFind
+    Loan.findById = originalFindById
+    LoanPayment.find = originalPaymentFind
+  }
+})
+
 // ---------------------------------------------------------------------------
 // 5. Loan Repayments & Concurrency Fallback
 // ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowDownRight, ArrowUpRight, Banknote, ChevronDown, FileText, MoreHorizontal, Plus, RefreshCcw, ShoppingCart, WalletCards } from 'lucide-react'
 import { api } from '../../lib/api'
 import type { Trade } from '../../types/domain'
@@ -27,13 +27,29 @@ export default function TradeView() {
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null)
   const [error, setError] = useState('')
   const [transactionsCollapsed, setTransactionsCollapsed] = useState(() => window.matchMedia('(max-width: 640px)').matches)
+  const loadSequence = useRef(0)
+
+  const loadTrades = useCallback(async (showLoading = false) => {
+    const sequence = ++loadSequence.current
+    if (showLoading) setLoading(true)
+    try {
+      const result = await api<{ trades: Trade[] }>('/trades', {}, { deduplicate: false })
+      if (sequence !== loadSequence.current) return
+      setTrades(Array.isArray(result?.trades) ? result.trades : [])
+      setError('')
+    } catch (reason) {
+      if (sequence === loadSequence.current) setError(reason instanceof Error ? reason.message : 'Unable to load transactions')
+    } finally {
+      if (sequence === loadSequence.current) setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    api<{ trades: Trade[] }>('/trades')
-      .then((result) => setTrades(Array.isArray(result?.trades) ? result.trades : []))
-      .catch((reason: Error) => setError(reason.message))
-      .finally(() => setLoading(false))
-  }, [])
+    void loadTrades(true)
+    const refreshTrades = () => void loadTrades(false)
+    window.addEventListener('phoneflow:trades-updated', refreshTrades)
+    return () => window.removeEventListener('phoneflow:trades-updated', refreshTrades)
+  }, [loadTrades])
 
   function exportTrades() {
     const headers = ['Reference', 'Type', 'Customer', 'Items', 'Subtotal', 'Discount', 'Total', 'Paid', 'Balance', 'Payment', 'Status', 'Date']
@@ -183,5 +199,4 @@ export default function TradeView() {
     </>
   )
 }
-
 

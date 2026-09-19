@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from 'react'
+import { useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Barcode, Grid2X2, List, MoreHorizontal, Package, Plus, ScanLine, Search, Smartphone, Trash2, Wrench, type LucideIcon } from 'lucide-react'
 import { api } from '../../lib/api'
 import type { InventoryItem, Pawn } from '../../types/domain'
@@ -254,6 +254,7 @@ export default function InventoryView({ user }: { user?: SessionUser } = {}) {
   const [savingPhoto, setSavingPhoto] = useState(false)
   const savingPriceRef = useRef(false)
   const savingPhotoRef = useRef(false)
+  const inventoryLoadSequence = useRef(0)
   const [deleteConfirmation, setDeleteConfirmation] = useState(false)
   const [deletingStock, setDeletingStock] = useState(false)
   const [deleteError, setDeleteError] = useState('')
@@ -307,24 +308,50 @@ export default function InventoryView({ user }: { user?: SessionUser } = {}) {
     }))
   }
 
-  useEffect(() => {
-    api<{ items: InventoryItem[] }>('/inventory')
-      .then(async (result) => {
-        const list = Array.isArray(result?.items) ? result.items : []
-        setItems(list)
+  const loadInventory = useCallback(async (showLoading = false, openRequestedItem = false) => {
+    const sequence = ++inventoryLoadSequence.current
+    if (showLoading) setLoading(true)
+    try {
+      const result = await api<{ items: InventoryItem[] }>('/inventory', {}, { deduplicate: false })
+      if (sequence !== inventoryLoadSequence.current) return
+      const list = Array.isArray(result?.items) ? result.items : []
+      setItems(list)
+      setSelectedItem((current) => current
+        ? list.find((row) => row._id === current._id) || current
+        : current)
+      setCatalogError('')
+      if (openRequestedItem) {
         const openId = new URLSearchParams(window.location.search).get('openItem')
         if (openId) {
           const matched = list.find((row) => row._id === openId || row.sku === openId || row.barcode === openId || row.relatedPawn?.pawnNo === openId)
             || (await api<{ item: InventoryItem }>(`/inventory/${encodeURIComponent(openId)}`)).item
+          if (sequence !== inventoryLoadSequence.current) return
           if (matched) {
             setSelectedItem(matched)
             window.history.replaceState(window.history.state, '', window.location.pathname)
           }
         }
-      })
-      .catch((reason: Error) => setCatalogError(reason.message))
-      .finally(() => setLoading(false))
+      }
+    } catch (reason) {
+      if (sequence === inventoryLoadSequence.current) setCatalogError(reason instanceof Error ? reason.message : 'Unable to load inventory')
+    } finally {
+      if (sequence === inventoryLoadSequence.current) setLoading(false)
+    }
   }, [])
+
+  useEffect(() => {
+    void loadInventory(true, true)
+    const refreshInventory = (event: Event) => {
+      // This page already removes a locally deleted row before broadcasting
+      // its deletion event. Refetching that same event can reinsert stale mock
+      // or replica data; trade events have no deleted item id and do refresh.
+      const detail = (event as CustomEvent<{ id?: string }>).detail
+      if (detail?.id) return
+      void loadInventory(false, false)
+    }
+    window.addEventListener('phoneflow:inventory-updated', refreshInventory)
+    return () => window.removeEventListener('phoneflow:inventory-updated', refreshInventory)
+  }, [loadInventory])
 
   useEffect(() => {
     function openScannedStock(event: Event) {

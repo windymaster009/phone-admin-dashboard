@@ -3361,48 +3361,21 @@ router.post('/payway/khqr', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER
   const config = requirePaywayFeature()
   const {
     inventoryItem,
+    items: rawItems,
     customer,
     quantity: rawQuantity = 1,
     unitPrice: rawUnitPrice,
     manualUnitPrice = false,
     discount: rawDiscount = 0,
   } = req.body
-  const item = await InventoryItem.findById(inventoryItem)
-  const quantity = item?.category === 'PHONE' ? 1 : Number(rawQuantity)
 
-  if (!item || item.status !== 'IN_STOCK' || item.quantity < quantity) {
-    throw requestError(409, 'The selected item is no longer available')
-  }
-  const pledgedPawn = await Pawn.findOne({
-    inventoryItem: item._id,
-    status: { $ne: 'FORFEITED' },
-  }).select('pawnNo status')
-  if (pledgedPawn) {
-    const linkState = openPawnStatuses.includes(pledgedPawn.status)
-      ? 'currently pledged to active'
-      : `linked to ${String(pledgedPawn.status).toLowerCase()}`
-    throw requestError(409, `Cannot sell ${item.name}: ${linkState} pawn contract #${pledgedPawn.pawnNo}`)
-  }
-  if (!Number.isInteger(quantity) || quantity < 1) throw requestError(400, 'Quantity must be a whole number greater than zero')
-  const { unitPrice: savedUnitPrice, minimumUnitPrice } = salePricing(item, req.user.role)
-  const requestedPriceDiffers = rawUnitPrice !== undefined
-    && Math.abs(Number(rawUnitPrice) - savedUnitPrice) > 0.001
-  const manualPriceRequested = manualUnitPrice === true || (req.user.role === 'OWNER' && requestedPriceDiffers)
-  let unitPrice = savedUnitPrice
-  if (manualPriceRequested) {
-    if (req.user.role !== 'OWNER') throw requestError(403, 'Only the owner can enter a manual selling price')
-    unitPrice = saleCurrencyAmount(rawUnitPrice, 'USD', 'Manual selling price', false)
-    if (unitPrice < minimumUnitPrice) throw requestError(400, `Manual selling price cannot be below $${minimumUnitPrice.toFixed(2)}`)
-  } else {
-    if (minimumUnitPrice > savedUnitPrice) throw requestError(409, `${item.name} has an invalid minimum selling price`)
-    if (requestedPriceDiffers) {
-      throw requestError(409, 'The selling price changed. Refresh the product and try again')
-    }
-  }
+  const lines = Array.isArray(rawItems) && rawItems.length > 0
+    ? rawItems
+    : [{ inventoryItem, quantity: rawQuantity, unitPrice: rawUnitPrice, manualUnitPrice }]
 
-  const subtotal = roundMoney(quantity * unitPrice)
-  const discount = saleDiscount(rawDiscount, subtotal, roundMoney(quantity * minimumUnitPrice))
-  const amount = roundMoney(subtotal - discount)
+  const quote = await buildSaleQuote(lines, undefined, req.user.role, 'USD', 1)
+  const discount = saleDiscount(rawDiscount, quote.subtotal, quote.minimumTotal, 'USD')
+  const amount = roundMoney(quote.subtotal - discount)
   if (amount < 0.01) throw requestError(400, 'KHQR total must be at least $0.01')
 
   if (customer && !mongoose.isValidObjectId(customer)) throw requestError(400, 'Customer is invalid')
@@ -3419,16 +3392,23 @@ router.post('/payway/khqr', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER
       lastName: names.join(' ') || 'Customer',
       phone: customerRecord?.phone || '',
     },
-    items: [{ name: item.name, quantity, price: unitPrice }],
+    items: quote.tradeItems.map((ti) => ({ name: ti.name, quantity: ti.quantity, price: ti.unitPrice })),
   })
   const expiresAt = new Date(Date.now() + config.qrLifetimeMinutes * 60_000)
   await PaywayIntent.create({
     transactionId,
     createdBy: req.user._id,
-    inventoryItem: item._id,
+    inventoryItem: quote.tradeItems[0].inventoryItem,
+    items: quote.tradeItems.map((ti) => ({
+      inventoryItem: ti.inventoryItem,
+      quantity: ti.quantity,
+      unitPrice: ti.unitPrice,
+      manualUnitPrice: lines.find((l) => String(l.inventoryItem) === String(ti.inventoryItem))?.manualUnitPrice === true,
+      name: ti.name,
+    })),
     customer: customerRecord?._id,
-    quantity,
-    unitPrice,
+    quantity: quote.tradeItems.reduce((acc, ti) => acc + ti.quantity, 0),
+    unitPrice: quote.tradeItems[0].unitPrice,
     discount,
     amount,
     currency: 'USD',
@@ -3525,11 +3505,30 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
     if (paymentIntent.status === 'COMPLETED' || paymentIntent.status === 'CANCELLED' || paymentIntent.expiresAt <= new Date()) {
       throw requestError(409, 'This KHQR payment request is no longer available')
     }
-    if (items.length !== 1
-      || String(paymentIntent.inventoryItem) !== String(items[0].inventoryItem)
-      || Number(paymentIntent.quantity) !== Number(items[0].quantity || 1)
-      || Math.abs(Number(paymentIntent.amount) - transactionTotal) > 0.001) {
+    if (String(paymentIntent.customer || '') !== String(customer || '')) {
       throw requestError(409, 'KHQR payment request does not match this sale')
+    }
+    if (paymentIntent.items && paymentIntent.items.length > 0) {
+      if (items.length !== paymentIntent.items.length
+        || Math.abs(Number(paymentIntent.amount) - transactionTotal) > 0.001) {
+        throw requestError(409, 'KHQR payment request does not match this sale')
+      }
+      for (const intentItem of paymentIntent.items) {
+        const matchingSaleItem = initialQuote.tradeItems.find((it) => String(it.inventoryItem) === String(intentItem.inventoryItem))
+        if (!matchingSaleItem
+          || Number(matchingSaleItem.quantity) !== Number(intentItem.quantity)
+          || Math.abs(Number(matchingSaleItem.unitPrice) - Number(intentItem.unitPrice)) > 0.001) {
+          throw requestError(409, 'KHQR payment request does not match this sale')
+        }
+      }
+    } else {
+      if (items.length !== 1
+        || String(paymentIntent.inventoryItem) !== String(items[0].inventoryItem)
+        || Number(paymentIntent.quantity) !== Number(items[0].quantity || 1)
+        || Math.abs(Number(paymentIntent.unitPrice) - Number(initialQuote.tradeItems[0].unitPrice)) > 0.001
+        || Math.abs(Number(paymentIntent.amount) - transactionTotal) > 0.001) {
+        throw requestError(409, 'KHQR payment request does not match this sale')
+      }
     }
     const payment = await checkPaywayTransaction(paymentIntent.transactionId)
     const paymentData = payment?.data || {}

@@ -539,18 +539,9 @@ export default function PawnDetailModal({
               <>
                 <button
                   type="button"
-                  className="secondary-button pawn-ticket-action"
-                  onClick={() => printPawnTicket()}
-                  disabled={ticketBusy || documentsBusy}
-                  title="Print the 80mm pawn ticket / contract"
-                >
-                  {ticketBusy ? <LoaderCircle className="animate-spin" size={15} /> : <Printer size={15} />} {ticketBusy ? 'Preparing...' : 'Print ticket'}
-                </button>
-                <button
-                  type="button"
                   className="secondary-button pawn-documents-action"
                   onClick={handleOpenDocuments}
-                  disabled={ticketBusy || documentsBusy}
+                  disabled={documentsBusy}
                   title="View receipts, contracts, and documents"
                 >
                   {documentsBusy ? <LoaderCircle className="animate-spin" size={15} /> : <FileText size={15} />} {documentsBusy ? 'Loading...' : 'Documents'}
@@ -590,7 +581,7 @@ export default function PawnDetailModal({
                 <>
                   <button
                     type="button"
-                    className="secondary-button"
+                    className="secondary-button pawn-payment-action"
                     onClick={() => openAction('payment')}
                     disabled={duePayment <= 0}
                     title={duePayment <= 0 ? 'No fee is due today' : `Pay ${pawnMoney(duePayment, pawnCurrency)} due today`}
@@ -599,7 +590,7 @@ export default function PawnDetailModal({
                   </button>
                   <button
                     type="button"
-                    className="secondary-button"
+                    className="secondary-button pawn-extend-action"
                     onClick={() => openAction('renew')}
                     disabled={pawn.feeModel === 'DAILY_SIMPLE' && duePayment > 0}
                     title={pawn.feeModel === 'DAILY_SIMPLE' && duePayment > 0 ? `Pay ${pawnMoney(duePayment, pawnCurrency)} due first` : 'Add more days to this pawn'}
@@ -608,7 +599,7 @@ export default function PawnDetailModal({
                   </button>
                   <button
                     type="button"
-                    className="primary-button"
+                    className="primary-button pawn-redeem-action"
                     onClick={() => openAction('redeem')}
                   >
                     Redeem item

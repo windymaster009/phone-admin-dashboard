@@ -2,6 +2,7 @@ import { act, render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import PawnDetailModal from './PawnDetailModal'
+import ReceiptCenterBridge from '../receipts/ReceiptCenterBridge'
 import { mockPawnRecord } from '../../test/testUtils'
 import type { Pawn } from '../../types/domain'
 import * as barcodeModule from '../inventory/barcode'
@@ -105,6 +106,12 @@ describe('PawnDetailModal component', () => {
 
     // Redundant footer close button is NOT rendered
     expect(screen.queryByRole('button', { name: /^Close$/i })).not.toBeInTheDocument()
+
+    // Redundant Print ticket button is NOT rendered
+    expect(screen.queryByRole('button', { name: /Print ticket/i })).not.toBeInTheDocument()
+
+    // Claim collateral is NOT available on active pawns (reserved only when eligible & overdue)
+    expect(screen.queryByRole('button', { name: /Claim collateral/i })).not.toBeInTheDocument()
   })
 
   it('supports dashboard reuse with onOpenAll action', async () => {
@@ -996,10 +1003,10 @@ describe('PawnDetailModal component', () => {
     expect(alertSpy).toHaveBeenCalledWith(expect.stringContaining('no valid stock SKU or barcode'))
   })
 
-  it('renders Print ticket button, shows preparing state on click, and dispatches phoneflow:open-pawn-ticket', async () => {
+  it('confirms Print ticket button is removed from footer, and Documents button opens contract via phoneflow:open-documents', async () => {
     const user = userEvent.setup()
-    const ticketHandler = vi.fn()
-    window.addEventListener('phoneflow:open-pawn-ticket', ticketHandler)
+    const docsHandler = vi.fn()
+    window.addEventListener('phoneflow:open-documents', docsHandler)
 
     render(
       <PawnDetailModal
@@ -1008,27 +1015,133 @@ describe('PawnDetailModal component', () => {
       />,
     )
 
-    const ticketBtn = screen.getByRole('button', { name: /Print ticket/i })
-    expect(ticketBtn).toBeInTheDocument()
+    // Confirm Print ticket is gone from the footer
+    expect(screen.queryByRole('button', { name: /Print ticket/i })).not.toBeInTheDocument()
 
-    await user.click(ticketBtn)
-    expect(ticketHandler).toHaveBeenCalled()
-    const customEvent = ticketHandler.mock.calls[0][0] as CustomEvent
+    // Documents is the single place in footer to open contracts and receipts
+    const docsBtn = screen.getByRole('button', { name: /Documents/i })
+    expect(docsBtn).toBeInTheDocument()
+
+    await user.click(docsBtn)
+    expect(docsHandler).toHaveBeenCalledTimes(1)
+    const customEvent = docsHandler.mock.calls[0][0] as CustomEvent
     expect(customEvent.detail).toEqual({
+      sourceType: 'PAWN',
       reference: mockPawnRecord.pawnNo,
-      sourceSubId: 'latest-contract',
     })
 
     // Shows loading feedback and clears on phoneflow:documents-opened
+    expect(screen.getByRole('button', { name: /Loading\.\.\./i })).toBeInTheDocument()
     act(() => {
       window.dispatchEvent(new CustomEvent('phoneflow:documents-opened'))
     })
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Print ticket/i })).not.toBeDisabled()
+      expect(screen.getByRole('button', { name: /Documents/i })).not.toBeDisabled()
     })
 
-    window.removeEventListener('phoneflow:open-pawn-ticket', ticketHandler)
+    window.removeEventListener('phoneflow:open-documents', docsHandler)
+  })
+
+  it('allows Documents to open and print the current 80mm pawn contract through the document bridge', async () => {
+    const user = userEvent.setup()
+    let generatedPayload: any = null
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/receipts/options') && url.includes('sourceType=PAWN')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            sourceType: 'PAWN',
+            referenceNo: mockPawnRecord.pawnNo,
+            options: [
+              {
+                documentType: 'PAWN_CONTRACT',
+                sourceSubId: 'contract',
+                label: 'Pawn contract - Part 1',
+                issuedAt: '2026-09-10T08:00:00.000Z',
+                amount: 500,
+                currency: 'USD',
+              },
+            ],
+          }),
+        } as Response
+      }
+      if (url.includes('/receipts/generate') && init?.method === 'POST') {
+        generatedPayload = JSON.parse(String(init.body))
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            receipt: {
+              _id: 'rec-pawn-curr',
+              receiptNo: 'RCP-PW-CURR',
+              documentType: 'PAWN_CONTRACT',
+              sourceType: 'PAWN',
+              sourceId: mockPawnRecord._id,
+              sourceSubId: generatedPayload.sourceSubId,
+              referenceNo: mockPawnRecord.pawnNo,
+              issuedAt: '2026-09-10T08:00:00.000Z',
+              total: 500,
+              currency: 'USD',
+              layout: 'THERMAL',
+              snapshot: {
+                schemaVersion: 1,
+                documentType: 'PAWN_CONTRACT',
+                title: 'Pawn Contract - Part 1',
+                shop: { name: 'PhoneFlow Central', phone: '012345678', address: 'Phnom Penh', logoUrl: '' },
+                referenceNo: mockPawnRecord.pawnNo,
+                issuedAt: '2026-09-10T08:00:00.000Z',
+                party: { name: mockPawnRecord.customer?.name || 'Customer', phone: '012345678', role: 'Pawner' },
+                currency: 'USD',
+                total: 500,
+                amountPaid: 0,
+                balance: 500,
+                ticketPart: 1,
+                items: [{ name: mockPawnRecord.itemSnapshot.name, quantity: 1, unitPrice: 500, total: 500 }],
+                signatureLabels: ['Customer signature', 'Authorized signature'],
+              },
+            },
+          }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    render(
+      <>
+        <ReceiptCenterBridge />
+        <PawnDetailModal
+          pawn={mockPawnRecord}
+          onClose={vi.fn()}
+        />
+      </>,
+    )
+
+    // Click Documents button
+    const docsBtn = screen.getByRole('button', { name: /Documents/i })
+    await user.click(docsBtn)
+
+    // Bridge requests options and generates current contract in THERMAL 80mm layout
+    await waitFor(() => {
+      expect(generatedPayload).toEqual({
+        sourceType: 'PAWN',
+        reference: mockPawnRecord.pawnNo,
+        documentType: 'PAWN_CONTRACT',
+        sourceSubId: 'contract',
+      })
+    })
+
+    // Thermal viewer dialog is opened and displays the current contract with print action
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: 'RCP-PW-CURR' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /80mm thermal/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /Print \/ Save PDF/i })).toBeInTheDocument()
+    })
   })
 
   it('displays error banner when document preparation fails', async () => {

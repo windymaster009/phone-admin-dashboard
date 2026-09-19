@@ -33,6 +33,7 @@ import OperationSectionCard from '../../components/OperationSectionCard'
 import SegmentedControl from '../../components/SegmentedControl'
 import KeyValueSummary from '../../components/KeyValueSummary'
 import { useExchangeRate } from '../../lib/presentation'
+import type { ReceiptOption } from '../receipts/receipt-types'
 
 type Currency = 'USD' | 'KHR'
 type LoanStatus = 'ACTIVE' | 'DUE_SOON' | 'OVERDUE' | 'PARTIALLY_PAID' | 'PAID' | 'CANCELLED'
@@ -350,7 +351,7 @@ function CreateLoanModal({ busy, error, createdLoan, onClose, onSubmit }: {
                   })
                 }}
               >
-                <Printer size={16} /> Print 80mm receipt
+                <Printer size={16} /> Print receipt
               </button>
             }
             primaryAction={
@@ -726,6 +727,24 @@ function LoanDetailModal({ detail, user, busy, error, paymentConfirmation, cance
   const canPay = canManage || user?.role === 'CASHIER'
   const open = !['PAID', 'CANCELLED'].includes(loan.status)
   const canDelete = user?.role === 'OWNER' && !open
+  const receiptOptions: ReceiptOption[] = [
+    {
+      documentType: 'LOAN_AGREEMENT',
+      sourceSubId: 'agreement',
+      label: 'Loan agreement',
+      issuedAt: loan.loanDate || loan.createdAt,
+      amount: loan.totalDue,
+      currency: loan.currency,
+    },
+    ...payments.map((payment) => ({
+      documentType: 'LOAN_PAYMENT' as const,
+      sourceSubId: payment._id,
+      label: 'Loan repayment receipt',
+      issuedAt: payment.paidAt,
+      amount: payment.amount,
+      currency: loan.currency,
+    })),
+  ]
 
   if (paymentConfirmation) {
     return (
@@ -772,7 +791,7 @@ function LoanDetailModal({ detail, user, busy, error, paymentConfirmation, cance
                     })
                   }}
                 >
-                  <Printer size={16} /> Print 80mm receipt
+                  <Printer size={16} /> Print receipt
                 </button>}
                 {paymentConfirmation.status === 'PAID' && user?.role === 'OWNER' ? (
                   <button type="button" className="ghost-button danger-button" onClick={onDelete}>
@@ -973,25 +992,13 @@ function LoanDetailModal({ detail, user, busy, error, paymentConfirmation, cance
               type="button"
               className="secondary-button loan-print-receipt-btn"
               onClick={() => {
-                window.dispatchEvent(new CustomEvent('phoneflow:open-loan-receipt', {
-                  detail: { reference: loan.loanNo, layout: 'THERMAL' },
-                }))
-              }}
-              title="Print 80mm loan receipt with barcode"
-            >
-              <Printer size={15} /> Print 80mm receipt
-            </button>
-            <button
-              type="button"
-              className="secondary-button loan-documents-btn"
-              onClick={() => {
                 window.dispatchEvent(new CustomEvent('phoneflow:open-documents', {
-                  detail: { sourceType: 'LOAN', reference: loan.loanNo },
+                  detail: { sourceType: 'LOAN', reference: loan.loanNo, options: receiptOptions },
                 }))
               }}
-              title="View all loan documents and receipts"
+              title="Choose a loan receipt to print on 80mm paper"
             >
-              <FileText size={15} /> Documents
+              <Printer size={15} /> Print receipt
             </button>
           </div>
         }
@@ -1047,6 +1054,7 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
   const [scannerError, setScannerError] = useState('')
   const [createdLoan, setCreatedLoan] = useState<Loan | null>(null)
   const [detail, setDetail] = useState<LoanDetail | null>(null)
+  const [openingLoan, setOpeningLoan] = useState<Loan | null>(null)
   const [paymentConfirmation, setPaymentConfirmation] = useState<LoanPaymentConfirmation | null>(null)
   const [cancelConfirmation, setCancelConfirmation] = useState(false)
   const [deleteConfirmation, setDeleteConfirmation] = useState(false)
@@ -1162,6 +1170,8 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
   async function openDetail(loan: Loan) {
     const seq = ++detailRequestSeqRef.current
     activeDetailLoanIdRef.current = loan._id
+    setDetail(null)
+    setOpeningLoan(loan)
     setModalError('')
     setPaymentConfirmation(null)
     setCancelConfirmation(false)
@@ -1170,9 +1180,11 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
       const nextDetail = await api<LoanDetail>(`/loans/${loan._id}`)
       if (detailRequestSeqRef.current === seq && activeDetailLoanIdRef.current === loan._id) {
         setDetail(nextDetail)
+        setOpeningLoan(null)
       }
     } catch (reason) {
       if (detailRequestSeqRef.current === seq && activeDetailLoanIdRef.current === loan._id) {
+        setOpeningLoan(null)
         setError(reason instanceof Error ? reason.message : 'Unable to open loan')
       }
     }
@@ -1350,7 +1362,8 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
 
     {showCreate && <CreateLoanModal busy={busy} error={modalError} createdLoan={createdLoan} onClose={() => { if (!busy) { setShowCreate(false); setCreatedLoan(null) } }} onSubmit={createLoan} />}
     {showScanner && <ScanLoanModal busy={busy} error={scannerError} onClose={() => { if (!busy) { scannerRequestSeqRef.current++; setShowScanner(false); setScannerError('') } }} onScan={(value) => void findLoanByBarcode(value)} />}
-    {detail && <LoanDetailModal detail={detail} user={user} busy={busy} error={modalError} paymentConfirmation={paymentConfirmation} cancelConfirmation={cancelConfirmation} deleteConfirmation={deleteConfirmation} onClose={() => { if (!busy) { activeDetailLoanIdRef.current = null; setDetail(null); setPaymentConfirmation(null); setCancelConfirmation(false); setDeleteConfirmation(false) } }} onPayment={recordPayment} onDueDate={changeDueDate} onCancel={() => { setModalError(''); setCancelConfirmation(true) }} onConfirmCancel={cancelLoan} onDelete={() => { setModalError(''); setPaymentConfirmation(null); setCancelConfirmation(false); setDeleteConfirmation(true) }} onConfirmDelete={deleteLoan} onCancelConfirmationClose={() => { if (!busy) { setCancelConfirmation(false); setModalError('') } }} onDeleteConfirmationClose={() => { if (!busy) { setDeleteConfirmation(false); setModalError('') } }} />}
+    {openingLoan && !detail && <OperationModalShell title={`${openingLoan.loanNo} · ${openingLoan.borrower.name}`} eyebrow="Loan record" description="Loading the latest balance and repayment history." icon={<Banknote size={21} />} compact className="loan-modal loan-detail-loading" onClose={() => { detailRequestSeqRef.current++; activeDetailLoanIdRef.current = null; setOpeningLoan(null) }}><LoadingState label="Opening loan" detail="Fetching the latest details…" /></OperationModalShell>}
+    {detail && <LoanDetailModal detail={detail} user={user} busy={busy} error={modalError} paymentConfirmation={paymentConfirmation} cancelConfirmation={cancelConfirmation} deleteConfirmation={deleteConfirmation} onClose={() => { if (!busy) { activeDetailLoanIdRef.current = null; setDetail(null); setOpeningLoan(null); setPaymentConfirmation(null); setCancelConfirmation(false); setDeleteConfirmation(false) } }} onPayment={recordPayment} onDueDate={changeDueDate} onCancel={() => { setModalError(''); setCancelConfirmation(true) }} onConfirmCancel={cancelLoan} onDelete={() => { setModalError(''); setPaymentConfirmation(null); setCancelConfirmation(false); setDeleteConfirmation(true) }} onConfirmDelete={deleteLoan} onCancelConfirmationClose={() => { if (!busy) { setCancelConfirmation(false); setModalError('') } }} onDeleteConfirmationClose={() => { if (!busy) { setDeleteConfirmation(false); setModalError('') } }} />}
     <NotificationToast message={toastMessage} onDismiss={() => setToastMessage('')} />
   </div>
 }

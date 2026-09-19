@@ -155,11 +155,14 @@ async function getLoanDetail(id, viewerRole) {
     .populate('createdBy', 'name role')
     .populate('updatedBy', 'name role')
   if (viewerRole === 'CASHIER') query.select('-borrower.nationalIdNumber -borrower.address')
-  const loan = await query
-  if (!loan) throw requestError(404, 'Loan not found')
-  const payments = await LoanPayment.find({ loan: loan._id })
+  const paymentsQuery = LoanPayment.find({ loan: id })
     .sort({ paidAt: -1, createdAt: -1 })
     .populate('receivedBy', 'name role')
+  const [loan, payments] = await Promise.all([query, paymentsQuery])
+  if (!loan) throw requestError(404, 'Loan not found')
+  // A detail read should not scan and update every loan. The list/summary endpoints
+  // persist scheduled status changes; compute this record's current display status here.
+  if (loan.dueDate) loan.status = statusForLoan(loan)
   return { loan, payments }
 }
 
@@ -197,7 +200,6 @@ router.get('/', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRou
 }))
 
 router.get('/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
-  await refreshLoanStatuses()
   res.json(await getLoanDetail(req.params.id, req.user.role))
 }))
 
