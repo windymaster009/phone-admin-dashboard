@@ -222,7 +222,9 @@ var
   ResultCode: Integer;
 begin
   if FileExists(ServiceExecutable) then
-    RunHidden(ServiceExecutable, 'stop', ResultCode)
+    { Wait until WinSW has actually released node.exe and its own executable
+      before Setup replaces the release and service wrapper files. }
+    RunHidden(ServiceExecutable, 'stopwait', ResultCode)
   else if ServiceWasInstalled then
     RunHidden(ExpandConstant('{sys}\sc.exe'), 'stop PhoneFlow', ResultCode);
 end;
@@ -314,18 +316,20 @@ end;
 procedure ConfigureAndStartService;
 var
   ResultCode: Integer;
-  Command: String;
 begin
-  if ServiceWasInstalled then
-    Command := 'refresh'
-  else
-    Command := 'install';
-
-  if (not RunHidden(ServiceExecutable, Command, ResultCode)) or (ResultCode <> 0) then
-    RaiseException('Setup could not register the PhoneFlow Windows service.');
+  { WinSW 2.12 has no "refresh" command. The registered service points to the
+    stable application service executable path and reads its XML again on
+    every start, so an upgrade only needs to restart the existing service. }
+  if not ServiceWasInstalled then
+  begin
+    if (not RunHidden(ServiceExecutable, 'install', ResultCode)) or (ResultCode <> 0) then
+      RaiseException('Setup could not register the PhoneFlow Windows service (exit code ' +
+        IntToStr(ResultCode) + ').');
+  end;
 
   if (not RunHidden(ServiceExecutable, 'start', ResultCode)) or (ResultCode <> 0) then
-    RaiseException('Setup could not start the PhoneFlow Windows service.');
+    RaiseException('Setup could not start the PhoneFlow Windows service (exit code ' +
+      IntToStr(ResultCode) + ').');
 end;
 
 function RunStartupCheck(var FailureMessage: String): Boolean;
@@ -361,7 +365,6 @@ begin
   if ServiceWasInstalled and PreviousServiceXmlSaved then
   begin
     CopyFile(PreviousServiceXmlPath, ServiceXmlPath, False);
-    RunHidden(ServiceExecutable, 'refresh', ResultCode);
     RunHidden(ServiceExecutable, 'start', ResultCode);
   end
   else if not ServiceWasInstalled then

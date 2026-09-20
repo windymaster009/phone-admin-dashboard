@@ -12,6 +12,8 @@ dependencies, Node.js 24 LTS, and WinSW into one upgrade-aware Windows setup.
 - Configuration, uploads, backups, and logs are stored outside the release at
   `C:\ProgramData\PhoneFlow` and survive upgrades.
 - The server starts automatically as the `PhoneFlow` Windows service.
+- Updates restart the already-registered service in place; the owner does not
+  need to uninstall the previous version.
 - **Open PhoneFlow** shortcuts open `http://localhost:5000`.
 - TCP port 5000 is opened only for Windows private-network profiles.
 
