@@ -2,10 +2,9 @@ import { useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { AlertTriangle, Barcode, Grid2X2, List, MoreHorizontal, Package, Plus, ScanLine, Search, Smartphone, Trash2, Wrench, type LucideIcon } from 'lucide-react'
 import { api } from '../../lib/api'
 import type { InventoryItem, Pawn } from '../../types/domain'
-import { currency, money, riel, inventoryPriceCurrency, inventoryPriceText, inventoryDualPriceText, useExchangeRate, dateText, titleStatus, comingNext } from '../../lib/presentation'
+import { currency, money, inventoryPriceCurrency, inventoryPriceText, inventoryDualPriceText, useExchangeRate, dateText, titleStatus, comingNext } from '../../lib/presentation'
 import { RouterContext } from '../../app/routing'
 import LoadingState from '../../components/LoadingState'
-import MoneyInput from '../../components/MoneyInput'
 import SectionHeader from '../../components/SectionHeader'
 import StatusBadge from '../../components/StatusBadge'
 import SummaryStats from '../../components/SummaryStats'
@@ -17,6 +16,7 @@ import DetailModalShell from '../../components/DetailModalShell'
 import DetailModalHeader from '../../components/DetailModalHeader'
 import DetailModalBody from '../../components/DetailModalBody'
 import DetailModalFooter from '../../components/DetailModalFooter'
+import InventoryPricingPanel from './InventoryPricingPanel'
 import './inventory-page.css'
 
 const categoryMeta: Record<InventoryItem['category'], { label: string; tone: 'violet' | 'blue' | 'orange'; Icon: LucideIcon; fallback: string }> = {
@@ -770,183 +770,31 @@ export default function InventoryView({ user }: { user?: SessionUser } = {}) {
           className={`inventory-detail-modal ${editingPrice ? 'inventory-price-modal-mode' : ''}`.trim()}
         >
           {editingPrice ? (
-            <>
-              <DetailModalHeader
-                leadingMedia={<InventoryPhoto item={selectedItem} size="large" />}
-                eyebrow="Inventory pricing"
-                title={selectedItem.sellPrice > 0 ? 'Change selling price' : 'Set selling price'}
-                titleId="stock-price-title"
-                description={`${selectedItem.name} · ${displaySku(selectedItem)}`}
-                descriptionId="stock-price-description"
-                onClose={() => {
-                  setEditingPrice(false)
-                  setError('')
-                }}
-                closeLabel="Cancel price editing"
-              />
-
-              <DetailModalBody className="inventory-detail-body inventory-price-focused-body">
-                {error && (
-                  <div className="operation-modal-error inventory-dialog-error" role="alert">
-                    <AlertTriangle size={16} />
-                    <span>{error}</span>
-                  </div>
-                )}
-
-                <div className="inventory-price-item-context" aria-label="Stock overview summary">
-                  <div className="inventory-price-context-pill">
-                    <span>Stock on hand</span>
-                    <strong>{selectedItem.quantity}</strong>
-                  </div>
-                  <div className="inventory-price-context-pill">
-                    <span>Buy cost</span>
-                    <strong>{money.format(selectedItem.buyPrice)}</strong>
-                  </div>
-                  <div className="inventory-price-context-pill">
-                    <span>Current sell</span>
-                    <strong>{inventoryPriceText(selectedItem)}</strong>
-                  </div>
-                </div>
-
-                <div className="inventory-price-editor inventory-price-focused-view">
-                  <div className="inventory-price-heading">
-                    <span className="eyebrow">Inventory pricing</span>
-                    <h4>Set selling prices</h4>
-                    <p>Enter either currency and the other price updates automatically. Choose which currency opens first in New Sale.</p>
-                    <small>Reference rate: 1 USD = {riel.format(usdKhrRate)} KHR</small>
-                  </div>
-                  <div className="inventory-price-columns">
-                    <section className={`inventory-currency-column ${priceCurrency === 'USD' ? 'is-default' : ''}`} aria-labelledby="inventory-usd-price-title">
-                      <header>
-                        <div className="inventory-currency-brand">
-                          <span className="inventory-currency-mark">$</span>
-                          <div><strong id="inventory-usd-price-title">US Dollar</strong><small>USD</small></div>
-                        </div>
-                        <label className="inventory-default-currency" htmlFor="default-currency-usd">
-                          <input
-                            id="default-currency-usd"
-                            type="radio"
-                            name="default-price-currency"
-                            checked={priceCurrency === 'USD'}
-                            onChange={() => changePriceCurrency('USD')}
-                          />
-                          <span>Open first</span>
-                        </label>
-                      </header>
-                      <label>
-                        Regular selling price
-                        <div className="input-prefix">
-                          <span>$</span>
-                          <MoneyInput
-                            autoFocus
-                            currency="USD"
-                            minimum={0}
-                            value={usdSellingPriceDraft}
-                            onValueChange={changeUsdSellingPrice}
-                            placeholder="0.00"
-                            aria-label="Regular selling price in US dollars"
-                          />
-                        </div>
-                      </label>
-                      <label>
-                        Minimum selling price
-                        <div className="input-prefix">
-                          <span>$</span>
-                          <MoneyInput
-                            currency="USD"
-                            minimum={0}
-                            maximum={Number(usdSellingPriceDraft || 0)}
-                            value={usdMinimumPriceDraft}
-                            onValueChange={changeUsdMinimumPrice}
-                            placeholder="0.00"
-                            aria-label="Minimum selling price in US dollars"
-                          />
-                        </div>
-                      </label>
-                    </section>
-                    <section className={`inventory-currency-column ${priceCurrency === 'KHR' ? 'is-default' : ''}`} aria-labelledby="inventory-khr-price-title">
-                      <header>
-                        <div className="inventory-currency-brand">
-                          <span className="inventory-currency-mark">៛</span>
-                          <div><strong id="inventory-khr-price-title">Cambodian Riel</strong><small>KHR</small></div>
-                        </div>
-                        <label className="inventory-default-currency" htmlFor="default-currency-khr">
-                          <input
-                            id="default-currency-khr"
-                            type="radio"
-                            name="default-price-currency"
-                            checked={priceCurrency === 'KHR'}
-                            onChange={() => changePriceCurrency('KHR')}
-                          />
-                          <span>Open first</span>
-                        </label>
-                      </header>
-                      <label>
-                        Regular selling price
-                        <div className="input-prefix">
-                          <span>៛</span>
-                          <MoneyInput
-                            currency="KHR"
-                            minimum={0}
-                            value={khrSellingPriceDraft}
-                            onValueChange={changeKhrSellingPrice}
-                            placeholder="0"
-                            aria-label="Regular selling price in Cambodian riel"
-                          />
-                        </div>
-                      </label>
-                      <label>
-                        Minimum selling price
-                        <div className="input-prefix">
-                          <span>៛</span>
-                          <MoneyInput
-                            currency="KHR"
-                            minimum={0}
-                            maximum={Number(khrSellingPriceDraft || 0)}
-                            value={khrMinimumPriceDraft}
-                            onValueChange={changeKhrMinimumPrice}
-                            placeholder="0"
-                            aria-label="Minimum selling price in Cambodian riel"
-                          />
-                        </div>
-                      </label>
-                    </section>
-                  </div>
-                  <p className="inventory-price-help">Minimum prices control the largest discount allowed in each currency.</p>
-                </div>
-              </DetailModalBody>
-
-              <DetailModalFooter
-                className="inventory-price-footer"
-                secondaryActions={
-                  <button
-                    type="button"
-                    className="ghost-button inventory-price-cancel-btn"
-                    onClick={() => {
-                      setEditingPrice(false)
-                      setError('')
-                    }}
-                    disabled={savingPrice}
-                  >
-                    Cancel
-                  </button>
-                }
-                transactionActions={
-                  <button
-                    type="button"
-                    className="primary-button"
-                    onClick={() => void saveSellingPrice()}
-                    disabled={
-                      savingPrice ||
-                      Number(usdMinimumPriceDraft || 0) > Number(usdSellingPriceDraft || 0) ||
-                      Number(khrMinimumPriceDraft || 0) > Number(khrSellingPriceDraft || 0)
-                    }
-                  >
-                    {savingPrice ? 'Saving…' : 'Save prices'}
-                  </button>
-                }
-              />
-            </>
+            <InventoryPricingPanel
+              itemName={selectedItem.name}
+              itemCode={displaySku(selectedItem)}
+              stockOnHand={selectedItem.quantity}
+              buyCostText={money.format(selectedItem.buyPrice)}
+              currentSellText={inventoryPriceText(selectedItem)}
+              hasSavedPrice={Number(selectedItem.sellPrice) > 0 || Number(selectedItem.khrSellPrice) > 0}
+              leadingMedia={<InventoryPhoto item={selectedItem} size="large" />}
+              usdKhrRate={usdKhrRate}
+              currency={priceCurrency}
+              usdSellingPrice={usdSellingPriceDraft}
+              usdMinimumPrice={usdMinimumPriceDraft}
+              khrSellingPrice={khrSellingPriceDraft}
+              khrMinimumPrice={khrMinimumPriceDraft}
+              error={error}
+              saving={savingPrice}
+              onCurrencyChange={changePriceCurrency}
+              onUsdSellingPriceChange={changeUsdSellingPrice}
+              onUsdMinimumPriceChange={changeUsdMinimumPrice}
+              onKhrSellingPriceChange={changeKhrSellingPrice}
+              onKhrMinimumPriceChange={changeKhrMinimumPrice}
+              onDismissError={() => setError('')}
+              onClose={() => { setEditingPrice(false); setError('') }}
+              onSave={() => void saveSellingPrice()}
+            />
           ) : (
             <>
               <DetailModalHeader

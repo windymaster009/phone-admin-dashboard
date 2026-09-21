@@ -768,6 +768,63 @@ test('POST /trades (SELL): executes successfully, marks PHONE as SOLD, and recor
   }
 })
 
+test('POST /trades (SELL): owner can use a manual price when saved inventory price is not set', async () => {
+  const fakeItemId = new mongoose.Types.ObjectId()
+  const partItem = {
+    _id: fakeItemId,
+    name: 'Battery iPhone X',
+    category: 'SPARE_PART',
+    status: 'IN_STOCK',
+    quantity: 1,
+    sellPrice: 0,
+    minimumSellPrice: 0,
+    buyPrice: 9,
+    save: async function () { return this },
+  }
+
+  const origFindById = InventoryItem.findById
+  const origTradeCreate = Trade.create
+  InventoryItem.findById = mockItemFindById(partItem)
+
+  let createdTrade = null
+  Trade.create = async ([tradeData]) => {
+    createdTrade = {
+      _id: new mongoose.Types.ObjectId(),
+      ...tradeData,
+      populate: async function () { return this },
+    }
+    return [createdTrade]
+  }
+
+  try {
+    const res = await callRouter(apiRouter, {
+      method: 'POST',
+      url: '/trades',
+      user: mockOwner,
+      body: {
+        type: 'SELL',
+        currency: 'USD',
+        warrantyDays: 30,
+        discount: 2,
+        amountReceived: 18,
+        amountPaid: 18,
+        paymentMethod: 'CASH',
+        items: [{ inventoryItem: fakeItemId.toString(), quantity: 1, unitPrice: 20, manualUnitPrice: true }],
+      },
+    })
+
+    assert.equal(res.status, 201)
+    assert.equal(createdTrade.transactionSubtotal, 20)
+    assert.equal(createdTrade.transactionTotal, 18)
+    assert.equal(createdTrade.items[0].unitPrice, 20)
+    assert.equal(partItem.quantity, 0)
+    assert.equal(partItem.status, 'ARCHIVED')
+  } finally {
+    InventoryItem.findById = origFindById
+    Trade.create = origTradeCreate
+  }
+})
+
 // ============================================================================
 // 4. Service Charges: Inventory Isolation & Zero Mutation
 // ============================================================================

@@ -1457,8 +1457,9 @@ describe('OperationModalBridge component', () => {
     expect(submitBtn).toBeDisabled()
     expect(submitBtn).toHaveAttribute('title', 'Choose an inventory product before continuing')
 
-    // Scanner trigger button is present in inventory heading
-    expect(screen.getByRole('button', { name: /Scan item/i })).toBeInTheDocument()
+    // Product search stays available without a separate camera scanner button.
+    expect(screen.getByRole('combobox', { name: /Inventory item/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Scan item/i })).not.toBeInTheDocument()
   })
 
   it('supports customer selection, calculates totals & discounts, and validates maximum discount and minimum sell price', async () => {
@@ -1531,62 +1532,6 @@ describe('OperationModalBridge component', () => {
     // Total in footer summary should be $1,100.00
     const totalEl = document.querySelector('.sale-total strong')
     expect(totalEl).toHaveTextContent('$1,100.00')
-  })
-
-  it('supports barcode camera scanner trigger, barcode detection, auto-item selection, and unknown item error feedback', async () => {
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
-      const url = String(input)
-      if (url.includes('/customers')) {
-        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [] }) } as Response
-      }
-      if (url.includes('/inventory')) {
-        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: [mockInventoryItem] }) } as Response
-      }
-      if (url.includes('/exchange-rates')) {
-        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
-      }
-      if (url.includes('/payway/config')) {
-        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ enabled: false, configured: false }) } as Response
-      }
-      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
-    })
-
-    renderModalBridge()
-
-    act(() => {
-      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
-    })
-
-    await waitFor(() => {
-      expect(screen.getByRole('dialog')).toBeInTheDocument()
-    })
-
-    // Click "Scan item"
-    fireEvent.click(screen.getByRole('button', { name: /Scan item/i }))
-
-    // Scanner modal opens
-    await waitFor(() => {
-      expect(screen.getByLabelText(/Scan product barcode, SKU, or IMEI/i)).toBeInTheDocument()
-    })
-
-    // 1. Scan unknown barcode -> shows error feedback
-    fireEvent.click(screen.getByRole('button', { name: /Simulate Unknown Scan/i }))
-    await waitFor(() => {
-      expect(screen.getByText(/No available stock item matched code "9999999999999"/i)).toBeInTheDocument()
-    })
-
-    // 2. Scan valid barcode matching mockInventoryItem.barcode ('8806091234567')
-    fireEvent.click(screen.getByRole('button', { name: /Simulate Product Barcode/i }))
-
-    // Scanner dialog auto-closes upon matching product
-    await waitFor(() => {
-      expect(screen.queryByLabelText(/Scan product barcode, SKU, or IMEI/i)).not.toBeInTheDocument()
-    })
-
-    // Inventory item has been automatically selected
-    const itemSelect = screen.getByLabelText(/Inventory item/i) as HTMLSelectElement
-    expect(itemSelect.value).toBe('inv-item-1')
-    expect(screen.getAllByText('$1,150.00').length).toBeGreaterThanOrEqual(1)
   })
 
   it('completes cash sale, updates inventory, displays completed sale details, and allows receipt printing', async () => {
@@ -3919,13 +3864,7 @@ describe('OperationModalBridge component', () => {
     expect(screen.getByText('Add each existing product only once per purchase')).toBeInTheDocument()
   })
 
-  it('enforces minimum selling price, maximum discount, and navigates to stock pricing', async () => {
-    let stockItemDetail: any = null
-    const stockItemHandler = (event: Event) => {
-      stockItemDetail = (event as CustomEvent).detail
-    }
-    window.addEventListener('phoneflow:open-stock-item', stockItemHandler)
-
+  it('enforces maximum discount and opens the shared pricing component for saved-price changes', async () => {
     const protectedItem = {
       ...mockInventoryItem,
       _id: 'item-protected-price',
@@ -3984,31 +3923,14 @@ describe('OperationModalBridge component', () => {
       expect(screen.getByText('Discount cannot exceed $50.00')).toBeInTheDocument()
     })
 
-    // Reset discount, enable manual price below minimum
+    // Reset the discount. Manual pricing is not offered; saved prices use the shared editor.
     fireEvent.change(discountInput, { target: { value: '0' } })
-    const manualBtn = screen.getByRole('button', { name: /Enter manually/i })
-    fireEvent.click(manualBtn)
-
     const priceGroup = screen.getByRole('group', { name: /Selling price in USD/i })
-    const manualPriceInput = priceGroup.querySelector('input')!
-    fireEvent.change(manualPriceInput, { target: { value: '700.00' } })
-
-    fireEvent.submit(form)
-
-    await waitFor(() => {
-      expect(screen.getByText("Fix this product's minimum selling price in Stock Information before completing the sale")).toBeInTheDocument()
-    })
-
-    // Click "Fix price" button to trigger openSelectedSaleItemPricing
-    const fixPriceBtn = screen.getByRole('button', { name: /Fix price/i })
-    fireEvent.click(fixPriceBtn)
-
-    await waitFor(() => {
-      expect(stockItemDetail).toEqual({ item: protectedItem })
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    })
-
-    window.removeEventListener('phoneflow:open-stock-item', stockItemHandler)
+    expect(within(priceGroup).queryByRole('button', { name: /Enter manually/i })).not.toBeInTheDocument()
+    fireEvent.click(within(priceGroup).getByRole('button', { name: /Change price/i }))
+    const pricingDialog = await screen.findByRole('dialog', { name: /Change selling price/i })
+    expect(within(pricingDialog).getByRole('heading', { name: /Set selling prices/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /New sale/i })).toBeInTheDocument()
   })
 
   it('validates KHR currency increments for prices, discounts, and amount received', async () => {
@@ -5713,6 +5635,7 @@ describe('OperationModalBridge component', () => {
       inventoryItems?: any[]
       onTradePost?: (body: any) => void
       onKhqrPost?: (body: any) => void
+      onPricePatch?: (body: any) => void
     }) {
       const items = opts?.inventoryItems ?? [phoneProduct, accessoryProduct, pawnedStaleProduct]
       vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -5728,6 +5651,28 @@ describe('OperationModalBridge component', () => {
         }
         if (url.includes('/payway/config')) {
           return { ok: true, status: 200, headers: new Headers(), json: async () => ({ enabled: true, configured: true }) } as Response
+        }
+        if (url.includes('/inventory/') && init?.method === 'PATCH') {
+          const body = JSON.parse(String(init.body))
+          opts?.onPricePatch?.(body)
+          const itemId = decodeURIComponent(url.split('/inventory/')[1].split(/[?#]/)[0])
+          const original = items.find((item) => item._id === itemId)
+          return {
+            ok: true,
+            status: 200,
+            headers: new Headers(),
+            json: async () => ({
+              item: {
+                ...original,
+                sellPrice: body.sellPriceUsd,
+                minimumSellPrice: body.minimumSellPriceUsd,
+                khrSellPrice: body.sellPriceKhr,
+                khrMinimumSellPrice: body.minimumSellPriceKhr,
+                pricingCurrency: body.currency,
+                pricingExchangeRate: body.exchangeRate,
+              },
+            }),
+          } as Response
         }
         if (url.includes('/trades') && init?.method === 'POST') {
           const body = JSON.parse(String(init.body))
@@ -5863,6 +5808,31 @@ describe('OperationModalBridge component', () => {
       expect(singleOptions[0]).toHaveTextContent('Samsung Galaxy S24 Ultra')
     })
 
+    it('routes typing to inventory search when no form field is selected', async () => {
+      setupMultiProductFetch()
+      renderModalBridge()
+
+      act(() => {
+        window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+      })
+
+      const searchInput = await screen.findByRole('combobox', { name: /inventory item/i })
+      await waitFor(() => expect(searchInput).not.toBeDisabled())
+      expect(searchInput).toHaveValue('')
+
+      fireEvent.keyDown(document.body, { key: 'A' })
+      fireEvent.keyDown(document.body, { key: 'n' })
+
+      expect(searchInput).toHaveFocus()
+      expect(searchInput).toHaveValue('An')
+      expect(searchInput).toHaveAttribute('aria-expanded', 'true')
+
+      const warrantyInput = screen.getByPlaceholderText(/Enter days/i)
+      fireEvent.focus(warrantyInput)
+      fireEvent.keyDown(warrantyInput, { key: '5' })
+      expect(searchInput).toHaveValue('An')
+    })
+
     it('supports keyboard navigation (ArrowDown/Up, Enter, Escape) and barcode scanner input', async () => {
       setupMultiProductFetch()
       renderModalBridge()
@@ -5916,6 +5886,14 @@ describe('OperationModalBridge component', () => {
       expect(within(cartSection).getByText('Samsung Galaxy S24 Ultra')).toBeInTheDocument()
       expect(within(cartSection).getByText('Anker 65W Fast Charger')).toBeInTheDocument()
       expect(within(cartSection).getByText(/Cart items \(2\)/i)).toBeInTheDocument()
+
+      // Scanning the same quantity-based product again increments its cart quantity.
+      fireEvent.change(searchInput, { target: { value: '8809999999999' } })
+      fireEvent.keyDown(searchInput, { key: 'Enter' })
+      const accessoryRow = within(cartSection).getByText('Anker 65W Fast Charger').closest('.sale-cart-item-card') as HTMLElement
+      expect(within(accessoryRow).getByRole('spinbutton', { name: /Quantity/i })).toHaveValue(2)
+      expect(searchInput).toHaveValue('')
+      expect(within(cartSection).getByText('3 total units')).toBeInTheDocument()
     })
 
     it('enforces multi-product cart limits: phone quantity locked at 1, stock limits, duplicate prevention, and line removal', async () => {
@@ -5986,10 +5964,10 @@ describe('OperationModalBridge component', () => {
       expect(accInput.value).toBe('8')
       expect(plusBtn).toBeDisabled()
 
-      // 3. Prevent duplicate lines
+      // 3. A second scan of a one-unit phone keeps quantity at 1 and explains why.
       fireEvent.change(searchInput, { target: { value: 'Samsung Galaxy S24 Ultra' } })
       fireEvent.keyDown(searchInput, { key: 'Enter' })
-      expect(screen.getByRole('alert')).toHaveTextContent(/already in your cart/i)
+      expect(screen.getByRole('alert')).toHaveTextContent(/Only 1 unit is available.*Quantity was not increased/i)
       expect(within(cartSection).getByText(/Cart items \(2\)/i)).toBeInTheDocument()
 
       // 4. Remove line from cart
@@ -5999,9 +5977,13 @@ describe('OperationModalBridge component', () => {
       expect(within(cartSection).getByText(/Cart items \(1\)/i)).toBeInTheDocument()
     })
 
-    it('edits the selected cart line price without changing the first product', async () => {
+    it('changes the selected product saved price without changing the first product', async () => {
       let submittedTradePayload: any = null
-      setupMultiProductFetch({ onTradePost: (body) => { submittedTradePayload = body } })
+      let pricePatch: any = null
+      setupMultiProductFetch({
+        onTradePost: (body) => { submittedTradePayload = body },
+        onPricePatch: (body) => { pricePatch = body },
+      })
       renderModalBridge()
 
       act(() => {
@@ -6014,8 +5996,13 @@ describe('OperationModalBridge component', () => {
 
       const priceGroup = screen.getByRole('group', { name: /Selling price in USD/i })
       expect(within(priceGroup).getByText(/Anker 65W Fast Charger/)).toBeInTheDocument()
-      fireEvent.click(within(priceGroup).getByRole('button', { name: /Enter manually/i }))
-      fireEvent.change(priceGroup.querySelector('input')!, { target: { value: '35.00' } })
+      expect(within(priceGroup).queryByRole('button', { name: /Enter manually/i })).not.toBeInTheDocument()
+      fireEvent.click(within(priceGroup).getByRole('button', { name: /Change price/i }))
+      const pricingDialog = await screen.findByRole('dialog', { name: /Change selling price/i })
+      fireEvent.change(within(pricingDialog).getByRole('textbox', { name: /Regular selling price in US dollars/i }), { target: { value: '35' } })
+      fireEvent.click(within(pricingDialog).getByRole('button', { name: /Save prices/i }))
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: /Change selling price/i })).not.toBeInTheDocument())
+      expect(pricePatch).toMatchObject({ sellPriceUsd: 35, minimumSellPriceUsd: 30 })
       expect(within(screen.getByRole('table', { name: /Sale summary items/i })).getByText('$35.00')).toBeInTheDocument()
 
       fireEvent.click(screen.getByRole('button', { name: `Edit selling price for ${phoneProduct.name}` }))
@@ -6057,11 +6044,10 @@ describe('OperationModalBridge component', () => {
       expect(currencySelect).toHaveValue('USD')
     })
 
-    it('opens the unpriced second cart product when setting its stock price', async () => {
+    it('opens and saves pricing for an unpriced cart product without leaving New Sale', async () => {
       const unpricedAccessory = { ...accessoryProduct, sellPrice: 0, minimumSellPrice: 0, khrSellPrice: 0, khrMinimumSellPrice: 0 }
-      setupMultiProductFetch({ inventoryItems: [phoneProduct, unpricedAccessory] })
-      const stockItemHandler = vi.fn()
-      window.addEventListener('phoneflow:open-stock-item', stockItemHandler)
+      let pricePatch: any = null
+      setupMultiProductFetch({ inventoryItems: [phoneProduct, unpricedAccessory], onPricePatch: (body) => { pricePatch = body } })
       renderModalBridge()
 
       act(() => {
@@ -6075,11 +6061,27 @@ describe('OperationModalBridge component', () => {
       const priceGroup = screen.getByRole('group', { name: /Selling price in USD/i })
       expect(within(priceGroup).getByText(/Anker 65W Fast Charger/)).toBeInTheDocument()
       expect(screen.getByRole('button', { name: /Enter a valid price/i })).toBeDisabled()
-      fireEvent.click(within(priceGroup).getByRole('button', { name: /Set price/i }))
-      await waitFor(() => expect(stockItemHandler).toHaveBeenCalledWith(expect.objectContaining({
-        detail: { item: unpricedAccessory },
-      })))
-      window.removeEventListener('phoneflow:open-stock-item', stockItemHandler)
+      const productRow = screen.getByText(unpricedAccessory.name).closest('.sale-cart-item-card') as HTMLElement
+      expect(within(productRow).queryByRole('button', { name: /^Set price$/i })).not.toBeInTheDocument()
+      fireEvent.click(within(priceGroup).getByRole('button', { name: /^Set price$/i }))
+
+      const pricingDialog = await screen.findByRole('dialog', { name: /^Set selling price$/i })
+      fireEvent.change(within(pricingDialog).getByRole('textbox', { name: /Regular selling price in US dollars/i }), { target: { value: '25' } })
+      fireEvent.change(within(pricingDialog).getByRole('textbox', { name: /Minimum selling price in US dollars/i }), { target: { value: '20' } })
+      fireEvent.click(within(pricingDialog).getByRole('button', { name: /Save prices/i }))
+
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: /^Set selling price$/i })).not.toBeInTheDocument())
+      expect(pricePatch).toMatchObject({
+        sellPriceUsd: 25,
+        minimumSellPriceUsd: 20,
+        sellPriceKhr: 102500,
+        minimumSellPriceKhr: 82000,
+        currency: 'USD',
+        exchangeRate: 4100,
+      })
+      expect(screen.getByRole('heading', { name: /New sale/i })).toBeInTheDocument()
+      expect(within(productRow).getAllByText('$25.00')).toHaveLength(2)
+      expect(within(priceGroup).getByRole('button', { name: /^Change price$/i })).toBeInTheDocument()
     })
 
     it('calculates line totals, subtotal, money/percent discounts, and minimum allowed total across cart', async () => {

@@ -14,6 +14,7 @@ type ViewerState = {
   initialLayout?: ReceiptLayout
   autoPrintWindow?: Window
   initialError?: string
+  directPrint?: boolean
 }
 
 function money(value: number, currency: 'USD' | 'KHR') {
@@ -174,7 +175,7 @@ function OptionPicker({ response, busy, pendingOptionKey, error, onSelect, onClo
   )
 }
 
-function Viewer({ initialReceipt, initialLayout = 'A4', autoPrintWindow, initialError = '', onClose, onUpdated }: { initialReceipt: ReceiptRecord; initialLayout?: ReceiptLayout; autoPrintWindow?: Window; initialError?: string; onClose: () => void; onUpdated: (receipt: ReceiptRecord) => void }) {
+function Viewer({ initialReceipt, initialLayout = 'A4', autoPrintWindow, initialError = '', directPrint = false, onClose, onUpdated, onPrintError }: { initialReceipt: ReceiptRecord; initialLayout?: ReceiptLayout; autoPrintWindow?: Window; initialError?: string; directPrint?: boolean; onClose: () => void; onUpdated: (receipt: ReceiptRecord) => void; onPrintError: (message: string) => void }) {
   const [receipt, setReceipt] = useState(initialReceipt)
   const [layout, setLayout] = useState<ReceiptLayout>(initialLayout)
   const [busy, setBusy] = useState(false)
@@ -199,7 +200,9 @@ function Viewer({ initialReceipt, initialLayout = 'A4', autoPrintWindow, initial
     let popup: Window | null = preopenedPopup || null
     if (popup?.closed) {
       popup = null
-      setError('The prepared print window was closed. Click Print / Save PDF to try again.')
+      const message = 'The prepared print window was closed. Please try printing the receipt again.'
+      if (directPrint) onPrintError(message)
+      else setError(message)
     }
     if (!popup && !preopenedPopup) {
       try {
@@ -211,11 +214,18 @@ function Viewer({ initialReceipt, initialLayout = 'A4', autoPrintWindow, initial
     if (!popup) {
       printingRef.current = false
       setBusy(false)
-      setError((current) => current || `The browser blocked the print window. Allow pop-ups for ${receipt.snapshot?.shop.name || 'this shop'} and try again.`)
+      const message = `The browser blocked the print window. Allow pop-ups for ${receipt.snapshot?.shop.name || 'this shop'} and try again.`
+      if (directPrint) {
+        onPrintError(message)
+        onClose()
+      } else {
+        setError((current) => current || message)
+      }
       return
     }
 
     let cancelled = false
+    let closeDirectPrinter = false
     let timer: number | undefined
     let resume = () => {}
     const controller = new AbortController()
@@ -249,16 +259,24 @@ function Viewer({ initialReceipt, initialLayout = 'A4', autoPrintWindow, initial
       onUpdated(result.receipt)
       if (popup.closed || typeof popup.print !== 'function') throw new Error('The print window is unavailable. Please try again.')
       popup.print()
+      closeDirectPrinter = directPrint
     } catch (reason) {
       if (!cancelled) {
         popup.close()
-        setError(reason instanceof Error ? reason.message : 'Unable to print receipt')
+        const message = reason instanceof Error ? reason.message : 'Unable to print receipt'
+        if (directPrint) {
+          onPrintError(message)
+          closeDirectPrinter = true
+        } else {
+          setError(message)
+        }
       }
     } finally {
       window.clearTimeout(timer)
       cancelPrintRef.current = null
       printingRef.current = false
       if (!cancelled) setBusy(false)
+      if (!cancelled && closeDirectPrinter) onClose()
     }
   }
 
@@ -273,6 +291,15 @@ function Viewer({ initialReceipt, initialLayout = 'A4', autoPrintWindow, initial
       if (!printingRef.current) autoPrintScheduledRef.current = false
     }
   }, [autoPrintWindow])
+
+  if (directPrint) {
+    return createPortal(
+      <div aria-hidden="true" style={{ position: 'fixed', left: '-10000px', top: 0, width: 0, height: 0, overflow: 'hidden' }}>
+        <div ref={paperRef}><ReceiptDocument receipt={receipt} layout={layout} /></div>
+      </div>,
+      document.body,
+    )
+  }
 
   return <Modal title={receipt.receiptNo} description={`${documentLabel(receipt.documentType)} · ${receipt.referenceNo}`} onClose={onClose} wide>
     {error && <div className="receipt-error" role="alert"><AlertTriangle size={16} /> {error}</div>}
@@ -293,6 +320,7 @@ export default function ReceiptCenterBridge() {
   const [viewer, setViewer] = useState<ViewerState | null>(null)
   const [busy, setBusy] = useState(false)
   const [pendingOptionKey, setPendingOptionKey] = useState<string | null>(null)
+  const [directPrintPending, setDirectPrintPending] = useState(false)
   const [error, setError] = useState('')
   const [version, setVersion] = useState(0)
   const generationController = useRef<AbortController | null>(null)
@@ -369,7 +397,7 @@ export default function ReceiptCenterBridge() {
     generationClosed.current = false
     const optionKey = `${option.documentType}-${option.sourceSubId}`
     const timeout = window.setTimeout(() => controller.abort(), 15_000)
-    setPendingOptionKey(optionKey); setBusy(true); setError('')
+    setPendingOptionKey(optionKey); setBusy(true); setDirectPrintPending(autoPrintRequested); setError('')
     try {
       const result = await api<{ receipt: ReceiptRecord }>('/receipts/generate', {
         method: 'POST',
@@ -381,14 +409,20 @@ export default function ReceiptCenterBridge() {
         return
       }
       if (!result.receipt?._id) throw new Error('The receipt was created without a valid preview. Please try again.')
-      setViewer({
-        receipt: result.receipt,
-        initialLayout,
-        autoPrintWindow: autoPrintWindow || undefined,
-        initialError: autoPrintRequested && !autoPrintWindow
-          ? `The browser blocked the automatic print window. Allow pop-ups for ${result.receipt.snapshot?.shop.name || 'this shop'}, then click Print / Save PDF.`
-          : undefined,
-      }); setPicker(null); setVersion((value) => value + 1)
+      if (autoPrintRequested && !autoPrintWindow) {
+        const message = `The browser blocked the print window. Allow pop-ups for ${result.receipt.snapshot?.shop.name || 'this shop'} and try again.`
+        setViewer(null)
+        setError(message)
+        window.dispatchEvent(new CustomEvent('phoneflow:documents-error', { detail: { message } }))
+      } else {
+        setViewer({
+          receipt: result.receipt,
+          initialLayout,
+          autoPrintWindow: autoPrintWindow || undefined,
+          directPrint: autoPrintRequested,
+        })
+      }
+      setPicker(null); setVersion((value) => value + 1)
       window.dispatchEvent(new CustomEvent('phoneflow:documents-opened', { detail: { receipt: result.receipt } }))
     } catch (reason) {
       autoPrintWindow?.close()
@@ -411,6 +445,7 @@ export default function ReceiptCenterBridge() {
         generationKeyRef.current = null
         setPendingOptionKey(null)
         setBusy(false)
+        setDirectPrintPending(false)
       }
     }
   }, [])
@@ -544,6 +579,7 @@ export default function ReceiptCenterBridge() {
     generationController.current = null
     generationKeyRef.current = null
     setPendingOptionKey(null)
+    setDirectPrintPending(false)
 
     setBusy(false)
     setPicker(null)
@@ -554,9 +590,9 @@ export default function ReceiptCenterBridge() {
 
   return <>
     {actionTarget && context && createPortal(<button className="secondary-button receipt-detail-action" onClick={() => void openDocuments()} disabled={busy}><Printer size={15} /> {busy ? 'Loading...' : context.sourceType === 'TRADE' ? 'Print receipt' : 'Documents'}</button>, actionTarget)}
-    {busy && generationController.current && !picker && !viewer && <Modal title="Preparing receipt" description="Loading the saved document for printing." onClose={closePicker}><LoadingState label="Preparing receipt" detail="This may take a moment on a slow connection." /></Modal>}
+    {busy && !directPrintPending && generationController.current && !picker && !viewer && <Modal title="Preparing receipt" description="Loading the saved document for printing." onClose={closePicker}><LoadingState label="Preparing receipt" detail="This may take a moment on a slow connection." /></Modal>}
     {picker && <OptionPicker response={picker} busy={busy} pendingOptionKey={pendingOptionKey} error={error} onSelect={(option) => void generate(picker.source, option, picker.source.sourceType === 'LOAN' || picker.source.sourceType === 'PAWN' ? 'THERMAL' : 'A4')} onClose={closePicker} />}
-    {viewer && <Viewer key={viewer.receipt._id} initialReceipt={viewer.receipt} initialLayout={viewer.initialLayout} autoPrintWindow={viewer.autoPrintWindow} initialError={viewer.initialError} onClose={closeViewer} onUpdated={(receipt) => { setViewer((current) => current ? { ...current, receipt, autoPrintWindow: undefined } : null); setVersion((value) => value + 1) }} />}
+    {viewer && <Viewer key={viewer.receipt._id} initialReceipt={viewer.receipt} initialLayout={viewer.initialLayout} autoPrintWindow={viewer.autoPrintWindow} initialError={viewer.initialError} directPrint={viewer.directPrint} onClose={closeViewer} onPrintError={setError} onUpdated={(receipt) => { if (!viewer.directPrint) setViewer((current) => current ? { ...current, receipt, autoPrintWindow: undefined } : null); setVersion((value) => value + 1) }} />}
     {!picker && !viewer && error && createPortal(<div className="receipt-toast" role="alert"><AlertTriangle size={16} /> {error}<button onClick={() => setError('')}><X size={14} /></button></div>, document.body)}
   </>
 }

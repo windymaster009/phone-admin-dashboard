@@ -510,7 +510,7 @@ function resolveDirectoryActivityPeriod(query) {
   return { key, label, from, to }
 }
 
-function salePricing(item, role, currency = 'USD', exchangeRate = 1) {
+function salePricing(item, role, currency = 'USD', exchangeRate = 1, allowMissingSavedPrice = false) {
   const savedUsdUnitPrice = roundMoney(item?.sellPrice)
   const savedUsdMinimum = roundMoney(item?.minimumSellPrice)
   const savedKhrUnitPrice = Number(item?.khrSellPrice)
@@ -535,7 +535,7 @@ function salePricing(item, role, currency = 'USD', exchangeRate = 1) {
     : savedUsdUnitPrice > 0
       ? savedUsdUnitPrice
       : saleAmountToUsd(effectiveKhrUnitPrice, 'KHR', khrExchangeRate)
-  if (!Number.isFinite(unitPrice) || unitPrice <= 0) {
+  if ((!Number.isFinite(unitPrice) || unitPrice <= 0) && !allowMissingSavedPrice) {
     throw requestError(409, `${item?.name || 'The selected item'} does not have a valid ${currency} selling price`)
   }
   const normalizedUnitPrice = currency === 'KHR'
@@ -599,7 +599,8 @@ async function buildSaleQuote(lines, session, role, currency = 'USD', exchangeRa
         : `linked to ${String(pledgedPawn.status).toLowerCase()}`
       throw requestError(409, `Cannot sell ${item.name}: ${linkState} pawn contract #${pledgedPawn.pawnNo}`)
     }
-    const { unitPrice: savedUnitPrice, minimumUnitPrice } = salePricing(item, role, currency, exchangeRate)
+    const explicitOwnerManualPrice = line.manualUnitPrice === true && role === 'OWNER'
+    const { unitPrice: savedUnitPrice, minimumUnitPrice } = salePricing(item, role, currency, exchangeRate, explicitOwnerManualPrice)
     const tolerance = currency === 'KHR' ? 0 : 0.001
     const requestedPriceDiffers = line.unitPrice !== undefined
       && Math.abs(Number(line.unitPrice) - savedUnitPrice) > tolerance

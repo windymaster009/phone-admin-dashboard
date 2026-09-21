@@ -339,7 +339,7 @@ export default function AuthScreen({
                     </a>
                   </div>
                 </details>
-                <span className="auth-version">{shop.name} v1.8.2</span>
+                <span className="auth-version">{shop.name} v1.9.3</span>
               </div>
             </div>
           </motion.section>

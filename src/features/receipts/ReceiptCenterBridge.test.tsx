@@ -611,9 +611,10 @@ describe('ReceiptCenterBridge component', () => {
       expect(openSpy).toHaveBeenCalledTimes(1)
     })
 
+    expect(screen.queryByRole('dialog', { name: 'Preparing receipt' })).not.toBeInTheDocument()
     await waitFor(() => expect(print).toHaveBeenCalledTimes(1))
-    expect(screen.getByRole('dialog', { name: printedReceipt.receiptNo })).toBeInTheDocument()
-    expect(screen.getByText('1 print')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.queryByText('1 print')).not.toBeInTheDocument()
   })
 
   it('opens document picker for multi-part pawn contracts and previews selected extension ticket', async () => {
