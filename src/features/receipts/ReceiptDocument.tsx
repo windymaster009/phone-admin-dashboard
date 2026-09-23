@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import JsBarcode from 'jsbarcode'
 import type { ReceiptLayout, ReceiptRecord, ReceiptSnapshot } from './receipt-types'
+import { formatReceiptDate, formatReceiptDateTime } from './receipt-date'
 import {
   bilingual,
   bilingualDocumentTitle,
@@ -24,16 +25,12 @@ function money(value: number | undefined, currency: 'USD' | 'KHR') {
   return currency === 'KHR' ? `${riel.format(Math.round(amount / 100) * 100)} ៛` : `$${number.format(amount)}`
 }
 
-function dateTime(value?: string) {
-  if (!value) return '—'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(date)
-}
-
-function dateOnly(value?: string) {
-  if (!value) return '—'
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '—' : new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium' }).format(date)
+function PawnTicketWarning({ className }: { className: string }) {
+  return <p className={className}>
+    <strong>Important / សំខាន់:</strong>
+    <span style={{ display: 'block' }}>If this pawn ticket is lost, the item cannot be collected or redeemed.</span>
+    <span lang="km" style={{ display: 'block', lineHeight: 1.5 }}>បើបាត់បង់បង្កាន់ដៃបញ្ចាំនេះ មិនអាចទទួល ឬលោះយកវត្ថុបញ្ចាំវិញបានទេ។</span>
+  </p>
 }
 
 function title(value?: string) {
@@ -94,11 +91,11 @@ function ContractDetails({ snapshot }: { snapshot: ReceiptSnapshot }) {
             : <Row label={bilingual('Interest')} value={`${Number(snapshot.interestRate || 0)}% per month / ក្នុងមួយខែ`} />}
           {snapshot.feeModel === 'DAILY_SIMPLE' && <Row label={bilingual('Contract length')} value={`${Number(snapshot.contractLengthDays || snapshot.termDays || 0)} days / ថ្ងៃ`} />}
           {snapshot.feeModel === 'DAILY_SIMPLE' && Number(snapshot.ticketPart || 1) > 1 && <Row label={bilingual('Extension period')} value={`${Number(snapshot.extensionTermDays || snapshot.termDays || 0)} days added / ថ្ងៃបន្ថែម`} />}
-          <Row label={bilingual('Pawned / deposited on')} value={dateOnly(snapshot.startDate || snapshot.issuedAt)} />
+          <Row label={bilingual('Pawned / deposited on')} value={formatReceiptDate(snapshot.startDate || snapshot.issuedAt)} />
           {snapshot.feeModel === 'DAILY_SIMPLE' && <Row label={bilingual('Fee at due date')} value={money(snapshot.pawnFeeAtDue, snapshot.currency)} />}
           {snapshot.feeModel === 'DAILY_SIMPLE' && <Row label={bilingual('Total at due date')} value={money(snapshot.total, snapshot.currency)} />}
-          <Row label={bilingual(snapshot.feeModel === 'DAILY_SIMPLE' ? 'Date to pay pawn fee' : 'Date to pay interest')} value={dateOnly(snapshot.dueDate)} />
-          <Row label={bilingual('Grace period ends')} value={dateOnly(snapshot.graceEndsAt || snapshot.dueDate)} />
+          <Row label={bilingual(snapshot.feeModel === 'DAILY_SIMPLE' ? 'Date to pay pawn fee' : 'Date to pay interest')} value={formatReceiptDate(snapshot.dueDate)} />
+          <Row label={bilingual('Grace period ends')} value={formatReceiptDate(snapshot.graceEndsAt || snapshot.dueDate)} />
           <Row label={bilingual('Ownership')} value={bilingual(snapshot.ownershipConfirmed ? 'Confirmed' : 'Legacy record')} />
           <Row label={bilingual('National ID')} value={bilingual(snapshot.identificationVerified ? 'Verified' : 'Not provided (optional)')} />
         </>}
@@ -107,7 +104,7 @@ function ContractDetails({ snapshot }: { snapshot: ReceiptSnapshot }) {
           <Row label={bilingual('Interest type')} value={bilingualInterestType(snapshot.interestType)} />
           <Row label={bilingual('Interest')} value={snapshot.interestType === 'PERCENT' ? `${number.format(Number(snapshot.interestValue || 0))}%` : money(snapshot.interestAmount, snapshot.currency)} />
           <Row label={bilingual('Total expected')} value={money(snapshot.total, snapshot.currency)} />
-          <Row label={bilingual('Due date')} value={dateOnly(snapshot.dueDate)} />
+          <Row label={bilingual('Due date')} value={formatReceiptDate(snapshot.dueDate)} />
           <Row label={bilingual('Status')} value={bilingualStatus(snapshot.status)} />
         </>}
         {pawnPayment && <>
@@ -118,14 +115,14 @@ function ContractDetails({ snapshot }: { snapshot: ReceiptSnapshot }) {
           <Row label={bilingual('Fees applied')} value={money(snapshot.allocation?.fees, snapshot.currency)} />
           {Number(snapshot.allocation?.additionalCollected || 0) > 0 && <Row label={bilingual('Additional amount collected')} value={money(snapshot.allocation?.additionalCollected, snapshot.currency)} />}
           <Row label={bilingual('Remaining balance')} value={money(snapshot.balance, snapshot.currency)} />
-          <Row label={bilingual('Contract due date')} value={dateOnly(snapshot.dueDate)} />
+          <Row label={bilingual('Contract due date')} value={formatReceiptDate(snapshot.dueDate)} />
         </>}
         {loanPayment && <>
           <Row label={bilingual('Payment method')} value={bilingualPaymentMethod(snapshot.paymentMethod)} />
           <Row label={bilingual('Agreement total')} value={money(snapshot.contractTotal, snapshot.currency)} />
           <Row label={bilingual('Payment amount')} value={money(snapshot.amountPaid, snapshot.currency)} />
           <Row label={bilingual('Remaining balance')} value={money(snapshot.balance, snapshot.currency)} />
-          <Row label={bilingual('Due date')} value={dateOnly(snapshot.dueDate)} />
+          <Row label={bilingual('Due date')} value={formatReceiptDate(snapshot.dueDate)} />
           <Row label={bilingual('Status')} value={bilingualStatus(snapshot.status)} />
         </>}
       </div>
@@ -189,9 +186,9 @@ function PawnTicketThermal({ receipt, snapshot }: { receipt: ReceiptRecord; snap
         {isDailyFee && partNumber > 1 && (
           <Row label={bilingual('Extension period')} value={`${Number(snapshot.extensionTermDays || snapshot.termDays || 0)} days added / ថ្ងៃបន្ថែម`} />
         )}
-        <Row label={bilingual('Pawned / deposited on')} value={dateOnly(snapshot.startDate || snapshot.issuedAt)} />
+        <Row label={bilingual('Pawned / deposited on')} value={formatReceiptDate(snapshot.startDate || snapshot.issuedAt)} />
         {snapshot.previousDueDate && partNumber > 1 && (
-          <Row label={bilingual('Previous due date')} value={dateOnly(snapshot.previousDueDate)} />
+          <Row label={bilingual('Previous due date')} value={formatReceiptDate(snapshot.previousDueDate)} />
         )}
         <Row
           label={
@@ -201,9 +198,9 @@ function PawnTicketThermal({ receipt, snapshot }: { receipt: ReceiptRecord; snap
                 : (partNumber > 1 ? 'New due date' : 'Date to pay interest'),
             )
           }
-          value={dateOnly(snapshot.dueDate)}
+          value={formatReceiptDate(snapshot.dueDate)}
         />
-        <Row label={bilingual('Grace period ends')} value={dateOnly(snapshot.graceEndsAt || snapshot.dueDate)} />
+        <Row label={bilingual('Grace period ends')} value={formatReceiptDate(snapshot.graceEndsAt || snapshot.dueDate)} />
       </section>
 
       {isDailyFee && (
@@ -221,9 +218,7 @@ function PawnTicketThermal({ receipt, snapshot }: { receipt: ReceiptRecord; snap
         </div>)}
       </section>
 
-      <p className="pawn-ticket-warning">
-        <strong>Important / សំខាន់:</strong> If this pawn ticket is lost, the item cannot be collected or redeemed.
-      </p>
+      <PawnTicketWarning className="pawn-ticket-warning" />
 
       <section className="pawn-ticket-signatures">
         <div><span /><strong>{bilingual('Customer signature / thumbprint')}</strong></div>
@@ -255,8 +250,8 @@ function LoanTicketThermal({ receipt, snapshot }: { receipt: ReceiptRecord; snap
         <Row label={bilingual('Borrower')} value={snapshot.party.name || bilingual('Unknown borrower')} />
         {snapshot.party.phone && <Row label={bilingual('Phone')} value={snapshot.party.phone} />}
         {snapshot.party.nationalIdNumber && <Row label={bilingual('National ID')} value={snapshot.party.nationalIdNumber} />}
-        <Row label={bilingual(isRepayment ? 'Paid on' : 'Loan date')} value={dateOnly(snapshot.issuedAt)} />
-        <Row label={bilingual('Due date')} value={dateOnly(snapshot.dueDate)} />
+        <Row label={bilingual(isRepayment ? 'Paid on' : 'Loan date')} value={formatReceiptDate(snapshot.issuedAt)} />
+        <Row label={bilingual('Due date')} value={formatReceiptDate(snapshot.dueDate)} />
         <Row label={bilingual('Principal')} value={money(isRepayment ? snapshot.contractPrincipal : snapshot.principal, snapshot.currency)} />
         {snapshot.interestType && snapshot.interestType !== 'NONE' && (
           <Row
@@ -338,7 +333,7 @@ export default function ReceiptDocument({ receipt, layout }: { receipt: ReceiptR
       <section className="receipt-grid receipt-meta">
         <Row label={bilingual('Receipt')} value={receipt.receiptNo} />
         <Row label={bilingual('Reference')} value={snapshot.referenceNo} />
-        <Row label={bilingual('Issued')} value={dateTime(snapshot.issuedAt)} />
+        <Row label={bilingual('Issued')} value={formatReceiptDateTime(snapshot.issuedAt)} />
         <Row label={bilingual('Currency')} value={snapshot.currency} />
         {snapshot.paymentReference && <Row label={bilingual('Payment reference')} value={snapshot.paymentReference} />}
         {snapshot.paymentExternalReference && <Row label={bilingual('External reference')} value={snapshot.paymentExternalReference} />}
@@ -378,10 +373,18 @@ export default function ReceiptDocument({ receipt, layout }: { receipt: ReceiptR
 
       <ContractDetails snapshot={snapshot} />
 
+      {(saleReceipt || snapshot.documentType === 'SERVICE_RECEIPT') && Number(snapshot.warrantyDays || 0) > 0 && (
+        <section className="receipt-section receipt-warranty">
+          <h3>{bilingual('Warranty')}</h3>
+          <div className="receipt-grid">
+            <Row label={bilingual('Warranty period')} value={`${snapshot.warrantyDays} days / ${toKhmerNumerals(snapshot.warrantyDays || 0)} ថ្ងៃ`} />
+            {snapshot.warrantyExpiresAt && <Row label={bilingual('Warranty ends')} value={formatReceiptDate(snapshot.warrantyExpiresAt)} />}
+          </div>
+        </section>
+      )}
+
       {snapshot.documentType === 'PAWN_CONTRACT' && (
-        <p className="pawn-contract-warning">
-          <strong>Important / សំខាន់:</strong> If this pawn ticket is lost, the item cannot be collected or redeemed.
-        </p>
+        <PawnTicketWarning className="pawn-contract-warning" />
       )}
 
       {(snapshot.paymentMethod || snapshot.paymentStatus || snapshot.transactionStatus) && (

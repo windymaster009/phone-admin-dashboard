@@ -614,6 +614,17 @@ test('Service charge creation: validates currency, customer, quantity, and payme
     })
     assert.equal(badPayMethodRes.status, 400)
     assert.match(badPayMethodRes.body.message, /Choose a valid payment method/i)
+
+    for (const warrantyDays of [-1, 1.5, 3651, 'not-a-number']) {
+      const badWarrantyRes = await callRouter(serviceRouter, {
+        method: 'POST',
+        url: '/charges',
+        body: { offeringId: fakeId, warrantyDays },
+        user: mockCashier,
+      })
+      assert.equal(badWarrantyRes.status, 400)
+      assert.match(badWarrantyRes.body.message, /Warranty days must be a whole number/i)
+    }
   } finally {
     ServiceOffering.findById = origFindById
     Customer.findById = origCustomerFindById
@@ -702,6 +713,7 @@ test('Service charge creation: accurately calculates subtotal, discount, and tot
         discount: 20,
         customerName: 'Alice Walkin',
         paymentMethod: 'CASH',
+        warrantyDays: 30,
         notes: 'Assisted with two-factor setup',
       },
       user: mockCashier,
@@ -713,6 +725,8 @@ test('Service charge creation: accurately calculates subtotal, discount, and tot
     assert.equal(createdRecord.discount, 4)
     assert.equal(createdRecord.total, 16)
     assert.equal(createdRecord.customerSnapshot.name, 'Alice Walkin')
+    assert.equal(createdRecord.warrantyDays, 30)
+    assert.equal(createdRecord.warrantyExpiresAt.getTime() - createdRecord.completedAt.getTime(), 30 * 86_400_000)
     assert.match(createdRecord.serviceNo, /^SV-\d{8}-[A-Z0-9]{5}$/)
 
     // 2. KHR charge with 1,000 KHR discount on quantity 1
@@ -738,6 +752,8 @@ test('Service charge creation: accurately calculates subtotal, discount, and tot
     assert.equal(createdRecord.currency, 'KHR')
     assert.equal(createdRecord.exchangeRate, 4100)
     assert.equal(createdRecord.customerSnapshot.name, 'Walk-in customer')
+    assert.equal(createdRecord.warrantyDays, 0)
+    assert.equal(createdRecord.warrantyExpiresAt, undefined)
   } finally {
     ServiceOffering.findById = origFindById
     ServiceCharge.create = origChargeCreate

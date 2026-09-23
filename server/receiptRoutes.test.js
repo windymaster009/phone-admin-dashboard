@@ -6,6 +6,7 @@ import receiptRouter from './receiptRoutes.js'
 import { ActivityLog, Trade, User } from './models.js'
 import { AuthSession } from './authSessionModels.js'
 import { Receipt } from './receiptModels.js'
+import { ServiceCharge } from './serviceModels.js'
 import { Loan, LoanPayment } from './loanModels.js'
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret-receipt-routes-12345'
@@ -356,6 +357,8 @@ test('POST /generate: creates immutable receipt snapshot (201 created: true)', a
     amountPaid: 200,
     subtotal: 200,
     discount: 0,
+    warrantyDays: 30,
+    warrantyExpiresAt: new Date('2026-10-21T06:17:21.248Z'),
     createdAt: new Date(),
     customer: { name: 'Alice Customer', phone: '012999000' },
     items: [],
@@ -382,7 +385,11 @@ test('POST /generate: creates immutable receipt snapshot (201 created: true)', a
     currency: 'USD',
     populate: async () => createdReceipt,
   }
-  Receipt.create = async () => createdReceipt
+  let createdPayload
+  Receipt.create = async (payload) => {
+    createdPayload = payload
+    return createdReceipt
+  }
 
   try {
     const res = await callRouter(receiptRouter, {
@@ -395,6 +402,8 @@ test('POST /generate: creates immutable receipt snapshot (201 created: true)', a
     assert.equal(res.status, 201)
     assert.equal(res.body.created, true)
     assert.equal(res.body.receipt.receiptNo, 'SR-20260913-TEST1')
+    assert.equal(createdPayload.snapshot.warrantyDays, 30)
+    assert.deepEqual(createdPayload.snapshot.warrantyExpiresAt, tradeDoc.warrantyExpiresAt)
     const log = activityLogs[activityLogs.length - 1]
     assert.ok(log)
     assert.equal(log.action, 'CREATE')
@@ -404,6 +413,52 @@ test('POST /generate: creates immutable receipt snapshot (201 created: true)', a
     Receipt.create = origReceiptCreate
     Receipt.findOne = origReceiptFindOne
     ActivityLog.create = origActivityCreate
+  }
+})
+
+test('POST /generate: copies service warranty into the receipt snapshot', async () => {
+  const originalServiceFindOne = ServiceCharge.findOne
+  const originalReceiptFindOne = Receipt.findOne
+  const originalReceiptCreate = Receipt.create
+  const charge = {
+    _id: new mongoose.Types.ObjectId(),
+    serviceNo: 'SV-20260921-WARRANTY',
+    serviceSnapshot: { name: 'Phone setup' },
+    customerSnapshot: { name: 'Walk-in customer' },
+    currency: 'USD',
+    unitPrice: 10,
+    quantity: 1,
+    subtotal: 10,
+    discount: 0,
+    total: 10,
+    status: 'COMPLETED',
+    warrantyDays: 30,
+    warrantyExpiresAt: new Date('2026-10-21T06:17:21.248Z'),
+    completedAt: new Date('2026-09-21T06:17:21.248Z'),
+  }
+  const chargeQuery = { populate: () => chargeQuery, then(resolve) { resolve(charge) } }
+  ServiceCharge.findOne = () => chargeQuery
+  Receipt.findOne = () => ({ populate: async () => null })
+  let savedSnapshot
+  Receipt.create = async (payload) => {
+    savedSnapshot = payload.snapshot
+    return { ...payload, _id: new mongoose.Types.ObjectId(), populate: async () => payload }
+  }
+
+  try {
+    const response = await callRouter(receiptRouter, {
+      method: 'POST',
+      url: '/generate',
+      body: { sourceType: 'SERVICE', reference: charge.serviceNo, documentType: 'SERVICE_RECEIPT' },
+      user: mockOwner,
+    })
+    assert.equal(response.status, 201)
+    assert.equal(savedSnapshot.warrantyDays, 30)
+    assert.deepEqual(savedSnapshot.warrantyExpiresAt, charge.warrantyExpiresAt)
+  } finally {
+    ServiceCharge.findOne = originalServiceFindOne
+    Receipt.findOne = originalReceiptFindOne
+    Receipt.create = originalReceiptCreate
   }
 })
 

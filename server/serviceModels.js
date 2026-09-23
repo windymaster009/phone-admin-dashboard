@@ -51,6 +51,8 @@ const serviceChargeSchema = new Schema(
     discountPercent: { type: Number, min: 0, max: 100 },
     total: { type: Number, min: 0, required: true },
     paymentMethod: { type: String, enum: ['CASH', 'KHQR', 'BANK', 'CARD', 'OTHER'], default: 'CASH' },
+    warrantyDays: { type: Number, min: 0, max: 3650, default: 0 },
+    warrantyExpiresAt: Date,
     status: { type: String, enum: ['COMPLETED', 'CANCELLED'], default: 'COMPLETED', index: true },
     notes: { type: String, trim: true },
     completedAt: { type: Date, default: Date.now, index: true },

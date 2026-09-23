@@ -183,8 +183,13 @@ router.post('/charges', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), 
   if (!Number.isFinite(discount) || discount < 0 || discount > subtotal) throw requestError(400, 'Discount cannot exceed the service subtotal')
   const paymentMethod = clean(req.body.paymentMethod || 'CASH').toUpperCase()
   if (!['CASH', 'KHQR', 'BANK', 'CARD', 'OTHER'].includes(paymentMethod)) throw requestError(400, 'Choose a valid payment method')
+  const warrantyDays = req.body.warrantyDays === undefined ? 0 : Number(req.body.warrantyDays)
+  if (!Number.isInteger(warrantyDays) || warrantyDays < 0 || warrantyDays > 3650) {
+    throw requestError(400, 'Warranty days must be a whole number from 0 to 3650')
+  }
   const notes = clean(req.body.notes)
   if (notes.length > 500) throw requestError(400, 'Notes must be 500 characters or fewer')
+  const completedAt = new Date()
 
   const charge = await ServiceCharge.create({
     serviceNo: makeServiceNo(),
@@ -202,7 +207,10 @@ router.post('/charges', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), 
     discountPercent,
     total: serviceCurrencyAmount(subtotal - discount, currency),
     paymentMethod,
+    warrantyDays,
+    warrantyExpiresAt: warrantyDays > 0 ? new Date(completedAt.getTime() + warrantyDays * 86_400_000) : undefined,
     notes,
+    completedAt,
     createdBy: req.user._id,
   })
   await writeActivity(req, {

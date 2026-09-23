@@ -1,0 +1,68 @@
+.warranty-period-field.warranty-period-field {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--muted, #8f9bb4);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.warranty-period-field.warranty-period-field > small {
+  color: var(--primary, #a78bfa);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.warranty-period-input {
+  min-width: 0;
+  min-height: 46px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 0 13px;
+  border: 1px solid var(--border-strong, rgba(255,255,255,.12));
+  border-radius: 11px;
+  color: var(--muted, #8f9bb4);
+  background: color-mix(in srgb, var(--bg-soft, #10172a) 78%, transparent);
+}
+
+.warranty-period-input:focus-within {
+  border-color: var(--primary, #8b5cf6);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary, #8b5cf6) 24%, transparent);
+}
+
+.warranty-period-field .warranty-period-input > input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  box-shadow: none;
+  color: var(--text, #f4f6fb);
+  background: transparent;
+  font: inherit;
+}
+
+.warranty-period-field .warranty-period-input > input:focus {
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+}
+
+.warranty-period-input > span {
+  color: var(--muted, #8f9bb4);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.warranty-period-field.field-invalid .warranty-period-input {
+  border-color: var(--danger, #fb7185);
+}
+
+@media (max-width: 640px) {
+  .warranty-period-input { min-height: 44px; }
+}

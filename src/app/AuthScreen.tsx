@@ -3,6 +3,7 @@ import { motion } from 'framer-motion'
 import { AlertTriangle, BadgeCheck, ChevronDown, ExternalLink, Github, KeyRound, ShieldCheck, Smartphone } from 'lucide-react'
 import { ApiError, api, setToken, type SessionUser, type ShopProfile } from '../lib/api'
 import { safeStorage } from '../lib/storage'
+import { version as appVersion } from '../../package.json'
 
 function ErrorNotice({ message }: { message: string }) {
   return <div className="error-notice" role="alert"><AlertTriangle size={16} /> {message}</div>
@@ -339,7 +340,7 @@ export default function AuthScreen({
                     </a>
                   </div>
                 </details>
-                <span className="auth-version">{shop.name} v1.9.3</span>
+                <span className="auth-version">{shop.name} v{appVersion}</span>
               </div>
             </div>
           </motion.section>

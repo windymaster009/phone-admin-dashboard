@@ -143,6 +143,23 @@ describe('GlobalSearch Component', () => {
     expect(apiSpy).toHaveBeenCalledWith('/search?q=iphone', expect.objectContaining({ signal: expect.any(AbortSignal) }))
   })
 
+  it('keeps results visible when the user types harmless edge spaces', async () => {
+    const apiSpy = vi.spyOn(apiModule, 'api').mockResolvedValue(sampleSearchResponse)
+    renderSearch()
+    const input = screen.getByRole('combobox', { name: /Global record search/i })
+
+    fireEvent.change(input, { target: { value: 'iphone' } })
+    await act(async () => { vi.advanceTimersByTime(250) })
+    expect(await screen.findByText('iPhone 15 Pro Max')).toBeInTheDocument()
+    expect(apiSpy).toHaveBeenCalledTimes(1)
+
+    fireEvent.change(input, { target: { value: 'iphone ' } })
+    await act(async () => { vi.advanceTimersByTime(300) })
+
+    expect(screen.getByText('iPhone 15 Pro Max')).toBeInTheDocument()
+    expect(apiSpy).toHaveBeenCalledTimes(1)
+  })
+
   it('aborts stale in-flight requests when a new query is entered', async () => {
     let capturedSignal: AbortSignal | undefined
 

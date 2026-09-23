@@ -118,6 +118,24 @@ const mockRefundReceipt: ReceiptRecord = {
 }
 
 describe('ReceiptDocument bilingual component', () => {
+  it.each(['A4', 'THERMAL'] as const)('prints a recorded sale warranty on %s receipts', (layout) => {
+    const receipt: ReceiptRecord = {
+      ...mockSaleReceipt,
+      snapshot: {
+        ...mockSaleReceipt.snapshot!,
+        warrantyDays: 30,
+        warrantyExpiresAt: '2026-10-21T06:17:21.248Z',
+      },
+    }
+    render(<ReceiptDocument receipt={receipt} layout={layout} />)
+
+    expect(screen.getByText('Warranty / ការធានា')).toBeInTheDocument()
+    expect(screen.getByText('Warranty period / រយៈពេលធានា')).toBeInTheDocument()
+    expect(screen.getByText('30 days / ៣០ ថ្ងៃ')).toBeInTheDocument()
+    expect(screen.getByText('Warranty ends / ថ្ងៃផុតកំណត់ការធានា')).toBeInTheDocument()
+    expect(screen.getByText('21/10/2026')).toBeInTheDocument()
+  })
+
   it('renders a SALE_RECEIPT with bilingual titles, columns, totals, status, and barcode', () => {
     render(<ReceiptDocument receipt={mockSaleReceipt} layout="A4" />)
 
@@ -132,6 +150,7 @@ describe('ReceiptDocument bilingual component', () => {
     expect(screen.getByText('Receipt / បង្កាន់ដៃ')).toBeInTheDocument()
     expect(screen.getByText('Reference / លេខយោង')).toBeInTheDocument()
     expect(screen.getByText('Issued / កាលបរិច្ឆេទចេញ')).toBeInTheDocument()
+    expect(screen.getByText(/^01\/09\/2026 \d{2}:\d{2}$/)).toBeInTheDocument()
     expect(screen.getByText('Currency / រូបិយប័ណ្ណ')).toBeInTheDocument()
 
     // Bilingual party role & National ID
@@ -313,6 +332,9 @@ describe('ReceiptDocument bilingual component', () => {
     expect(screen.getByText('Pawned / deposited on / កាលបរិច្ឆេទដាក់បញ្ចាំ')).toBeInTheDocument()
     expect(screen.getByText('Date to pay pawn fee / ថ្ងៃកំណត់បង់កម្រៃបញ្ចាំ')).toBeInTheDocument()
     expect(screen.getByText('Grace period ends / ថ្ងៃផុតរយៈពេលអនុគ្រោះ')).toBeInTheDocument()
+    expect(screen.getByText('10/09/2026')).toBeInTheDocument()
+    expect(screen.getByText('10/10/2026')).toBeInTheDocument()
+    expect(screen.getByText('17/10/2026')).toBeInTheDocument()
 
     // Items & signatures
     expect(screen.getByText('Pawned item / វត្ថុបញ្ចាំ')).toBeInTheDocument()
@@ -324,6 +346,7 @@ describe('ReceiptDocument bilingual component', () => {
     expect(screen.getByText(/Pay, redeem, or extend by the fee due date\. Claim review begins only after the grace period ends\./i)).toBeInTheDocument()
     expect(screen.getByText(/If this pawn ticket is lost, the item cannot be collected or redeemed\./i)).toBeInTheDocument()
     expect(screen.getByText(/Important \/ សំខាន់:/i)).toBeInTheDocument()
+    expect(screen.getByText('បើបាត់បង់បង្កាន់ដៃបញ្ចាំនេះ មិនអាចទទួល ឬលោះយកវត្ថុបញ្ចាំវិញបានទេ។')).toHaveAttribute('lang', 'km')
   })
 
   it('renders an extension PAWN_CONTRACT (Part 2) in 80mm THERMAL format with extension period, previous due date, and new fee due date', () => {
@@ -391,6 +414,8 @@ describe('ReceiptDocument bilingual component', () => {
     expect(screen.getByText('7 days added / ថ្ងៃបន្ថែម')).toBeInTheDocument()
     expect(screen.getByText('Previous due date / ថ្ងៃកំណត់បង់មុន')).toBeInTheDocument()
     expect(screen.getByText('New fee due date / ថ្ងៃកំណត់បង់កម្រៃថ្មី')).toBeInTheDocument()
+    expect(screen.getByText('17/09/2026')).toBeInTheDocument()
+    expect(screen.getByText('24/09/2026')).toBeInTheDocument()
   })
 
   it('renders a legacy monthly-interest PAWN_CONTRACT with Interest and Date to pay interest', () => {
@@ -440,6 +465,9 @@ describe('ReceiptDocument bilingual component', () => {
     expect(screen.getByText('Interest / ការប្រាក់')).toBeInTheDocument()
     expect(screen.getByText('3% per month / ក្នុងមួយខែ')).toBeInTheDocument()
     expect(screen.getByText('Date to pay interest / ថ្ងៃកំណត់បង់ការប្រាក់')).toBeInTheDocument()
+    expect(screen.getByText('01/05/2025')).toBeInTheDocument()
+    expect(screen.getByText('01/06/2025')).toBeInTheDocument()
+    expect(screen.getByText('បើបាត់បង់បង្កាន់ដៃបញ្ចាំនេះ មិនអាចទទួល ឬលោះយកវត្ថុបញ្ចាំវិញបានទេ។')).toHaveAttribute('lang', 'km')
     expect(screen.getByText('Ownership / កម្មសិទ្ធិ')).toBeInTheDocument()
     expect(screen.getByText('Confirmed / បានបញ្ជាក់')).toBeInTheDocument()
     expect(screen.getByText('National ID / លេខអត្តសញ្ញាណប័ណ្ណ')).toBeInTheDocument()
@@ -609,6 +637,7 @@ describe('ReceiptDocument bilingual component', () => {
     expect(screen.getByText('Loan Agreement / កិច្ចសន្យាប្រាក់កម្ចី')).toBeInTheDocument()
     expect(screen.getByText('Agreement details / ព័ត៌មានលម្អិតកិច្ចសន្យា')).toBeInTheDocument()
     expect(screen.getByText('Borrower / អ្នកខ្ចី')).toBeInTheDocument()
+    expect(screen.getByText('01/10/2026')).toBeInTheDocument()
     expect(screen.getByText('Interest type / ប្រភេទការប្រាក់')).toBeInTheDocument()
     expect(screen.getByText('Percent / ភាគរយ')).toBeInTheDocument()
     expect(screen.getByText('5%')).toBeInTheDocument()
@@ -661,7 +690,7 @@ describe('ReceiptDocument bilingual component', () => {
     expect(screen.getByText('Cashier signature / ហត្ថលេខាអ្នកទទួលប្រាក់')).toBeInTheDocument()
   })
 
-  it('renders SERVICE_RECEIPT with bilingual titles, items / purpose, and dual signatures', () => {
+  it.each(['A4', 'THERMAL'] as const)('renders SERVICE_RECEIPT with a bilingual 30-day warranty on %s', (layout) => {
     const serviceReceipt: ReceiptRecord = {
       _id: 'rec-svc-01',
       receiptNo: 'SC-2026-0001',
@@ -691,16 +720,21 @@ describe('ReceiptDocument bilingual component', () => {
         balance: 0,
         paymentStatus: 'PAID',
         transactionStatus: 'COMPLETED',
+        warrantyDays: 30,
+        warrantyExpiresAt: '2026-10-18T10:00:00.000Z',
         signatureLabels: ['Customer acknowledgement', 'Shop representative'],
         items: [{ name: 'Screen protector installation', quantity: 1, unitPrice: 35, total: 35 }],
       },
     }
 
-    render(<ReceiptDocument receipt={serviceReceipt} layout="A4" />)
+    render(<ReceiptDocument receipt={serviceReceipt} layout={layout} />)
     expect(screen.getByText('Service Receipt / បង្កាន់ដៃសេវាកម្ម')).toBeInTheDocument()
     expect(screen.getByText('Items / purpose / ទំនិញ / គោលបំណង')).toBeInTheDocument()
     expect(screen.getByText('Customer acknowledgement / ការទទួលស្គាល់របស់អតិថិជន')).toBeInTheDocument()
     expect(screen.getByText('Shop representative / តំណាងហាង')).toBeInTheDocument()
+    expect(screen.getByText('Warranty / ការធានា')).toBeInTheDocument()
+    expect(screen.getByText('30 days / ៣០ ថ្ងៃ')).toBeInTheDocument()
+    expect(screen.getByText('18/10/2026')).toBeInTheDocument()
   })
 
   it('renders 80mm thermal LOAN_AGREEMENT with barcode and ticket layout', () => {
@@ -790,6 +824,8 @@ describe('ReceiptDocument bilingual component', () => {
     expect(screen.getByLabelText(/Barcode for loan repayment LN-20260917-SPP3M0/i)).toBeInTheDocument()
     expect(screen.getByText('Cash / សាច់ប្រាក់')).toBeInTheDocument()
     expect(screen.getByText('Paid on / កាលបរិច្ឆេទបានបង់')).toBeInTheDocument()
+    expect(screen.getByText('18/09/2026')).toBeInTheDocument()
+    expect(screen.getByText('23/10/2026')).toBeInTheDocument()
     expect(screen.queryByText(/Loan date/i)).not.toBeInTheDocument()
     expect(screen.getByText('Total agreement / ប្រាក់សរុបតាមកិច្ចសន្យា').closest('.receipt-row')).toHaveTextContent('$200')
     expect(screen.getByText('Amount paid / ចំនួនប្រាក់បានបង់').closest('.receipt-row')).toHaveTextContent('$100')

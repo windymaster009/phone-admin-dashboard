@@ -1100,37 +1100,6 @@ body.operation-modal-open {
 .sale-price-display small { color: var(--primary, #a78bfa); font-size: 10px; font-weight: 700; }
 .sale-price-display.needs-price strong { border-color: color-mix(in srgb, var(--primary, #a78bfa) 48%, transparent); }
 .detail-modal-backdrop:has(.sale-inventory-pricing-modal) { z-index: 10020; background: rgba(3, 7, 18, 0.84); }
-.sale-warranty-input {
-  min-width: 0;
-  min-height: 46px;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 9px;
-  padding: 0 13px;
-  border: 1px solid var(--border-strong, rgba(255,255,255,.12));
-  border-radius: 11px;
-  color: var(--muted, #8f9bb4);
-  background: color-mix(in srgb, var(--bg-soft, #10172a) 78%, transparent);
-}
-.sale-warranty-input:focus-within {
-  border-color: var(--primary, #8b5cf6);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary, #8b5cf6) 24%, transparent);
-}
-.sale-warranty-input input {
-  min-width: 0;
-  min-height: 44px;
-  padding: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-}
-.sale-warranty-input span {
-  color: var(--muted, #8f9bb4);
-  font-size: 11px;
-  font-weight: 800;
-}
-.sale-warranty-field.field-invalid .sale-warranty-input { border-color: var(--danger, #fb7185); }
 .sale-discount-mode {
   min-width: 0;
   display: flex;
@@ -3058,8 +3027,7 @@ body.operation-modal-open {
     border-radius: 12px;
   }
 
-  .sale-price-set-button,
-  .sale-warranty-input {
+  .sale-price-set-button {
     min-height: 44px;
   }
 

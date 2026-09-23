@@ -617,6 +617,39 @@ describe('ReceiptCenterBridge component', () => {
     expect(screen.queryByText('1 print')).not.toBeInTheDocument()
   })
 
+  it('prints an existing service charge with the saved service receipt flow', async () => {
+    const printedReceipt = { ...mockRefundReceipt, documentType: 'SERVICE_RECEIPT' as const, printCount: 1 }
+    let payload: Record<string, unknown> | null = null
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/receipts/generate') && init?.method === 'POST') {
+        payload = JSON.parse(String(init.body))
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ receipt: printedReceipt }) } as Response
+      }
+      if (url.includes(`/receipts/${printedReceipt._id}/printed`) && init?.method === 'POST') {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ receipt: printedReceipt }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+    const popup = {
+      document: document.implementation.createHTMLDocument(),
+      closed: false,
+      focus: vi.fn(),
+      print: vi.fn(),
+      close: vi.fn(),
+    } as unknown as Window
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(popup)
+    render(<ReceiptCenterBridge />)
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-service-receipt', {
+        detail: { reference: 'SV-20260921-EXAMPLE', currency: 'KHR', autoPrint: true },
+      }))
+      expect(openSpy).toHaveBeenCalledTimes(1)
+    })
+    await waitFor(() => expect(payload).toMatchObject({ sourceType: 'SERVICE', reference: 'SV-20260921-EXAMPLE', documentType: 'SERVICE_RECEIPT', sourceSubId: 'service' }))
+    await waitFor(() => expect(popup.print).toHaveBeenCalledTimes(1))
+  })
+
   it('opens document picker for multi-part pawn contracts and previews selected extension ticket', async () => {
     const user = userEvent.setup()
     let generatedPayload: any = null

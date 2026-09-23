@@ -141,6 +141,7 @@ export default function GlobalSearch({ onNavigate }: GlobalSearchProps) {
   const navigate = onNavigate || router.navigate
 
   const [query, setQuery] = useState('')
+  const normalizedQuery = useMemo(() => query.trim().replace(/\s+/g, ' '), [query])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [results, setResults] = useState<SearchResults>({})
@@ -341,11 +342,9 @@ export default function GlobalSearch({ onNavigate }: GlobalSearchProps) {
 
   // Execute search with debouncing and stale cancellation
   useEffect(() => {
-    const trimmed = query.trim()
-
     abortControllerRef.current?.abort()
 
-    if (!trimmed) {
+    if (!normalizedQuery) {
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
         abortControllerRef.current = null
@@ -379,7 +378,7 @@ export default function GlobalSearch({ onNavigate }: GlobalSearchProps) {
       setError(null)
 
       try {
-        const response = await api<SearchResponse>(`/search?q=${encodeURIComponent(trimmed)}`, {
+        const response = await api<SearchResponse>(`/search?q=${encodeURIComponent(normalizedQuery)}`, {
           signal: controller.signal,
         })
 
@@ -407,7 +406,7 @@ export default function GlobalSearch({ onNavigate }: GlobalSearchProps) {
         window.clearTimeout(debounceTimerRef.current)
       }
     }
-  }, [query])
+  }, [normalizedQuery])
 
   // Global keyboard shortcut: Ctrl+K / Cmd+K
   useEffect(() => {

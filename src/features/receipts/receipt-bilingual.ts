@@ -90,6 +90,9 @@ export const BILINGUAL_DICTIONARY: Record<string, string> = {
   'Remaining due': 'ប្រាក់នៅសល់ត្រូវបង់',
   'Notes': 'កំណត់ចំណាំ',
   'Note': 'កំណត់ចំណាំ',
+  'Warranty': 'ការធានា',
+  'Warranty period': 'រយៈពេលធានា',
+  'Warranty ends': 'ថ្ងៃផុតកំណត់ការធានា',
 
   // --- OWNERSHIP & ID VERIFICATION ---
   'Ownership': 'កម្មសិទ្ធិ',

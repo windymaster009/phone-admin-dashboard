@@ -125,6 +125,29 @@ test('Search endpoint returns empty payload when query is empty or whitespace', 
   assert.deepEqual(result.body.results.suppliers, [])
 })
 
+test('Search normalizes spaces and uses case-insensitive flexible multi-word matching', async () => {
+  let capturedPattern = null
+  const rowsQuery = () => ({ select: () => ({ limit: () => ({ lean: async () => [] }) }) })
+  InventoryItem.find = (filter) => {
+    capturedPattern = filter.$or[0].name
+    return rowsQuery()
+  }
+  Pawn.find = () => rowsQuery()
+  Loan.find = () => rowsQuery()
+  Customer.find = () => rowsQuery()
+  ServiceOffering.find = () => rowsQuery()
+  Supplier.find = () => rowsQuery()
+
+  const result = await callSearchRoute('  so   PHEA  ')
+
+  assert.equal(result.status, 200)
+  assert.equal(result.body.query, 'so PHEA')
+  assert.ok(capturedPattern instanceof RegExp)
+  assert.equal(capturedPattern.flags.includes('i'), true, 'matching must ignore letter case')
+  assert.equal(capturedPattern.test('So Phea'), true)
+  assert.equal(capturedPattern.test('SO-PHEA'), true)
+})
+
 test('Role boundaries: STOCK role can only search inventory and suppliers', async () => {
   currentUserRole = 'STOCK'
 

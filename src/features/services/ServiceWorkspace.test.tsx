@@ -156,6 +156,32 @@ describe('ServiceWorkspace', () => {
     return mockFn
   }
 
+  it('searches saved charges and opens a detail record with a direct receipt action', async () => {
+    const user = userEvent.setup()
+    const fetchMock = setupFetchMock({
+      '/api/services/charges?search=': async () => ({ charges: [sampleCharges[1]] }),
+    })
+    const receiptEvent = vi.fn()
+    window.addEventListener('phoneflow:open-service-receipt', receiptEvent)
+    try {
+      render(<RouterProvider><ServiceWorkspace /></RouterProvider>)
+      const search = await screen.findByRole('textbox', { name: 'Search service charges' })
+      await user.type(search, 'D3E4F')
+      await waitFor(() => expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/services/charges?search=D3E4F'))).toBe(true))
+      await user.click(await screen.findByRole('button', { name: 'View SV-20260302-D3E4F' }))
+      const detail = screen.getByRole('dialog', { name: 'SV-20260302-D3E4F' })
+      expect(within(detail).getByText('Walk-in customer')).toBeInTheDocument()
+      expect(within(detail).getAllByText('41,000 KHR').length).toBeGreaterThan(0)
+      await user.click(within(detail).getByRole('button', { name: 'Print receipt' }))
+      expect(receiptEvent).toHaveBeenCalledOnce()
+      expect((receiptEvent.mock.calls[0][0] as CustomEvent).detail).toEqual({
+        reference: 'SV-20260302-D3E4F', currency: 'KHR', autoPrint: true,
+      })
+    } finally {
+      window.removeEventListener('phoneflow:open-service-receipt', receiptEvent)
+    }
+  })
+
   it('1. A successful charge appears in recent charges without manually refreshing', async () => {
     const user = userEvent.setup()
     let postCalled = false
@@ -494,6 +520,11 @@ describe('ServiceWorkspace', () => {
 
     // Submit
     const dialog = screen.getByRole('dialog', { name: /record service charge/i })
+    const warrantyInput = within(dialog).getByRole('spinbutton', { name: /warranty period in days/i })
+    expect(warrantyInput).toHaveValue(0)
+    expect(warrantyInput.closest('.warranty-period-input')).not.toBeNull()
+    await user.clear(warrantyInput)
+    await user.type(warrantyInput, '30')
     await user.click(within(dialog).getByRole('button', { name: /record charge/i }))
 
     await waitFor(() => {
@@ -504,6 +535,7 @@ describe('ServiceWorkspace', () => {
     const payload = recordedBody as Record<string, unknown> | null
     expect(payload?.customerId).toBe('cust-2')
     expect(payload?.customerName).toBeUndefined()
+    expect(payload?.warrantyDays).toBe(30)
   })
 
   it('6. Service charges do not mutate inventory or call inventory endpoints', async () => {
@@ -620,6 +652,7 @@ describe('ServiceWorkspace', () => {
     const payload = recordedBody as Record<string, unknown> | null
     expect(payload?.currency).toBe('KHR')
     expect(payload?.discount).toBe(41000)
+    expect(payload?.warrantyDays).toBe(0)
   })
 
   it('8. Prevents duplicate in-flight submissions when Record charge is clicked rapidly', async () => {
@@ -1038,7 +1071,7 @@ describe('ServiceWorkspace', () => {
     const dialog = screen.getByRole('dialog', { name: /Record service charge/i })
 
     // Change quantity to 3 (Subtotal = $15.00)
-    const qtyInput = within(dialog).getByRole('spinbutton')
+    const qtyInput = within(dialog).getByRole('spinbutton', { name: /quantity/i })
     fireEvent.change(qtyInput, { target: { value: '3' } })
 
     expect(within(dialog).getAllByText('$15.00').length).toBeGreaterThanOrEqual(2)

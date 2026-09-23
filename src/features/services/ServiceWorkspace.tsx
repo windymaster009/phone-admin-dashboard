@@ -12,8 +12,10 @@ import {
   Mail,
   MessageCircle,
   MonitorSmartphone,
+  MoreHorizontal,
   PackageCheck,
   Pencil,
+  Printer,
   ReceiptText,
   RefreshCcw,
   Search,
@@ -27,7 +29,12 @@ import {
 import { api, getSessionUser } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
 import MoneyInput from '../../components/MoneyInput'
+import WarrantyPeriodField from '../../components/WarrantyPeriodField'
 import OperationModalShell from '../../components/OperationModalShell'
+import DetailModalShell from '../../components/DetailModalShell'
+import DetailModalHeader from '../../components/DetailModalHeader'
+import DetailModalBody from '../../components/DetailModalBody'
+import DetailModalFooter from '../../components/DetailModalFooter'
 import './service-workspace.css'
 
 type Currency = 'USD' | 'KHR'
@@ -56,9 +63,18 @@ type ServiceCharge = {
   customerSnapshot: { name: string; phone?: string }
   currency: Currency
   total: number
+  unitPrice?: number
+  quantity?: number
+  subtotal?: number
+  discount?: number
+  discountType?: 'AMOUNT' | 'PERCENT'
+  discountPercent?: number
   paymentMethod: string
+  warrantyDays?: number
+  warrantyExpiresAt?: string
   status: string
   completedAt: string
+  notes?: string
   createdBy?: { name: string }
 }
 
@@ -93,6 +109,11 @@ export default function ServiceWorkspace() {
   const [services, setServices] = useState<ServiceOffering[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
   const [charges, setCharges] = useState<ServiceCharge[]>([])
+  const [chargeSearch, setChargeSearch] = useState('')
+  const [searchedCharges, setSearchedCharges] = useState<ServiceCharge[] | null>(null)
+  const [chargeSearchBusy, setChargeSearchBusy] = useState(false)
+  const [chargeSearchError, setChargeSearchError] = useState('')
+  const [selectedCharge, setSelectedCharge] = useState<ServiceCharge | null>(null)
   const [selected, setSelected] = useState<ServiceOffering | null>(null)
   const [chargeOpen, setChargeOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -104,6 +125,7 @@ export default function ServiceWorkspace() {
   const [discountType, setDiscountType] = useState<'AMOUNT' | 'PERCENT'>('AMOUNT')
   const [chargeCurrency, setChargeCurrency] = useState<Currency>('USD')
   const [paymentMethod, setPaymentMethod] = useState('CASH')
+  const [warrantyDays, setWarrantyDays] = useState('0')
   const [notes, setNotes] = useState('')
   const [pricing, setPricing] = useState<ServiceOffering | null>(null)
   const [priceUsd, setPriceUsd] = useState('')
@@ -149,6 +171,27 @@ export default function ServiceWorkspace() {
   useEffect(() => { void load() }, [])
 
   useEffect(() => {
+    const term = chargeSearch.trim()
+    if (!term) {
+      setSearchedCharges(null)
+      setChargeSearchBusy(false)
+      setChargeSearchError('')
+      return
+    }
+    let cancelled = false
+    setChargeSearchBusy(true)
+    setChargeSearchError('')
+    setSearchedCharges(null)
+    const timer = window.setTimeout(() => {
+      void api<{ charges: ServiceCharge[] }>(`/services/charges?search=${encodeURIComponent(term)}`)
+        .then((result) => { if (!cancelled) setSearchedCharges(result.charges) })
+        .catch((reason) => { if (!cancelled) setChargeSearchError(reason instanceof Error ? reason.message : 'Unable to search service charges') })
+        .finally(() => { if (!cancelled) setChargeSearchBusy(false) })
+    }, 250)
+    return () => { cancelled = true; window.clearTimeout(timer) }
+  }, [chargeSearch])
+
+  useEffect(() => {
     function handleOpenServiceDetail(event: Event) {
       const detail = (event as CustomEvent<{ service?: ServiceOffering; id?: string; code?: string }>).detail
       let service = detail?.service
@@ -173,6 +216,13 @@ export default function ServiceWorkspace() {
     return matchesCategory && terms.includes(search.trim().toLowerCase())
   }), [services, search, category])
   const pricedServices = useMemo(() => services.filter((service) => service.price > 0), [services])
+  const visibleCharges = chargeSearch.trim() ? (searchedCharges || []) : charges.slice(0, 6)
+
+  function printChargeReceipt(charge: ServiceCharge) {
+    window.dispatchEvent(new CustomEvent('phoneflow:open-service-receipt', {
+      detail: { reference: charge.serviceNo, currency: charge.currency, autoPrint: true },
+    }))
+  }
 
   function selectedPrice(currency: Currency) {
     if (!selected) return 0
@@ -234,6 +284,7 @@ export default function ServiceWorkspace() {
     setChargeCurrency(service.currency)
     setDiscount('0')
     setDiscountType('AMOUNT')
+    setWarrantyDays('0')
     setChargeOpen(true)
     setError('')
   }
@@ -247,6 +298,7 @@ export default function ServiceWorkspace() {
     if (busy) return
     setChargeOpen(false)
     setSelected(null)
+    setWarrantyDays('0')
     setError('')
   }
 
@@ -288,6 +340,11 @@ export default function ServiceWorkspace() {
   async function recordCharge(event: FormEvent) {
     event.preventDefault()
     if (submittingRef.current || busy || !selected || !(selected.price > 0)) return
+    const warrantyDayCount = Number(warrantyDays)
+    if (warrantyDays.trim() === '' || !Number.isInteger(warrantyDayCount) || warrantyDayCount < 0 || warrantyDayCount > 3650) {
+      setError('Warranty days must be a whole number from 0 to 3650')
+      return
+    }
     submittingRef.current = true
     setBusy(true)
     setError('')
@@ -303,6 +360,7 @@ export default function ServiceWorkspace() {
           discount: discountType === 'PERCENT' ? discountPercent : normalizedDiscount,
           discountType,
           paymentMethod,
+          warrantyDays: warrantyDayCount,
           notes,
         }),
       })
@@ -317,6 +375,7 @@ export default function ServiceWorkspace() {
       setDiscountType('AMOUNT')
       setChargeCurrency('USD')
       setPaymentMethod('CASH')
+      setWarrantyDays('0')
       setNotes('')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to record this service')
@@ -393,18 +452,47 @@ export default function ServiceWorkspace() {
 
         <section className="surface-card service-recent">
           <header><div><span className="eyebrow">Latest work</span><h3>Recent service charges</h3></div><button className="text-button" type="button" onClick={() => go('/reports/services')}>View report <ArrowRight size={14} /></button></header>
+          <div className="service-recent-tools">
+            <label className="search-field"><Search size={17} /><input aria-label="Search service charges" value={chargeSearch} onChange={(event) => setChargeSearch(event.target.value)} placeholder="Search charge, service, customer, or phone" /></label>
+            {chargeSearch && <button className="icon-button" type="button" onClick={() => setChargeSearch('')} aria-label="Clear service charge search"><X size={16} /></button>}
+          </div>
+          {chargeSearchError && <p className="service-recent-error" role="alert">{chargeSearchError}</p>}
           <div className="service-recent-list">
-            {charges.slice(0, 6).map((charge) => <article key={charge._id}>
+            {visibleCharges.map((charge) => <article key={charge._id}>
               <span className="service-recent-icon"><ReceiptText size={17} /></span>
               <p><strong>{charge.serviceSnapshot.name}</strong><small>{charge.customerSnapshot.name} · {charge.serviceNo}</small></p>
-              <span><strong>{money(charge.total, charge.currency)}</strong><small>{dateText(charge.completedAt)}</small></span>
+              <span className="service-recent-amount"><strong>{money(charge.total, charge.currency)}</strong><small>{dateText(charge.completedAt)}</small></span>
+              <button className="icon-button" type="button" onClick={() => setSelectedCharge(charge)} aria-label={`View ${charge.serviceNo}`}><MoreHorizontal size={18} /></button>
             </article>)}
-            {!charges.length && !loading && <div className="service-empty compact"><Clock3 size={22} /><strong>No service charges yet</strong><p>Your completed service work will appear here.</p></div>}
+            {chargeSearchBusy && <LoadingState compact label="Searching service charges" />}
+            {!chargeSearchBusy && !visibleCharges.length && !loading && <div className="service-empty compact"><Clock3 size={22} /><strong>{chargeSearch ? 'No matching service charges' : 'No service charges yet'}</strong><p>{chargeSearch ? 'Try a different reference, service, customer, or phone.' : 'Your completed service work will appear here.'}</p></div>}
           </div>
         </section>
       </main>
 
     </div>
+
+    {selectedCharge && <DetailModalShell onClose={() => setSelectedCharge(null)} titleId="service-charge-detail-title" className="service-charge-detail-modal">
+      <DetailModalHeader eyebrow="Service charge" title={selectedCharge.serviceNo} titleId="service-charge-detail-title" description={`${selectedCharge.serviceSnapshot.name} · ${dateText(selectedCharge.completedAt)}`} onClose={() => setSelectedCharge(null)} />
+      <DetailModalBody>
+        <div className="detail-grid">
+          <div><span>Customer</span><strong>{selectedCharge.customerSnapshot.name}</strong></div>
+          <div><span>Phone</span><strong>{selectedCharge.customerSnapshot.phone || 'Not recorded'}</strong></div>
+          <div><span>Service</span><strong>{selectedCharge.serviceSnapshot.name}</strong></div>
+          <div><span>Quantity</span><strong>{selectedCharge.quantity ?? 1}</strong></div>
+          <div><span>Unit price</span><strong>{selectedCharge.unitPrice === undefined ? 'Not recorded' : money(selectedCharge.unitPrice, selectedCharge.currency)}</strong></div>
+          <div><span>Subtotal</span><strong>{selectedCharge.subtotal === undefined ? 'Not recorded' : money(selectedCharge.subtotal, selectedCharge.currency)}</strong></div>
+          <div><span>Discount</span><strong>{money(selectedCharge.discount ?? 0, selectedCharge.currency)}{selectedCharge.discountType === 'PERCENT' && selectedCharge.discountPercent !== undefined ? ` (${selectedCharge.discountPercent}%)` : ''}</strong></div>
+          <div><span>Total paid</span><strong>{money(selectedCharge.total, selectedCharge.currency)}</strong></div>
+          <div><span>Payment method</span><strong>{titleCase(selectedCharge.paymentMethod)}</strong></div>
+          <div><span>Warranty</span><strong>{selectedCharge.warrantyDays ? `${selectedCharge.warrantyDays} days` : 'No warranty'}</strong></div>
+          {Boolean(selectedCharge.warrantyDays) && <div><span>Warranty expires</span><strong>{dateText(selectedCharge.warrantyExpiresAt)}</strong></div>}
+          <div><span>Status</span><strong>{titleCase(selectedCharge.status)}</strong></div>
+        </div>
+        {selectedCharge.notes && <div className="detail-note"><span className="eyebrow">Work note</span><p>{selectedCharge.notes}</p></div>}
+      </DetailModalBody>
+      <DetailModalFooter utilityActions={<button className="secondary-button" type="button" onClick={() => printChargeReceipt(selectedCharge)}><Printer size={16} /> Print receipt</button>} dismissAction={<button className="ghost-button" type="button" onClick={() => setSelectedCharge(null)}>Close</button>} />
+    </DetailModalShell>}
 
     {chargeOpen && (
       <OperationModalShell
@@ -526,16 +614,19 @@ export default function ServiceWorkspace() {
                   </small>
                 </label>
               </div>
-              <label>
-                <span>Payment method</span>
-                <select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
-                  <option value="CASH">Cash</option>
-                  <option value="KHQR">KHQR</option>
-                  <option value="BANK">Bank transfer</option>
-                  <option value="CARD">Card</option>
-                  <option value="OTHER">Other</option>
-                </select>
-              </label>
+              <div className="service-form-pair">
+                <label>
+                  <span>Payment method</span>
+                  <select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
+                    <option value="CASH">Cash</option>
+                    <option value="KHQR">KHQR</option>
+                    <option value="BANK">Bank transfer</option>
+                    <option value="CARD">Card</option>
+                    <option value="OTHER">Other</option>
+                  </select>
+                </label>
+                <WarrantyPeriodField value={warrantyDays} onChange={setWarrantyDays} kind="service" />
+              </div>
               <label>
                 <span>Work note <small>Optional</small></span>
                 <textarea

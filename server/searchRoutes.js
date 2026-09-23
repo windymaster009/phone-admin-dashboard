@@ -7,11 +7,16 @@ import { ServiceOffering } from './serviceModels.js'
 const router = Router()
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
 const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const normalizeSearchQuery = (value) => String(value || '').trim().replace(/\s+/g, ' ').slice(0, 60)
+const searchPattern = (value) => {
+  const tokens = normalizeSearchQuery(value).split(' ').filter(Boolean)
+  return new RegExp(tokens.map(escapeRegex).join('.*'), 'i')
+}
 const LIMIT_PER_CATEGORY = 6
 
 router.get('/', requireAuth, asyncRoute(async (req, res) => {
   res.set('Cache-Control', 'no-store')
-  const q = String(req.query.q || req.query.query || req.query.search || '').trim().slice(0, 60)
+  const q = normalizeSearchQuery(req.query.q || req.query.query || req.query.search)
 
   if (!q) {
     return res.json({
@@ -29,7 +34,7 @@ router.get('/', requireAuth, asyncRoute(async (req, res) => {
   }
 
   const role = req.user?.role || 'CASHIER'
-  const pattern = new RegExp(escapeRegex(q), 'i')
+  const pattern = searchPattern(q)
 
   // Enforce server-side role boundaries
   const canSearchInventory = ['OWNER', 'MANAGER', 'CASHIER', 'STOCK'].includes(role)

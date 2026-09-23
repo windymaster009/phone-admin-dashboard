@@ -5,7 +5,6 @@ import {
   AlertTriangle,
   Banknote,
   Camera,
-  CalendarRange,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
@@ -29,6 +28,7 @@ import { api, getSessionUser } from '../../lib/api'
 import type { Pawn } from '../../types/domain'
 import { safeStorage } from '../../lib/storage'
 import MoneyInput from '../../components/MoneyInput'
+import WarrantyPeriodField from '../../components/WarrantyPeriodField'
 import AutoCalculateToggle from '../../components/AutoCalculateToggle'
 import OperationWorkflowStepper, { type WorkflowStep } from '../../components/OperationWorkflowStepper'
 import OperationWorkflowFooter from '../../components/OperationWorkflowFooter'
@@ -139,7 +139,7 @@ export default function OperationModalBridge() {
   const [saleCustomerId, setSaleCustomerId] = useState('')
   const [saleDiscount, setSaleDiscount] = useState('0')
   const [saleDiscountType, setSaleDiscountType] = useState<'AMOUNT' | 'PERCENT'>('AMOUNT')
-  const [saleWarrantyDays, setSaleWarrantyDays] = useState('')
+  const [saleWarrantyDays, setSaleWarrantyDays] = useState('0')
   const [saleAmountPaid, setSaleAmountPaid] = useState('')
   const [saleNotes, setSaleNotes] = useState('')
   const [saleNotesOpen, setSaleNotesOpen] = useState(false)
@@ -608,14 +608,14 @@ export default function OperationModalBridge() {
             }
             setSaleDiscount('0')
             setSaleDiscountType('AMOUNT')
-            setSaleWarrantyDays('')
+            setSaleWarrantyDays('0')
             setSaleAmountPaid('')
             setSalePaymentMethod('CASH')
           } else {
             setSaleCart([])
             setSaleDiscount('0')
             setSaleDiscountType('AMOUNT')
-            setSaleWarrantyDays('')
+            setSaleWarrantyDays('0')
             setSaleAmountPaid('')
             setSalePaymentMethod('CASH')
             setSaleCurrency('USD')
@@ -903,7 +903,7 @@ export default function OperationModalBridge() {
     setSaleCustomerId('')
     setSaleDiscount('0')
     setSaleDiscountType('AMOUNT')
-    setSaleWarrantyDays('')
+    setSaleWarrantyDays('0')
     setSaleAmountPaid('')
     setSaleNotes('')
     setSaleNotesOpen(false)
@@ -1359,7 +1359,7 @@ export default function OperationModalBridge() {
     addProductToCart(scannedItem)
     setSaleDiscount('0')
     setSaleDiscountType('AMOUNT')
-    setSaleWarrantyDays('')
+    setSaleWarrantyDays('0')
     setSaleAmountPaid('')
     setError('')
     setKind('sale')
@@ -3025,7 +3025,7 @@ export default function OperationModalBridge() {
                     : 'Configured inventory price'}</small>
                 : <small>Choose inventory first</small>}
             </div>
-            <label className={`sale-warranty-field${saleWarrantyInvalid && saleWarrantyDays !== '' ? ' field-invalid' : ''}`}>Warranty period<div className="sale-warranty-input"><CalendarRange size={16} aria-hidden="true" /><input required type="number" inputMode="numeric" min="0" max="3650" step="1" value={saleWarrantyDays} onChange={(event) => setSaleWarrantyDays(event.target.value)} placeholder="Enter days" /><span>days</span></div><small>{saleWarrantyDays === '' ? 'Enter 0 when this sale has no refund warranty.' : saleWarrantyInvalid ? 'Use a whole number from 0 to 3650.' : saleWarrantyDayCount === 0 ? 'No refund warranty for this sale.' : `Refundable for ${saleWarrantyDayCount} day${saleWarrantyDayCount === 1 ? '' : 's'} after the sale.`}</small></label>
+            <WarrantyPeriodField value={saleWarrantyDays} onChange={setSaleWarrantyDays} kind="sale" />
             <div className="sale-discount-mode">
               <span>Discount method</span>
               <div role="group" aria-label="Method">

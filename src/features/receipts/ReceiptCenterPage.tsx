@@ -17,6 +17,7 @@ import { api } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
 import SummaryStats from '../../components/SummaryStats'
 import ReceiptDocument from './ReceiptDocument'
+import { formatReceiptDate, formatReceiptDateTime } from './receipt-date'
 import { fitReceiptPrintPage, writeReceiptPrintDocument } from './receipt-print'
 import type {
   ReceiptDocumentType,
@@ -34,10 +35,7 @@ function money(value: number, currency: 'USD' | 'KHR') {
 }
 
 function dateText(value?: string, withTime = false) {
-  if (!value) return '—'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '—'
-  return new Intl.DateTimeFormat('en-GB', withTime ? { dateStyle: 'medium', timeStyle: 'short' } : { dateStyle: 'medium' }).format(date)
+  return withTime ? formatReceiptDateTime(value) : formatReceiptDate(value)
 }
 
 function documentLabel(type: ReceiptDocumentType) {

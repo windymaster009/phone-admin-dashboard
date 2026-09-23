@@ -1594,7 +1594,9 @@ describe('OperationModalBridge component', () => {
     fireEvent.change(screen.getByLabelText(/Inventory item/i), { target: { value: 'inv-item-1' } })
 
     // Provide warranty days
-    fireEvent.change(screen.getByPlaceholderText(/Enter days/i), { target: { value: '0' } })
+    const warrantyInput = screen.getByRole('spinbutton', { name: /warranty period in days/i })
+    expect(warrantyInput).toHaveValue(0)
+    fireEvent.change(warrantyInput, { target: { value: '0' } })
 
     const submitBtn = screen.getByRole('button', { name: /Complete sale/i })
     expect(submitBtn).toBeEnabled()

@@ -4,6 +4,7 @@ import { AlertTriangle, Banknote, ChevronDown, ChevronRight, HandCoins, History,
 import { api, defaultShopProfile, type ShopProfile } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
 import ReceiptDocument from './ReceiptDocument'
+import { formatReceiptDate, formatReceiptDateTime } from './receipt-date'
 import { fitReceiptPrintPage, writeReceiptPrintDocument } from './receipt-print'
 import type { ReceiptDocumentType, ReceiptLayout, ReceiptOption, ReceiptOptionResponse, ReceiptRecord, ReceiptSourceType } from './receipt-types'
 import './receipt-center.css'
@@ -24,10 +25,7 @@ function money(value: number, currency: 'USD' | 'KHR') {
 }
 
 function dateText(value?: string, withTime = false) {
-  if (!value) return '—'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return '—'
-  return new Intl.DateTimeFormat('en-GB', withTime ? { dateStyle: 'medium', timeStyle: 'short' } : { dateStyle: 'medium' }).format(date)
+  return withTime ? formatReceiptDateTime(value) : formatReceiptDate(value)
 }
 
 function documentLabel(type: ReceiptDocumentType) {
@@ -545,6 +543,31 @@ export default function ReceiptCenterBridge() {
         printWindow,
       )
     }
+    const openServiceReceipt = (event: Event) => {
+      const detail = (event as CustomEvent<{ reference?: string; currency?: 'USD' | 'KHR'; autoPrint?: boolean }>).detail
+      const reference = detail?.reference?.trim()
+      if (!reference) return
+      let printWindow: Window | null = null
+      if (detail?.autoPrint) {
+        try {
+          printWindow = window.open('', '_blank', 'width=980,height=760')
+          if (printWindow) {
+            printWindow.document.open()
+            printWindow.document.write('<!doctype html><html><head><meta charset="utf-8"><title>Preparing receipt</title></head><body style="font:16px system-ui;padding:32px">Preparing receipt for printing...</body></html>')
+            printWindow.document.close()
+          }
+        } catch {
+          printWindow = null
+        }
+      }
+      void generate(
+        { sourceType: 'SERVICE', reference },
+        { documentType: 'SERVICE_RECEIPT', sourceSubId: 'service', label: 'Service receipt', issuedAt: new Date().toISOString(), amount: 0, currency: detail?.currency === 'KHR' ? 'KHR' : 'USD' },
+        'THERMAL',
+        Boolean(detail?.autoPrint),
+        printWindow,
+      )
+    }
     const openRefundReceipt = (event: Event) => {
       const detail = (event as CustomEvent<{ reference?: string; currency?: 'USD' | 'KHR'; refreshOnClose?: boolean }>).detail
       const reference = detail?.reference?.trim()
@@ -559,12 +582,14 @@ export default function ReceiptCenterBridge() {
     window.addEventListener('phoneflow:open-pawn-ticket', openPawnTicket)
     window.addEventListener('phoneflow:open-loan-receipt', openLoanReceipt)
     window.addEventListener('phoneflow:open-trade-receipt', openTradeReceipt)
+    window.addEventListener('phoneflow:open-service-receipt', openServiceReceipt)
     window.addEventListener('phoneflow:open-refund-receipt', openRefundReceipt)
     return () => {
       window.removeEventListener('phoneflow:open-documents', openDocumentsEvent)
       window.removeEventListener('phoneflow:open-pawn-ticket', openPawnTicket)
       window.removeEventListener('phoneflow:open-loan-receipt', openLoanReceipt)
       window.removeEventListener('phoneflow:open-trade-receipt', openTradeReceipt)
+      window.removeEventListener('phoneflow:open-service-receipt', openServiceReceipt)
       window.removeEventListener('phoneflow:open-refund-receipt', openRefundReceipt)
     }
   }, [generate, openDocumentsForSource])
