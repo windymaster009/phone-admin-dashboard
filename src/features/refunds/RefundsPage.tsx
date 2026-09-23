@@ -121,11 +121,32 @@ export default function RefundsView({ user }: { user: SessionUser }) {
       .then((result) => {
         const items = Array.isArray(result?.trades) ? result.trades : []
         setTrades(items)
-        setSelectedId((current) => current || items.find((trade) => trade.status === 'COMPLETED')?._id || items[0]?._id || '')
+        const requestedId = new URLSearchParams(window.location.search).get('openTrade')
+        const requestedTrade = requestedId ? items.find((trade) => trade._id === requestedId) : undefined
+        setSelectedId((current) => requestedTrade?._id || current || items.find((trade) => trade.status === 'COMPLETED')?._id || items[0]?._id || '')
+        if (requestedTrade) {
+          setSearch(requestedTrade.tradeNo)
+          setFilter(requestedTrade.status === 'RETURNED' ? 'RETURNED' : 'COMPLETED')
+          setMobileRefundStep('review')
+        }
       })
       .catch((error: Error) => setLoadError(error.message))
       .finally(() => setLoading(false))
   }, [hasAccess])
+
+  useEffect(() => {
+    const openRefundTrade = (event: Event) => {
+      const id = String((event as CustomEvent<{ id?: string }>).detail?.id || '')
+      const match = trades.find((trade) => trade._id === id)
+      if (!match) return
+      setSearch(match.tradeNo)
+      setFilter(match.status === 'RETURNED' ? 'RETURNED' : 'COMPLETED')
+      setSelectedId(match._id)
+      setMobileRefundStep('review')
+    }
+    window.addEventListener('phoneflow:open-refund-trade', openRefundTrade)
+    return () => window.removeEventListener('phoneflow:open-refund-trade', openRefundTrade)
+  }, [trades])
 
   useEffect(() => {
     setReason('')

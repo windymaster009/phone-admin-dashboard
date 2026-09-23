@@ -8,7 +8,9 @@ import {
   Building2,
   CornerDownLeft,
   HandCoins,
+  RefreshCcw,
   Search,
+  ShoppingCart,
   Users,
   Wrench,
   X,
@@ -84,6 +86,20 @@ export type SearchSupplier = {
   active: boolean
 }
 
+export type SearchTrade = {
+  _id: string
+  tradeNo: string
+  type: 'BUY' | 'SELL'
+  status: string
+  partyName?: string
+  partyPhone?: string
+  items?: Array<{ name?: string; quantity?: number }>
+  total?: number
+  currency?: 'USD' | 'KHR'
+  warrantyExpiresAt?: string
+  createdAt?: string
+}
+
 export type SearchResults = {
   inventory?: SearchInventoryItem[]
   pawns?: SearchPawn[]
@@ -91,6 +107,8 @@ export type SearchResults = {
   customers?: SearchCustomer[]
   services?: SearchService[]
   suppliers?: SearchSupplier[]
+  trades?: SearchTrade[]
+  refunds?: SearchTrade[]
 }
 
 export type SearchResponse = {
@@ -101,7 +119,7 @@ export type SearchResponse = {
 
 export type FlatSearchResult = {
   id: string
-  type: 'inventory' | 'pawns' | 'loans' | 'customers' | 'services' | 'suppliers'
+  type: 'inventory' | 'trades' | 'refunds' | 'pawns' | 'loans' | 'customers' | 'services' | 'suppliers'
   title: string
   subItems: Array<{ label?: string; value: string; isTag?: boolean }>
   badge?: { text: string; className: string }
@@ -199,7 +217,65 @@ export default function GlobalSearch({ onNavigate }: GlobalSearchProps) {
       })
     }
 
-    // 2. Pawns
+    // 2. Buy & Sell transactions. A sale is intentionally also shown in the
+    // Refunds group for authorized users so they can choose the destination.
+    if (results.trades?.length) {
+      results.trades.forEach((trade) => {
+        const items = (trade.items || []).map((item) => `${item.name || 'Item'} x${item.quantity || 1}`).join(', ')
+        const subItems = [
+          trade.partyName ? { label: trade.type === 'SELL' ? 'Customer' : 'Seller', value: trade.partyName } : undefined,
+          trade.partyPhone ? { value: trade.partyPhone } : undefined,
+          items ? { value: items } : undefined,
+        ].filter(Boolean) as Array<{ label?: string; value: string; isTag?: boolean }>
+
+        list.push({
+          id: `trades-${trade._id}`,
+          type: 'trades',
+          title: trade.tradeNo,
+          subItems,
+          badge: { text: trade.type === 'SELL' ? 'Sale' : 'Purchase', className: getStatusClass(trade.status) },
+          meta: {
+            primary: trade.total != null ? formatAmount(trade.total, trade.currency) : '',
+            secondary: formatDate(trade.createdAt),
+          },
+          onSelect: () => {
+            handleSelectRecord(`/buy-sell?openTrade=${encodeURIComponent(trade._id)}`, () => {
+              window.dispatchEvent(new CustomEvent('phoneflow:open-trade-detail', { detail: { id: trade._id, tradeNo: trade.tradeNo } }))
+            })
+          },
+        })
+      })
+    }
+
+    if (results.refunds?.length) {
+      results.refunds.forEach((trade) => {
+        const items = (trade.items || []).map((item) => `${item.name || 'Item'} x${item.quantity || 1}`).join(', ')
+        const subItems = [
+          trade.partyName ? { label: 'Customer', value: trade.partyName } : undefined,
+          items ? { value: items } : undefined,
+          { value: trade.status === 'RETURNED' ? 'View recorded refund' : 'Review for refund' },
+        ].filter(Boolean) as Array<{ label?: string; value: string; isTag?: boolean }>
+
+        list.push({
+          id: `refunds-${trade._id}`,
+          type: 'refunds',
+          title: trade.tradeNo,
+          subItems,
+          badge: { text: trade.status === 'RETURNED' ? 'Refunded' : 'Open sale', className: getStatusClass(trade.status) },
+          meta: {
+            primary: trade.total != null ? formatAmount(trade.total, trade.currency) : '',
+            secondary: trade.warrantyExpiresAt ? `Warranty ${formatDate(trade.warrantyExpiresAt)}` : undefined,
+          },
+          onSelect: () => {
+            handleSelectRecord(`/refunds?openTrade=${encodeURIComponent(trade._id)}`, () => {
+              window.dispatchEvent(new CustomEvent('phoneflow:open-refund-trade', { detail: { id: trade._id, tradeNo: trade.tradeNo } }))
+            })
+          },
+        })
+      })
+    }
+
+    // 3. Pawns
     if (results.pawns?.length) {
       results.pawns.forEach((pawn) => {
         const subItems: Array<{ label?: string; value: string; isTag?: boolean }> = []
@@ -228,7 +304,7 @@ export default function GlobalSearch({ onNavigate }: GlobalSearchProps) {
       })
     }
 
-    // 3. Loans
+    // 4. Loans
     if (results.loans?.length) {
       results.loans.forEach((loan) => {
         const subItems: Array<{ label?: string; value: string; isTag?: boolean }> = []
@@ -257,7 +333,7 @@ export default function GlobalSearch({ onNavigate }: GlobalSearchProps) {
       })
     }
 
-    // 4. Customers
+    // 5. Customers
     if (results.customers?.length) {
       results.customers.forEach((customer) => {
         const subItems: Array<{ label?: string; value: string; isTag?: boolean }> = []
@@ -282,7 +358,7 @@ export default function GlobalSearch({ onNavigate }: GlobalSearchProps) {
       })
     }
 
-    // 5. Services
+    // 6. Services
     if (results.services?.length) {
       results.services.forEach((service) => {
         const subItems: Array<{ label?: string; value: string; isTag?: boolean }> = []
@@ -308,7 +384,7 @@ export default function GlobalSearch({ onNavigate }: GlobalSearchProps) {
       })
     }
 
-    // 6. Suppliers
+    // 7. Suppliers
     if (results.suppliers?.length) {
       results.suppliers.forEach((supplier) => {
         const subItems: Array<{ label?: string; value: string; isTag?: boolean }> = []
@@ -522,7 +598,7 @@ export default function GlobalSearch({ onNavigate }: GlobalSearchProps) {
       return (
         <div className="global-search-status-box" role="status">
           <h4>No records found</h4>
-          <p>No results found for &ldquo;{query}&rdquo;. Try searching by product, SKU, barcode, IMEI, serial, contract number, or phone.</p>
+          <p>No results found for &ldquo;{query}&rdquo;. Try searching by receipt, product, SKU, barcode, IMEI, serial, contract number, or phone.</p>
         </div>
       )
     }
@@ -530,7 +606,7 @@ export default function GlobalSearch({ onNavigate }: GlobalSearchProps) {
     if (!hasSearched && !query.trim()) {
       return (
         <div className="global-search-status-box">
-          <p>Type to search inventory, pawns, loans, and customers...</p>
+          <p>Type to search inventory, sales, pawns, loans, and customers...</p>
         </div>
       )
     }
@@ -541,6 +617,8 @@ export default function GlobalSearch({ onNavigate }: GlobalSearchProps) {
       icon: React.ComponentType<{ size?: number }>
     }> = [
       { type: 'inventory', label: 'Inventory / Stock', icon: Boxes },
+      { type: 'trades', label: 'Buy & Sell transactions', icon: ShoppingCart },
+      { type: 'refunds', label: 'Refunds', icon: RefreshCcw },
       { type: 'pawns', label: 'Pawn Contracts', icon: HandCoins },
       { type: 'loans', label: 'Loans', icon: Banknote },
       { type: 'customers', label: 'Customers', icon: Users },
@@ -562,7 +640,7 @@ export default function GlobalSearch({ onNavigate }: GlobalSearchProps) {
         {groups.map((group) => {
           const GroupIcon = group.icon
           return (
-            <div className="global-search-group" key={group.type}>
+            <div className={`global-search-group global-search-group-${group.type}`} key={group.type}>
               <div className="global-search-group-header">
                 <div className="global-search-group-title">
                   <GroupIcon size={14} />
@@ -636,7 +714,7 @@ export default function GlobalSearch({ onNavigate }: GlobalSearchProps) {
             aria-autocomplete="list"
             aria-label="Global record search"
             className="global-search-input"
-            placeholder="Search inventory, pawns, loans, customers..."
+            placeholder="Search inventory, sales, pawns, loans, customers..."
             value={query}
             onChange={(event) => {
               setQuery(event.target.value)
@@ -672,7 +750,7 @@ export default function GlobalSearch({ onNavigate }: GlobalSearchProps) {
                   <span><kbd><CornerDownLeft size={10} /></kbd> select</span>
                   <span><kbd>esc</kbd> close</span>
                 </div>
-                <span>{totalCount} total record{totalCount === 1 ? '' : 's'}</span>
+                <span>{totalCount} result{totalCount === 1 ? '' : 's'}</span>
               </div>
             )}
           </div>

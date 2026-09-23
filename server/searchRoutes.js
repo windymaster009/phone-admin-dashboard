@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { requireAuth } from './auth.js'
-import { Customer, InventoryItem, Pawn, Supplier } from './models.js'
+import { Customer, InventoryItem, Pawn, Supplier, Trade } from './models.js'
 import { Loan } from './loanModels.js'
 import { ServiceOffering } from './serviceModels.js'
 
@@ -29,6 +29,8 @@ router.get('/', requireAuth, asyncRoute(async (req, res) => {
         customers: [],
         services: [],
         suppliers: [],
+        trades: [],
+        refunds: [],
       },
     })
   }
@@ -43,6 +45,8 @@ router.get('/', requireAuth, asyncRoute(async (req, res) => {
   const canSearchCustomers = ['OWNER', 'MANAGER', 'CASHIER'].includes(role)
   const canSearchServices = ['OWNER', 'MANAGER', 'CASHIER'].includes(role)
   const canSearchSuppliers = ['OWNER', 'MANAGER', 'STOCK'].includes(role)
+  const canSearchTrades = ['OWNER', 'MANAGER', 'CASHIER'].includes(role)
+  const canSearchRefunds = ['OWNER', 'MANAGER'].includes(role)
 
   const inventoryQuery = canSearchInventory
     ? InventoryItem.find({
@@ -60,15 +64,15 @@ router.get('/', requireAuth, asyncRoute(async (req, res) => {
         .lean()
     : Promise.resolve([])
 
-  const pawnCustomersQuery = canSearchPawns
-    ? Customer.find({ $or: [{ name: pattern }, { phone: pattern }] })
+  const referenceCustomersQuery = canSearchPawns || canSearchTrades
+    ? Promise.resolve(Customer.find({ $or: [{ name: pattern }, { phone: pattern }] })
         .select('_id name phone')
         .limit(100)
-        .lean()
+        .lean())
     : Promise.resolve([])
 
   const pawnsQuery = canSearchPawns
-    ? pawnCustomersQuery.then((matchedCustomers) => Pawn.find({
+    ? referenceCustomersQuery.then((matchedCustomers) => Pawn.find({
         $or: [
           { pawnNo: pattern },
           { customer: { $in: matchedCustomers.map((customer) => customer._id) } },
@@ -89,6 +93,37 @@ router.get('/', requireAuth, asyncRoute(async (req, res) => {
           status: pawn.status,
           dueDate: pawn.dueDate,
         }))))
+    : Promise.resolve([])
+
+  const tradesQuery = canSearchTrades
+    ? referenceCustomersQuery.then((matchedCustomers) => Trade.find({
+        $or: [
+          { tradeNo: pattern },
+          { customer: { $in: matchedCustomers.map((customer) => customer._id) } },
+          { 'sellerSnapshot.name': pattern },
+          { 'sellerSnapshot.phone': pattern },
+          { 'items.name': pattern },
+          { notes: pattern },
+        ],
+      })
+        .select('_id tradeNo type customer sellerSnapshot items.name items.quantity total transactionTotal currency status warrantyExpiresAt createdAt')
+        .limit(LIMIT_PER_CATEGORY)
+        .lean().then((trades) => trades.map((trade) => {
+          const customer = matchedCustomers.find((candidate) => String(candidate._id) === String(trade.customer))
+          return {
+            _id: trade._id,
+            tradeNo: trade.tradeNo,
+            type: trade.type,
+            status: trade.status,
+            partyName: trade.sellerSnapshot?.name || customer?.name || (trade.type === 'BUY' ? 'Walk-in seller' : 'Walk-in customer'),
+            partyPhone: trade.sellerSnapshot?.phone || customer?.phone,
+            items: trade.items || [],
+            total: trade.transactionTotal ?? trade.total,
+            currency: trade.currency,
+            warrantyExpiresAt: trade.warrantyExpiresAt,
+            createdAt: trade.createdAt,
+          }
+        })))
     : Promise.resolve([])
 
   const loansQuery = canSearchLoans
@@ -146,16 +181,18 @@ router.get('/', requireAuth, asyncRoute(async (req, res) => {
         .lean()
     : Promise.resolve([])
 
-  const [inventory, pawns, loans, customers, services, suppliers] = await Promise.all([
+  const [inventory, pawns, loans, customers, services, suppliers, trades] = await Promise.all([
     inventoryQuery,
     pawnsQuery,
     loansQuery,
     customersQuery,
     servicesQuery,
     suppliersQuery,
+    tradesQuery,
   ])
 
-  const total = inventory.length + pawns.length + loans.length + customers.length + services.length + suppliers.length
+  const refundDestinations = canSearchRefunds ? trades.filter((trade) => trade.type === 'SELL') : []
+  const total = inventory.length + pawns.length + loans.length + customers.length + services.length + suppliers.length + trades.length + refundDestinations.length
 
   res.json({
     query: q,
@@ -191,6 +228,8 @@ router.get('/', requireAuth, asyncRoute(async (req, res) => {
       customers,
       services,
       suppliers,
+      trades,
+      refunds: refundDestinations,
     },
   })
 }))

@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
-import { ArrowDownRight, ArrowUpRight, Banknote, ChevronDown, FileText, MoreHorizontal, Pencil, Plus, RefreshCcw, ShoppingCart, WalletCards } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { ArrowDownRight, ArrowUpRight, Banknote, ChevronDown, FileText, MoreHorizontal, Pencil, Plus, RefreshCcw, Search, ShoppingCart, WalletCards } from 'lucide-react'
 import { api, getSessionUser } from '../../lib/api'
 import type { Trade } from '../../types/domain'
 import { money, tradePartyName, tradePartyPhone, tradeTransactionMoney, dateText, titleStatus, comingNext } from '../../lib/presentation'
@@ -31,6 +31,9 @@ function warrantyText(trade: Trade) {
   return days > 0 ? `${days} day${days === 1 ? '' : 's'}` : 'No warranty'
 }
 
+type TradeTypeFilter = 'ALL' | 'SELL' | 'BUY'
+type TradeStatusFilter = 'ALL' | 'COMPLETED' | 'RETURNED' | 'CANCELLED'
+
 export default function TradeView() {
   const sessionUser = getSessionUser()
   const canCorrectSale = sessionUser?.role === 'OWNER' || sessionUser?.role === 'MANAGER'
@@ -38,6 +41,9 @@ export default function TradeView() {
   const [loading, setLoading] = useState(true)
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null)
   const [error, setError] = useState('')
+  const [transactionSearch, setTransactionSearch] = useState('')
+  const [transactionTypeFilter, setTransactionTypeFilter] = useState<TradeTypeFilter>('ALL')
+  const [transactionStatusFilter, setTransactionStatusFilter] = useState<TradeStatusFilter>('ALL')
   const [editingCorrection, setEditingCorrection] = useState(false)
   const [correctionWarrantyDays, setCorrectionWarrantyDays] = useState('0')
   const [correctionNotes, setCorrectionNotes] = useState('')
@@ -53,7 +59,13 @@ export default function TradeView() {
     try {
       const result = await api<{ trades: Trade[] }>('/trades', {}, { deduplicate: false })
       if (sequence !== loadSequence.current) return
-      setTrades(Array.isArray(result?.trades) ? result.trades : [])
+      const items = Array.isArray(result?.trades) ? result.trades : []
+      setTrades(items)
+      const requestedId = new URLSearchParams(window.location.search).get('openTrade')
+      if (requestedId) {
+        const requestedTrade = items.find((trade) => trade._id === requestedId)
+        if (requestedTrade) setSelectedTrade(requestedTrade)
+      }
       setError('')
     } catch (reason) {
       if (sequence === loadSequence.current) setError(reason instanceof Error ? reason.message : 'Unable to load transactions')
@@ -69,11 +81,53 @@ export default function TradeView() {
     return () => window.removeEventListener('phoneflow:trades-updated', refreshTrades)
   }, [loadTrades])
 
+  useEffect(() => {
+    const openTrade = (event: Event) => {
+      const id = String((event as CustomEvent<{ id?: string }>).detail?.id || '')
+      const match = trades.find((trade) => trade._id === id)
+      if (match) setSelectedTrade(match)
+    }
+    window.addEventListener('phoneflow:open-trade-detail', openTrade)
+    return () => window.removeEventListener('phoneflow:open-trade-detail', openTrade)
+  }, [trades])
+
+  const filteredTrades = useMemo(() => {
+    const tokens = transactionSearch.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean)
+    return trades.filter((trade) => {
+      if (transactionTypeFilter !== 'ALL' && trade.type !== transactionTypeFilter) return false
+      if (transactionStatusFilter !== 'ALL' && trade.status !== transactionStatusFilter) return false
+      if (tokens.length === 0) return true
+      const searchable = [
+        trade.tradeNo,
+        trade.type,
+        trade.status,
+        trade.paymentMethod,
+        tradePartyName(trade),
+        tradePartyPhone(trade),
+        trade.notes,
+        ...trade.items.flatMap((item) => [
+          item.name,
+          item.inventoryItem?.sku,
+          item.inventoryItem?.barcode,
+          item.inventoryItem?.imei1,
+          item.inventoryItem?.imei2,
+          item.inventoryItem?.serialNumber,
+        ]),
+      ].filter(Boolean).join(' ').toLocaleLowerCase()
+      return tokens.every((token) => searchable.includes(token))
+    })
+  }, [trades, transactionSearch, transactionTypeFilter, transactionStatusFilter])
+
   function closeTradeDetail() {
     if (correctionBusy) return
     setSelectedTrade(null)
     setEditingCorrection(false)
     setCorrectionError('')
+    const url = new URL(window.location.href)
+    if (url.searchParams.has('openTrade')) {
+      url.searchParams.delete('openTrade')
+      window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`)
+    }
   }
 
   function openCorrection() {
@@ -122,7 +176,7 @@ export default function TradeView() {
 
   function exportTrades() {
     const headers = ['Reference', 'Type', 'Customer', 'Items', 'Subtotal', 'Discount', 'Total', 'Paid', 'Balance', 'Payment', 'Status', 'Date']
-    const rows = trades.map((trade) => [
+    const rows = filteredTrades.map((trade) => [
       trade.tradeNo,
       trade.type,
       tradePartyName(trade),
@@ -173,12 +227,37 @@ export default function TradeView() {
         <div className="card-heading table-heading">
           <div><span className="eyebrow">Activity</span><h3>Recent transactions</h3></div>
           <div className="trade-table-actions">
-            {!transactionsCollapsed && <button className="ghost-button trade-export-button" onClick={exportTrades} disabled={trades.length === 0} aria-label="Export transactions as CSV"><FileText size={15} /><span>Export</span></button>}
+            {!transactionsCollapsed && <button className="ghost-button trade-export-button" onClick={exportTrades} disabled={filteredTrades.length === 0} aria-label="Export transactions as CSV" title="Exports the currently filtered transactions"><FileText size={15} /><span>Export</span></button>}
             <button className="ghost-button transaction-collapse-button" type="button" onClick={() => setTransactionsCollapsed((value) => !value)} aria-expanded={!transactionsCollapsed} aria-label={transactionsCollapsed ? 'Expand recent transactions' : 'Collapse recent transactions'}><ChevronDown size={17} /></button>
           </div>
         </div>
         {!transactionsCollapsed && <div className="transaction-list">
-          {trades.map((transaction) => (
+          <div className="trade-transaction-toolbar">
+            <label className="trade-transaction-search">
+              <span className="sr-only">Search recent transactions</span>
+              <Search size={16} aria-hidden="true" />
+              <input value={transactionSearch} onChange={(event) => setTransactionSearch(event.target.value)} placeholder="Search receipt, product, customer, phone, SKU..." autoComplete="off" />
+            </label>
+            <label>
+              <span className="sr-only">Filter transaction type</span>
+              <select value={transactionTypeFilter} onChange={(event) => setTransactionTypeFilter(event.target.value as TradeTypeFilter)} aria-label="Filter transaction type">
+                <option value="ALL">All transactions</option>
+                <option value="SELL">Sales</option>
+                <option value="BUY">Purchases</option>
+              </select>
+            </label>
+            <label>
+              <span className="sr-only">Filter transaction status</span>
+              <select value={transactionStatusFilter} onChange={(event) => setTransactionStatusFilter(event.target.value as TradeStatusFilter)} aria-label="Filter transaction status">
+                <option value="ALL">All statuses</option>
+                <option value="COMPLETED">Completed</option>
+                <option value="RETURNED">Refunded</option>
+                <option value="CANCELLED">Cancelled</option>
+              </select>
+            </label>
+            <span className="trade-transaction-count">{filteredTrades.length} of {trades.length}</span>
+          </div>
+          {filteredTrades.map((transaction) => (
             <div className="transaction-row" key={transaction._id}>
               <span className={`transaction-icon ${transaction.type === 'SELL' ? 'sale' : 'purchase'}`}>{transaction.type === 'SELL' ? <ArrowUpRight /> : <ArrowDownRight />}</span>
               <p><strong>{transaction.items.map((item) => `${item.name} x${item.quantity}`).join(', ')}</strong><small>{transaction.tradeNo} - {tradePartyName(transaction)} - {dateText(transaction.purchaseDate || transaction.createdAt)}</small></p>
@@ -189,6 +268,7 @@ export default function TradeView() {
           ))}
           {loading && <LoadingState compact label="Loading transactions" detail="Reading recent purchases and sales…" />}
           {!loading && trades.length === 0 && <div className="transaction-row"><p><strong>No transactions yet</strong><small>Create a buy or sell transaction to see it here.</small></p></div>}
+          {!loading && trades.length > 0 && filteredTrades.length === 0 && <div className="trade-transaction-empty"><Search size={20} /><strong>No transactions match</strong><small>Change the search or filters to see other records.</small></div>}
         </div>}
       </article>
       {selectedTrade && (

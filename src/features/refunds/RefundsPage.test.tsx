@@ -42,6 +42,38 @@ describe('RefundsPage feature integration & safeguards', () => {
     })
   })
 
+  it('opens the exact sale chosen from universal search in the refund workbench', async () => {
+    const firstSale: Trade = {
+      ...mockTradeRecord,
+      _id: 'tr-sale-first',
+      tradeNo: 'SL-FIRST',
+      status: 'COMPLETED',
+      warrantyDays: 30,
+      createdAt: new Date().toISOString(),
+    }
+    const requestedSale: Trade = {
+      ...firstSale,
+      _id: 'tr-sale-requested',
+      tradeNo: 'SL-REQUESTED',
+    }
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({ trades: [firstSale, requestedSale] }),
+    } as Response)
+
+    render(<RefundsPage user={mockOwnerUser} />)
+    await waitFor(() => expect(screen.getAllByText('SL-FIRST').length).toBeGreaterThan(0))
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-refund-trade', { detail: { id: requestedSale._id } }))
+    })
+
+    expect(screen.getByPlaceholderText(/Search receipt, customer, phone, or item/i)).toHaveValue('SL-REQUESTED')
+    expect(screen.getAllByText('SL-REQUESTED').length).toBeGreaterThan(0)
+  })
+
   it('enforces multi-step safeguard before enabling refund submission button', async () => {
     const saleTrade: Trade = {
       ...mockTradeRecord,

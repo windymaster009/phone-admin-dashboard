@@ -68,6 +68,76 @@
   padding: 4px 18px 16px;
 }
 
+.trade-transaction-toolbar {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(150px, auto) minmax(140px, auto) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 0 14px;
+  border-top: 1px solid var(--border);
+}
+
+.trade-transaction-toolbar label {
+  min-width: 0;
+}
+
+.trade-transaction-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.trade-transaction-search svg {
+  position: absolute;
+  left: 12px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.trade-transaction-toolbar input,
+.trade-transaction-toolbar select {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  outline: 2px solid transparent;
+  color: var(--text);
+  background: var(--bg-soft);
+  font: inherit;
+  font-size: .68rem;
+}
+
+.trade-transaction-toolbar input {
+  padding-left: 36px;
+}
+
+.trade-transaction-toolbar input:focus,
+.trade-transaction-toolbar select:focus {
+  border-color: var(--primary);
+  outline-color: color-mix(in srgb, var(--primary) 30%, transparent);
+}
+
+.trade-transaction-count {
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: .66rem;
+  font-weight: 700;
+}
+
+.trade-transaction-empty {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 28px 16px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  text-align: center;
+}
+
+.trade-transaction-empty strong { color: var(--text); font-size: .75rem; }
+.trade-transaction-empty small { font-size: .65rem; }
+
 .trade-table-actions {
   display: flex;
   align-items: center;
@@ -438,6 +508,20 @@
 
   .trade-transactions-card .transaction-list {
     padding: 0 14px 8px;
+  }
+
+  .trade-transaction-toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    padding: 10px 0 12px;
+  }
+
+  .trade-transaction-search {
+    grid-column: 1 / -1;
+  }
+
+  .trade-transaction-count {
+    grid-column: 1 / -1;
   }
 
   .trade-transactions-card .transaction-row {

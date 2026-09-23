@@ -95,6 +95,50 @@ describe('TradePage feature integration', () => {
     })
   })
 
+  it('searches and filters recent transactions without changing stored records', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({ trades: [mockTradeRecord, mockPurchaseRecord] }),
+    } as Response)
+    const user = userEvent.setup()
+    render(<TradePage />)
+
+    await waitFor(() => {
+      expect(screen.getByText(new RegExp(mockTradeRecord.tradeNo, 'i'))).toBeInTheDocument()
+      expect(screen.getByText(new RegExp(mockPurchaseRecord.tradeNo, 'i'))).toBeInTheDocument()
+    })
+
+    const search = screen.getByPlaceholderText(/Search receipt, product, customer/i)
+    await user.type(search, mockPurchaseRecord.tradeNo.toLowerCase())
+    expect(screen.queryByText(new RegExp(mockTradeRecord.tradeNo, 'i'))).not.toBeInTheDocument()
+    expect(screen.getByText(new RegExp(mockPurchaseRecord.tradeNo, 'i'))).toBeInTheDocument()
+
+    await user.clear(search)
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Filter transaction type' }), 'SELL')
+    expect(screen.getByText(new RegExp(mockTradeRecord.tradeNo, 'i'))).toBeInTheDocument()
+    expect(screen.queryByText(new RegExp(mockPurchaseRecord.tradeNo, 'i'))).not.toBeInTheDocument()
+    expect(screen.getByText('1 of 2')).toBeInTheDocument()
+  })
+
+  it('opens the exact transaction requested by universal search', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({ trades: [mockTradeRecord] }),
+    } as Response)
+    render(<TradePage />)
+
+    await waitFor(() => expect(screen.getByText(new RegExp(mockTradeRecord.tradeNo, 'i'))).toBeInTheDocument())
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-trade-detail', { detail: { id: mockTradeRecord._id } }))
+    })
+
+    expect(await screen.findByRole('dialog')).toHaveTextContent(mockTradeRecord.tradeNo)
+  })
+
   it('refreshes recent transactions immediately after a completed buy or sale event', async () => {
     let requestCount = 0
     vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {

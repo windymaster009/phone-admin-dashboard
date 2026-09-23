@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
-import { User, InventoryItem, Pawn, Customer, Supplier } from './models.js'
+import { User, InventoryItem, Pawn, Customer, Supplier, Trade } from './models.js'
 import { AuthSession } from './authSessionModels.js'
 import { Loan } from './loanModels.js'
 import { ServiceOffering } from './serviceModels.js'
@@ -72,6 +72,8 @@ const origLoanFind = Loan.find
 const origCustomerFind = Customer.find
 const origServiceOfferingFind = ServiceOffering.find
 const origSupplierFind = Supplier.find
+const origTradeFind = Trade.find
+const emptyRowsQuery = () => ({ select: () => ({ limit: () => ({ lean: async () => [] }) }) })
 
 test.beforeEach(() => {
   currentUserRole = 'OWNER'
@@ -92,6 +94,7 @@ test.beforeEach(() => {
       active: true,
     }),
   })
+  Trade.find = emptyRowsQuery
 })
 
 test.afterEach(() => {
@@ -105,6 +108,7 @@ test.afterEach(() => {
   Customer.find = origCustomerFind
   ServiceOffering.find = origServiceOfferingFind
   Supplier.find = origSupplierFind
+  Trade.find = origTradeFind
 })
 
 test('Search endpoint requires authentication', async () => {
@@ -123,6 +127,8 @@ test('Search endpoint returns empty payload when query is empty or whitespace', 
   assert.deepEqual(result.body.results.customers, [])
   assert.deepEqual(result.body.results.services, [])
   assert.deepEqual(result.body.results.suppliers, [])
+  assert.deepEqual(result.body.results.trades, [])
+  assert.deepEqual(result.body.results.refunds, [])
 })
 
 test('Search normalizes spaces and uses case-insensitive flexible multi-word matching', async () => {
@@ -386,4 +392,54 @@ test('Search returns display-ready records and matches pawn customers by referen
   assert.equal(result.body.results.pawns[0].collateral, 'iPhone 14')
   assert.equal(result.body.results.loans[0].customerName, 'Dara')
   assert.equal(result.body.results.services[0].code, 'SV-1')
+})
+
+test('Search returns a sale as separate Buy & Sell and Refunds destinations for owners', async () => {
+  const rowsQuery = (rows) => ({ select: () => ({ limit: () => ({ lean: async () => rows }) }) })
+  InventoryItem.find = () => rowsQuery([])
+  Pawn.find = () => rowsQuery([])
+  Loan.find = () => rowsQuery([])
+  Customer.find = () => rowsQuery([])
+  ServiceOffering.find = () => rowsQuery([])
+  Supplier.find = () => rowsQuery([])
+  Trade.find = (filter) => {
+    assert.ok(filter.$or.some((condition) => condition.tradeNo instanceof RegExp))
+    return rowsQuery([{
+      _id: 'sale-1',
+      tradeNo: 'SL-20260923-CGCOF',
+      type: 'SELL',
+      status: 'COMPLETED',
+      items: [{ name: 'HOTWAV Adapter', quantity: 1 }],
+      transactionTotal: 3,
+      currency: 'USD',
+      createdAt: new Date('2026-09-23T01:00:00.000Z'),
+    }])
+  }
+
+  const result = await callSearchRoute('sl-20260923-cgcof')
+
+  assert.equal(result.status, 200)
+  assert.equal(result.body.total, 2)
+  assert.equal(result.body.results.trades[0].tradeNo, 'SL-20260923-CGCOF')
+  assert.equal(result.body.results.trades[0].partyName, 'Walk-in customer')
+  assert.equal(result.body.results.refunds[0]._id, 'sale-1')
+})
+
+test('Search exposes sale details but not the Refunds destination to cashiers', async () => {
+  currentUserRole = 'CASHIER'
+  const rowsQuery = (rows) => ({ select: () => ({ limit: () => ({ lean: async () => rows }) }) })
+  InventoryItem.find = () => rowsQuery([])
+  Pawn.find = () => rowsQuery([])
+  Loan.find = () => rowsQuery([])
+  Customer.find = () => rowsQuery([])
+  ServiceOffering.find = () => rowsQuery([])
+  Trade.find = () => rowsQuery([{
+    _id: 'sale-cashier', tradeNo: 'SL-CASHIER-1', type: 'SELL', status: 'COMPLETED', items: [], total: 5,
+  }])
+
+  const result = await callSearchRoute('SL-CASHIER-1')
+
+  assert.equal(result.status, 200)
+  assert.equal(result.body.results.trades.length, 1)
+  assert.deepEqual(result.body.results.refunds, [])
 })

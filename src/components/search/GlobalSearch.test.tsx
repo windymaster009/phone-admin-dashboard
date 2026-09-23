@@ -110,7 +110,7 @@ describe('GlobalSearch Component', () => {
     renderSearch()
     const input = screen.getByRole('combobox', { name: /Global record search/i })
     expect(input).toBeInTheDocument()
-    expect(input).toHaveAttribute('placeholder', 'Search inventory, pawns, loans, customers...')
+    expect(input).toHaveAttribute('placeholder', 'Search inventory, sales, pawns, loans, customers...')
     expect(screen.getByText('Ctrl K')).toBeInTheDocument()
   })
 
@@ -283,6 +283,50 @@ describe('GlobalSearch Component', () => {
     window.removeEventListener('phoneflow:open-pawn-detail', pawnEventSpy)
     window.removeEventListener('phoneflow:open-loan-detail', loanEventSpy)
     window.removeEventListener('phoneflow:open-customer-detail', customerEventSpy)
+  })
+
+  it('shows one sale in both Buy & Sell and Refunds so the user chooses the destination', async () => {
+    vi.spyOn(apiModule, 'api').mockResolvedValue({
+      query: 'SL-20260923-CGCOF',
+      results: {
+        trades: [{
+          _id: 'sale-1', tradeNo: 'SL-20260923-CGCOF', type: 'SELL', status: 'COMPLETED',
+          partyName: 'Walk-in customer', items: [{ name: 'HOTWAV Adapter', quantity: 1 }], total: 3, currency: 'USD',
+        }],
+        refunds: [{
+          _id: 'sale-1', tradeNo: 'SL-20260923-CGCOF', type: 'SELL', status: 'COMPLETED',
+          partyName: 'Walk-in customer', items: [{ name: 'HOTWAV Adapter', quantity: 1 }], total: 3, currency: 'USD',
+        }],
+      },
+      total: 2,
+    })
+    const tradeEventSpy = vi.fn()
+    const refundEventSpy = vi.fn()
+    window.addEventListener('phoneflow:open-trade-detail', tradeEventSpy)
+    window.addEventListener('phoneflow:open-refund-trade', refundEventSpy)
+    renderSearch()
+
+    const input = screen.getByRole('combobox', { name: /Global record search/i })
+    fireEvent.change(input, { target: { value: 'SL-20260923-CGCOF' } })
+    await act(async () => { vi.advanceTimersByTime(250) })
+
+    expect(screen.getByText('Buy & Sell transactions')).toBeInTheDocument()
+    expect(screen.getByText('Refunds')).toBeInTheDocument()
+    const destinationButtons = screen.getAllByText('SL-20260923-CGCOF').map((element) => element.closest('button')!)
+    expect(destinationButtons).toHaveLength(2)
+
+    fireEvent.click(destinationButtons[0])
+    expect(mockNavigate).toHaveBeenCalledWith('/buy-sell?openTrade=sale-1')
+    expect(tradeEventSpy).toHaveBeenCalled()
+
+    fireEvent.focus(input)
+    const reopenedDestinations = screen.getAllByText('SL-20260923-CGCOF').map((element) => element.closest('button')!)
+    fireEvent.click(reopenedDestinations[1])
+    expect(mockNavigate).toHaveBeenCalledWith('/refunds?openTrade=sale-1')
+    expect(refundEventSpy).toHaveBeenCalled()
+
+    window.removeEventListener('phoneflow:open-trade-detail', tradeEventSpy)
+    window.removeEventListener('phoneflow:open-refund-trade', refundEventSpy)
   })
 
   it('supports arrow key navigation, Enter to select, and Escape to dismiss', async () => {
