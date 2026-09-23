@@ -137,8 +137,8 @@ describe('PawnManagementPage feature integration', () => {
   })
 
   it('filters visible contracts by search query', async () => {
-    const pawn1 = { ...mockPawnRecord, _id: 'p-1', pawnNo: 'PW-ALPHA', customer: { _id: 'c-1', name: 'Alpha Customer' } }
-    const pawn2 = { ...mockPawnRecord, _id: 'p-2', pawnNo: 'PW-BETA', customer: { _id: 'c-2', name: 'Beta Customer' } }
+    const pawn1 = { ...mockPawnRecord, _id: 'p-1', pawnNo: 'PW-ALPHA', customer: { _id: 'c-1', name: 'Alpha Customer', phone: '010111222' } }
+    const pawn2 = { ...mockPawnRecord, _id: 'p-2', pawnNo: 'PW-BETA', customer: { _id: 'c-2', name: 'Beta Customer', phone: '012333444' } }
 
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
@@ -148,7 +148,7 @@ describe('PawnManagementPage feature integration', () => {
     } as Response)
 
     const user = userEvent.setup()
-    render(<PawnManagementPage user={mockOwnerUser} />)
+    const { container } = render(<PawnManagementPage user={mockOwnerUser} />)
 
     await waitFor(() => {
       expect(screen.getByText('PW-ALPHA')).toBeInTheDocument()
@@ -160,6 +160,15 @@ describe('PawnManagementPage feature integration', () => {
 
     expect(screen.queryByText('PW-ALPHA')).not.toBeInTheDocument()
     expect(screen.getByText('PW-BETA')).toBeInTheDocument()
+
+    await user.clear(searchInput)
+    await user.type(searchInput, '010111222')
+    expect(screen.getByText('PW-ALPHA')).toBeInTheDocument()
+    expect(screen.queryByText('PW-BETA')).not.toBeInTheDocument()
+
+    expect(container.querySelector('.pawn-filter-row.filter-row .search-field')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Filter pawn status' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Sort pawn contracts' })).toBeInTheDocument()
   })
 
   it('opens pawn detail modal when contract action is clicked', async () => {

@@ -3,6 +3,18 @@
  * Pawn detail modal, balance breakdown, action forms, and confirmation dialogues.
  */
 
+@media (min-width: 641px) {
+  .pawn-filter-row .search-field {
+    flex: 1 1 680px;
+    min-width: 320px;
+  }
+
+  .pawn-filter-row .filter-select {
+    flex: 0 0 auto;
+    min-width: 160px;
+  }
+}
+
 .pawn-detail-modal {
   display: flex;
   flex-direction: column;

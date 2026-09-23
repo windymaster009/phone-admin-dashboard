@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { AlertTriangle, ArrowUpRight, BadgeCheck, Clock3, HandCoins, MoreHorizontal, Plus, RefreshCcw, Search } from 'lucide-react'
+import { AlertTriangle, ArrowUpRight, BadgeCheck, Clock3, HandCoins, MoreHorizontal, Plus, RefreshCcw } from 'lucide-react'
 import { api, type SessionUser } from '../../lib/api'
 import type { Pawn, PawnAction } from '../../types/domain'
 import { comingNext, dateText, money, pawnEquivalentText, pawnMoney, pawnUsdValue, useExchangeRate } from '../../lib/presentation'
@@ -7,6 +7,7 @@ import LoadingState from '../../components/LoadingState'
 import SectionHeader from '../../components/SectionHeader'
 import StatusBadge from '../../components/StatusBadge'
 import SummaryStats from '../../components/SummaryStats'
+import FilterToolbar from '../../components/FilterToolbar'
 import ScannerTriggerButton, { openProductScanner } from '../../components/scanner/ScannerTriggerButton'
 import NotificationToast from '../../components/NotificationToast'
 import PawnDetailModal, { pawnOutstanding } from './PawnDetailModal'
@@ -90,10 +91,11 @@ export default function PawnView({ user }: { user: SessionUser }) {
   const visiblePawns = pawns
     .filter((pawn) => {
       if (statusFilter !== 'ALL' && pawn.status !== statusFilter) return false
-      const query = searchTerm.trim().toLowerCase()
-      if (!query) return true
-      return [pawn.pawnNo, pawn.customer?.name, pawn.itemSnapshot?.name, pawn.itemSnapshot?.imei]
-        .some((value) => value?.toLowerCase().includes(query))
+      const tokens = searchTerm.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean)
+      if (tokens.length === 0) return true
+      const searchable = [pawn.pawnNo, pawn.customer?.name, pawn.customer?.phone, pawn.itemSnapshot?.name, pawn.itemSnapshot?.imei]
+        .filter(Boolean).join(' ').toLocaleLowerCase()
+      return tokens.every((token) => searchable.includes(token))
     })
     .sort((a, b) => {
       if (pawnSort === 'oldest') return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
@@ -174,15 +176,20 @@ export default function PawnView({ user }: { user: SessionUser }) {
         ]}
       />
       <article className="surface-card table-card page-table pawn-workspace-card">
-        <div className="filter-row">
-          <div className="search-field"><Search size={17} /><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search contract, customer, phone or IMEI" /></div>
+        <FilterToolbar
+          className="pawn-filter-row"
+          search={searchTerm}
+          onSearchChange={setSearchTerm}
+          searchLabel="Search pawn contracts"
+          placeholder="Search contract, customer, phone or IMEI"
+        >
           <select className="ghost-button filter-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter pawn status">
             <option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="DUE_SOON">Due soon</option><option value="OVERDUE">Overdue</option><option value="REDEEMED">Redeemed</option><option value="FORFEITED">Claimed</option>
           </select>
           <select className="ghost-button filter-select" value={pawnSort} onChange={(event) => setPawnSort(event.target.value as 'newest' | 'oldest' | 'due-soonest' | 'due-latest')} aria-label="Sort pawn contracts">
             <option value="newest">Newest contracts</option><option value="oldest">Oldest contracts</option><option value="due-soonest">Due soonest</option><option value="due-latest">Due latest</option>
           </select>
-        </div>
+        </FilterToolbar>
         <div className="table-scroll pawn-management-table">
           <table>
             <thead><tr><th>Contract</th><th>Customer</th><th>Collateral</th><th>Estimated value</th><th>Loan</th><th>ID card</th><th>Due date</th><th>Status</th><th /></tr></thead>
