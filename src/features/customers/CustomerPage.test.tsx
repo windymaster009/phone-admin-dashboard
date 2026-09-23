@@ -408,6 +408,27 @@ describe('CustomerPage Regression & Workflow Tests', () => {
     expect(within(screen.getByRole('table')).getByText('Sokha Chan')).toBeInTheDocument()
     expect(within(screen.getByRole('table')).getByText('Bopha Vorn')).toBeInTheDocument()
     expect(within(screen.getByRole('table')).getByText('Dara Keo')).toBeInTheDocument()
+
+    const statusFilter = screen.getByRole('combobox', { name: 'Filter customer status' })
+
+    await user.selectOptions(statusFilter, 'ID_READY')
+    expect(within(table).getByText('Sokha Chan')).toBeInTheDocument()
+    expect(within(table).queryByText('Bopha Vorn')).not.toBeInTheDocument()
+    expect(within(table).queryByText('Dara Keo')).not.toBeInTheDocument()
+
+    await user.selectOptions(statusFilter, 'BASIC')
+    expect(within(table).getByText('Bopha Vorn')).toBeInTheDocument()
+    expect(within(table).queryByText('Sokha Chan')).not.toBeInTheDocument()
+
+    await user.selectOptions(statusFilter, 'INACTIVE')
+    expect(within(table).getByText('Dara Keo')).toBeInTheDocument()
+    expect(within(table).queryByText('Sokha Chan')).not.toBeInTheDocument()
+
+    await user.selectOptions(statusFilter, 'ALL')
+    expect(within(table).getByText('Sokha Chan')).toBeInTheDocument()
+    expect(within(table).getByText('Bopha Vorn')).toBeInTheDocument()
+    expect(within(table).getByText('Dara Keo')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument()
   })
 
   it('6. Empty results when shop has 0 customers', async () => {

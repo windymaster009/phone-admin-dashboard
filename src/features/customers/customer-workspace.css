@@ -29,11 +29,17 @@
 }
 
 .customer-filter-row {
-  justify-content: space-between;
+  align-items: center;
 }
 
 .customer-filter-row .search-field {
-  width: min(560px, 100%);
+  flex: 1 1 680px;
+  min-width: 320px;
+}
+
+.customer-filter-row .filter-select {
+  flex: 0 0 auto;
+  min-width: 160px;
 }
 
 .customer-name-cell {
@@ -270,18 +276,19 @@
   .customer-filter-row {
     padding: 9px;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     align-items: center;
     gap: 8px;
   }
 
   .customer-filter-row .search-field {
     width: 100%;
+    min-width: 0;
   }
 
-  .customer-filter-row .ghost-button {
-    width: auto;
-    min-width: 72px;
+  .customer-filter-row .filter-select {
+    width: 100%;
+    min-width: 0;
     min-height: 38px;
     padding-inline: 10px;
     font-size: 9px;
@@ -290,8 +297,8 @@
   /* Preserve the compact physical footprint when the app Display size is increased. */
   .app[data-font-size='comfortable'] .customer-workspace-bridge > .section-header .primary-button { min-height: 33px; }
   .app[data-font-size='large'] .customer-workspace-bridge > .section-header .primary-button { min-height: 30px; }
-  .app[data-font-size='comfortable'] .customer-filter-row .ghost-button { min-height: 35px; }
-  .app[data-font-size='large'] .customer-filter-row .ghost-button { min-height: 32px; padding-inline: 8px; }
+  .app[data-font-size='comfortable'] .customer-filter-row .filter-select { min-height: 35px; }
+  .app[data-font-size='large'] .customer-filter-row .filter-select { min-height: 32px; padding-inline: 8px; }
 
   .customer-table-card {
     min-height: 0;

@@ -10,7 +10,6 @@ import {
   Phone,
   Plus,
   Power,
-  Search,
   Trash2,
   UserRound,
   Users,
@@ -20,6 +19,7 @@ import { api } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
 import SummaryStats from '../../components/SummaryStats'
 import OperationModalShell from '../../components/OperationModalShell'
+import FilterToolbar from '../../components/FilterToolbar'
 
 type Customer = {
   _id: string
@@ -31,6 +31,8 @@ type Customer = {
   active?: boolean
   createdAt?: string
 }
+
+type CustomerStatusFilter = 'ALL' | 'ID_READY' | 'BASIC' | 'INACTIVE'
 
 function formatDate(value?: string) {
   if (!value) return '—'
@@ -173,6 +175,7 @@ function DeleteCustomerModal({ customer, busy, error, onClose, onConfirm }: {
 export default function CustomerPage() {
   const [customers, setCustomers] = useState<Customer[]>([])
   const [search, setSearch] = useState('')
+  const [statusFilter, setStatusFilter] = useState<CustomerStatusFilter>('ALL')
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -240,15 +243,23 @@ export default function CustomerPage() {
   }, [customers, openEdit])
 
   const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase()
-    if (!term) return customers
-    return customers.filter((customer) => [
-      customer.name,
-      customer.phone,
-      customer.nationalIdNumber,
-      customer.address,
-    ].some((value) => String(value || '').toLowerCase().includes(term)))
-  }, [customers, search])
+    const tokens = search.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean)
+    return customers.filter((customer) => {
+      const matchesStatus = statusFilter === 'ALL'
+        || (statusFilter === 'INACTIVE' && customer.active === false)
+        || (statusFilter === 'ID_READY' && customer.active !== false && Boolean(customer.nationalIdNumber))
+        || (statusFilter === 'BASIC' && customer.active !== false && !customer.nationalIdNumber)
+      if (!matchesStatus) return false
+      if (tokens.length === 0) return true
+      const searchable = [
+        customer.name,
+        customer.phone,
+        customer.nationalIdNumber,
+        customer.address,
+      ].filter(Boolean).join(' ').toLocaleLowerCase()
+      return tokens.every((token) => searchable.includes(token))
+    })
+  }, [customers, search, statusFilter])
 
   const verifiedCount = customers.filter((customer) => Boolean(customer.nationalIdNumber)).length
   const missingIdCount = customers.length - verifiedCount
@@ -332,10 +343,20 @@ export default function CustomerPage() {
       />
 
       <article className="surface-card table-card page-table customer-table-card">
-        <div className="filter-row customer-filter-row">
-          <div className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name, phone, National ID, or address" /></div>
-          <button className="ghost-button" onClick={() => void loadCustomers()}>Refresh</button>
-        </div>
+        <FilterToolbar
+          className="customer-filter-row"
+          search={search}
+          onSearchChange={setSearch}
+          searchLabel="Search customers"
+          placeholder="Search name, phone, National ID, or address"
+        >
+          <select className="ghost-button filter-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as CustomerStatusFilter)} aria-label="Filter customer status">
+            <option value="ALL">All customers</option>
+            <option value="ID_READY">ID ready</option>
+            <option value="BASIC">Basic profile</option>
+            <option value="INACTIVE">Inactive</option>
+          </select>
+        </FilterToolbar>
 
         <div className="table-scroll">
           <table>
