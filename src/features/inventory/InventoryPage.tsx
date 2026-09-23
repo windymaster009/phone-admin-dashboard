@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useRef, useState } from 'react'
-import { AlertTriangle, Barcode, Grid2X2, List, MoreHorizontal, Package, Plus, ScanLine, Search, Smartphone, Trash2, Wrench, type LucideIcon } from 'lucide-react'
+import { AlertTriangle, Barcode, Grid2X2, List, MoreHorizontal, Package, Plus, ScanLine, Smartphone, Trash2, Wrench, type LucideIcon } from 'lucide-react'
 import { api } from '../../lib/api'
 import type { InventoryItem, Pawn } from '../../types/domain'
 import { currency, money, inventoryPriceCurrency, inventoryPriceText, inventoryDualPriceText, useExchangeRate, dateText, titleStatus, comingNext } from '../../lib/presentation'
@@ -16,6 +16,7 @@ import DetailModalShell from '../../components/DetailModalShell'
 import DetailModalHeader from '../../components/DetailModalHeader'
 import DetailModalBody from '../../components/DetailModalBody'
 import DetailModalFooter from '../../components/DetailModalFooter'
+import FilterToolbar from '../../components/FilterToolbar'
 import InventoryPricingPanel from './InventoryPricingPanel'
 import './inventory-page.css'
 
@@ -674,39 +675,37 @@ export default function InventoryView({ user }: { user?: SessionUser } = {}) {
           </div>
         </div>
 
-        <div className="filter-row inventory-filter-row">
-          <div className="search-field">
-            <Search size={17} />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  const query = search.trim().toLowerCase()
-                  if (query) {
-                    const exact = items.find((item) =>
-                      item.sku?.toLowerCase() === query ||
-                      item.barcode?.toLowerCase() === query ||
-                      item.relatedPawn?.pawnNo?.toLowerCase() === query ||
-                      item.imei1?.toLowerCase() === query ||
-                      item.serialNumber?.toLowerCase() === query
-                    )
-                    if (exact) {
-                      setSelectedItem(exact)
-                    }
-                  }
+        <FilterToolbar
+          className="inventory-filter-row"
+          search={search}
+          onSearchChange={setSearch}
+          searchLabel="Search stock information"
+          placeholder="Search SKU, product, IMEI or serial number"
+          onSearchKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              const query = search.trim().toLowerCase()
+              if (query) {
+                const exact = items.find((item) =>
+                  item.sku?.toLowerCase() === query ||
+                  item.barcode?.toLowerCase() === query ||
+                  item.relatedPawn?.pawnNo?.toLowerCase() === query ||
+                  item.imei1?.toLowerCase() === query ||
+                  item.serialNumber?.toLowerCase() === query
+                )
+                if (exact) {
+                  setSelectedItem(exact)
                 }
-              }}
-              placeholder="Search SKU, product, IMEI or serial number"
-            />
-          </div>
+              }
+            }
+          }}
+        >
           <select className="ghost-button filter-select" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} aria-label="Filter inventory category">
             <option value="ALL">All categories</option><option value="PHONE">Phones</option><option value="TABLET">Tablets</option><option value="ACCESSORY">Accessories</option><option value="SPARE_PART">Spare parts</option><option value="OTHER">Other</option>
           </select>
           <select className="ghost-button filter-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter stock status">
             <option value="ALL">All stock statuses</option><option value="IN_STOCK">In stock</option><option value="RESERVED">Reserved</option><option value="SOLD">Sold</option><option value="PAWNED">Pawned</option><option value="REPAIR">Repair</option><option value="ARCHIVED">Archived</option>
           </select>
-        </div>
+        </FilterToolbar>
 
         {inventoryView === 'large' ? (
           <div className="inventory-card-grid">

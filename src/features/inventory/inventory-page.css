@@ -84,6 +84,18 @@
   border-bottom: 1px solid var(--border);
 }
 
+@media (min-width: 641px) {
+  .inventory-filter-row .search-field {
+    flex: 1 1 680px;
+    min-width: 320px;
+  }
+
+  .inventory-filter-row .filter-select {
+    flex: 0 0 auto;
+    min-width: 150px;
+  }
+}
+
 .inventory-filter-row + .inventory-card-grid {
   padding-top: 13px;
 }

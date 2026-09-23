@@ -69,60 +69,21 @@
 }
 
 .trade-transaction-toolbar {
-  display: grid;
-  grid-template-columns: minmax(260px, 1fr) minmax(150px, auto) minmax(140px, auto) auto;
   align-items: center;
-  gap: 10px;
-  padding: 12px 0 14px;
   border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
 }
 
-.trade-transaction-toolbar label {
-  min-width: 0;
-}
+@media (min-width: 641px) {
+  .trade-transaction-toolbar .search-field {
+    flex: 1 1 620px;
+    min-width: 320px;
+  }
 
-.trade-transaction-search {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.trade-transaction-search svg {
-  position: absolute;
-  left: 12px;
-  color: var(--muted);
-  pointer-events: none;
-}
-
-.trade-transaction-toolbar input,
-.trade-transaction-toolbar select {
-  width: 100%;
-  min-height: 40px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  outline: 2px solid transparent;
-  color: var(--text);
-  background: var(--bg-soft);
-  font: inherit;
-  font-size: .68rem;
-}
-
-.trade-transaction-toolbar input {
-  padding-left: 36px;
-}
-
-.trade-transaction-toolbar input:focus,
-.trade-transaction-toolbar select:focus {
-  border-color: var(--primary);
-  outline-color: color-mix(in srgb, var(--primary) 30%, transparent);
-}
-
-.trade-transaction-count {
-  white-space: nowrap;
-  color: var(--muted);
-  font-size: .66rem;
-  font-weight: 700;
+  .trade-transaction-toolbar .filter-select {
+    flex: 0 0 auto;
+    min-width: 150px;
+  }
 }
 
 .trade-transaction-empty {
@@ -511,17 +472,24 @@
   }
 
   .trade-transaction-toolbar {
+    display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
-    padding: 10px 0 12px;
+    padding: 11px;
   }
 
-  .trade-transaction-search {
+  .trade-transaction-toolbar .search-field {
     grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
   }
 
-  .trade-transaction-count {
-    grid-column: 1 / -1;
+  .trade-transaction-toolbar .filter-select {
+    width: 100%;
+    min-width: 0;
+    min-height: 40px;
+    padding-inline: 9px;
+    font-size: 9px;
   }
 
   .trade-transactions-card .transaction-row {

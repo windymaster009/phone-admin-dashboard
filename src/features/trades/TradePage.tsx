@@ -11,6 +11,7 @@ import DetailModalHeader from '../../components/DetailModalHeader'
 import DetailModalBody from '../../components/DetailModalBody'
 import DetailModalFooter from '../../components/DetailModalFooter'
 import WarrantyPeriodField from '../../components/WarrantyPeriodField'
+import FilterToolbar from '../../components/FilterToolbar'
 import './trade-page.css'
 
 function tradeSignedTotal(trade: Trade) {
@@ -227,49 +228,46 @@ export default function TradeView() {
         <div className="card-heading table-heading">
           <div><span className="eyebrow">Activity</span><h3>Recent transactions</h3></div>
           <div className="trade-table-actions">
+            {!transactionsCollapsed && <span className="catalog-count">{filteredTrades.length} of {trades.length}</span>}
             {!transactionsCollapsed && <button className="ghost-button trade-export-button" onClick={exportTrades} disabled={filteredTrades.length === 0} aria-label="Export transactions as CSV" title="Exports the currently filtered transactions"><FileText size={15} /><span>Export</span></button>}
             <button className="ghost-button transaction-collapse-button" type="button" onClick={() => setTransactionsCollapsed((value) => !value)} aria-expanded={!transactionsCollapsed} aria-label={transactionsCollapsed ? 'Expand recent transactions' : 'Collapse recent transactions'}><ChevronDown size={17} /></button>
           </div>
         </div>
-        {!transactionsCollapsed && <div className="transaction-list">
-          <div className="trade-transaction-toolbar">
-            <label className="trade-transaction-search">
-              <span className="sr-only">Search recent transactions</span>
-              <Search size={16} aria-hidden="true" />
-              <input value={transactionSearch} onChange={(event) => setTransactionSearch(event.target.value)} placeholder="Search receipt, product, customer, phone, SKU..." autoComplete="off" />
-            </label>
-            <label>
-              <span className="sr-only">Filter transaction type</span>
-              <select value={transactionTypeFilter} onChange={(event) => setTransactionTypeFilter(event.target.value as TradeTypeFilter)} aria-label="Filter transaction type">
-                <option value="ALL">All transactions</option>
-                <option value="SELL">Sales</option>
-                <option value="BUY">Purchases</option>
-              </select>
-            </label>
-            <label>
-              <span className="sr-only">Filter transaction status</span>
-              <select value={transactionStatusFilter} onChange={(event) => setTransactionStatusFilter(event.target.value as TradeStatusFilter)} aria-label="Filter transaction status">
-                <option value="ALL">All statuses</option>
-                <option value="COMPLETED">Completed</option>
-                <option value="RETURNED">Refunded</option>
-                <option value="CANCELLED">Cancelled</option>
-              </select>
-            </label>
-            <span className="trade-transaction-count">{filteredTrades.length} of {trades.length}</span>
+        {!transactionsCollapsed && <>
+          <FilterToolbar
+            className="trade-transaction-toolbar"
+            search={transactionSearch}
+            onSearchChange={setTransactionSearch}
+            searchLabel="Search recent transactions"
+            placeholder="Search receipt, product, customer, phone, SKU..."
+          >
+            <select className="ghost-button filter-select" value={transactionTypeFilter} onChange={(event) => setTransactionTypeFilter(event.target.value as TradeTypeFilter)} aria-label="Filter transaction type">
+              <option value="ALL">All transactions</option>
+              <option value="SELL">Sales</option>
+              <option value="BUY">Purchases</option>
+            </select>
+            <select className="ghost-button filter-select" value={transactionStatusFilter} onChange={(event) => setTransactionStatusFilter(event.target.value as TradeStatusFilter)} aria-label="Filter transaction status">
+              <option value="ALL">All statuses</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="RETURNED">Refunded</option>
+              <option value="CANCELLED">Cancelled</option>
+            </select>
+          </FilterToolbar>
+          <div className="transaction-list">
+            {filteredTrades.map((transaction) => (
+              <div className="transaction-row" key={transaction._id}>
+                <span className={`transaction-icon ${transaction.type === 'SELL' ? 'sale' : 'purchase'}`}>{transaction.type === 'SELL' ? <ArrowUpRight /> : <ArrowDownRight />}</span>
+                <p><strong>{transaction.items.map((item) => `${item.name} x${item.quantity}`).join(', ')}</strong><small>{transaction.tradeNo} - {tradePartyName(transaction)} - {dateText(transaction.purchaseDate || transaction.createdAt)}</small></p>
+                <StatusBadge status={transaction.type === 'SELL' ? 'Sale' : 'Purchase'} />
+                <strong className={transaction.type === 'SELL' ? 'money-in' : 'money-out'}>{tradeSignedTotal(transaction)}</strong>
+                <button className="icon-button" onClick={() => setSelectedTrade(transaction)} aria-label={`View ${transaction.tradeNo}`}><MoreHorizontal size={18} /></button>
+              </div>
+            ))}
+            {loading && <LoadingState compact label="Loading transactions" detail="Reading recent purchases and sales…" />}
+            {!loading && trades.length === 0 && <div className="transaction-row"><p><strong>No transactions yet</strong><small>Create a buy or sell transaction to see it here.</small></p></div>}
+            {!loading && trades.length > 0 && filteredTrades.length === 0 && <div className="trade-transaction-empty"><Search size={20} /><strong>No transactions match</strong><small>Change the search or filters to see other records.</small></div>}
           </div>
-          {filteredTrades.map((transaction) => (
-            <div className="transaction-row" key={transaction._id}>
-              <span className={`transaction-icon ${transaction.type === 'SELL' ? 'sale' : 'purchase'}`}>{transaction.type === 'SELL' ? <ArrowUpRight /> : <ArrowDownRight />}</span>
-              <p><strong>{transaction.items.map((item) => `${item.name} x${item.quantity}`).join(', ')}</strong><small>{transaction.tradeNo} - {tradePartyName(transaction)} - {dateText(transaction.purchaseDate || transaction.createdAt)}</small></p>
-              <StatusBadge status={transaction.type === 'SELL' ? 'Sale' : 'Purchase'} />
-              <strong className={transaction.type === 'SELL' ? 'money-in' : 'money-out'}>{tradeSignedTotal(transaction)}</strong>
-              <button className="icon-button" onClick={() => setSelectedTrade(transaction)} aria-label={`View ${transaction.tradeNo}`}><MoreHorizontal size={18} /></button>
-            </div>
-          ))}
-          {loading && <LoadingState compact label="Loading transactions" detail="Reading recent purchases and sales…" />}
-          {!loading && trades.length === 0 && <div className="transaction-row"><p><strong>No transactions yet</strong><small>Create a buy or sell transaction to see it here.</small></p></div>}
-          {!loading && trades.length > 0 && filteredTrades.length === 0 && <div className="trade-transaction-empty"><Search size={20} /><strong>No transactions match</strong><small>Change the search or filters to see other records.</small></div>}
-        </div>}
+        </>}
       </article>
       {selectedTrade && (
         <DetailModalShell
