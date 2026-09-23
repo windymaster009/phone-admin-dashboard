@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowDownRight, ArrowUpRight, Banknote, ChevronDown, FileText, MoreHorizontal, Plus, RefreshCcw, ShoppingCart, WalletCards } from 'lucide-react'
-import { api } from '../../lib/api'
+import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react'
+import { ArrowDownRight, ArrowUpRight, Banknote, ChevronDown, FileText, MoreHorizontal, Pencil, Plus, RefreshCcw, ShoppingCart, WalletCards } from 'lucide-react'
+import { api, getSessionUser } from '../../lib/api'
 import type { Trade } from '../../types/domain'
 import { money, tradePartyName, tradePartyPhone, tradeTransactionMoney, dateText, titleStatus, comingNext } from '../../lib/presentation'
 import LoadingState from '../../components/LoadingState'
@@ -10,6 +10,7 @@ import DetailModalShell from '../../components/DetailModalShell'
 import DetailModalHeader from '../../components/DetailModalHeader'
 import DetailModalBody from '../../components/DetailModalBody'
 import DetailModalFooter from '../../components/DetailModalFooter'
+import WarrantyPeriodField from '../../components/WarrantyPeriodField'
 import './trade-page.css'
 
 function tradeSignedTotal(trade: Trade) {
@@ -21,11 +22,28 @@ function tradeSignedTotal(trade: Trade) {
   return `${trade.type === 'SELL' ? '+' : '-'}${formatted}`
 }
 
+function dateTimeText(value: string) {
+  return new Intl.DateTimeFormat('en-GB', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+}
+
+function warrantyText(trade: Trade) {
+  const days = Number(trade.warrantyDays || 0)
+  return days > 0 ? `${days} day${days === 1 ? '' : 's'}` : 'No warranty'
+}
+
 export default function TradeView() {
+  const sessionUser = getSessionUser()
+  const canCorrectSale = sessionUser?.role === 'OWNER' || sessionUser?.role === 'MANAGER'
   const [trades, setTrades] = useState<Trade[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null)
   const [error, setError] = useState('')
+  const [editingCorrection, setEditingCorrection] = useState(false)
+  const [correctionWarrantyDays, setCorrectionWarrantyDays] = useState('0')
+  const [correctionNotes, setCorrectionNotes] = useState('')
+  const [correctionReason, setCorrectionReason] = useState('')
+  const [correctionError, setCorrectionError] = useState('')
+  const [correctionBusy, setCorrectionBusy] = useState(false)
   const [transactionsCollapsed, setTransactionsCollapsed] = useState(() => window.matchMedia('(max-width: 640px)').matches)
   const loadSequence = useRef(0)
 
@@ -50,6 +68,57 @@ export default function TradeView() {
     window.addEventListener('phoneflow:trades-updated', refreshTrades)
     return () => window.removeEventListener('phoneflow:trades-updated', refreshTrades)
   }, [loadTrades])
+
+  function closeTradeDetail() {
+    if (correctionBusy) return
+    setSelectedTrade(null)
+    setEditingCorrection(false)
+    setCorrectionError('')
+  }
+
+  function openCorrection() {
+    if (!selectedTrade || selectedTrade.type !== 'SELL') return
+    setCorrectionWarrantyDays(String(Number(selectedTrade.warrantyDays || 0)))
+    setCorrectionNotes(selectedTrade.notes || '')
+    setCorrectionReason('')
+    setCorrectionError('')
+    setEditingCorrection(true)
+  }
+
+  function cancelCorrection() {
+    if (correctionBusy) return
+    setEditingCorrection(false)
+    setCorrectionError('')
+  }
+
+  async function saveCorrection(event: FormEvent) {
+    event.preventDefault()
+    if (!selectedTrade || correctionBusy) return
+    const warrantyDays = Number(correctionWarrantyDays)
+    if (!Number.isInteger(warrantyDays) || warrantyDays < 0 || warrantyDays > 3650) {
+      setCorrectionError('Warranty days must be a whole number from 0 to 3650')
+      return
+    }
+    if (correctionReason.trim().length < 3) {
+      setCorrectionError('Enter a correction reason')
+      return
+    }
+    setCorrectionBusy(true)
+    setCorrectionError('')
+    try {
+      const result = await api<{ trade: Trade }>(`/trades/${selectedTrade._id}/correction`, {
+        method: 'PATCH',
+        body: JSON.stringify({ warrantyDays, notes: correctionNotes, correctionReason }),
+      })
+      setTrades((current) => current.map((trade) => trade._id === result.trade._id ? result.trade : trade))
+      setSelectedTrade(result.trade)
+      setEditingCorrection(false)
+    } catch (reason) {
+      setCorrectionError(reason instanceof Error ? reason.message : 'Unable to correct this sale')
+    } finally {
+      setCorrectionBusy(false)
+    }
+  }
 
   function exportTrades() {
     const headers = ['Reference', 'Type', 'Customer', 'Items', 'Subtotal', 'Discount', 'Total', 'Paid', 'Balance', 'Payment', 'Status', 'Date']
@@ -124,29 +193,59 @@ export default function TradeView() {
       </article>
       {selectedTrade && (
         <DetailModalShell
-          onClose={() => setSelectedTrade(null)}
+          onClose={closeTradeDetail}
           titleId="trade-detail-title"
-          className="trade-detail-modal"
+          className={`trade-detail-modal ${editingCorrection ? 'trade-correction-mode' : ''}`}
         >
           <DetailModalHeader
-            eyebrow={selectedTrade.type === 'SELL' ? 'Sale transaction' : 'Purchase transaction'}
+            eyebrow={editingCorrection ? 'Controlled correction' : selectedTrade.type === 'SELL' ? 'Sale transaction' : 'Purchase transaction'}
             title={selectedTrade.tradeNo}
             titleId="trade-detail-title"
-            description={`${tradePartyName(selectedTrade)} - ${dateText(selectedTrade.purchaseDate || selectedTrade.createdAt)}`}
-            onClose={() => setSelectedTrade(null)}
+            description={editingCorrection ? 'Only warranty and sale notes can be changed.' : `${tradePartyName(selectedTrade)} - ${dateTimeText(selectedTrade.purchaseDate || selectedTrade.createdAt)}`}
+            onClose={closeTradeDetail}
             closeLabel="Close details"
           />
 
+          {editingCorrection ? <form className="trade-correction-form" onSubmit={saveCorrection}>
+            <DetailModalBody className="trade-correction-body">
+              <div className="trade-correction-lock-note">
+                <strong>Financial and stock details stay locked</strong>
+                <p>Products, quantities, prices, payment, customer, currency, and transaction date cannot be changed here.</p>
+              </div>
+              {correctionError && <div className="trade-correction-error" role="alert">{correctionError}</div>}
+              <WarrantyPeriodField value={correctionWarrantyDays} onChange={setCorrectionWarrantyDays} kind="sale" />
+              <label className="trade-correction-field">
+                <span>Sale notes <small>Optional</small></span>
+                <textarea maxLength={1000} value={correctionNotes} onChange={(event) => setCorrectionNotes(event.target.value)} placeholder="Notes shown on the corrected receipt" />
+              </label>
+              <label className="trade-correction-field">
+                <span>Correction reason <small>Required · audit history only</small></span>
+                <textarea required minLength={3} maxLength={500} value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} placeholder="Example: Warranty was omitted during checkout" />
+              </label>
+            </DetailModalBody>
+            <DetailModalFooter
+              transactionActions={<button className="primary-button" type="submit" disabled={correctionBusy}>{correctionBusy ? 'Saving...' : 'Save correction'}</button>}
+              dismissAction={<button className="ghost-button" type="button" onClick={cancelCorrection} disabled={correctionBusy}>Cancel</button>}
+            />
+          </form> : <>
           <DetailModalBody className="trade-detail-body">
             <div className="detail-grid">
               <div><span>Type</span><strong>{selectedTrade.type === 'SELL' ? 'Sale' : 'Purchase'}</strong></div>
               <div><span>{selectedTrade.type === 'BUY' ? 'Payment status' : 'Status'}</span><strong><StatusBadge status={selectedTrade.type === 'BUY' ? selectedTrade.paymentStatus || selectedTrade.status : selectedTrade.status} /></strong></div>
               <div><span>Payment</span><strong>{titleStatus(selectedTrade.paymentMethod)}</strong></div>
-              <div><span>Date</span><strong>{dateText(selectedTrade.createdAt)}</strong></div>
+              <div><span>Date and time</span><strong>{dateTimeText(selectedTrade.purchaseDate || selectedTrade.createdAt)}</strong></div>
+              <div><span>Currency</span><strong>{selectedTrade.currency || 'USD'}{selectedTrade.currency === 'KHR' && Number(selectedTrade.exchangeRate) > 0 ? ` · 1 USD = ${Number(selectedTrade.exchangeRate).toLocaleString()} KHR` : ''}</strong></div>
+              <div><span>Payment status</span><strong>{titleStatus(selectedTrade.paymentStatus || (selectedTrade.balance > 0 ? 'PARTIAL' : 'PAID'))}</strong></div>
               <div><span>Subtotal</span><strong>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionSubtotal, selectedTrade.subtotal)}</strong></div>
-              <div><span>Discount</span><strong>{money.format(selectedTrade.discount)}</strong></div>
+              <div><span>Discount</span><strong>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionSubtotal === undefined || selectedTrade.transactionTotal === undefined ? undefined : selectedTrade.transactionSubtotal - selectedTrade.transactionTotal, selectedTrade.discount)}</strong></div>
+              <div><span>Total</span><strong>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionTotal, selectedTrade.total)}</strong></div>
               <div><span>Amount paid</span><strong>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionAmountPaid, selectedTrade.amountPaid)}</strong></div>
+              <div><span>Amount received</span><strong>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionAmountReceived, selectedTrade.amountReceived ?? selectedTrade.amountPaid)}</strong></div>
+              <div><span>Change returned</span><strong>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionChangeDue, selectedTrade.changeDue ?? 0)}</strong></div>
               <div><span>Balance</span><strong>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionBalance, selectedTrade.balance)}</strong></div>
+              {selectedTrade.type === 'SELL' && <div><span>Warranty</span><strong>{warrantyText(selectedTrade)}</strong></div>}
+              {selectedTrade.type === 'SELL' && <div><span>Warranty expires</span><strong>{selectedTrade.warrantyExpiresAt ? dateText(selectedTrade.warrantyExpiresAt) : 'Not applicable'}</strong></div>}
+              <div><span>Processed by</span><strong>{selectedTrade.createdBy?.name || 'Not recorded'}</strong></div>
             </div>
 
             <div className="detail-sections">
@@ -156,8 +255,8 @@ export default function TradeView() {
                 <p>{tradePartyPhone(selectedTrade) || 'No phone recorded'}</p>
               </article>
               <article>
-                <span className="eyebrow">Total</span>
-                <p><strong>{tradeSignedTotal(selectedTrade)}</strong></p>
+                <span className="eyebrow">Transaction summary</span>
+                <p><strong>{selectedTrade.items.reduce((sum, item) => sum + item.quantity, 0)} total unit{selectedTrade.items.reduce((sum, item) => sum + item.quantity, 0) === 1 ? '' : 's'}</strong></p>
                 <p>{selectedTrade.items.length} line item{selectedTrade.items.length === 1 ? '' : 's'}</p>
               </article>
             </div>
@@ -166,11 +265,27 @@ export default function TradeView() {
               <span className="eyebrow">Items</span>
               {selectedTrade.items.map((item, index) => (
                 <div className="detail-line" key={`${item.name}-${index}`}>
-                  <p><strong>{item.name}</strong><small>Quantity {item.quantity}</small></p>
+                  <p>
+                    <strong>{item.name}</strong>
+                    <small>Quantity {item.quantity} · {tradeTransactionMoney(selectedTrade, item.originalUnitPrice, item.unitPrice)} each</small>
+                    {(item.inventoryItem?.sku || item.inventoryItem?.barcode || item.inventoryItem?.imei1 || item.inventoryItem?.serialNumber) && <small>{[
+                      item.inventoryItem?.sku ? `SKU ${item.inventoryItem.sku}` : '',
+                      item.inventoryItem?.barcode ? `Barcode ${item.inventoryItem.barcode}` : '',
+                      item.inventoryItem?.imei1 ? `IMEI ${item.inventoryItem.imei1}` : '',
+                      item.inventoryItem?.serialNumber ? `Serial ${item.inventoryItem.serialNumber}` : '',
+                    ].filter(Boolean).join(' · ')}</small>}
+                  </p>
                   <strong>{tradeTransactionMoney(selectedTrade, item.originalUnitPrice === undefined ? undefined : item.originalUnitPrice * item.quantity, item.unitPrice * item.quantity)}</strong>
                 </div>
               ))}
             </div>
+
+            {Number(selectedTrade.correctionVersion || 0) > 0 && (
+              <div className="trade-correction-history" role="status">
+                <Pencil size={16} />
+                <div><strong>Sale details corrected</strong><small>Revision {selectedTrade.correctionVersion}{selectedTrade.lastCorrectedAt ? ` · ${dateTimeText(selectedTrade.lastCorrectedAt)}` : ''}{selectedTrade.lastCorrectedBy?.name ? ` · ${selectedTrade.lastCorrectedBy.name}` : ''}</small></div>
+              </div>
+            )}
 
             {selectedTrade.notes && (
               <div className="detail-note">
@@ -188,15 +303,20 @@ export default function TradeView() {
           </DetailModalBody>
 
           <DetailModalFooter
+            utilityActions={canCorrectSale && selectedTrade.type === 'SELL' && selectedTrade.status === 'COMPLETED' ? (
+              <button type="button" className="secondary-button" onClick={openCorrection}>
+                <Pencil size={15} /> Correct warranty or notes
+              </button>
+            ) : undefined}
             dismissAction={
-              <button type="button" className="ghost-button" onClick={() => setSelectedTrade(null)}>
+              <button type="button" className="ghost-button" onClick={closeTradeDetail}>
                 Close
               </button>
             }
           />
+          </>}
         </DetailModalShell>
       )}
     </>
   )
 }
-

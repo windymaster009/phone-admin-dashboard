@@ -85,6 +85,8 @@ export type ReceiptSnapshot = {
   transactionStatus?: string
   warrantyDays?: number
   warrantyExpiresAt?: string
+  correctionVersion?: number
+  correctedAt?: string
   paymentType?: string
   estimatedValue?: number
   pawnPercentage?: number

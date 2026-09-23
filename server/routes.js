@@ -3279,9 +3279,78 @@ router.get('/trades', requireAuth, asyncRoute(async (req, res) => {
   const trades = await Trade.find(filter)
     .populate('customer', 'name phone')
     .populate('supplier', supplierFields)
+    .populate('createdBy lastCorrectedBy', 'name email role')
+    .populate('items.inventoryItem', 'sku barcode name category brand model imei1 imei2 serialNumber')
     .sort({ createdAt: -1 })
     .limit(300)
   res.json({ trades })
+}))
+
+router.patch('/trades/:id/correction', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) throw requestError(400, 'Sale transaction is invalid')
+
+  const warrantyDays = normalizeSaleWarrantyDays(req.body.warrantyDays)
+  const notes = clean(req.body.notes)
+  const correctionReason = clean(req.body.correctionReason)
+  if (notes.length > 1000) throw requestError(400, 'Sale notes must be 1,000 characters or fewer')
+  if (correctionReason.length < 3) throw requestError(400, 'Enter a correction reason')
+  if (correctionReason.length > 500) throw requestError(400, 'Correction reason must be 500 characters or fewer')
+
+  const session = await mongoose.startSession()
+  let trade
+  try {
+    await session.withTransaction(async () => {
+      trade = await Trade.findById(req.params.id).session(session)
+      if (!trade || trade.type !== 'SELL') throw requestError(404, 'Sale transaction was not found')
+      if (trade.status !== 'COMPLETED') throw requestError(409, 'Only completed sales can be corrected')
+
+      const previousWarrantyDays = Number(trade.warrantyDays || 0)
+      const previousNotes = String(trade.notes || '')
+      if (previousWarrantyDays === warrantyDays && previousNotes === notes) {
+        throw requestError(400, 'Change the warranty period or sale notes before saving')
+      }
+
+      const saleDate = new Date(trade.purchaseDate || trade.createdAt)
+      if (Number.isNaN(saleDate.getTime())) throw requestError(409, 'The original sale date is invalid')
+      const correctedAt = new Date()
+      trade.warrantyDays = warrantyDays
+      trade.warrantyExpiresAt = warrantyDays > 0
+        ? new Date(saleDate.getTime() + warrantyDays * 86_400_000)
+        : undefined
+      trade.notes = notes
+      trade.correctionVersion = Number(trade.correctionVersion || 0) + 1
+      trade.lastCorrectedAt = correctedAt
+      trade.lastCorrectedBy = req.user._id
+      await trade.save({ session })
+
+      await ActivityLog.create([{
+        user: req.user._id,
+        action: 'CORRECT',
+        entity: 'TRADE',
+        entityId: trade._id,
+        details: {
+          tradeNo: trade.tradeNo,
+          reason: correctionReason,
+          fields: [
+            ...(previousWarrantyDays !== warrantyDays ? ['warrantyDays'] : []),
+            ...(previousNotes !== notes ? ['notes'] : []),
+          ],
+          previousWarrantyDays,
+          warrantyDays,
+          notesChanged: previousNotes !== notes,
+          correctionVersion: trade.correctionVersion,
+        },
+        ipAddress: req.ip,
+      }], { session })
+    })
+  } finally {
+    await session.endSession()
+  }
+
+  await trade.populate('customer', 'name phone')
+  await trade.populate('createdBy lastCorrectedBy', 'name email role')
+  await trade.populate('items.inventoryItem', 'sku barcode name category brand model imei1 imei2 serialNumber')
+  res.json({ trade })
 }))
 
 router.get('/refunds', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (_req, res) => {

@@ -118,6 +118,22 @@ const mockRefundReceipt: ReceiptRecord = {
 }
 
 describe('ReceiptDocument bilingual component', () => {
+  it('clearly marks a corrected sale receipt without replacing the original transaction reference', () => {
+    const receipt: ReceiptRecord = {
+      ...mockSaleReceipt,
+      sourceSubId: 'trade-correction-1',
+      snapshot: {
+        ...mockSaleReceipt.snapshot!,
+        correctionVersion: 1,
+        correctedAt: '2026-09-23T08:30:00.000Z',
+      },
+    }
+    render(<ReceiptDocument receipt={receipt} layout="THERMAL" />)
+    expect(screen.getByText(/Corrected receipt/i)).toBeInTheDocument()
+    expect(screen.getByText(/Revision 1/i)).toBeInTheDocument()
+    expect(screen.getAllByText('SL-2026-9999').length).toBeGreaterThan(0)
+  })
+
   it.each(['A4', 'THERMAL'] as const)('prints a recorded sale warranty on %s receipts', (layout) => {
     const receipt: ReceiptRecord = {
       ...mockSaleReceipt,

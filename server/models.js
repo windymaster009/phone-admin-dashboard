@@ -323,6 +323,9 @@ const tradeSchema = new Schema(
     },
     warrantyDays: { type: Number, min: 0, max: 3650 },
     warrantyExpiresAt: Date,
+    correctionVersion: { type: Number, min: 0, default: 0 },
+    lastCorrectedAt: Date,
+    lastCorrectedBy: { type: Schema.Types.ObjectId, ref: 'User' },
     paywayTransactionId: { type: String, unique: true, sparse: true, index: true },
     status: { type: String, enum: ['COMPLETED', 'CANCELLED', 'RETURNED'], default: 'COMPLETED' },
     refund: {

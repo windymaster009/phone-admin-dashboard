@@ -300,6 +300,67 @@ test('GET /trades: CASHIER sees only SELL, STOCK sees only BUY, OWNER sees reque
   }
 })
 
+test('PATCH /trades/:id/correction only changes warranty and notes and records an audit reason', async () => {
+  const origTradeFindById = Trade.findById
+  const tradeId = new mongoose.Types.ObjectId()
+  const createdAt = new Date('2026-09-23T03:00:00.000Z')
+  let saved = false
+  let auditEntry = null
+  const trade = {
+    _id: tradeId,
+    tradeNo: 'SL-20260923-SAFE1',
+    type: 'SELL',
+    status: 'COMPLETED',
+    warrantyDays: 0,
+    notes: '',
+    correctionVersion: 0,
+    createdAt,
+    items: [{ name: 'Phone', quantity: 1, unitPrice: 100 }],
+    total: 100,
+    async save() { saved = true },
+    async populate() { return this },
+  }
+  Trade.findById = () => ({ session: async () => trade })
+  ActivityLog.create = async ([entry]) => { auditEntry = entry; return [entry] }
+
+  try {
+    const result = await callRouter(apiRouter, {
+      method: 'PATCH',
+      url: `/trades/${tradeId}/correction`,
+      user: mockOwner,
+      body: { warrantyDays: 30, notes: 'Customer has a 30-day warranty.', correctionReason: 'Warranty omitted at checkout' },
+    })
+
+    assert.equal(result.status, 200)
+    assert.equal(saved, true)
+    assert.equal(trade.warrantyDays, 30)
+    assert.equal(trade.notes, 'Customer has a 30-day warranty.')
+    assert.equal(trade.warrantyExpiresAt.toISOString(), '2026-10-23T03:00:00.000Z')
+    assert.equal(trade.correctionVersion, 1)
+    assert.equal(auditEntry.action, 'CORRECT')
+    assert.equal(auditEntry.details.reason, 'Warranty omitted at checkout')
+    assert.deepEqual(auditEntry.details.fields, ['warrantyDays', 'notes'])
+  } finally {
+    Trade.findById = origTradeFindById
+  }
+})
+
+test('PATCH /trades/:id/correction rejects cashiers and requires a correction reason', async () => {
+  const tradeId = new mongoose.Types.ObjectId()
+  const cashierResult = await callRouter(apiRouter, {
+    method: 'PATCH', url: `/trades/${tradeId}/correction`, user: mockCashier,
+    body: { warrantyDays: 30, notes: '', correctionReason: 'Forgot warranty' },
+  })
+  assert.equal(cashierResult.status, 403)
+
+  const ownerResult = await callRouter(apiRouter, {
+    method: 'PATCH', url: `/trades/${tradeId}/correction`, user: mockOwner,
+    body: { warrantyDays: 30, notes: '', correctionReason: '' },
+  })
+  assert.equal(ownerResult.status, 400)
+  assert.match(ownerResult.body.message, /correction reason/i)
+})
+
 // ============================================================================
 // 2. Multi-Item Purchase: Serialized vs Quantity, Duplicate IMEI, Restocking
 // ============================================================================

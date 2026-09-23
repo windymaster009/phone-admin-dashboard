@@ -188,16 +188,24 @@ export type Trade = {
   transactionSubtotal?: number
   transactionTotal?: number
   transactionAmountPaid?: number
+  transactionAmountReceived?: number
+  transactionChangeDue?: number
   transactionBalance?: number
-  items: { name: string; quantity: number; unitPrice: number; costPrice?: number; originalUnitPrice?: number; currency?: 'USD' | 'KHR' }[]
+  items: { name: string; quantity: number; unitPrice: number; costPrice?: number; originalUnitPrice?: number; currency?: 'USD' | 'KHR'; inventoryItem?: { _id: string; sku?: string; barcode?: string; imei1?: string; imei2?: string; serialNumber?: string } }[]
   subtotal: number
   discount: number
   total: number
   amountPaid: number
+  amountReceived?: number
+  changeDue?: number
   balance: number
+  exchangeRate?: number
   paymentMethod: string
   warrantyDays?: number
   warrantyExpiresAt?: string
+  correctionVersion?: number
+  lastCorrectedAt?: string
+  lastCorrectedBy?: { _id: string; name: string; email?: string; role?: string }
   status: string
   refund?: {
     amount: number

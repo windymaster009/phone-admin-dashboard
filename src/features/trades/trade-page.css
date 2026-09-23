@@ -199,6 +199,38 @@
   padding: 13px 16px;
 }
 
+.trade-detail-body .detail-line p { display: grid; gap: 3px; }
+.trade-detail-body .detail-line small { overflow-wrap: anywhere; }
+
+.trade-correction-history {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 18px 14px;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border));
+  border-radius: var(--radius-lg);
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 7%, var(--bg-soft));
+}
+
+.trade-correction-history div { display: grid; gap: 2px; }
+.trade-correction-history strong { color: var(--text); font-size: .72rem; }
+.trade-correction-history small { color: var(--muted); font-size: .63rem; }
+
+.trade-correction-form { min-height: 0; display: flex; flex: 1; flex-direction: column; overflow: hidden; }
+.trade-correction-body { display: grid; gap: 14px; padding: 18px; }
+.trade-correction-lock-note { padding: 13px 15px; border: 1px solid var(--border); border-radius: 12px; background: var(--bg-soft); }
+.trade-correction-lock-note strong { color: var(--text); font-size: .74rem; }
+.trade-correction-lock-note p { margin: 4px 0 0; color: var(--muted); font-size: .66rem; line-height: 1.5; }
+.trade-correction-error { padding: 11px 13px; border: 1px solid color-mix(in srgb, var(--rose) 36%, var(--border)); border-radius: 10px; color: var(--rose); background: color-mix(in srgb, var(--rose) 8%, var(--bg-soft)); font-size: .7rem; }
+.trade-correction-field { display: grid; gap: 7px; color: var(--muted); font-size: .7rem; font-weight: 700; }
+.trade-correction-field small { color: var(--primary); font-size: .6rem; }
+.trade-correction-field textarea { width: 100%; min-height: 84px; resize: vertical; padding: 11px 12px; border: 1px solid var(--border-strong); border-radius: 11px; outline: 2px solid transparent; color: var(--text); background: var(--bg-soft); font: inherit; font-weight: 500; }
+.trade-correction-field textarea:focus { border-color: var(--primary); outline-color: color-mix(in srgb, var(--primary) 35%, transparent); }
+.trade-correction-mode .receipt-action-host { display: none; }
+
 /* Footer layout with dynamic receipt action integration */
 .trade-detail-modal .detail-modal-footer {
   display: flex;

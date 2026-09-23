@@ -5,6 +5,7 @@ import TradePage from './TradePage'
 import ReceiptCenterBridge from '../receipts/ReceiptCenterBridge'
 import { mockTradeRecord } from '../../test/testUtils'
 import type { Trade } from '../../types/domain'
+import { setSessionUser } from '../../lib/api'
 
 const mockPurchaseRecord: Trade = {
   _id: 'trade-buy-1',
@@ -47,6 +48,7 @@ const mockZeroTradeRecord: Trade = {
 describe('TradePage feature integration', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    setSessionUser(null)
   })
 
   it('renders Buy and Sell action cards and triggers open operation events', async () => {
@@ -251,6 +253,49 @@ describe('TradePage feature integration', () => {
       const footer = document.querySelector('.trade-detail-modal .detail-modal-footer')
       expect(footer?.contains(printBtn)).toBe(true)
     })
+  })
+
+  it('lets an owner correct only warranty and notes with a required reason', async () => {
+    setSessionUser({ id: 'owner-1', name: 'Owner', email: 'owner@test.local', role: 'OWNER', active: true })
+    const correctedTrade: Trade = {
+      ...mockTradeRecord,
+      warrantyDays: 30,
+      warrantyExpiresAt: '2026-09-14T00:00:00.000Z',
+      notes: 'Customer has a 30-day warranty.',
+      correctionVersion: 1,
+      lastCorrectedAt: '2026-08-16T08:00:00.000Z',
+      lastCorrectedBy: { _id: 'owner-1', name: 'Owner' },
+    }
+    let correctionPayload: Record<string, unknown> | null = null
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/api/trades/trade-rec-1/correction') && init?.method === 'PATCH') {
+        correctionPayload = JSON.parse(String(init.body))
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ trade: correctedTrade }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({ trades: [mockTradeRecord] }) } as Response
+    })
+
+    const user = userEvent.setup()
+    render(<TradePage />)
+    await user.click(await screen.findByRole('button', { name: `View ${mockTradeRecord.tradeNo}` }))
+    await user.click(screen.getByRole('button', { name: /Correct warranty or notes/i }))
+
+    const warranty = screen.getByRole('spinbutton', { name: /Warranty period in days/i })
+    await user.clear(warranty)
+    await user.type(warranty, '30')
+    await user.type(screen.getByPlaceholderText('Notes shown on the corrected receipt'), 'Customer has a 30-day warranty.')
+    await user.type(screen.getByPlaceholderText(/Warranty was omitted during checkout/i), 'Warranty omitted at checkout')
+    expect(screen.queryByRole('textbox', { name: /total/i })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Save correction' }))
+
+    await waitFor(() => expect(correctionPayload).toEqual({
+      warrantyDays: 30,
+      notes: 'Customer has a 30-day warranty.',
+      correctionReason: 'Warranty omitted at checkout',
+    }))
+    expect(await screen.findByText('30 days')).toBeInTheDocument()
+    expect(screen.getByText('Sale details corrected')).toBeInTheDocument()
   })
 
   it('renders purchase transaction variant and seller information properly', async () => {

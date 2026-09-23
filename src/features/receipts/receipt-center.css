@@ -411,3 +411,18 @@
 .receipt-paper-thermal .pawn-ticket-fields .receipt-row strong {
   max-width: 50%;
 }
+
+.receipt-correction {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid #d97706;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 10px;
+}
+
+.receipt-correction span { text-align: right; }
+.receipt-paper-thermal .receipt-correction { display: grid; gap: 3px; text-align: center; }
+.receipt-paper-thermal .receipt-correction span { text-align: center; }

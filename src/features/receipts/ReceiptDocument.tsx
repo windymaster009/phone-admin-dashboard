@@ -321,6 +321,13 @@ export default function ReceiptDocument({ receipt, layout }: { receipt: ReceiptR
         <div className="receipt-title"><strong>{displayTitle}</strong><span>{receipt.receiptNo}</span></div>
       </header>
 
+      {Number(snapshot.correctionVersion || 0) > 0 && (
+        <section className="receipt-section receipt-correction" role="note">
+          <strong>Corrected receipt / បង្កាន់ដៃកែតម្រូវ</strong>
+          <span>Revision {snapshot.correctionVersion}{snapshot.correctedAt ? ` · ${formatReceiptDateTime(snapshot.correctedAt)}` : ''}</span>
+        </section>
+      )}
+
       {(snapshot.shop.address || snapshot.shop.phone || snapshot.shop.email || snapshot.shop.taxId) && (
         <div className="receipt-shop-info">
           {snapshot.shop.address && <span>{snapshot.shop.address}</span>}

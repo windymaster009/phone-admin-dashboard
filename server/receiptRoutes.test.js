@@ -245,6 +245,26 @@ test('GET /options: returns SALE_RECEIPT option for completed sale', async () =>
   }
 })
 
+test('GET /options: points a corrected sale to a new immutable receipt revision', async () => {
+  const origFindOne = Trade.findOne
+  const tradeDoc = {
+    _id: new mongoose.Types.ObjectId(), tradeNo: 'SL-OPT-CORRECTED', type: 'SELL', status: 'COMPLETED',
+    currency: 'USD', total: 350, amountPaid: 350, correctionVersion: 2, createdAt: new Date(), items: [],
+  }
+  const queryMock = { populate: () => queryMock, then(resolve) { resolve(tradeDoc) } }
+  Trade.findOne = () => queryMock
+  try {
+    const res = await callRouter(receiptRouter, {
+      method: 'GET', url: '/options?sourceType=TRADE&reference=SL-OPT-CORRECTED', user: mockOwner,
+    })
+    assert.equal(res.status, 200)
+    assert.equal(res.body.options[0].sourceSubId, 'trade-correction-2')
+    assert.match(res.body.options[0].label, /corrected sales receipt - revision 2/i)
+  } finally {
+    Trade.findOne = origFindOne
+  }
+})
+
 test('GET /options: includes REFUND_RECEIPT option for returned sale with refund', async () => {
   const origFindOne = Trade.findOne
   const refundedTrade = {
@@ -359,6 +379,8 @@ test('POST /generate: creates immutable receipt snapshot (201 created: true)', a
     discount: 0,
     warrantyDays: 30,
     warrantyExpiresAt: new Date('2026-10-21T06:17:21.248Z'),
+    correctionVersion: 1,
+    lastCorrectedAt: new Date('2026-09-22T06:17:21.248Z'),
     createdAt: new Date(),
     customer: { name: 'Alice Customer', phone: '012999000' },
     items: [],
@@ -404,6 +426,9 @@ test('POST /generate: creates immutable receipt snapshot (201 created: true)', a
     assert.equal(res.body.receipt.receiptNo, 'SR-20260913-TEST1')
     assert.equal(createdPayload.snapshot.warrantyDays, 30)
     assert.deepEqual(createdPayload.snapshot.warrantyExpiresAt, tradeDoc.warrantyExpiresAt)
+    assert.equal(createdPayload.sourceSubId, 'trade-correction-1')
+    assert.equal(createdPayload.snapshot.correctionVersion, 1)
+    assert.deepEqual(createdPayload.snapshot.correctedAt, tradeDoc.lastCorrectedAt)
     const log = activityLogs[activityLogs.length - 1]
     assert.ok(log)
     assert.equal(log.action, 'CREATE')

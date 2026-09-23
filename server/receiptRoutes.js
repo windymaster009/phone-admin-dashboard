@@ -180,6 +180,8 @@ function buildTradeSnapshot(trade, documentType) {
     ...(documentType === 'SALE_RECEIPT' ? {
       warrantyDays: Number(trade.warrantyDays || 0),
       warrantyExpiresAt: trade.warrantyExpiresAt || undefined,
+      correctionVersion: Number(trade.correctionVersion || 0),
+      correctedAt: trade.lastCorrectedAt || undefined,
     } : {}),
     notes: trade.notes || '',
     staff: trade.createdBy ? { name: trade.createdBy.name, role: trade.createdBy.role } : null,
@@ -195,6 +197,11 @@ function customerParty(customer, fallback = 'Unknown customer') {
     address: customer?.address || '',
     role: 'Customer',
   }
+}
+
+function currentTradeReceiptSubId(trade) {
+  const version = Number(trade?.correctionVersion || 0)
+  return trade?.type === 'SELL' && version > 0 ? `trade-correction-${version}` : 'trade'
 }
 
 function buildServiceSnapshot(charge) {
@@ -586,10 +593,13 @@ router.get('/options', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), a
   if (sourceType === 'TRADE') {
     const trade = await findTrade(reference)
     const documentType = trade.type === 'SELL' ? 'SALE_RECEIPT' : 'PURCHASE_RECEIPT'
+    const sourceSubId = currentTradeReceiptSubId(trade)
     const options = [option(
       documentType,
-      'trade',
-      documentType === 'SALE_RECEIPT' ? 'Sales receipt / invoice' : 'Purchase receipt',
+      sourceSubId,
+      documentType === 'SALE_RECEIPT' && Number(trade.correctionVersion || 0) > 0
+        ? `Corrected sales receipt - revision ${trade.correctionVersion}`
+        : documentType === 'SALE_RECEIPT' ? 'Sales receipt / invoice' : 'Purchase receipt',
       trade.purchaseDate || trade.createdAt,
       tradeDisplayAmount(trade, trade.transactionTotal, trade.total),
       trade.currency === 'KHR' ? 'KHR' : 'USD',
@@ -702,7 +712,7 @@ router.post('/generate', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'),
       snapshot = buildRefundSnapshot(source)
     } else {
       if (documentType !== tradeDocumentType) throw requestError(409, 'Receipt type does not match this transaction')
-      sourceSubId = 'trade'
+      sourceSubId = currentTradeReceiptSubId(source)
       snapshot = buildTradeSnapshot(source, documentType)
     }
   } else if (sourceType === 'PAWN') {
