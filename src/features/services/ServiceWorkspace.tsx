@@ -17,7 +17,6 @@ import {
   Pencil,
   Printer,
   ReceiptText,
-  RefreshCcw,
   Search,
   Settings2,
   ShieldCheck,
@@ -35,6 +34,7 @@ import DetailModalShell from '../../components/DetailModalShell'
 import DetailModalHeader from '../../components/DetailModalHeader'
 import DetailModalBody from '../../components/DetailModalBody'
 import DetailModalFooter from '../../components/DetailModalFooter'
+import FilterToolbar from '../../components/FilterToolbar'
 import './service-workspace.css'
 
 type Currency = 'USD' | 'KHR'
@@ -76,6 +76,9 @@ type ServiceCharge = {
   completedAt: string
   notes?: string
   createdBy?: { name: string }
+  correctionVersion?: number
+  lastCorrectedAt?: string
+  lastCorrectedBy?: { name: string }
 }
 
 const categoryDetails: Record<ServiceCategory, { label: string; icon: LucideIcon }> = {
@@ -114,6 +117,12 @@ export default function ServiceWorkspace() {
   const [chargeSearchBusy, setChargeSearchBusy] = useState(false)
   const [chargeSearchError, setChargeSearchError] = useState('')
   const [selectedCharge, setSelectedCharge] = useState<ServiceCharge | null>(null)
+  const [editingChargeCorrection, setEditingChargeCorrection] = useState(false)
+  const [correctionWarrantyDays, setCorrectionWarrantyDays] = useState('0')
+  const [correctionNotes, setCorrectionNotes] = useState('')
+  const [correctionReason, setCorrectionReason] = useState('')
+  const [correctionError, setCorrectionError] = useState('')
+  const [correctionBusy, setCorrectionBusy] = useState(false)
   const [selected, setSelected] = useState<ServiceOffering | null>(null)
   const [chargeOpen, setChargeOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -405,6 +414,63 @@ export default function ServiceWorkspace() {
     }
   }
 
+  function closeChargeDetail() {
+    if (correctionBusy) return
+    setSelectedCharge(null)
+    setEditingChargeCorrection(false)
+    setCorrectionError('')
+  }
+
+  function openChargeCorrection() {
+    if (!selectedCharge || !canPrice || selectedCharge.status !== 'COMPLETED') return
+    setCorrectionWarrantyDays(String(Number(selectedCharge.warrantyDays || 0)))
+    setCorrectionNotes(selectedCharge.notes || '')
+    setCorrectionReason('')
+    setCorrectionError('')
+    setEditingChargeCorrection(true)
+  }
+
+  function cancelChargeCorrection() {
+    if (correctionBusy) return
+    setEditingChargeCorrection(false)
+    setCorrectionError('')
+  }
+
+  async function saveChargeCorrection(event: FormEvent) {
+    event.preventDefault()
+    if (!selectedCharge || correctionBusy) return
+    const nextWarrantyDays = Number(correctionWarrantyDays)
+    if (!Number.isInteger(nextWarrantyDays) || nextWarrantyDays < 0 || nextWarrantyDays > 3650) {
+      setCorrectionError('Warranty days must be a whole number from 0 to 3650')
+      return
+    }
+    if (correctionReason.trim().length < 3) {
+      setCorrectionError('Enter a correction reason')
+      return
+    }
+
+    setCorrectionBusy(true)
+    setCorrectionError('')
+    try {
+      const result = await api<{ charge: ServiceCharge }>(`/services/charges/${selectedCharge._id}/correction`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          warrantyDays: nextWarrantyDays,
+          notes: correctionNotes,
+          correctionReason,
+        }),
+      })
+      setCharges((current) => current.map((charge) => charge._id === result.charge._id ? result.charge : charge))
+      setSearchedCharges((current) => current?.map((charge) => charge._id === result.charge._id ? result.charge : charge) || current)
+      setSelectedCharge(result.charge)
+      setEditingChargeCorrection(false)
+    } catch (reason) {
+      setCorrectionError(reason instanceof Error ? reason.message : 'Unable to correct this service charge')
+    } finally {
+      setCorrectionBusy(false)
+    }
+  }
+
   return <div className="service-page">
     <header className="section-header service-page-header">
       <div><span className="eyebrow">Customer services</span><h2>Service charges</h2><p>Charge for account setup, phone assistance, data transfer, and other work without changing stock.</p></div>
@@ -423,14 +489,18 @@ export default function ServiceWorkspace() {
           <div><span>2</span><p><strong>Add customer</strong><small>Use a saved profile or walk-in.</small></p></div>
           <div><span>3</span><p><strong>Record payment</strong><small>Confirm the total and payment method.</small></p></div>
         </section>
-        <section className="surface-card service-catalogue-tools" aria-label="Service catalogue filters">
-          <div className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search services" /></div>
-          <select value={category} onChange={(event) => setCategory(event.target.value as 'ALL' | ServiceCategory)} aria-label="Service category">
+        <FilterToolbar
+          className="surface-card service-catalogue-tools"
+          search={search}
+          onSearchChange={setSearch}
+          searchLabel="Search services"
+          placeholder="Search services"
+        >
+          <select className="ghost-button filter-select" value={category} onChange={(event) => setCategory(event.target.value as 'ALL' | ServiceCategory)} aria-label="Service category">
             <option value="ALL">All categories</option>
             {Object.entries(categoryDetails).map(([value, detail]) => <option value={value} key={value}>{detail.label}</option>)}
           </select>
-          <button className="icon-button" type="button" onClick={() => void load()} disabled={loading} aria-label="Refresh services"><RefreshCcw size={16} /></button>
-        </section>
+        </FilterToolbar>
 
         {loading && services.length === 0 ? <section className="surface-card"><LoadingState label="Loading services" detail="Preparing the service catalogue…" /></section> : <section className="service-catalogue-grid" aria-label="Available services">
           {filtered.map((service) => {
@@ -452,10 +522,15 @@ export default function ServiceWorkspace() {
 
         <section className="surface-card service-recent">
           <header><div><span className="eyebrow">Latest work</span><h3>Recent service charges</h3></div><button className="text-button" type="button" onClick={() => go('/reports/services')}>View report <ArrowRight size={14} /></button></header>
-          <div className="service-recent-tools">
-            <label className="search-field"><Search size={17} /><input aria-label="Search service charges" value={chargeSearch} onChange={(event) => setChargeSearch(event.target.value)} placeholder="Search charge, service, customer, or phone" /></label>
+          <FilterToolbar
+            className="service-recent-tools"
+            search={chargeSearch}
+            onSearchChange={setChargeSearch}
+            searchLabel="Search service charges"
+            placeholder="Search charge, service, customer, or phone"
+          >
             {chargeSearch && <button className="icon-button" type="button" onClick={() => setChargeSearch('')} aria-label="Clear service charge search"><X size={16} /></button>}
-          </div>
+          </FilterToolbar>
           {chargeSearchError && <p className="service-recent-error" role="alert">{chargeSearchError}</p>}
           <div className="service-recent-list">
             {visibleCharges.map((charge) => <article key={charge._id}>
@@ -472,26 +547,60 @@ export default function ServiceWorkspace() {
 
     </div>
 
-    {selectedCharge && <DetailModalShell onClose={() => setSelectedCharge(null)} titleId="service-charge-detail-title" className="service-charge-detail-modal">
-      <DetailModalHeader eyebrow="Service charge" title={selectedCharge.serviceNo} titleId="service-charge-detail-title" description={`${selectedCharge.serviceSnapshot.name} · ${dateText(selectedCharge.completedAt)}`} onClose={() => setSelectedCharge(null)} />
-      <DetailModalBody>
-        <div className="detail-grid">
-          <div><span>Customer</span><strong>{selectedCharge.customerSnapshot.name}</strong></div>
-          <div><span>Phone</span><strong>{selectedCharge.customerSnapshot.phone || 'Not recorded'}</strong></div>
-          <div><span>Service</span><strong>{selectedCharge.serviceSnapshot.name}</strong></div>
-          <div><span>Quantity</span><strong>{selectedCharge.quantity ?? 1}</strong></div>
-          <div><span>Unit price</span><strong>{selectedCharge.unitPrice === undefined ? 'Not recorded' : money(selectedCharge.unitPrice, selectedCharge.currency)}</strong></div>
-          <div><span>Subtotal</span><strong>{selectedCharge.subtotal === undefined ? 'Not recorded' : money(selectedCharge.subtotal, selectedCharge.currency)}</strong></div>
-          <div><span>Discount</span><strong>{money(selectedCharge.discount ?? 0, selectedCharge.currency)}{selectedCharge.discountType === 'PERCENT' && selectedCharge.discountPercent !== undefined ? ` (${selectedCharge.discountPercent}%)` : ''}</strong></div>
-          <div><span>Total paid</span><strong>{money(selectedCharge.total, selectedCharge.currency)}</strong></div>
-          <div><span>Payment method</span><strong>{titleCase(selectedCharge.paymentMethod)}</strong></div>
-          <div><span>Warranty</span><strong>{selectedCharge.warrantyDays ? `${selectedCharge.warrantyDays} days` : 'No warranty'}</strong></div>
-          {Boolean(selectedCharge.warrantyDays) && <div><span>Warranty expires</span><strong>{dateText(selectedCharge.warrantyExpiresAt)}</strong></div>}
-          <div><span>Status</span><strong>{titleCase(selectedCharge.status)}</strong></div>
-        </div>
-        {selectedCharge.notes && <div className="detail-note"><span className="eyebrow">Work note</span><p>{selectedCharge.notes}</p></div>}
-      </DetailModalBody>
-      <DetailModalFooter utilityActions={<button className="secondary-button" type="button" onClick={() => printChargeReceipt(selectedCharge)}><Printer size={16} /> Print receipt</button>} dismissAction={<button className="ghost-button" type="button" onClick={() => setSelectedCharge(null)}>Close</button>} />
+    {selectedCharge && <DetailModalShell onClose={closeChargeDetail} titleId="service-charge-detail-title" className={`service-charge-detail-modal ${editingChargeCorrection ? 'service-charge-correction-mode' : ''}`}>
+      <DetailModalHeader
+        eyebrow={editingChargeCorrection ? 'Controlled correction' : 'Service charge'}
+        title={selectedCharge.serviceNo}
+        titleId="service-charge-detail-title"
+        description={editingChargeCorrection ? 'Only warranty and work notes can be changed.' : `${selectedCharge.serviceSnapshot.name} · ${dateText(selectedCharge.completedAt)}`}
+        onClose={closeChargeDetail}
+      />
+      {editingChargeCorrection ? <form className="service-charge-correction-form" onSubmit={saveChargeCorrection}>
+        <DetailModalBody className="service-charge-correction-body">
+          <div className="service-charge-correction-lock-note">
+            <strong>Payment and service details stay locked</strong>
+            <p>Customer, service, quantity, price, discount, payment method, and completion date cannot be changed here.</p>
+          </div>
+          {correctionError && <div className="service-charge-correction-error" role="alert">{correctionError}</div>}
+          <WarrantyPeriodField value={correctionWarrantyDays} onChange={setCorrectionWarrantyDays} kind="service" />
+          <label className="service-charge-correction-field">
+            <span>Work note <small>Optional</small></span>
+            <textarea maxLength={500} value={correctionNotes} onChange={(event) => setCorrectionNotes(event.target.value)} placeholder="What was completed for the customer?" />
+          </label>
+          <label className="service-charge-correction-field">
+            <span>Correction reason <small>Required · audit history only</small></span>
+            <textarea required minLength={3} maxLength={500} value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} placeholder="Example: Warranty was omitted during checkout" />
+          </label>
+        </DetailModalBody>
+        <DetailModalFooter
+          transactionActions={<button className="primary-button" type="submit" disabled={correctionBusy}>{correctionBusy ? 'Saving...' : 'Save correction'}</button>}
+          dismissAction={<button className="ghost-button" type="button" onClick={cancelChargeCorrection} disabled={correctionBusy}>Cancel</button>}
+        />
+      </form> : <>
+        <DetailModalBody>
+          <div className="detail-grid">
+            <div><span>Customer</span><strong>{selectedCharge.customerSnapshot.name}</strong></div>
+            <div><span>Phone</span><strong>{selectedCharge.customerSnapshot.phone || 'Not recorded'}</strong></div>
+            <div><span>Service</span><strong>{selectedCharge.serviceSnapshot.name}</strong></div>
+            <div><span>Quantity</span><strong>{selectedCharge.quantity ?? 1}</strong></div>
+            <div><span>Unit price</span><strong>{selectedCharge.unitPrice === undefined ? 'Not recorded' : money(selectedCharge.unitPrice, selectedCharge.currency)}</strong></div>
+            <div><span>Subtotal</span><strong>{selectedCharge.subtotal === undefined ? 'Not recorded' : money(selectedCharge.subtotal, selectedCharge.currency)}</strong></div>
+            <div><span>Discount</span><strong>{money(selectedCharge.discount ?? 0, selectedCharge.currency)}{selectedCharge.discountType === 'PERCENT' && selectedCharge.discountPercent !== undefined ? ` (${selectedCharge.discountPercent}%)` : ''}</strong></div>
+            <div><span>Total paid</span><strong>{money(selectedCharge.total, selectedCharge.currency)}</strong></div>
+            <div><span>Payment method</span><strong>{titleCase(selectedCharge.paymentMethod)}</strong></div>
+            <div><span>Warranty</span><strong>{selectedCharge.warrantyDays ? `${selectedCharge.warrantyDays} days` : 'No warranty'}</strong></div>
+            {Boolean(selectedCharge.warrantyDays) && <div><span>Warranty expires</span><strong>{dateText(selectedCharge.warrantyExpiresAt)}</strong></div>}
+            <div><span>Status</span><strong>{titleCase(selectedCharge.status)}</strong></div>
+          </div>
+          {Number(selectedCharge.correctionVersion || 0) > 0 && <div className="service-charge-correction-history" role="status"><Pencil size={16} /><div><strong>Service details corrected</strong><small>Revision {selectedCharge.correctionVersion}{selectedCharge.lastCorrectedAt ? ` · ${dateText(selectedCharge.lastCorrectedAt)}` : ''}{selectedCharge.lastCorrectedBy?.name ? ` · ${selectedCharge.lastCorrectedBy.name}` : ''}</small></div></div>}
+          {selectedCharge.notes && <div className="detail-note"><span className="eyebrow">Work note</span><p>{selectedCharge.notes}</p></div>}
+        </DetailModalBody>
+        <DetailModalFooter
+          utilityActions={<button className="secondary-button" type="button" onClick={() => printChargeReceipt(selectedCharge)}><Printer size={16} /> Print receipt</button>}
+          secondaryActions={canPrice && selectedCharge.status === 'COMPLETED' ? <button className="secondary-button" type="button" onClick={openChargeCorrection}><Pencil size={15} /> Correct warranty or note</button> : undefined}
+          dismissAction={<button className="ghost-button" type="button" onClick={closeChargeDetail}>Close</button>}
+        />
+      </>}
     </DetailModalShell>}
 
     {chargeOpen && (

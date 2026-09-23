@@ -204,6 +204,11 @@ function currentTradeReceiptSubId(trade) {
   return trade?.type === 'SELL' && version > 0 ? `trade-correction-${version}` : 'trade'
 }
 
+function currentServiceReceiptSubId(charge) {
+  const version = Number(charge?.correctionVersion || 0)
+  return version > 0 ? `service-correction-${version}` : 'service'
+}
+
 function buildServiceSnapshot(charge) {
   const party = customerParty(charge.customer, charge.customerSnapshot?.name || 'Walk-in customer')
   if (!party.phone) party.phone = charge.customerSnapshot?.phone || ''
@@ -234,6 +239,8 @@ function buildServiceSnapshot(charge) {
     transactionStatus: charge.status,
     warrantyDays: Number(charge.warrantyDays || 0),
     warrantyExpiresAt: charge.warrantyExpiresAt || undefined,
+    correctionVersion: Number(charge.correctionVersion || 0),
+    correctedAt: charge.lastCorrectedAt || undefined,
     notes: charge.notes || '',
     staff: charge.createdBy ? { name: charge.createdBy.name, role: charge.createdBy.role } : null,
     signatureLabels: ['Customer acknowledgement', 'Shop representative'],
@@ -675,13 +682,16 @@ router.get('/options', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), a
 
   if (sourceType === 'SERVICE') {
     const charge = await findServiceCharge(reference)
+    const sourceSubId = currentServiceReceiptSubId(charge)
     return res.json({
       sourceType,
       referenceNo: charge.serviceNo,
       options: [option(
         'SERVICE_RECEIPT',
-        'service',
-        'Service receipt',
+        sourceSubId,
+        Number(charge.correctionVersion || 0) > 0
+          ? `Corrected service receipt - revision ${charge.correctionVersion}`
+          : 'Service receipt',
         charge.completedAt || charge.createdAt,
         charge.total,
         charge.currency === 'KHR' ? 'KHR' : 'USD',
@@ -737,7 +747,7 @@ router.post('/generate', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'),
     source = await findServiceCharge(reference)
     documentType = requestedType || 'SERVICE_RECEIPT'
     if (documentType !== 'SERVICE_RECEIPT') throw requestError(400, 'Invalid service receipt type')
-    sourceSubId = 'service'
+    sourceSubId = currentServiceReceiptSubId(source)
     snapshot = buildServiceSnapshot(source)
   } else {
     throw requestError(400, 'Source type must be TRADE, PAWN, LOAN, or SERVICE')

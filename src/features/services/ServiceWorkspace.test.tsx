@@ -182,6 +182,48 @@ describe('ServiceWorkspace', () => {
     }
   })
 
+  it('lets a manager correct service warranty and work notes with a required audit reason', async () => {
+    const user = userEvent.setup()
+    let correctionPayload: Record<string, unknown> | null = null
+    const correctedCharge = {
+      ...sampleCharges[0],
+      warrantyDays: 30,
+      warrantyExpiresAt: '2026-03-31T10:00:00.000Z',
+      notes: 'Warranty confirmed with customer',
+      correctionVersion: 1,
+      lastCorrectedAt: '2026-03-03T10:00:00.000Z',
+      lastCorrectedBy: { name: 'Manager User' },
+    }
+    setupFetchMock({
+      '/api/services/charges/sc-existing-1/correction': async (init) => {
+        correctionPayload = JSON.parse(String(init.body))
+        return { charge: correctedCharge }
+      },
+    })
+
+    render(<RouterProvider><ServiceWorkspace /></RouterProvider>)
+    await user.click(await screen.findByRole('button', { name: 'View SV-20260301-A1B2C' }))
+    let detail = screen.getByRole('dialog', { name: 'SV-20260301-A1B2C' })
+    await user.click(within(detail).getByRole('button', { name: 'Correct warranty or note' }))
+
+    const warranty = within(detail).getByRole('spinbutton', { name: 'Warranty period in days' })
+    await user.clear(warranty)
+    await user.type(warranty, '30')
+    await user.type(within(detail).getByPlaceholderText('What was completed for the customer?'), 'Warranty confirmed with customer')
+    await user.type(within(detail).getByPlaceholderText('Example: Warranty was omitted during checkout'), 'Warranty omitted during checkout')
+    await user.click(within(detail).getByRole('button', { name: 'Save correction' }))
+
+    await waitFor(() => expect(correctionPayload).not.toBeNull())
+    expect(correctionPayload).toEqual({
+      warrantyDays: 30,
+      notes: 'Warranty confirmed with customer',
+      correctionReason: 'Warranty omitted during checkout',
+    })
+    detail = screen.getByRole('dialog', { name: 'SV-20260301-A1B2C' })
+    expect(within(detail).getByText('30 days')).toBeInTheDocument()
+    expect(within(detail).getByText('Service details corrected')).toBeInTheDocument()
+  })
+
   it('1. A successful charge appears in recent charges without manually refreshing', async () => {
     const user = userEvent.setup()
     let postCalled = false
@@ -747,8 +789,7 @@ describe('ServiceWorkspace', () => {
     expect(screen.getByText('Try another search or category.')).toBeInTheDocument()
   })
 
-  it('10. Refresh button triggers reload of catalogue, customers, and charges', async () => {
-    const user = userEvent.setup()
+  it('10. Reuses the shared filter toolbar and does not show a redundant refresh button', async () => {
     let catalogCallCount = 0
 
     setupFetchMock({
@@ -758,7 +799,7 @@ describe('ServiceWorkspace', () => {
       },
     })
 
-    render(
+    const { container } = render(
       <RouterProvider>
         <ServiceWorkspace />
       </RouterProvider>,
@@ -768,12 +809,10 @@ describe('ServiceWorkspace', () => {
       expect(catalogCallCount).toBe(1)
     })
 
-    const refreshButton = screen.getByRole('button', { name: /Refresh services/i })
-    await user.click(refreshButton)
-
-    await waitFor(() => {
-      expect(catalogCallCount).toBe(2)
-    })
+    expect(screen.queryByRole('button', { name: /Refresh services/i })).not.toBeInTheDocument()
+    expect(container.querySelector('.service-catalogue-tools.filter-row .search-field')).toBeInTheDocument()
+    expect(container.querySelector('.service-recent-tools.filter-row .search-field')).toBeInTheDocument()
+    expect(catalogCallCount).toBe(1)
   })
 
   it('11. Cashier sees warning when clicking unpriced service, while Manager can configure price', async () => {

@@ -238,6 +238,17 @@ test('Service server roles: CASHIER and STOCK cannot patch catalog prices (403)'
   assert.equal(stockRes.status, 403)
 })
 
+test('Service charge corrections are restricted to managers and owners', async () => {
+  const fakeId = new mongoose.Types.ObjectId()
+  const response = await callRouter(serviceRouter, {
+    method: 'PATCH',
+    url: `/charges/${fakeId}/correction`,
+    body: { warrantyDays: 30, notes: '', correctionReason: 'Warranty omitted' },
+    user: mockCashier,
+  })
+  assert.equal(response.status, 403)
+})
+
 test('Service server roles: STOCK is rejected on GET and POST /charges (403)', async () => {
   const getRes = await callRouter(serviceRouter, {
     method: 'GET',
@@ -757,5 +768,63 @@ test('Service charge creation: accurately calculates subtotal, discount, and tot
   } finally {
     ServiceOffering.findById = origFindById
     ServiceCharge.create = origChargeCreate
+  }
+})
+
+test('Service charge correction updates only warranty and notes with an audited revision', async () => {
+  const fakeId = new mongoose.Types.ObjectId()
+  const originalFindById = ServiceCharge.findById
+  const previousActivitySave = ActivityLog.prototype.save
+  const completedAt = new Date('2026-09-21T06:17:21.248Z')
+  let saved = false
+  let activity = null
+  const charge = {
+    _id: fakeId,
+    serviceNo: 'SV-20260921-CORR1',
+    status: 'COMPLETED',
+    completedAt,
+    warrantyDays: 0,
+    notes: '',
+    correctionVersion: 0,
+    session() { return this },
+    async save({ session }) {
+      assert.ok(session)
+      saved = true
+      return this
+    },
+    async populate() { return this },
+  }
+  ServiceCharge.findById = () => charge
+  ActivityLog.prototype.save = async function ({ session } = {}) {
+    assert.ok(session)
+    activity = this.toObject()
+    return this
+  }
+
+  try {
+    const response = await callRouter(serviceRouter, {
+      method: 'PATCH',
+      url: `/charges/${fakeId}/correction`,
+      body: {
+        warrantyDays: 30,
+        notes: 'Warranty confirmed with customer',
+        correctionReason: 'Warranty omitted during checkout',
+      },
+      user: mockManager,
+    })
+
+    assert.equal(response.status, 200)
+    assert.equal(saved, true)
+    assert.equal(response.body.charge.warrantyDays, 30)
+    assert.equal(response.body.charge.notes, 'Warranty confirmed with customer')
+    assert.equal(response.body.charge.correctionVersion, 1)
+    assert.equal(response.body.charge.warrantyExpiresAt.getTime() - completedAt.getTime(), 30 * 86_400_000)
+    assert.equal(activity.action, 'CORRECT')
+    assert.equal(activity.entity, 'SERVICE_CHARGE')
+    assert.equal(activity.details.reason, 'Warranty omitted during checkout')
+    assert.deepEqual(activity.details.fields, ['warrantyDays', 'notes'])
+  } finally {
+    ServiceCharge.findById = originalFindById
+    ActivityLog.prototype.save = previousActivitySave
   }
 })

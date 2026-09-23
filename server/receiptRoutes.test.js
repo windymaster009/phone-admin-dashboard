@@ -459,14 +459,16 @@ test('POST /generate: copies service warranty into the receipt snapshot', async 
     status: 'COMPLETED',
     warrantyDays: 30,
     warrantyExpiresAt: new Date('2026-10-21T06:17:21.248Z'),
+    correctionVersion: 2,
+    lastCorrectedAt: new Date('2026-09-23T06:17:21.248Z'),
     completedAt: new Date('2026-09-21T06:17:21.248Z'),
   }
   const chargeQuery = { populate: () => chargeQuery, then(resolve) { resolve(charge) } }
   ServiceCharge.findOne = () => chargeQuery
   Receipt.findOne = () => ({ populate: async () => null })
-  let savedSnapshot
+  let savedPayload
   Receipt.create = async (payload) => {
-    savedSnapshot = payload.snapshot
+    savedPayload = payload
     return { ...payload, _id: new mongoose.Types.ObjectId(), populate: async () => payload }
   }
 
@@ -478,8 +480,11 @@ test('POST /generate: copies service warranty into the receipt snapshot', async 
       user: mockOwner,
     })
     assert.equal(response.status, 201)
-    assert.equal(savedSnapshot.warrantyDays, 30)
-    assert.deepEqual(savedSnapshot.warrantyExpiresAt, charge.warrantyExpiresAt)
+    assert.equal(savedPayload.sourceSubId, 'service-correction-2')
+    assert.equal(savedPayload.snapshot.warrantyDays, 30)
+    assert.deepEqual(savedPayload.snapshot.warrantyExpiresAt, charge.warrantyExpiresAt)
+    assert.equal(savedPayload.snapshot.correctionVersion, 2)
+    assert.deepEqual(savedPayload.snapshot.correctedAt, charge.lastCorrectedAt)
   } finally {
     ServiceCharge.findOne = originalServiceFindOne
     Receipt.findOne = originalReceiptFindOne

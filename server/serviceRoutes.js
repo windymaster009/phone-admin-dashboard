@@ -142,7 +142,7 @@ router.get('/charges', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), a
   }
   const charges = await ServiceCharge.find(query)
     .populate('customer', 'name phone')
-    .populate('createdBy', 'name role')
+    .populate('createdBy lastCorrectedBy', 'name role')
     .sort({ completedAt: -1, createdAt: -1 })
     .limit(100)
     .lean()
@@ -218,6 +218,71 @@ router.post('/charges', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), 
     details: { serviceNo: charge.serviceNo, service: offering.name, customer: charge.customerSnapshot.name, total: charge.total, currency: charge.currency, discountType: charge.discountType, discount: charge.discount },
   })
   res.status(201).json({ charge: await charge.populate('customer createdBy', 'name phone role') })
+}))
+
+router.patch('/charges/:id/correction', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
+  if (!mongoose.isValidObjectId(req.params.id)) throw requestError(400, 'Service charge is invalid')
+
+  const warrantyDays = req.body.warrantyDays === undefined ? 0 : Number(req.body.warrantyDays)
+  if (!Number.isInteger(warrantyDays) || warrantyDays < 0 || warrantyDays > 3650) {
+    throw requestError(400, 'Warranty days must be a whole number from 0 to 3650')
+  }
+  const notes = clean(req.body.notes)
+  const correctionReason = clean(req.body.correctionReason)
+  if (notes.length > 500) throw requestError(400, 'Work notes must be 500 characters or fewer')
+  if (correctionReason.length < 3) throw requestError(400, 'Enter a correction reason')
+  if (correctionReason.length > 500) throw requestError(400, 'Correction reason must be 500 characters or fewer')
+
+  const session = await mongoose.startSession()
+  let charge
+  try {
+    await session.withTransaction(async () => {
+      charge = await ServiceCharge.findById(req.params.id).session(session)
+      if (!charge) throw requestError(404, 'Service charge was not found')
+      if (charge.status !== 'COMPLETED') throw requestError(409, 'Only completed service charges can be corrected')
+
+      const previousWarrantyDays = Number(charge.warrantyDays || 0)
+      const previousNotes = String(charge.notes || '')
+      if (previousWarrantyDays === warrantyDays && previousNotes === notes) {
+        throw requestError(400, 'Change the warranty period or work note before saving')
+      }
+
+      const completedAt = new Date(charge.completedAt || charge.createdAt)
+      if (Number.isNaN(completedAt.getTime())) throw requestError(409, 'The original service completion date is invalid')
+      charge.warrantyDays = warrantyDays
+      charge.warrantyExpiresAt = warrantyDays > 0
+        ? new Date(completedAt.getTime() + warrantyDays * 86_400_000)
+        : undefined
+      charge.notes = notes
+      charge.correctionVersion = Number(charge.correctionVersion || 0) + 1
+      charge.lastCorrectedAt = new Date()
+      charge.lastCorrectedBy = req.user._id
+      await charge.save({ session })
+
+      await writeActivity(req, {
+        action: 'CORRECT',
+        entity: 'SERVICE_CHARGE',
+        entityId: charge._id,
+        details: {
+          serviceNo: charge.serviceNo,
+          reason: correctionReason,
+          fields: [
+            ...(previousWarrantyDays !== warrantyDays ? ['warrantyDays'] : []),
+            ...(previousNotes !== notes ? ['notes'] : []),
+          ],
+          previousWarrantyDays,
+          warrantyDays,
+          notesChanged: previousNotes !== notes,
+          correctionVersion: charge.correctionVersion,
+        },
+      }, { required: true, session })
+    })
+  } finally {
+    await session.endSession()
+  }
+
+  await charge.populate('customer createdBy lastCorrectedBy', 'name phone role')
+  res.json({ charge })
 }))
 
 export default router
