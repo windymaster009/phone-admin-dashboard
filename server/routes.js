@@ -587,13 +587,12 @@ async function buildSaleQuote(lines, session, role, currency = 'USD', exchangeRa
     if (!item || item.status !== 'IN_STOCK' || item.quantity < quantity) {
       throw requestError(409, `${line.name || 'Item'} does not have enough available stock`)
     }
-    const pawnQuery = Pawn.findOne({
-      inventoryItem: item._id,
-      status: { $ne: 'FORFEITED' },
-    }).select('pawnNo status')
+    let pawnQuery = Pawn.findOne({ inventoryItem: item._id })
+    if (typeof pawnQuery?.sort === 'function') pawnQuery = pawnQuery.sort({ createdAt: -1 })
+    pawnQuery = pawnQuery.select('pawnNo status')
     if (session && typeof pawnQuery.session === 'function') pawnQuery.session(session)
     const pledgedPawn = await pawnQuery
-    if (pledgedPawn) {
+    if (pledgedPawn && pledgedPawn.status !== 'FORFEITED') {
       const linkState = openPawnStatuses.includes(pledgedPawn.status)
         ? 'currently pledged to active'
         : `linked to ${String(pledgedPawn.status).toLowerCase()}`
@@ -741,6 +740,61 @@ function pawnFeeSummary(pawn, asOf = new Date()) {
 function pawnResponse(pawn, asOf = new Date()) {
   const value = typeof pawn?.toObject === 'function' ? pawn.toObject() : { ...pawn }
   return { ...value, feeSummary: pawnFeeSummary(value, asOf) }
+}
+
+function useSession(query, session) {
+  return session && typeof query?.session === 'function' ? query.session(session) : query
+}
+
+async function pawnReuseStatusForImei(rawImei, session) {
+  const imei = clean(rawImei)
+  if (!/^\d{15}$/.test(imei)) throw requestError(400, 'IMEI must contain exactly 15 digits')
+
+  const item = await useSession(InventoryItem.findOne({ imei1: imei }), session)
+  if (!item) return { matched: false, canReuse: false, imei }
+
+  let activePawnQuery = Pawn.findOne({ inventoryItem: item._id, status: { $in: openPawnStatuses } })
+    .select('pawnNo status customer issueDate createdAt')
+    .sort({ createdAt: -1 })
+  activePawnQuery = useSession(activePawnQuery, session)
+  const activePawn = await activePawnQuery
+
+  let latestPawnQuery = Pawn.findOne({ inventoryItem: item._id })
+    .select('pawnNo status customer issueDate redeemedAt forfeitedAt createdAt')
+    .sort({ createdAt: -1 })
+  latestPawnQuery = useSession(latestPawnQuery, session)
+  const latestPawn = await latestPawnQuery
+
+  if (activePawn) {
+    return {
+      matched: true,
+      canReuse: false,
+      reason: 'ACTIVE_PAWN',
+      message: `This IMEI is already collateral for open pawn ${activePawn.pawnNo}`,
+      item,
+      previousPawn: activePawn,
+    }
+  }
+  if (item.status === 'ARCHIVED' && latestPawn?.status === 'REDEEMED') {
+    return {
+      matched: true,
+      canReuse: true,
+      reason: 'REDEEMED',
+      message: `This phone was previously pawned under ${latestPawn.pawnNo} and can be pawned again`,
+      item,
+      previousPawn: latestPawn,
+    }
+  }
+
+  const statusLabel = String(item.status || 'UNKNOWN').replaceAll('_', ' ').toLowerCase()
+  return {
+    matched: true,
+    canReuse: false,
+    reason: 'INVENTORY_OWNED',
+    message: `This IMEI is already recorded as ${statusLabel} inventory and cannot be used for a new pawn`,
+    item,
+    previousPawn: latestPawn,
+  }
 }
 
 function pawnAmountDue(pawn, asOf = new Date()) {
@@ -2160,9 +2214,16 @@ router.get('/inventory', requireAuth, asyncRoute(async (req, res) => {
   }
   const items = await InventoryItem.find(filter).sort({ createdAt: -1 }).limit(500)
   const pawnLinks = await Pawn.find({ inventoryItem: { $in: items.map((item) => item._id) } })
-    .select('inventoryItem pawnNo status')
+    .select('inventoryItem pawnNo status createdAt')
     .lean()
-  const pawnByInventoryId = new Map(pawnLinks.map((pawn) => [String(pawn.inventoryItem), pawn]))
+  const pawnByInventoryId = new Map()
+  for (const pawn of pawnLinks) {
+    const key = String(pawn.inventoryItem)
+    const current = pawnByInventoryId.get(key)
+    const pawnTime = new Date(pawn.createdAt || 0).getTime()
+    const currentTime = new Date(current?.createdAt || 0).getTime()
+    if (!current || pawnTime >= currentTime) pawnByInventoryId.set(key, pawn)
+  }
   res.json({
     items: items.map((item) => ({
       ...item.toObject(),
@@ -2197,7 +2258,9 @@ router.get('/inventory/:id', requireAuth, asyncRoute(async (req, res) => {
     }
   }
   if (!item) throw requestError(404, 'Inventory item was not found')
-  const relatedPawn = await Pawn.findOne({ inventoryItem: item._id }).select('pawnNo status').lean()
+  let relatedPawnQuery = Pawn.findOne({ inventoryItem: item._id })
+  if (typeof relatedPawnQuery?.sort === 'function') relatedPawnQuery = relatedPawnQuery.sort({ createdAt: -1 })
+  const relatedPawn = await relatedPawnQuery.select('pawnNo status').lean()
   res.json({ item: { ...item.toObject(), relatedPawn: relatedPawn || null } })
 }))
 
@@ -2217,7 +2280,9 @@ router.get('/inventory/scan/:code', requireAuth, asyncRoute(async (req, res) => 
   })
   let relatedPawn = null
   if (item) {
-    relatedPawn = await Pawn.findOne({ inventoryItem: item._id })
+    let relatedPawnQuery = Pawn.findOne({ inventoryItem: item._id })
+    if (typeof relatedPawnQuery?.sort === 'function') relatedPawnQuery = relatedPawnQuery.sort({ createdAt: -1 })
+    relatedPawn = await relatedPawnQuery
       .select('pawnNo status customer')
       .populate('customer', 'name')
       .lean()
@@ -2555,6 +2620,18 @@ router.get('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asy
   res.json({ pawns: pawns.map((pawn) => pawnResponse(pawn, asOf)) })
 }))
 
+router.get('/pawns/reuse-status/:imei', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
+  const status = await pawnReuseStatusForImei(req.params.imei)
+  if (status.previousPawn && typeof status.previousPawn.populate === 'function') {
+    await status.previousPawn.populate('customer', 'name phone')
+  }
+  const item = status.item && typeof status.item.toObject === 'function' ? status.item.toObject() : status.item
+  const previousPawn = status.previousPawn && typeof status.previousPawn.toObject === 'function'
+    ? status.previousPawn.toObject()
+    : status.previousPawn
+  res.json({ ...status, item, previousPawn })
+}))
+
 router.get('/pawns/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) throw requestError(400, 'Pawn ID is invalid')
   await refreshPawnStatuses()
@@ -2568,7 +2645,7 @@ router.get('/pawns/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'),
 }))
 
 router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
-  const { customer, customerDetails, itemSnapshot, estimatedValue, pawnPercentage, principal, termDays, dailyFeeRate, feeAtDue, identificationVerified, ownershipConfirmed, notes, valuationSnapshot } = req.body
+  const { customer, customerDetails, itemSnapshot, estimatedValue, pawnPercentage, principal, termDays, dailyFeeRate, feeAtDue, identificationVerified, ownershipConfirmed, notes, valuationSnapshot, reuseInventoryItem } = req.body
   if ((!customer && !customerDetails) || !itemSnapshot?.name) return res.status(400).json({ message: 'Customer and item are required' })
 
   let existingCustomer
@@ -2603,7 +2680,8 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
   // The deposit date is billable Day 1, so a seven-day pawn opened on the
   // 17th is due on the 23rd (six calendar-day boundaries later).
   const maturityDate = addPawnDays(startDate, selectedTermDays - 1)
-  if (!/^\d{15}$/.test(clean(itemSnapshot.imei) || '')) throw requestError(400, 'IMEI must contain exactly 15 digits')
+  const itemImei = clean(itemSnapshot.imei)
+  if (!/^\d{15}$/.test(itemImei || '')) throw requestError(400, 'IMEI must contain exactly 15 digits')
   try {
     validateMaximumPawnPrincipal(requestedPrincipal, maxPrincipal, currency)
   } catch {
@@ -2612,6 +2690,7 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
 
   const gracePeriodDays = PAWN_GRACE_PERIOD_DAYS
   let pawn
+  let reusedPreviousPawn = null
   await mongoose.connection.transaction(async (session) => {
     let pawnCustomerId = customer
     if (!pawnCustomerId) {
@@ -2626,25 +2705,57 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
       pawnCustomerId = createdCustomer._id
     }
     const pawnNo = makeCode('PW')
-    const itemSku = makeCode('PWN')
-    const [inventoryItem] = await InventoryItem.create([{
-      sku: itemSku, barcode: itemSku, category: 'PHONE', name: clean(itemSnapshot.name),
-      brand: clean(itemSnapshot.brand), model: clean(itemSnapshot.model), imei1: clean(itemSnapshot.imei),
-      condition: itemSnapshot.condition || 'GOOD', color: clean(itemSnapshot.color), storage: normalizeGigabytes(itemSnapshot.storage),
-      ram: normalizeGigabytes(itemSnapshot.ram), batteryHealth: itemSnapshot.batteryHealth,
-      carrierLock: itemSnapshot.carrierLock || 'UNKNOWN',
-      accessoriesIncluded: Array.isArray(itemSnapshot.accessoriesIncluded) ? itemSnapshot.accessoriesIncluded : [],
-      quantity: 1,
-      buyPrice: pawnAmountToUsd(requestedPrincipal, currency, usdKhrRate),
-      sellPrice: pawnAmountToUsd(valuation, currency, usdKhrRate),
-      status: 'PAWNED', source: 'CUSTOMER', createdBy: req.user._id,
-    }], { session })
+    const reuseStatus = await pawnReuseStatusForImei(itemImei, session)
+    let inventoryItem
+    if (reuseStatus.matched) {
+      if (!reuseStatus.canReuse) throw requestError(409, reuseStatus.message)
+      if (!reuseInventoryItem || String(reuseInventoryItem) !== String(reuseStatus.item._id)) {
+        throw requestError(409, `Confirm that ${reuseStatus.previousPawn.pawnNo} is redeemed before re-pawning this phone`)
+      }
+      inventoryItem = reuseStatus.item
+      reusedPreviousPawn = reuseStatus.previousPawn
+      inventoryItem.category = 'PHONE'
+      inventoryItem.name = clean(itemSnapshot.name)
+      inventoryItem.brand = clean(itemSnapshot.brand)
+      inventoryItem.model = clean(itemSnapshot.model)
+      inventoryItem.condition = itemSnapshot.condition || 'GOOD'
+      inventoryItem.color = clean(itemSnapshot.color)
+      inventoryItem.storage = normalizeGigabytes(itemSnapshot.storage)
+      inventoryItem.ram = normalizeGigabytes(itemSnapshot.ram)
+      inventoryItem.batteryHealth = itemSnapshot.batteryHealth
+      inventoryItem.carrierLock = itemSnapshot.carrierLock || 'UNKNOWN'
+      inventoryItem.accessoriesIncluded = Array.isArray(itemSnapshot.accessoriesIncluded) ? itemSnapshot.accessoriesIncluded : []
+      inventoryItem.quantity = 1
+      inventoryItem.buyPrice = pawnAmountToUsd(requestedPrincipal, currency, usdKhrRate)
+      inventoryItem.sellPrice = pawnAmountToUsd(valuation, currency, usdKhrRate)
+      inventoryItem.status = 'PAWNED'
+      inventoryItem.source = 'CUSTOMER'
+      await inventoryItem.save({ session })
+    } else {
+      if (reuseInventoryItem) throw requestError(409, 'The selected phone no longer matches this IMEI. Check the number and try again.')
+      const itemSku = makeCode('PWN')
+      const createdItems = await InventoryItem.create([{
+        sku: itemSku, barcode: itemSku, category: 'PHONE', name: clean(itemSnapshot.name),
+        brand: clean(itemSnapshot.brand), model: clean(itemSnapshot.model), imei1: itemImei,
+        condition: itemSnapshot.condition || 'GOOD', color: clean(itemSnapshot.color), storage: normalizeGigabytes(itemSnapshot.storage),
+        ram: normalizeGigabytes(itemSnapshot.ram), batteryHealth: itemSnapshot.batteryHealth,
+        carrierLock: itemSnapshot.carrierLock || 'UNKNOWN',
+        accessoriesIncluded: Array.isArray(itemSnapshot.accessoriesIncluded) ? itemSnapshot.accessoriesIncluded : [],
+        quantity: 1,
+        buyPrice: pawnAmountToUsd(requestedPrincipal, currency, usdKhrRate),
+        sellPrice: pawnAmountToUsd(valuation, currency, usdKhrRate),
+        status: 'PAWNED', source: 'CUSTOMER', createdBy: req.user._id,
+      }], { session })
+      inventoryItem = createdItems[0]
+    }
+    const itemSku = inventoryItem.sku
     const created = await Pawn.create([{
       pawnNo, customer: pawnCustomerId, inventoryItem: inventoryItem._id,
+      previousPawn: reusedPreviousPawn?._id,
       itemSnapshot: {
         ...itemSnapshot,
         sku: itemSku,
-        imei: clean(itemSnapshot.imei),
+        imei: itemImei,
         storage: normalizeGigabytes(itemSnapshot.storage),
         ram: normalizeGigabytes(itemSnapshot.ram),
         accessoriesIncluded: Array.isArray(itemSnapshot.accessoriesIncluded) ? itemSnapshot.accessoriesIncluded : [],
@@ -2670,7 +2781,7 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
     }], { session })
     pawn = created[0]
   })
-  await writeActivity(req, { action: 'CREATE', entity: 'PAWN', entityId: pawn._id, details: { pawnNo: pawn.pawnNo, principal: pawn.principal, currency: pawn.currency } })
+  await writeActivity(req, { action: 'CREATE', entity: 'PAWN', entityId: pawn._id, details: { pawnNo: pawn.pawnNo, principal: pawn.principal, currency: pawn.currency, previousPawn: reusedPreviousPawn?.pawnNo } })
   if (typeof pawn.populate === 'function') {
     await pawn.populate('customer', 'name phone nationalIdNumber')
     await pawn.populate('inventoryItem', 'sku barcode name brand model storage color imei1 sellPrice status')

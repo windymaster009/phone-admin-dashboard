@@ -30,8 +30,12 @@ export type InventoryItem = {
   model?: string
   serialNumber?: string
   storage?: string
+  ram?: string
   color?: string
   condition?: string
+  batteryHealth?: number
+  carrierLock?: string
+  accessoriesIncluded?: string[]
   status: string
   imei1?: string
   relatedPawn?: { status: string } | null
@@ -42,6 +46,20 @@ export type RelatedPawn = {
   pawnNo: string
   status: string
   customer?: { _id: string; name: string }
+}
+
+export type PawnReuseStatus = {
+  matched: boolean
+  canReuse: boolean
+  reason?: 'REDEEMED' | 'ACTIVE_PAWN' | 'INVENTORY_OWNED' | 'LOOKUP_FAILED'
+  message?: string
+  imei?: string
+  item?: InventoryItem
+  previousPawn?: RelatedPawn & {
+    issueDate?: string
+    redeemedAt?: string
+    createdAt?: string
+  }
 }
 
 export type Supplier = {

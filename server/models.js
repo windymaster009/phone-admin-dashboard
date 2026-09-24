@@ -185,6 +185,7 @@ const pawnSchema = new Schema(
     pawnNo: { type: String, required: true, unique: true, index: true },
     customer: { type: Schema.Types.ObjectId, ref: 'Customer', required: true, index: true },
     inventoryItem: { type: Schema.Types.ObjectId, ref: 'InventoryItem' },
+    previousPawn: { type: Schema.Types.ObjectId, ref: 'Pawn', index: true },
     itemSnapshot: {
       name: { type: String, required: true },
       sku: { type: String, trim: true },

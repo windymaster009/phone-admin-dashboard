@@ -2007,6 +2007,20 @@ body.operation-modal-open {
 .pawn-imported-valuation strong { color: var(--text, #f4f6fb); font-size: 10px; overflow-wrap: break-word; }
 .pawn-imported-valuation small { overflow: visible; color: var(--muted, #8f9bb4); font-size: 8px; text-overflow: clip; white-space: normal; line-height: 1.35; overflow-wrap: break-word; }
 .pawn-imported-valuation > span { flex: 0 0 auto; font-size: 10px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pawn-reuse-status { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 10px; margin: 2px 0 0; padding: 11px 12px; border: 1px solid rgba(139,92,246,.3); border-radius: 11px; color: #a78bfa; background: rgba(139,92,246,.08); }
+.pawn-reuse-status > span { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 9px; background: rgba(139,92,246,.14); }
+.pawn-reuse-status > div { min-width: 0; display: grid; gap: 3px; }
+.pawn-reuse-status strong { color: var(--text,#f4f6fb); font-size: 10px; line-height: 1.35; }
+.pawn-reuse-status p { margin: 0; color: var(--muted,#8f9bb4); font-size: 9px; line-height: 1.4; overflow-wrap: anywhere; }
+.pawn-reuse-status small { color: #a78bfa; font-size: 8px; line-height: 1.35; overflow-wrap: anywhere; }
+.pawn-reuse-status > button { min-height: 34px; padding: 7px 10px; white-space: nowrap; }
+.pawn-reuse-status > b { padding: 5px 8px; border-radius: 999px; color: #34d399; background: rgba(52,211,153,.12); font-size: 8px; white-space: nowrap; }
+.pawn-reuse-status.accepted { color: #34d399; border-color: rgba(52,211,153,.3); background: rgba(52,211,153,.07); }
+.pawn-reuse-status.accepted > span { background: rgba(52,211,153,.12); }
+.pawn-reuse-status.blocked { color: #fb7185; border-color: rgba(251,113,133,.3); background: rgba(251,113,133,.07); }
+.pawn-reuse-status.blocked > span { background: rgba(251,113,133,.12); }
+.pawn-reuse-status.blocked small { color: #fb7185; }
+.pawn-reuse-status .spin { animation: operation-spin .8s linear infinite; }
 .pawn-terms-card input[readonly] { color: #a78bfa; background: rgba(139,92,246,.07); cursor: default; }
 .pawn-inline-assessment { margin-top: 14px; overflow: hidden; border: 1px solid var(--border, rgba(255,255,255,.08)); border-radius: 13px; background: color-mix(in srgb, var(--bg-soft, #10172a) 72%, transparent); }
 .pawn-assessment-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 15px; border-bottom: 1px solid var(--border, rgba(255,255,255,.08)); }
@@ -3328,6 +3342,16 @@ body.operation-modal-open {
   }
 
   .scanned-pawn-link > b {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .pawn-reuse-status {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .pawn-reuse-status > button,
+  .pawn-reuse-status > b {
     grid-column: 2;
     justify-self: start;
   }

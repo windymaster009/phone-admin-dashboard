@@ -391,6 +391,7 @@ test('Pawn creation: rejects invalid term days (not 3, 7, 15, 30) (400)', async 
 test('Pawn creation: successfully creates customer, collateral inventory item, and pawn contract', async () => {
   const origCustomerCreate = Customer.create
   const origItemCreate = InventoryItem.create
+  const origItemFindOne = InventoryItem.findOne
   const origPawnCreate = Pawn.create
 
   let createdCustomer = null
@@ -406,6 +407,7 @@ test('Pawn creation: successfully creates customer, collateral inventory item, a
     createdItem = { _id: new mongoose.Types.ObjectId(), ...items[0] }
     return [createdItem]
   }
+  InventoryItem.findOne = () => ({ session: async () => null })
 
   Pawn.create = async (items) => {
     createdPawn = {
@@ -482,6 +484,192 @@ test('Pawn creation: successfully creates customer, collateral inventory item, a
   } finally {
     Customer.create = origCustomerCreate
     InventoryItem.create = origItemCreate
+    InventoryItem.findOne = origItemFindOne
+    Pawn.create = origPawnCreate
+  }
+})
+
+test('Pawn IMEI reuse lookup: allows an archived phone whose latest pawn was redeemed', async () => {
+  const origItemFindOne = InventoryItem.findOne
+  const origPawnFindOne = Pawn.findOne
+  const itemId = new mongoose.Types.ObjectId()
+  const previousPawnId = new mongoose.Types.ObjectId()
+  const item = {
+    _id: itemId,
+    imei1: '358901234567890',
+    name: 'Samsung S22',
+    status: 'ARCHIVED',
+    toObject() { return { ...this } },
+  }
+  const previousPawn = {
+    _id: previousPawnId,
+    pawnNo: 'PW-OLD-REDEEMED',
+    status: 'REDEEMED',
+    redeemedAt: new Date('2026-09-20T00:00:00.000Z'),
+    customer: { _id: new mongoose.Types.ObjectId(), name: 'Previous Customer' },
+  }
+
+  InventoryItem.findOne = () => Promise.resolve(item)
+  Pawn.findOne = (query) => {
+    const value = query.status ? null : previousPawn
+    const chain = {
+      select() { return chain },
+      sort() { return Promise.resolve(value) },
+    }
+    return chain
+  }
+
+  try {
+    const res = await callRouter(apiRouter, {
+      method: 'GET',
+      url: '/pawns/reuse-status/358901234567890',
+      user: mockOwner,
+    })
+    assert.equal(res.status, 200)
+    assert.equal(res.body.matched, true)
+    assert.equal(res.body.canReuse, true)
+    assert.equal(res.body.reason, 'REDEEMED')
+    assert.equal(res.body.item._id, itemId)
+    assert.equal(res.body.previousPawn.pawnNo, 'PW-OLD-REDEEMED')
+  } finally {
+    InventoryItem.findOne = origItemFindOne
+    Pawn.findOne = origPawnFindOne
+  }
+})
+
+test('Pawn IMEI reuse lookup: blocks a phone that is already collateral for an open pawn', async () => {
+  const origItemFindOne = InventoryItem.findOne
+  const origPawnFindOne = Pawn.findOne
+  const item = {
+    _id: new mongoose.Types.ObjectId(),
+    imei1: '358901234567891',
+    name: 'Active pawn phone',
+    status: 'PAWNED',
+    toObject() { return { ...this } },
+  }
+  const activePawn = {
+    _id: new mongoose.Types.ObjectId(),
+    pawnNo: 'PW-STILL-ACTIVE',
+    status: 'ACTIVE',
+  }
+
+  InventoryItem.findOne = () => Promise.resolve(item)
+  Pawn.findOne = (query) => {
+    const value = query.status ? activePawn : activePawn
+    const chain = {
+      select() { return chain },
+      sort() { return Promise.resolve(value) },
+    }
+    return chain
+  }
+
+  try {
+    const res = await callRouter(apiRouter, {
+      method: 'GET',
+      url: '/pawns/reuse-status/358901234567891',
+      user: mockManager,
+    })
+    assert.equal(res.status, 200)
+    assert.equal(res.body.matched, true)
+    assert.equal(res.body.canReuse, false)
+    assert.equal(res.body.reason, 'ACTIVE_PAWN')
+    assert.match(res.body.message, /PW-STILL-ACTIVE/)
+  } finally {
+    InventoryItem.findOne = origItemFindOne
+    Pawn.findOne = origPawnFindOne
+  }
+})
+
+test('Pawn creation: reuses redeemed phone inventory and links the new contract to the old pawn', async () => {
+  const origCustomerCreate = Customer.create
+  const origItemCreate = InventoryItem.create
+  const origItemFindOne = InventoryItem.findOne
+  const origPawnFindOne = Pawn.findOne
+  const origPawnCreate = Pawn.create
+  const itemId = new mongoose.Types.ObjectId()
+  const previousPawnId = new mongoose.Types.ObjectId()
+  let inventoryCreateCalled = false
+  let createdPawn = null
+  const existingItem = {
+    _id: itemId,
+    sku: 'PWN-ORIGINAL-PHONE',
+    barcode: 'PWN-ORIGINAL-PHONE',
+    imei1: '358901234567890',
+    name: 'Samsung S22',
+    status: 'ARCHIVED',
+    quantity: 0,
+    async save() { return this },
+  }
+  const previousPawn = {
+    _id: previousPawnId,
+    pawnNo: 'PW-OLD-REDEEMED',
+    status: 'REDEEMED',
+  }
+
+  Customer.create = async (items) => [{ _id: new mongoose.Types.ObjectId(), ...items[0] }]
+  InventoryItem.findOne = () => ({ session: async () => existingItem })
+  InventoryItem.create = async () => {
+    inventoryCreateCalled = true
+    throw new Error('A duplicate inventory item must not be created')
+  }
+  Pawn.findOne = (query) => {
+    const value = query.status ? null : previousPawn
+    const chain = {
+      select() { return chain },
+      sort() { return chain },
+      session() { return Promise.resolve(value) },
+    }
+    return chain
+  }
+  Pawn.create = async (items) => {
+    createdPawn = {
+      _id: new mongoose.Types.ObjectId(),
+      status: 'ACTIVE',
+      ...items[0],
+      async populate(field) {
+        if (field === 'inventoryItem') this.inventoryItem = existingItem
+        return this
+      },
+      toObject() { return { ...this } },
+    }
+    return [createdPawn]
+  }
+
+  try {
+    const res = await callRouter(apiRouter, {
+      method: 'POST',
+      url: '/pawns',
+      user: mockOwner,
+      body: {
+        customerDetails: { name: 'Returning Customer', nationalIdNumber: 'ID-RETURN' },
+        itemSnapshot: {
+          name: 'Samsung S22 128GB',
+          brand: 'Samsung',
+          model: 'Galaxy S22',
+          imei: '358901234567890',
+          storage: '128',
+        },
+        estimatedValue: 300,
+        pawnPercentage: 45,
+        principal: 120,
+        currency: 'USD',
+        termDays: 7,
+        ownershipConfirmed: true,
+        reuseInventoryItem: itemId.toString(),
+      },
+    })
+    assert.equal(res.status, 201)
+    assert.equal(inventoryCreateCalled, false)
+    assert.equal(existingItem.status, 'PAWNED')
+    assert.equal(existingItem.quantity, 1)
+    assert.equal(existingItem.sku, 'PWN-ORIGINAL-PHONE')
+    assert.equal(String(createdPawn.previousPawn), previousPawnId.toString())
+    assert.equal(String(createdPawn.inventoryItem._id), itemId.toString())
+  } finally {
+    Customer.create = origCustomerCreate
+    InventoryItem.create = origItemCreate
+    InventoryItem.findOne = origItemFindOne
+    Pawn.findOne = origPawnFindOne
     Pawn.create = origPawnCreate
   }
 })

@@ -45,7 +45,7 @@ import CameraBarcodeReader from '../../components/scanner/CameraBarcodeReader'
 import ScannerWorkflow from '../../components/scanner/ScannerWorkflow'
 import ScannerTriggerButton, { PRODUCT_SCANNER_EVENT } from '../../components/scanner/ScannerTriggerButton'
 import { notifyPawnCreated } from '../pawns/pawnEvents'
-import { ModalKind, StockCategory, Customer, InventoryItem, RelatedPawn, Supplier, SellerType, PurchaseCurrency, SaleCurrency, PawnCurrency, PurchaseInventoryMode, PawnCustomerMode, SalePaymentMethod, SalePaymentPhase, StockAdjustmentMode, StockAdjustmentStatus, PawnValuationSnapshot, CreatedPawn, CompletedStockAdjustment, SaleDraft, SaleKhqr, CreatedSaleTrade, CompletedSale, completedSaleFromTrade, paywayImageSource, PurchaseDevice, newPurchaseDevice, canRestockExisting, localDateValue, roundPawnAmount, pawnAmountText, pawnEquivalentAmountText, money, riel, saleAmountText, inventorySalePrice, inventoryNativeSalePriceText } from './operationDomain'
+import { ModalKind, StockCategory, Customer, InventoryItem, RelatedPawn, Supplier, SellerType, PurchaseCurrency, SaleCurrency, PawnCurrency, PurchaseInventoryMode, PawnCustomerMode, SalePaymentMethod, SalePaymentPhase, StockAdjustmentMode, StockAdjustmentStatus, PawnValuationSnapshot, PawnReuseStatus, CreatedPawn, CompletedStockAdjustment, SaleDraft, SaleKhqr, CreatedSaleTrade, CompletedSale, completedSaleFromTrade, paywayImageSource, PurchaseDevice, newPurchaseDevice, canRestockExisting, localDateValue, roundPawnAmount, pawnAmountText, pawnEquivalentAmountText, money, riel, saleAmountText, inventorySalePrice, inventoryNativeSalePriceText } from './operationDomain'
 import './pawn-guide.css'
 
 
@@ -125,6 +125,9 @@ export default function OperationModalBridge() {
   const [pawnCarrierLock, setPawnCarrierLock] = useState('UNLOCKED')
   const [pawnAccessories, setPawnAccessories] = useState<string[]>([])
   const [pawnScannerOpen, setPawnScannerOpen] = useState(false)
+  const [pawnReuseStatus, setPawnReuseStatus] = useState<PawnReuseStatus | null>(null)
+  const [pawnReuseChecking, setPawnReuseChecking] = useState(false)
+  const [pawnReuseAccepted, setPawnReuseAccepted] = useState(false)
   const [scanCode, setScanCode] = useState('')
   const [scannedItem, setScannedItem] = useState<InventoryItem | null>(null)
   const [scannedPawn, setScannedPawn] = useState<RelatedPawn | null>(null)
@@ -191,6 +194,7 @@ export default function OperationModalBridge() {
   const submittingPurchaseRef = useRef(false)
   const submittingSaleRef = useRef(false)
   const submittingPawnRef = useRef(false)
+  const pawnReuseRequestRef = useRef(0)
   const submittingStockRef = useRef(false)
   const scanRequestSeqRef = useRef(0)
   const scanInFlightRef = useRef(false)
@@ -285,6 +289,44 @@ export default function OperationModalBridge() {
     setPawnPrincipalLimitMessage('')
   }, [kind, maximumPawn, pawnAutoCalculate, pawnStep, pawnValuation])
 
+  useEffect(() => {
+    const requestId = ++pawnReuseRequestRef.current
+    setPawnReuseAccepted(false)
+    setPawnReuseStatus(null)
+    setPawnReuseChecking(false)
+    if (kind !== 'pawn' || pawnStep !== 2 || !/^\d{15}$/.test(pawnImei)) return
+
+    setPawnReuseChecking(true)
+    const timer = window.setTimeout(() => {
+      api<PawnReuseStatus>(`/pawns/reuse-status/${pawnImei}`, {}, { deduplicate: false })
+        .then((result) => {
+          if (requestId !== pawnReuseRequestRef.current) return
+          setPawnReuseStatus(result)
+          if (result.canReuse && result.item) {
+            setPawnBrand((current) => current || result.item?.brand || '')
+            setPawnModel((current) => current || result.item?.model || '')
+            setPawnStorage((current) => current || String(result.item?.storage || '').replace(/\s*GB$/i, ''))
+            setPawnRam((current) => current || String(result.item?.ram || '').replace(/\s*GB$/i, ''))
+            setPawnColor((current) => current || result.item?.color || '')
+          }
+        })
+        .catch((reason: Error) => {
+          if (requestId !== pawnReuseRequestRef.current) return
+          setPawnReuseStatus({
+            matched: true,
+            canReuse: false,
+            reason: 'LOOKUP_FAILED',
+            message: reason.message || 'Unable to verify this IMEI. Try again before saving the pawn.',
+          })
+        })
+        .finally(() => {
+          if (requestId === pawnReuseRequestRef.current) setPawnReuseChecking(false)
+        })
+    }, 250)
+
+    return () => window.clearTimeout(timer)
+  }, [kind, pawnImei, pawnStep])
+
   function changePawnAutoCalculate(nextValue: boolean) {
     if (nextValue) {
       if (pawnEffectiveDailyFeeRate > 0) setPawnDailyFeeRate(String(pawnEffectiveDailyFeeRate))
@@ -301,6 +343,7 @@ export default function OperationModalBridge() {
   const pawnCustomerValid = pawnCustomerMode === 'EXISTING'
     ? Boolean(selectedPawnCustomer && pawnOwnershipConfirmed)
     : Boolean(pawnWalkInName.trim() && pawnOwnershipConfirmed)
+  const pawnReuseBlocked = Boolean(pawnReuseStatus?.matched && (!pawnReuseStatus.canReuse || !pawnReuseAccepted))
   const purchaseTotal = useMemo(
     () => purchaseDevices.reduce((sum, item) => sum + Math.max(0, Number(item.purchasePrice) || 0) * (item.category === 'PHONE' ? 1 : Math.max(1, Number(item.quantity) || 1)), 0),
     [purchaseDevices],
@@ -573,6 +616,9 @@ export default function OperationModalBridge() {
           setPawnStorage('')
           setPawnRam('')
           setPawnColor('')
+          setPawnReuseStatus(null)
+          setPawnReuseChecking(false)
+          setPawnReuseAccepted(false)
         }
         if (detail.kind === 'sale') {
           setSaleCompleted(null)
@@ -652,6 +698,9 @@ export default function OperationModalBridge() {
       setPawnStorage('')
       setPawnRam('')
       setPawnColor('')
+      setPawnReuseStatus(null)
+      setPawnReuseChecking(false)
+      setPawnReuseAccepted(false)
       setKind('pawn')
     }
     window.addEventListener('phoneflow:open-pawn', openPawn)
@@ -890,6 +939,10 @@ export default function OperationModalBridge() {
     setPawnCarrierLock('UNLOCKED')
     setPawnAccessories([])
     setPawnScannerOpen(false)
+    setPawnReuseStatus(null)
+    setPawnReuseChecking(false)
+    setPawnReuseAccepted(false)
+    pawnReuseRequestRef.current++
     setScanCode('')
     setScannedItem(null)
     setScannedPawn(null)
@@ -1978,6 +2031,14 @@ export default function OperationModalBridge() {
     event.preventDefault()
     if (submittingPawnRef.current || busy) return
     setError('')
+    if (pawnReuseStatus?.matched && !pawnReuseStatus.canReuse) {
+      setError(pawnReuseStatus.message || 'This phone cannot be used for a new pawn contract.')
+      return
+    }
+    if (pawnReuseStatus?.canReuse && !pawnReuseAccepted) {
+      setError('Confirm that you want to re-pawn this previously redeemed phone.')
+      return
+    }
     const form = new FormData(event.currentTarget)
     const requestedPrincipal = Number(form.get('principal') || 0)
     if (!Number.isFinite(requestedPrincipal) || requestedPrincipal <= 0) {
@@ -2056,6 +2117,7 @@ export default function OperationModalBridge() {
       ownershipConfirmed: pawnOwnershipConfirmed,
       identificationVerified: Boolean(pawnCustomerHasId && pawnOwnershipConfirmed),
       notes: String(form.get('notes') || ''),
+      reuseInventoryItem: pawnReuseAccepted && pawnReuseStatus?.canReuse ? pawnReuseStatus.item?._id : undefined,
     }
     try {
       const result = await api<{ pawn: Pawn }>('/pawns', { method: 'POST', body: JSON.stringify(payload) })
@@ -2610,6 +2672,20 @@ export default function OperationModalBridge() {
                   }}
                   onScan={() => setPawnScannerOpen(true)}
                 />
+                {(pawnReuseChecking || pawnReuseStatus?.matched) && <div className={`pawn-reuse-status ${pawnReuseChecking ? 'checking' : pawnReuseStatus?.canReuse ? pawnReuseAccepted ? 'accepted' : 'available' : 'blocked'}`} role="note" aria-live="polite">
+                  <span>{pawnReuseChecking ? <LoaderCircle className="spin" size={18} /> : pawnReuseStatus?.canReuse ? <RefreshCw size={18} /> : <AlertTriangle size={18} />}</span>
+                  <div>
+                    <strong>{pawnReuseChecking ? 'Checking previous pawn history' : pawnReuseStatus?.canReuse ? pawnReuseAccepted ? 'Phone approved for re-pawn' : 'This phone was pawned before' : 'This phone cannot start a new pawn'}</strong>
+                    {!pawnReuseChecking && <p>{pawnReuseStatus?.message}</p>}
+                    {!pawnReuseChecking && pawnReuseStatus?.previousPawn && <small>
+                      Previous contract {pawnReuseStatus.previousPawn.pawnNo}
+                      {pawnReuseStatus.previousPawn.customer?.name ? ` · ${pawnReuseStatus.previousPawn.customer.name}` : ''}
+                      {pawnReuseStatus.previousPawn.redeemedAt ? ` · Redeemed ${new Intl.DateTimeFormat('en-GB').format(new Date(pawnReuseStatus.previousPawn.redeemedAt))}` : ''}
+                    </small>}
+                  </div>
+                  {!pawnReuseChecking && pawnReuseStatus?.canReuse && !pawnReuseAccepted && <button type="button" className="secondary-button" onClick={() => { setPawnReuseAccepted(true); setError('') }}>Re-pawn this phone</button>}
+                  {!pawnReuseChecking && pawnReuseStatus?.canReuse && pawnReuseAccepted && <b>Confirmed</b>}
+                </div>}
               </article>
             </OperationSectionCard>
 
@@ -2708,7 +2784,7 @@ export default function OperationModalBridge() {
               detailText: `${pawnAmountText(Number(pawnPrincipal || 0), pawnCurrency)} principal`,
             }}
             secondaryAction={<button type="button" className="ghost-button" onClick={() => { setError(''); setPawnStep(1) }}>Back</button>}
-            primaryAction={<button className="primary-button" disabled={busy || !pawnAssessment.eligible || maximumPawn <= 0 || pawnPrincipalAmount <= 0 || pawnPrincipalAmount > maximumPawn}>{busy ? 'Saving contract...' : !pawnAssessment.eligible ? 'Activation lock must be removed' : maximumPawn <= 0 ? 'Enter valuation details' : pawnPrincipalAmount <= 0 ? 'Enter principal' : pawnPrincipalAmount > maximumPawn ? 'Principal exceeds maximum' : 'Create pawn contract'}</button>}
+            primaryAction={<button className="primary-button" disabled={busy || pawnReuseBlocked || !pawnAssessment.eligible || maximumPawn <= 0 || pawnPrincipalAmount <= 0 || pawnPrincipalAmount > maximumPawn}>{busy ? 'Saving contract...' : pawnReuseStatus?.matched && !pawnReuseStatus.canReuse ? 'Phone unavailable for pawn' : pawnReuseStatus?.canReuse && !pawnReuseAccepted ? 'Confirm phone re-pawn' : !pawnAssessment.eligible ? 'Activation lock must be removed' : maximumPawn <= 0 ? 'Enter valuation details' : pawnPrincipalAmount <= 0 ? 'Enter principal' : pawnPrincipalAmount > maximumPawn ? 'Principal exceeds maximum' : 'Create pawn contract'}</button>}
           />
         </>}
       </form>}

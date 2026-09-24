@@ -705,6 +705,96 @@ describe('OperationModalBridge component', () => {
     })
   })
 
+  it('detects a redeemed IMEI, requires confirmation, and submits the existing inventory item for re-pawn', async () => {
+    let capturedPayload: Record<string, unknown> | null = null
+    const customer = { _id: 'cust-returning', name: 'Returning Customer', phone: '012999111', nationalIdNumber: 'ID-RETURN', active: true }
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = String(input)
+      if (url.includes('/customers')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ customers: [customer] }) } as Response
+      }
+      if (url.includes('/pawns/reuse-status/358901234567890')) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({
+            matched: true,
+            canReuse: true,
+            reason: 'REDEEMED',
+            message: 'This phone was previously pawned and can be pawned again',
+            item: {
+              _id: 'inventory-returning-phone',
+              sku: 'PWN-ORIGINAL',
+              name: 'Samsung Galaxy S22',
+              category: 'PHONE',
+              quantity: 0,
+              status: 'ARCHIVED',
+              sellPrice: 0,
+              brand: 'Samsung',
+              model: 'Galaxy S22',
+              storage: '128GB',
+              ram: '8GB',
+              color: 'Black',
+              imei1: '358901234567890',
+            },
+            previousPawn: {
+              _id: 'pawn-old',
+              pawnNo: 'PW-OLD-REDEEMED',
+              status: 'REDEEMED',
+              redeemedAt: '2026-09-20T00:00:00.000Z',
+              customer: { _id: 'cust-old', name: 'Previous Customer' },
+            },
+          }),
+        } as Response
+      }
+      if (url.includes('/pawns') && init?.method === 'POST') {
+        capturedPayload = JSON.parse(String(init.body))
+        return {
+          ok: true,
+          status: 201,
+          headers: new Headers(),
+          json: async () => ({ pawn: { pawnNo: 'PW-NEW-REPAWN', principal: 100, currency: 'USD' } }),
+        } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({ usdKhr: 4100 }) } as Response
+    })
+
+    renderModalBridge()
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'pawn' } }))
+    })
+    await waitFor(() => expect(screen.getByRole('heading', { name: /New pawn contract/i })).toBeInTheDocument())
+
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: customer._id } })
+    fireEvent.click(screen.getByRole('checkbox'))
+    fireEvent.click(screen.getByRole('button', { name: /Continue to collateral/i }))
+    await waitFor(() => expect(screen.getByPlaceholderText(/15-digit IMEI/i)).toBeInTheDocument())
+
+    fireEvent.change(screen.getByPlaceholderText(/15-digit IMEI/i), { target: { value: '358901234567890' } })
+    await waitFor(() => expect(screen.getByText('This phone was pawned before')).toBeInTheDocument())
+    expect(screen.getByText(/PW-OLD-REDEEMED/)).toBeInTheDocument()
+    expect(screen.getByPlaceholderText(/Apple/i)).toHaveValue('Samsung')
+    expect(screen.getByPlaceholderText(/iPhone 13 Pro/i)).toHaveValue('Galaxy S22')
+    expect(screen.getByRole('button', { name: /Confirm phone re-pawn/i })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: /Re-pawn this phone/i }))
+    expect(screen.getByText('Phone approved for re-pawn')).toBeInTheDocument()
+    expect(screen.getByText('Confirmed')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByRole('textbox', { name: /Resale value \(USD\)/i }), { target: { value: '600' } })
+    fireEvent.change(screen.getByRole('textbox', { name: /Principal \(USD\)/i }), { target: { value: '100' } })
+    const submitButton = screen.getByRole('button', { name: /Create pawn contract/i })
+    expect(submitButton).not.toBeDisabled()
+    fireEvent.click(submitButton)
+
+    await waitFor(() => expect(capturedPayload).not.toBeNull())
+    const submittedPayload = capturedPayload as unknown as Record<string, unknown>
+    expect(submittedPayload.reuseInventoryItem).toBe('inventory-returning-phone')
+    expect((submittedPayload.itemSnapshot as Record<string, unknown>)?.imei).toBe('358901234567890')
+  })
+
   it('supports Purchase workflow with OperationWorkflowStepper, SegmentedControl, and SerializedDeviceFields', async () => {
     const mockSuppliers = [
       { _id: 'sup-1', name: 'Global Tech Wholesale', phone: '011223344', active: true },
