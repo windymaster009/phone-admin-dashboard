@@ -36,6 +36,7 @@ function overviewActivityLabel(log: ActivityLog) {
   if (log.entity === 'TRADE' && log.action === 'CREATE') {
     return String(log.details?.type || '').toUpperCase() === 'BUY' ? 'Purchase created' : 'Sale created'
   }
+  if (log.entity === 'TRADE' && log.action === 'REFUND') return 'Sale refunded'
   if (log.entity === 'PAWN' && log.action === 'CREATE') return 'Pawn created'
   if (log.entity === 'PAWN' && log.action === 'REDEEM') return 'Pawn redeemed'
   if (log.entity === 'LOAN' && log.action === 'CREATE') return 'Loan created'
@@ -169,6 +170,7 @@ export default function BusinessOverviewView({ onReady }: { onReady: () => void 
 
   const periodLabel = data?.period.label || 'This Month'
   const salesRevenueValue = money.format(data?.financial.salesRevenue || 0)
+  const refundsValue = money.format(data?.financial.refunds || 0)
   const purchasesValue = money.format(data?.financial.purchases || 0)
   const grossProfitValue = money.format(data?.financial.grossProfit || 0)
   const stockValue = money.format(data?.inventory.costValue || 0)
@@ -209,14 +211,25 @@ export default function BusinessOverviewView({ onReady }: { onReady: () => void 
       <SummaryStats
         label="Business summary"
         variant="compact"
-        columns={5}
+        columns={6}
         items={[
           {
-            label: 'Sales Revenue',
+            label: 'Net Sales Revenue',
             value: salesRevenueValue,
+            valueTone: (data?.financial.salesRevenue || 0) < 0 ? 'negative' : 'default',
             icon: CircleDollarSign,
             tone: 'violet',
             detail: periodLabel,
+          },
+          {
+            label: 'Refunds',
+            value: refundsValue,
+            valueTone: (data?.financial.refunds || 0) > 0 ? 'negative' : 'default',
+            icon: RefreshCcw,
+            tone: 'rose',
+            detail: (data?.financial.refundWriteOffCost || 0) > 0
+              ? `${money.format(data?.financial.refundWriteOffCost || 0)} stock loss`
+              : periodLabel,
           },
           {
             label: 'Purchases',
@@ -231,7 +244,7 @@ export default function BusinessOverviewView({ onReady }: { onReady: () => void 
             valueTone: (data?.financial.grossProfit || 0) < 0 ? 'negative' : 'default',
             icon: TrendingDown,
             tone: 'blue',
-            detail: `${periodLabel} · after COGS`,
+            detail: `${periodLabel} · after COGS & refunds`,
           },
           {
             label: 'Pawn Outstanding',
@@ -252,8 +265,8 @@ export default function BusinessOverviewView({ onReady }: { onReady: () => void 
       />
 
       <section className="surface-card overview-performance-card">
-        <div className="card-heading"><div><span className="eyebrow">{periodLabel}</span><h3>Business Performance</h3><p>Completed sales, purchases, and gross profit over time.</p></div>{loading && <RefreshCcw className="overview-refreshing" size={18} />}</div>
-        <BusinessPerformanceChart points={data?.chart || []} />
+        <div className="card-heading"><div><span className="eyebrow">{periodLabel}</span><h3>Business Performance</h3><p>Net sales after refunds, purchases, and gross profit over time.</p></div>{loading && <RefreshCcw className="overview-refreshing" size={18} />}</div>
+        <BusinessPerformanceChart points={data?.chart || []} firstLabel="Net sales" ariaLabel="Net sales after refunds, purchases, and gross profit over the selected period" />
       </section>
 
       <section className="overview-snapshot-grid">
@@ -294,4 +307,3 @@ export default function BusinessOverviewView({ onReady }: { onReady: () => void 
     </div>
   )
 }
-

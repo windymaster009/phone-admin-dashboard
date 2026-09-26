@@ -15,6 +15,8 @@ const mockOverviewData = {
     salesRevenue: 12500,
     purchases: 7800,
     cogs: 8200,
+    refunds: 500,
+    refundWriteOffCost: 200,
     grossProfit: 4300,
   },
   pawn: {
@@ -107,6 +109,8 @@ describe('BusinessOverviewPage', () => {
 
     // Financial KPIs
     expect(screen.getByText('$12,500')).toBeInTheDocument() // sales revenue
+    expect(screen.getByText('$500')).toBeInTheDocument() // refunds
+    expect(screen.getByText('$200 stock loss')).toBeInTheDocument()
     expect(screen.getByText('$7,800')).toBeInTheDocument() // purchases
     expect(screen.getByText('$4,300')).toBeInTheDocument() // gross profit
     expect(screen.getAllByText('$18,500')).toHaveLength(2) // stat card + inventory snapshot

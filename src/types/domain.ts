@@ -290,6 +290,8 @@ export type BusinessOverviewData = {
     salesRevenue: number
     purchases: number
     cogs: number
+    refunds: number
+    refundWriteOffCost: number
     grossProfit: number
   }
   pawn: {

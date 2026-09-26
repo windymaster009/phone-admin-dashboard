@@ -192,6 +192,15 @@ test('GET /dashboard: aggregates sales, pawn conversions, stock counts, and perf
     if (match.type === 'BUY' && match.status === 'COMPLETED') {
       return [{ _id: null, total: 1100 }]
     }
+    const group = pipeline.find((stage) => stage.$group)?.$group
+    if (group?._id === '$type') {
+      assert.match(JSON.stringify(pipeline), /refund\.refundedAt/)
+      return [
+        { _id: 'SELL', total: 2500 },
+        { _id: 'BUY', total: 1100 },
+        { _id: 'REFUND', total: 300 },
+      ]
+    }
     return []
   }
 
@@ -248,6 +257,11 @@ test('GET /dashboard: aggregates sales, pawn conversions, stock counts, and perf
     assert.equal(res.body.recentPawns.length, 1)
     assert.equal(res.body.recentTrades.length, 1)
     assert.equal(res.body.inventoryMix.length, 2)
+    assert.deepEqual(res.body.monthPerformance, [
+      { _id: 'SELL', total: 2500 },
+      { _id: 'BUY', total: 1100 },
+      { _id: 'REFUND', total: 300 },
+    ])
   } finally {
     Pawn.updateMany = origPawnUpdateMany
     Trade.aggregate = origTradeAggregate
@@ -278,11 +292,17 @@ test('GET /business-overview: calculates revenue, COGS, gross profit, and preser
   Trade.aggregate = async (pipeline) => {
     const groupStage = pipeline.find((stage) => stage.$group)
     if (groupStage && groupStage.$group._id === null) {
+      const pipelineText = JSON.stringify(pipeline)
+      assert.match(pipelineText, /refund\.refundedAt/)
+      assert.match(pipelineText, /NO_RESTOCK/)
+      assert.match(pipelineText, /refundWriteOffCost/)
       return [{
         _id: null,
         salesRevenue: 5000,
         purchases: 3000,
         cogs: 3500,
+        refunds: 700,
+        refundWriteOffCost: 600,
       }]
     }
     return [
@@ -345,6 +365,8 @@ test('GET /business-overview: calculates revenue, COGS, gross profit, and preser
     assert.equal(res.body.financial.salesRevenue, 5000)
     assert.equal(res.body.financial.purchases, 3000)
     assert.equal(res.body.financial.cogs, 3500)
+    assert.equal(res.body.financial.refunds, 700)
+    assert.equal(res.body.financial.refundWriteOffCost, 600)
     assert.equal(res.body.financial.grossProfit, 1500)
 
     assert.equal(res.body.pawn.outstandingPrincipal.USD, 800)

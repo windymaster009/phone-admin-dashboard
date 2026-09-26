@@ -1105,6 +1105,72 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
     cambodiaNow.getUTCMonth(),
     cambodiaNow.getUTCDate() - daysSinceMonday,
   ) - cambodiaOffsetMs)
+  const dashboardCashFlowStages = (from) => [
+    {
+      $match: {
+        $or: [
+          { status: 'COMPLETED', createdAt: { $gte: from } },
+          {
+            type: 'SELL',
+            status: 'RETURNED',
+            $or: [
+              { createdAt: { $gte: from } },
+              { 'refund.refundedAt': { $gte: from } },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      $project: {
+        events: {
+          $concatArrays: [
+            {
+              $cond: [
+                { $gte: ['$createdAt', from] },
+                [{
+                  date: '$createdAt',
+                  type: '$type',
+                  total: { $ifNull: ['$amountPaid', { $ifNull: ['$total', 0] }] },
+                }],
+                [],
+              ],
+            },
+            {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ['$type', 'SELL'] },
+                    { $eq: ['$status', 'RETURNED'] },
+                    { $gte: ['$refund.refundedAt', from] },
+                  ],
+                },
+                [{
+                  date: '$refund.refundedAt',
+                  type: 'REFUND',
+                  total: {
+                    $cond: [
+                      { $eq: ['$currency', 'KHR'] },
+                      {
+                        $divide: [
+                          { $ifNull: ['$refund.amount', 0] },
+                          { $cond: [{ $gt: ['$exchangeRate', 0] }, '$exchangeRate', fallbackExchangeRate()] },
+                        ],
+                      },
+                      { $ifNull: ['$refund.amount', 0] },
+                    ],
+                  },
+                }],
+                [],
+              ],
+            },
+          ],
+        },
+      },
+    },
+    { $unwind: '$events' },
+    { $replaceRoot: { newRoot: '$events' } },
+  ]
 
   const [salesToday, purchasesToday, activePawnValue, phonesInStock, overdueContracts, lowStock, customerCount, pawnCount] = await Promise.all([
     Trade.aggregate([{ $match: { type: 'SELL', status: 'COMPLETED', createdAt: { $gte: today } } }, { $group: { _id: null, total: { $sum: '$total' } } }]),
@@ -1150,35 +1216,35 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
       { $group: { _id: '$category', count: { $sum: '$quantity' }, value: { $sum: { $multiply: ['$quantity', '$buyPrice'] } } } },
     ]),
     Trade.aggregate([
-      { $match: { status: 'COMPLETED', createdAt: { $gte: month } } },
+      ...dashboardCashFlowStages(month),
       { $group: { _id: '$type', total: { $sum: '$total' } } },
     ]),
     Trade.aggregate([
-      { $match: { status: 'COMPLETED', createdAt: { $gte: year } } },
+      ...dashboardCashFlowStages(year),
       {
         $group: {
-          _id: { month: { $month: '$createdAt' }, type: '$type' },
+          _id: { month: { $month: { date: '$date', timezone: '+07:00' } }, type: '$type' },
           total: { $sum: '$total' },
         },
       },
       { $sort: { '_id.month': 1 } },
     ]),
     Trade.aggregate([
-      { $match: { status: 'COMPLETED', createdAt: { $gte: month } } },
+      ...dashboardCashFlowStages(month),
       {
         $group: {
-          _id: { day: { $dayOfMonth: '$createdAt' }, type: '$type' },
+          _id: { day: { $dayOfMonth: { date: '$date', timezone: '+07:00' } }, type: '$type' },
           total: { $sum: '$total' },
         },
       },
       { $sort: { '_id.day': 1 } },
     ]),
     Trade.aggregate([
-      { $match: { status: 'COMPLETED', createdAt: { $gte: weekStart } } },
+      ...dashboardCashFlowStages(weekStart),
       {
         $group: {
           _id: {
-            date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: '+07:00' } },
+            date: { $dateToString: { format: '%Y-%m-%d', date: '$date', timezone: '+07:00' } },
             type: '$type',
           },
           total: { $sum: '$total' },
@@ -1220,11 +1286,6 @@ router.get('/business-overview', requireAuth, allowRoles('OWNER', 'MANAGER'), as
       '$createdAt',
     ],
   }
-  const completedTradePeriodStages = [
-    { $match: { status: 'COMPLETED' } },
-    { $addFields: { overviewDate: overviewTradeDateExpression } },
-    { $match: { overviewDate: { $gte: period.from, $lt: period.to } } },
-  ]
   const saleCogsExpression = {
     $sum: {
       $map: {
@@ -1239,6 +1300,83 @@ router.get('/business-overview', requireAuth, allowRoles('OWNER', 'MANAGER'), as
       },
     },
   }
+  const refundAmountUsdExpression = {
+    $cond: [
+      { $eq: ['$currency', 'KHR'] },
+      {
+        $divide: [
+          { $ifNull: ['$refund.amount', 0] },
+          { $cond: [{ $gt: ['$exchangeRate', 0] }, '$exchangeRate', fallbackExchangeRate()] },
+        ],
+      },
+      { $ifNull: ['$refund.amount', 0] },
+    ],
+  }
+  const overviewEventStages = [
+    { $match: { $or: [{ status: 'COMPLETED' }, { type: 'SELL', status: 'RETURNED' }] } },
+    {
+      $project: {
+        events: {
+          $concatArrays: [
+            {
+              $cond: [
+                {
+                  $and: [
+                    { $gte: [overviewTradeDateExpression, period.from] },
+                    { $lt: [overviewTradeDateExpression, period.to] },
+                  ],
+                },
+                [{
+                  date: overviewTradeDateExpression,
+                  salesRevenue: { $cond: [{ $eq: ['$type', 'SELL'] }, { $ifNull: ['$total', 0] }, 0] },
+                  purchases: { $cond: [{ $eq: ['$type', 'BUY'] }, { $ifNull: ['$total', 0] }, 0] },
+                  cogs: { $cond: [{ $eq: ['$type', 'SELL'] }, saleCogsExpression, 0] },
+                  refunds: 0,
+                  refundWriteOffCost: 0,
+                }],
+                [],
+              ],
+            },
+            {
+              $cond: [
+                {
+                  $and: [
+                    { $eq: ['$type', 'SELL'] },
+                    { $eq: ['$status', 'RETURNED'] },
+                    { $gte: ['$refund.refundedAt', period.from] },
+                    { $lt: ['$refund.refundedAt', period.to] },
+                  ],
+                },
+                [{
+                  date: '$refund.refundedAt',
+                  salesRevenue: { $multiply: [{ $ifNull: ['$total', 0] }, -1] },
+                  purchases: 0,
+                  cogs: {
+                    $cond: [
+                      { $eq: ['$refund.inventoryDisposition', 'RESTOCK'] },
+                      { $multiply: [saleCogsExpression, -1] },
+                      0,
+                    ],
+                  },
+                  refunds: refundAmountUsdExpression,
+                  refundWriteOffCost: {
+                    $cond: [
+                      { $eq: ['$refund.inventoryDisposition', 'NO_RESTOCK'] },
+                      saleCogsExpression,
+                      0,
+                    ],
+                  },
+                }],
+                [],
+              ],
+            },
+          ],
+        },
+      },
+    },
+    { $unwind: '$events' },
+    { $replaceRoot: { newRoot: '$events' } },
+  ]
   const bucketFormat = period.granularity === 'hour'
     ? '%Y-%m-%dT%H'
     : period.granularity === 'month'
@@ -1247,33 +1385,34 @@ router.get('/business-overview', requireAuth, allowRoles('OWNER', 'MANAGER'), as
 
   const [financialRows, chartRows, recentTransactions, pawnRecords, loanRecords, inventoryRecords, recentActivity] = await Promise.all([
     Trade.aggregate([
-      ...completedTradePeriodStages,
-      { $project: { type: 1, total: { $ifNull: ['$total', 0] }, saleCogs: saleCogsExpression } },
+      ...overviewEventStages,
       {
         $group: {
           _id: null,
-          salesRevenue: { $sum: { $cond: [{ $eq: ['$type', 'SELL'] }, '$total', 0] } },
-          purchases: { $sum: { $cond: [{ $eq: ['$type', 'BUY'] }, '$total', 0] } },
-          cogs: { $sum: { $cond: [{ $eq: ['$type', 'SELL'] }, '$saleCogs', 0] } },
+          salesRevenue: { $sum: '$salesRevenue' },
+          purchases: { $sum: '$purchases' },
+          cogs: { $sum: '$cogs' },
+          refunds: { $sum: '$refunds' },
+          refundWriteOffCost: { $sum: '$refundWriteOffCost' },
         },
       },
     ]),
     Trade.aggregate([
-      ...completedTradePeriodStages,
+      ...overviewEventStages,
       {
         $project: {
-          bucket: { $dateToString: { format: bucketFormat, date: '$overviewDate', timezone: overviewTimeZone } },
-          type: 1,
-          total: { $ifNull: ['$total', 0] },
-          saleCogs: saleCogsExpression,
+          bucket: { $dateToString: { format: bucketFormat, date: '$date', timezone: overviewTimeZone } },
+          salesRevenue: 1,
+          purchases: 1,
+          cogs: 1,
         },
       },
       {
         $group: {
           _id: '$bucket',
-          sales: { $sum: { $cond: [{ $eq: ['$type', 'SELL'] }, '$total', 0] } },
-          purchases: { $sum: { $cond: [{ $eq: ['$type', 'BUY'] }, '$total', 0] } },
-          cogs: { $sum: { $cond: [{ $eq: ['$type', 'SELL'] }, '$saleCogs', 0] } },
+          sales: { $sum: '$salesRevenue' },
+          purchases: { $sum: '$purchases' },
+          cogs: { $sum: '$cogs' },
         },
       },
       { $sort: { _id: 1 } },
@@ -1311,6 +1450,8 @@ router.get('/business-overview', requireAuth, allowRoles('OWNER', 'MANAGER'), as
   const salesRevenue = roundMoney(financialRow.salesRevenue || 0)
   const purchases = roundMoney(financialRow.purchases || 0)
   const cogs = roundMoney(financialRow.cogs || 0)
+  const refunds = roundMoney(financialRow.refunds || 0)
+  const refundWriteOffCost = roundMoney(financialRow.refundWriteOffCost || 0)
   const chartByKey = new Map(chartRows.map((row) => [row._id, row]))
   const chart = []
 
@@ -1408,6 +1549,8 @@ router.get('/business-overview', requireAuth, allowRoles('OWNER', 'MANAGER'), as
       salesRevenue,
       purchases,
       cogs,
+      refunds,
+      refundWriteOffCost,
       grossProfit: roundMoney(salesRevenue - cogs),
     },
     pawn: {

@@ -20,22 +20,26 @@ const mockPerformanceData = {
   monthPerformance: [
     { _id: 'SELL' as const, total: 15000 },
     { _id: 'BUY' as const, total: 9000 },
+    { _id: 'REFUND' as const, total: 1000 },
   ],
   monthlyPerformance: [
     { _id: { month: 1, type: 'SELL' as const }, total: 8000 },
     { _id: { month: 1, type: 'BUY' as const }, total: 4000 },
     { _id: { month: 2, type: 'SELL' as const }, total: 10000 },
     { _id: { month: 2, type: 'BUY' as const }, total: 6000 },
+    { _id: { month: 2, type: 'REFUND' as const }, total: 500 },
   ],
   dailyPerformance: [
     { _id: { day: 1, type: 'SELL' as const }, total: 5000 },
     { _id: { day: 1, type: 'BUY' as const }, total: 2000 },
     { _id: { day: 2, type: 'SELL' as const }, total: 10000 },
     { _id: { day: 2, type: 'BUY' as const }, total: 7000 },
+    { _id: { day: 2, type: 'REFUND' as const }, total: 1000 },
   ],
   weekPerformance: [
     { _id: { date: currentCambodiaWeekDate(), type: 'SELL' as const }, total: 3000 },
     { _id: { date: currentCambodiaWeekDate(), type: 'BUY' as const }, total: 1000 },
+    { _id: { date: currentCambodiaWeekDate(), type: 'REFUND' as const }, total: 250 },
   ],
 }
 
@@ -60,10 +64,11 @@ describe('CashFlowCard', () => {
       expect(screen.getByText('Net cash flow')).toBeInTheDocument()
     })
 
-    // Month mode: sales 15000, purchases 9000, net = +6000
-    expect(screen.getByText('$6,000')).toBeInTheDocument()
+    // Month mode: sales 15000, purchases 9000, refunds 1000, net = +5000
+    expect(screen.getByText('$5,000')).toBeInTheDocument()
     expect(screen.getByText('$15,000')).toBeInTheDocument()
-    expect(screen.getByText('$9,000')).toBeInTheDocument()
+    expect(screen.getByText('$10,000')).toBeInTheDocument()
+    expect(screen.getByText('$1,000 refunds')).toBeInTheDocument()
     expect(screen.getByText('More cash in than out')).toBeInTheDocument()
   })
 
@@ -110,7 +115,7 @@ describe('CashFlowCard', () => {
 
     await waitFor(() => {
       expect(screen.getByText('No cash movement yet')).toBeInTheDocument()
-      expect(screen.getByText('Completed sales and purchases will appear here.')).toBeInTheDocument()
+      expect(screen.getByText('Completed sales, purchases, and refunds will appear here.')).toBeInTheDocument()
     })
   })
 
@@ -146,7 +151,7 @@ describe('CashFlowCard', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Net cash flow')).toBeInTheDocument()
-      expect(screen.getByText('$6,000')).toBeInTheDocument()
+      expect(screen.getByText('$5,000')).toBeInTheDocument()
     })
   })
 })
