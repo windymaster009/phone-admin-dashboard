@@ -489,6 +489,69 @@ test('Pawn creation: successfully creates customer, collateral inventory item, a
   }
 })
 
+test('Pawn creation: keeps a walk-in customer on the pawn without creating a customer record', async () => {
+  const origCustomerCreate = Customer.create
+  const origItemCreate = InventoryItem.create
+  const origItemFindOne = InventoryItem.findOne
+  const origPawnCreate = Pawn.create
+  let customerCreateCalled = false
+  let createdPawn = null
+
+  Customer.create = async () => {
+    customerCreateCalled = true
+    throw new Error('Walk-in pawn must not create a customer record')
+  }
+  InventoryItem.findOne = () => ({ session: async () => null })
+  InventoryItem.create = async (items) => [{ _id: new mongoose.Types.ObjectId(), ...items[0] }]
+  Pawn.create = async (items) => {
+    createdPawn = {
+      _id: new mongoose.Types.ObjectId(),
+      status: 'ACTIVE',
+      ...items[0],
+      populate: async () => createdPawn,
+      toObject: () => ({ ...createdPawn }),
+    }
+    return [createdPawn]
+  }
+
+  try {
+    const res = await callRouter(apiRouter, {
+      method: 'POST',
+      url: '/pawns',
+      user: mockOwner,
+      body: {
+        walkInCustomer: true,
+        customerDetails: { name: 'Walk-in Dara', phone: '012 222 333', address: 'Phnom Penh' },
+        itemSnapshot: { name: 'Apple iPhone 13', brand: 'Apple', model: 'iPhone 13', imei: '352099001761481' },
+        estimatedValue: 300,
+        pawnPercentage: 45,
+        principal: 100,
+        currency: 'USD',
+        termDays: 7,
+        ownershipConfirmed: true,
+      },
+    })
+
+    assert.equal(res.status, 201)
+    assert.equal(customerCreateCalled, false)
+    assert.equal(createdPawn.customer, undefined)
+    assert.deepEqual(createdPawn.customerSnapshot, {
+      name: 'Walk-in Dara',
+      phone: '012 222 333',
+      nationalIdNumber: undefined,
+      address: 'Phnom Penh',
+      type: 'WALK_IN',
+    })
+    assert.equal(res.body.pawn.customer.name, 'Walk-in Dara')
+    assert.equal(res.body.pawn.customer.isWalkIn, true)
+  } finally {
+    Customer.create = origCustomerCreate
+    InventoryItem.create = origItemCreate
+    InventoryItem.findOne = origItemFindOne
+    Pawn.create = origPawnCreate
+  }
+})
+
 test('Pawn IMEI reuse lookup: allows an archived phone whose latest pawn was redeemed', async () => {
   const origItemFindOne = InventoryItem.findOne
   const origPawnFindOne = Pawn.findOne
@@ -679,6 +742,11 @@ test('Pawn creation: reuses redeemed phone inventory and links the new contract 
 
 test('Pawn list: CASHIER role redacts customer nationalIdNumber', async () => {
   let populateFieldsCalled = null
+  const pawnWithSnapshot = {
+    pawnNo: 'PW-WALK-IN-REDACTION',
+    customerSnapshot: { name: 'Walk-in Customer', phone: '012345678', nationalIdNumber: 'SECRET-ID', type: 'WALK_IN' },
+    toObject() { return { ...this } },
+  }
   Pawn.find = (query) => {
     if (query?.dueDate && query?.status?.$in) {
       return {
@@ -694,7 +762,7 @@ test('Pawn list: CASHIER role redacts customer nationalIdNumber', async () => {
         return chain
       },
       sort() { return chain },
-      limit() { return Promise.resolve([]) },
+      limit() { return Promise.resolve([pawnWithSnapshot]) },
     }
     return chain
   }
@@ -703,11 +771,14 @@ test('Pawn list: CASHIER role redacts customer nationalIdNumber', async () => {
     const resCashier = await callRouter(apiRouter, { method: 'GET', url: '/pawns', user: mockCashier })
     assert.equal(resCashier.status, 200)
     assert.equal(populateFieldsCalled, 'name phone')
+    assert.equal(resCashier.body.pawns[0].customerSnapshot.nationalIdNumber, undefined)
+    assert.equal(resCashier.body.pawns[0].customer.nationalIdNumber, '')
 
     populateFieldsCalled = null
     const resOwner = await callRouter(apiRouter, { method: 'GET', url: '/pawns', user: mockOwner })
     assert.equal(resOwner.status, 200)
     assert.equal(populateFieldsCalled, 'name phone nationalIdNumber')
+    assert.equal(resOwner.body.pawns[0].customerSnapshot.nationalIdNumber, 'SECRET-ID')
   } finally {
     Pawn.find = origPawnFind
   }

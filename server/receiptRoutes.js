@@ -199,6 +199,14 @@ function customerParty(customer, fallback = 'Unknown customer') {
   }
 }
 
+function pawnCustomerParty(pawn) {
+  const party = customerParty(pawn.customer, pawn.customerSnapshot?.name || 'Walk-in customer')
+  if (!party.phone) party.phone = pawn.customerSnapshot?.phone || ''
+  if (!party.nationalIdNumber) party.nationalIdNumber = pawn.customerSnapshot?.nationalIdNumber || ''
+  if (!party.address) party.address = pawn.customerSnapshot?.address || ''
+  return party
+}
+
 function currentTradeReceiptSubId(trade) {
   const version = Number(trade?.correctionVersion || 0)
   return trade?.type === 'SELL' && version > 0 ? `trade-correction-${version}` : 'trade'
@@ -372,7 +380,7 @@ function buildPawnContractSnapshot(pawn, revision = findPawnContractRevision(paw
     shop: shopSnapshot(),
     referenceNo: pawn.pawnNo,
     issuedAt,
-    party: customerParty(pawn.customer),
+    party: pawnCustomerParty(pawn),
     currency,
     exchangeRate: Number(pawn.exchangeRate || 1),
     items: [pawnItem(pawn)],
@@ -432,7 +440,7 @@ function buildPawnPaymentSnapshot(pawn, payment, documentType) {
     referenceNo: pawn.pawnNo,
     paymentReference: payment._id.toString(),
     issuedAt: payment.paidAt || pawn.updatedAt || new Date(),
-    party: customerParty(pawn.customer),
+    party: pawnCustomerParty(pawn),
     currency: pawn.currency === 'KHR' ? 'KHR' : 'USD',
     exchangeRate: Number(pawn.exchangeRate || 1),
     items: [pawnItem(pawn)],

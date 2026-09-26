@@ -1721,6 +1721,7 @@ export default function OperationModalBridge() {
   const pawnCustomerOptions: SegmentedControlOption<PawnCustomerMode>[] = useMemo(() => [
     { value: 'EXISTING', label: 'Existing customer', id: 'pawn-customer-tab-existing' },
     { value: 'NEW', label: 'New customer', id: 'pawn-customer-tab-new' },
+    { value: 'WALK_IN', label: 'Walk-in customer', id: 'pawn-customer-tab-walk-in' },
   ], [])
 
   function openPurchaseItem(id: string) {
@@ -2086,12 +2087,13 @@ export default function OperationModalBridge() {
     }
     const payload = {
       customer: pawnCustomerMode === 'EXISTING' ? pawnCustomerId : undefined,
-      customerDetails: pawnCustomerMode === 'NEW' ? {
+      customerDetails: pawnCustomerMode !== 'EXISTING' ? {
         name: pawnWalkInName,
         phone: pawnWalkInPhone,
         nationalIdNumber: pawnWalkInNationalId,
         address: pawnWalkInAddress,
       } : undefined,
+      walkInCustomer: pawnCustomerMode === 'WALK_IN',
       itemSnapshot: {
         name: [brand, model, storage ? `${storage.replace(/\s*GB$/i, '')}GB` : ''].filter(Boolean).join(' '),
         brand,
@@ -2578,12 +2580,13 @@ export default function OperationModalBridge() {
                 className="pawn-customer-tabs"
                 onChange={(mode) => { setPawnCustomerMode(mode); setPawnOwnershipConfirmed(false); setError('') }}
               />
-              <div id="pawn-customer-panel" role="tabpanel" aria-labelledby={pawnCustomerMode === 'EXISTING' ? 'pawn-customer-tab-existing' : 'pawn-customer-tab-new'} className="operation-form-grid purchase-fields-grid">
+              <div id="pawn-customer-panel" role="tabpanel" aria-labelledby={`pawn-customer-tab-${pawnCustomerMode.toLowerCase().replace('_', '-')}`} className="operation-form-grid purchase-fields-grid">
                 {pawnCustomerMode === 'EXISTING' ? <label className={`operation-wide ${pawnAttempted && !pawnCustomerId ? 'field-invalid' : ''}`}>Customer<select required value={pawnCustomerId} onChange={(event) => { setPawnCustomerId(event.target.value); setPawnOwnershipConfirmed(false); setError('') }}><option value="" disabled>Select customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name}{customer.phone ? ` — ${customer.phone}` : ' — No phone recorded'}{customer.nationalIdNumber ? ' — ID recorded' : ' — ID not provided'}</option>)}</select>{pawnAttempted && !pawnCustomerId && <small>Select a customer</small>}</label> : <>
                   <label className={pawnAttempted && !pawnWalkInName.trim() ? 'field-invalid' : ''}>Customer name<input required value={pawnWalkInName} onChange={(event) => setPawnWalkInName(event.target.value)} placeholder="Full name" />{pawnAttempted && !pawnWalkInName.trim() && <small>Name is required</small>}</label>
                   <label>Phone number <small className="optional-marker">Optional</small><input value={pawnWalkInPhone} onChange={(event) => setPawnWalkInPhone(event.target.value)} placeholder="012 345 678" /></label>
                   <label>National ID <small className="optional-marker">Optional</small><input value={pawnWalkInNationalId} onChange={(event) => { setPawnWalkInNationalId(event.target.value); setPawnOwnershipConfirmed(false) }} placeholder="Leave blank to protect privacy" /></label>
                   <label>Address <small className="optional-marker">Optional</small><input value={pawnWalkInAddress} onChange={(event) => setPawnWalkInAddress(event.target.value)} placeholder="Current address" /></label>
+                  {pawnCustomerMode === 'WALK_IN' && <small className="operation-wide">This customer is recorded on this pawn contract only and will not be added to Customer management.</small>}
                 </>}
               </div>
               {pawnCustomerMode === 'EXISTING' && selectedPawnCustomer && (

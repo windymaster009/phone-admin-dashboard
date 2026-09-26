@@ -1957,7 +1957,7 @@ body.operation-modal-open {
 .pawn-customer-summary,
 .pawn-contract-summary { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border, rgba(255,255,255,.08)); }
 .pawn-contract-summary { grid-template-columns: repeat(4,minmax(0,1fr)); }
-.pawn-customer-tabs { grid-template-columns: repeat(2,minmax(0,1fr)); }
+.pawn-customer-tabs { grid-template-columns: repeat(3,minmax(0,1fr)); }
 .pawn-customer-summary > div,
 .pawn-contract-summary > div { min-width: 0; padding: 12px; border-radius: 11px; background: var(--surface-solid, #151e34); }
 .pawn-customer-summary span,
@@ -2885,7 +2885,7 @@ body.operation-modal-open {
   }
 
   .pawn-customer-tabs {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
     margin-bottom: 8px;
     padding: 3px;

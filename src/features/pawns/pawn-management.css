@@ -59,12 +59,12 @@
   background: color-mix(in srgb, var(--rose) 26%, var(--bg-soft));
 }
 
-/* Low-emphasis, visually separate delete action in PawnDetailModal footer */
+/* Visually separate destructive action in PawnDetailModal footer */
 .pawn-detail-modal .pawn-delete-action {
-  color: var(--muted);
-  border-color: transparent;
-  background: transparent;
-  font-weight: 500;
+  color: var(--rose);
+  border: 1px solid color-mix(in srgb, var(--rose) 38%, var(--border));
+  background: color-mix(in srgb, var(--rose) 7%, transparent);
+  font-weight: 600;
   transition: color var(--transition-fast, 150ms), border-color var(--transition-fast, 150ms), background-color var(--transition-fast, 150ms);
 }
 

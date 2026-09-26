@@ -76,17 +76,19 @@ router.get('/', requireAuth, asyncRoute(async (req, res) => {
         $or: [
           { pawnNo: pattern },
           { customer: { $in: matchedCustomers.map((customer) => customer._id) } },
+          { 'customerSnapshot.name': pattern },
+          { 'customerSnapshot.phone': pattern },
           { 'itemSnapshot.name': pattern },
           { 'itemSnapshot.imei': pattern },
         ],
       })
-        .select('_id pawnNo customer itemSnapshot.name itemSnapshot.imei principal remainingPrincipal currency status dueDate')
+        .select('_id pawnNo customer customerSnapshot itemSnapshot.name itemSnapshot.imei principal remainingPrincipal currency status dueDate')
         .limit(LIMIT_PER_CATEGORY)
         .lean().then((pawns) => pawns.map((pawn) => ({
           _id: pawn._id,
           pawnNo: pawn.pawnNo,
-          customerName: matchedCustomers.find((customer) => String(customer._id) === String(pawn.customer))?.name,
-          customerPhone: matchedCustomers.find((customer) => String(customer._id) === String(pawn.customer))?.phone,
+          customerName: matchedCustomers.find((customer) => String(customer._id) === String(pawn.customer))?.name || pawn.customerSnapshot?.name,
+          customerPhone: matchedCustomers.find((customer) => String(customer._id) === String(pawn.customer))?.phone || pawn.customerSnapshot?.phone,
           collateral: pawn.itemSnapshot?.name,
           loanAmount: pawn.remainingPrincipal ?? pawn.principal,
           currency: pawn.currency,

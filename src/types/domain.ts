@@ -110,6 +110,7 @@ export type Pawn = {
   _id: string
   pawnNo: string
   customer?: Customer
+  customerSnapshot?: { name: string; phone?: string; nationalIdNumber?: string; address?: string; type?: 'EXISTING' | 'NEW' | 'WALK_IN' }
   inventoryItem?: Pick<InventoryItem, '_id' | 'sku' | 'barcode' | 'name' | 'brand' | 'model' | 'storage' | 'color' | 'imei1' | 'sellPrice' | 'status'> | string
   previousPawn?: string | { _id: string; pawnNo: string; status: string }
   itemSnapshot: { name: string; brand?: string; model?: string; imei?: string; condition?: string; color?: string; storage?: string; sku?: string }

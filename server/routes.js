@@ -737,8 +737,27 @@ function pawnFeeSummary(pawn, asOf = new Date()) {
   }
 }
 
-function pawnResponse(pawn, asOf = new Date()) {
+function pawnResponse(pawn, asOf = new Date(), includeNationalId = true) {
   const value = typeof pawn?.toObject === 'function' ? pawn.toObject() : { ...pawn }
+  if (!includeNationalId) {
+    if (value.customer && typeof value.customer === 'object') {
+      value.customer = { ...value.customer }
+      delete value.customer.nationalIdNumber
+    }
+    if (value.customerSnapshot) {
+      value.customerSnapshot = { ...value.customerSnapshot }
+      delete value.customerSnapshot.nationalIdNumber
+    }
+  }
+  if (!value.customer && value.customerSnapshot?.name) {
+    value.customer = {
+      name: value.customerSnapshot.name,
+      phone: value.customerSnapshot.phone || '',
+      nationalIdNumber: value.customerSnapshot.nationalIdNumber || '',
+      address: value.customerSnapshot.address || '',
+      isWalkIn: value.customerSnapshot.type === 'WALK_IN',
+    }
+  }
   return { ...value, feeSummary: pawnFeeSummary(value, asOf) }
 }
 
@@ -889,7 +908,7 @@ async function refreshPawnStatuses() {
       await ActivityLog.create({
         action: 'DUE_REMINDER', entity: 'PAWN', entityId: pawn._id,
         details: {
-          pawnNo: pawn.pawnNo, customer: pawn.customer?.name || 'Unknown customer',
+          pawnNo: pawn.pawnNo, customer: pawn.customer?.name || pawn.customerSnapshot?.name || 'Unknown customer',
           principal: summary.remainingPrincipal, fee: summary.accruedFee,
           total: summary.redemptionTotal, currency: pawn.currency, dueDate: pawn.dueDate,
         },
@@ -1091,7 +1110,7 @@ router.delete('/users/:id', requireAuth, allowRoles('OWNER'), asyncRoute(async (
   res.json({ deleted: true, userId: user._id })
 }))
 
-router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
+router.get('/dashboard', requireAuth, asyncRoute(async (req, res) => {
   await refreshPawnStatuses()
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
@@ -1265,7 +1284,7 @@ router.get('/dashboard', requireAuth, asyncRoute(async (_req, res) => {
       customerCount,
       pawnCount,
     },
-    recentPawns: recentPawns.map((pawn) => pawnResponse(pawn, now)),
+    recentPawns: recentPawns.map((pawn) => pawnResponse(pawn, now, req.user.role !== 'CASHIER')),
     recentTrades,
     inventoryMix,
     monthPerformance,
@@ -2760,7 +2779,7 @@ router.get('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asy
     .sort({ createdAt: -1 })
     .limit(300)
   const asOf = new Date()
-  res.json({ pawns: pawns.map((pawn) => pawnResponse(pawn, asOf)) })
+  res.json({ pawns: pawns.map((pawn) => pawnResponse(pawn, asOf, req.user.role !== 'CASHIER')) })
 }))
 
 router.get('/pawns/reuse-status/:imei', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
@@ -2769,9 +2788,7 @@ router.get('/pawns/reuse-status/:imei', requireAuth, allowRoles('OWNER', 'MANAGE
     await status.previousPawn.populate('customer', 'name phone')
   }
   const item = status.item && typeof status.item.toObject === 'function' ? status.item.toObject() : status.item
-  const previousPawn = status.previousPawn && typeof status.previousPawn.toObject === 'function'
-    ? status.previousPawn.toObject()
-    : status.previousPawn
+  const previousPawn = status.previousPawn ? pawnResponse(status.previousPawn) : status.previousPawn
   res.json({ ...status, item, previousPawn })
 }))
 
@@ -2784,19 +2801,21 @@ router.get('/pawns/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'),
     .populate('inventoryItem', 'sku barcode name brand model storage color imei1 sellPrice status')
     .populate('renewals.renewedBy', 'name role')
   if (!pawn) throw requestError(404, 'Pawn contract was not found')
-  res.json({ pawn: pawnResponse(pawn) })
+  res.json({ pawn: pawnResponse(pawn, new Date(), req.user.role !== 'CASHIER') })
 }))
 
 router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {
-  const { customer, customerDetails, itemSnapshot, estimatedValue, pawnPercentage, principal, termDays, dailyFeeRate, feeAtDue, identificationVerified, ownershipConfirmed, notes, valuationSnapshot, reuseInventoryItem } = req.body
+  const { customer, customerDetails, walkInCustomer, itemSnapshot, estimatedValue, pawnPercentage, principal, termDays, dailyFeeRate, feeAtDue, identificationVerified, ownershipConfirmed, notes, valuationSnapshot, reuseInventoryItem } = req.body
+  const isWalkInCustomer = walkInCustomer === true
   if ((!customer && !customerDetails) || !itemSnapshot?.name) return res.status(400).json({ message: 'Customer and item are required' })
+  if (customer && isWalkInCustomer) throw requestError(400, 'Walk-in pawn cannot be linked to an existing customer')
 
   let existingCustomer
   if (customer) {
-    existingCustomer = await Customer.findById(customer).select('nationalIdNumber')
+    existingCustomer = await Customer.findById(customer).select('name phone nationalIdNumber address')
     if (!existingCustomer) throw requestError(404, 'Customer not found')
   } else {
-    if (!clean(customerDetails?.name)) throw requestError(400, 'New customer name is required')
+    if (!clean(customerDetails?.name)) throw requestError(400, isWalkInCustomer ? 'Walk-in customer name is required' : 'New customer name is required')
   }
   const nationalIdNumber = clean(existingCustomer?.nationalIdNumber || customerDetails?.nationalIdNumber)
   const confirmedOwnership = Boolean(ownershipConfirmed || (nationalIdNumber && identificationVerified))
@@ -2836,7 +2855,7 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
   let reusedPreviousPawn = null
   await mongoose.connection.transaction(async (session) => {
     let pawnCustomerId = customer
-    if (!pawnCustomerId) {
+    if (!pawnCustomerId && !isWalkInCustomer) {
       const [createdCustomer] = await Customer.create([{
         name: clean(customerDetails.name),
         phone: clean(customerDetails.phone) || undefined,
@@ -2846,6 +2865,13 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
         createdBy: req.user._id,
       }], { session })
       pawnCustomerId = createdCustomer._id
+    }
+    const customerSnapshot = {
+      name: clean(existingCustomer?.name || customerDetails?.name),
+      phone: clean(existingCustomer?.phone || customerDetails?.phone),
+      nationalIdNumber,
+      address: clean(existingCustomer?.address || customerDetails?.address),
+      type: customer ? 'EXISTING' : isWalkInCustomer ? 'WALK_IN' : 'NEW',
     }
     const pawnNo = makeCode('PW')
     const reuseStatus = await pawnReuseStatusForImei(itemImei, session)
@@ -2893,7 +2919,7 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
     }
     const itemSku = inventoryItem.sku
     const created = await Pawn.create([{
-      pawnNo, customer: pawnCustomerId, inventoryItem: inventoryItem._id,
+      pawnNo, customer: pawnCustomerId || undefined, customerSnapshot, inventoryItem: inventoryItem._id,
       previousPawn: reusedPreviousPawn?._id,
       itemSnapshot: {
         ...itemSnapshot,
@@ -2924,7 +2950,7 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
     }], { session })
     pawn = created[0]
   })
-  await writeActivity(req, { action: 'CREATE', entity: 'PAWN', entityId: pawn._id, details: { pawnNo: pawn.pawnNo, principal: pawn.principal, currency: pawn.currency, previousPawn: reusedPreviousPawn?.pawnNo } })
+  await writeActivity(req, { action: 'CREATE', entity: 'PAWN', entityId: pawn._id, details: { pawnNo: pawn.pawnNo, principal: pawn.principal, currency: pawn.currency, customer: pawn.customerSnapshot?.name, customerType: pawn.customerSnapshot?.type, previousPawn: reusedPreviousPawn?.pawnNo } })
   if (typeof pawn.populate === 'function') {
     await pawn.populate('customer', 'name phone nationalIdNumber')
     await pawn.populate('inventoryItem', 'sku barcode name brand model storage color imei1 sellPrice status')
@@ -2957,7 +2983,7 @@ router.post('/pawns/:id/payment', requireAuth, allowRoles('OWNER', 'MANAGER', 'C
     await pawn.populate('inventoryItem', 'sku barcode name brand model storage color imei1 sellPrice status')
     await pawn.populate('renewals.renewedBy', 'name role')
   }
-  res.json({ pawn: pawnResponse(pawn) })
+  res.json({ pawn: pawnResponse(pawn, new Date(), req.user.role !== 'CASHIER') })
 }))
 
 router.post('/pawns/:id/renew', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
@@ -3090,7 +3116,7 @@ router.post('/pawns/:id/renew', requireAuth, allowRoles('OWNER', 'MANAGER', 'CAS
     await pawn.populate('renewals.renewedBy', 'name role')
   }
   // Replays return current balances without changing the recorded renewal.
-  res.json({ pawn: pawnResponse(pawn) })
+  res.json({ pawn: pawnResponse(pawn, new Date(), req.user.role !== 'CASHIER') })
 }))
 
 router.post('/pawns/:id/redeem', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
@@ -3154,7 +3180,7 @@ router.post('/pawns/:id/redeem', requireAuth, allowRoles('OWNER', 'MANAGER', 'CA
     await pawn.populate('inventoryItem', 'sku barcode name brand model storage color imei1 sellPrice status')
     await pawn.populate('renewals.renewedBy', 'name role')
   }
-  res.json({ pawn: pawnResponse(pawn) })
+  res.json({ pawn: pawnResponse(pawn, new Date(), req.user.role !== 'CASHIER') })
 }))
 
 router.post('/pawns/:id/forfeit', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(async (req, res) => {

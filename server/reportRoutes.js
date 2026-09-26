@@ -263,7 +263,7 @@ router.get('/pawns', requireAuth, allowRoles(...reportRoles), asyncRoute(async (
     ],
     rows: pawns.slice(0, 500).map((pawn) => ({
       id: pawn._id, date: pawn.issueDate || pawn.createdAt, reference: pawn.pawnNo,
-      party: pawn.customer?.name || 'Unknown customer', item: pawn.itemSnapshot?.name || 'Collateral',
+      party: pawn.customer?.name || pawn.customerSnapshot?.name || 'Unknown customer', item: pawn.itemSnapshot?.name || 'Collateral',
       currency: pawn.currency,
       principal: pawn.originalPrincipal, outstanding: pawn.remainingPrincipal, paid: pawn.amountPaid,
       dueDate: pawn.dueDate, staff: publicStaff(pawn.createdBy), status: pawn.status,
@@ -491,7 +491,7 @@ router.get('/payments', requireAuth, allowRoles(...reportRoles), asyncRoute(asyn
       const normalizedAmount = normalizeAmount(amount, pawnCurrency, pawn.exchangeRate)
       entries.push({
         id: payment._id, date: payment.paidAt, reference: pawn.pawnNo,
-        party: pawn.customer?.name || 'Pawn customer', source: 'PAWN', direction: 'IN', method: 'OTHER',
+        party: pawn.customer?.name || pawn.customerSnapshot?.name || 'Pawn customer', source: 'PAWN', direction: 'IN', method: 'OTHER',
         currency: pawnCurrency,
         amount,
         normalizedAmount,

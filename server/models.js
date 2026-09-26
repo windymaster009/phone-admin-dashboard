@@ -183,7 +183,14 @@ const renewalSchema = new Schema(
 const pawnSchema = new Schema(
   {
     pawnNo: { type: String, required: true, unique: true, index: true },
-    customer: { type: Schema.Types.ObjectId, ref: 'Customer', required: true, index: true },
+    customer: { type: Schema.Types.ObjectId, ref: 'Customer', index: true },
+    customerSnapshot: {
+      name: { type: String, trim: true },
+      phone: { type: String, trim: true },
+      nationalIdNumber: { type: String, trim: true },
+      address: { type: String, trim: true },
+      type: { type: String, enum: ['EXISTING', 'NEW', 'WALK_IN'] },
+    },
     inventoryItem: { type: Schema.Types.ObjectId, ref: 'InventoryItem' },
     previousPawn: { type: Schema.Types.ObjectId, ref: 'Pawn', index: true },
     itemSnapshot: {

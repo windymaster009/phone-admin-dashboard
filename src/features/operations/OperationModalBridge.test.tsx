@@ -2284,6 +2284,7 @@ describe('OperationModalBridge component', () => {
 
   it('guards pawn creation against rapid double submission before React rerenders', async () => {
     let postCallCount = 0
+    let submittedPawn: Record<string, unknown> | undefined
     let resolvePost: (value: Response) => void
     const postPromise = new Promise<Response>((resolve) => {
       resolvePost = resolve
@@ -2295,6 +2296,7 @@ describe('OperationModalBridge component', () => {
 
       if (url.includes('/pawns') && method === 'POST') {
         postCallCount++
+        submittedPawn = JSON.parse(String(init?.body))
         return postPromise
       }
 
@@ -2334,8 +2336,9 @@ describe('OperationModalBridge component', () => {
       expect(screen.getByRole('dialog')).toBeInTheDocument()
     })
 
-    // Step 1: Fill customer
-    fireEvent.click(screen.getByRole('tab', { name: /New customer/i }))
+    // Step 1: Fill a walk-in customer without adding them to Customer management
+    fireEvent.click(screen.getByRole('tab', { name: /Walk-in customer/i }))
+    expect(screen.getByText(/will not be added to Customer management/i)).toBeInTheDocument()
     fireEvent.change(screen.getByPlaceholderText(/Full name/i), { target: { value: 'Pawn Customer Sok' } })
     fireEvent.change(screen.getByPlaceholderText(/012 345 678/i), { target: { value: '012334455' } })
     fireEvent.click(screen.getByRole('checkbox', { name: /Customer identity and collateral ownership confirmed/i }))
@@ -2373,6 +2376,11 @@ describe('OperationModalBridge component', () => {
 
     // Before submittingPawnRef fix, postCallCount is 2. Must be 1.
     expect(postCallCount).toBe(1)
+    expect(submittedPawn).toMatchObject({
+      walkInCustomer: true,
+      customerDetails: { name: 'Pawn Customer Sok', phone: '012334455' },
+    })
+    expect(submittedPawn?.customer).toBeUndefined()
 
     resolvePost!({
       ok: true,
