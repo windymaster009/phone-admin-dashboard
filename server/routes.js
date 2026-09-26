@@ -2815,7 +2815,7 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
     existingCustomer = await Customer.findById(customer).select('name phone nationalIdNumber address')
     if (!existingCustomer) throw requestError(404, 'Customer not found')
   } else {
-    if (!clean(customerDetails?.name)) throw requestError(400, isWalkInCustomer ? 'Walk-in customer name is required' : 'New customer name is required')
+    if (!isWalkInCustomer && !clean(customerDetails?.name)) throw requestError(400, 'New customer name is required')
   }
   const nationalIdNumber = clean(existingCustomer?.nationalIdNumber || customerDetails?.nationalIdNumber)
   const confirmedOwnership = Boolean(ownershipConfirmed || (nationalIdNumber && identificationVerified))
@@ -2867,7 +2867,7 @@ router.post('/pawns', requireAuth, allowRoles('OWNER', 'MANAGER'), asyncRoute(as
       pawnCustomerId = createdCustomer._id
     }
     const customerSnapshot = {
-      name: clean(existingCustomer?.name || customerDetails?.name),
+      name: clean(existingCustomer?.name || customerDetails?.name) || 'Walk-in customer',
       phone: clean(existingCustomer?.phone || customerDetails?.phone),
       nationalIdNumber,
       address: clean(existingCustomer?.address || customerDetails?.address),

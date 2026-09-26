@@ -521,7 +521,7 @@ test('Pawn creation: keeps a walk-in customer on the pawn without creating a cus
       user: mockOwner,
       body: {
         walkInCustomer: true,
-        customerDetails: { name: 'Walk-in Dara', phone: '012 222 333', address: 'Phnom Penh' },
+        customerDetails: { name: '', phone: '012 222 333', address: 'Phnom Penh' },
         itemSnapshot: { name: 'Apple iPhone 13', brand: 'Apple', model: 'iPhone 13', imei: '352099001761481' },
         estimatedValue: 300,
         pawnPercentage: 45,
@@ -536,13 +536,13 @@ test('Pawn creation: keeps a walk-in customer on the pawn without creating a cus
     assert.equal(customerCreateCalled, false)
     assert.equal(createdPawn.customer, undefined)
     assert.deepEqual(createdPawn.customerSnapshot, {
-      name: 'Walk-in Dara',
+      name: 'Walk-in customer',
       phone: '012 222 333',
       nationalIdNumber: undefined,
       address: 'Phnom Penh',
       type: 'WALK_IN',
     })
-    assert.equal(res.body.pawn.customer.name, 'Walk-in Dara')
+    assert.equal(res.body.pawn.customer.name, 'Walk-in customer')
     assert.equal(res.body.pawn.customer.isWalkIn, true)
   } finally {
     Customer.create = origCustomerCreate

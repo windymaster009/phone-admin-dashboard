@@ -21,6 +21,12 @@
   overflow: hidden;
 }
 
+@media (min-width: 901px) {
+  .detail-modal.pawn-detail-modal {
+    width: min(1040px, calc(100vw - 48px));
+  }
+}
+
 .pawn-detail-modal .detail-modal-header {
   flex: 0 0 auto;
 }
@@ -534,6 +540,24 @@
   cursor: not-allowed;
 }
 
+.pawn-detail-modal .pawn-claim-footer-action {
+  color: var(--green);
+  border-color: color-mix(in srgb, var(--green) 30%, var(--border));
+  background: color-mix(in srgb, var(--green) 6%, transparent);
+}
+
+.pawn-detail-modal .pawn-claim-footer-action:not(:disabled) {
+  border-color: color-mix(in srgb, var(--green) 45%, var(--border));
+  background: color-mix(in srgb, var(--green) 10%, transparent);
+}
+
+.pawn-detail-modal .pawn-claim-footer-action:not(:disabled):hover,
+.pawn-detail-modal .pawn-claim-footer-action:not(:disabled):focus-visible {
+  color: var(--green);
+  border-color: color-mix(in srgb, var(--green) 60%, var(--border));
+  background: color-mix(in srgb, var(--green) 15%, transparent);
+}
+
 .pawn-renewal-summary {
   grid-column: 1 / -1;
   display: grid;
@@ -950,7 +974,7 @@
     width: 100%;
   }
 
-  /* Make Due payment, Extend pawn, and Redeem item easy to find */
+  /* Keep Due, Extend, Claim, and Redeem actions easy to find */
   .pawn-detail-modal .detail-modal-transaction-group {
     order: 1;
     display: grid;

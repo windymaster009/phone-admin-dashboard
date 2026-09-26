@@ -26,7 +26,8 @@ describe('PawnDetailModal component', () => {
     // Heading and identity
     expect(screen.getByRole('heading', { level: 3, name: mockPawnRecord.pawnNo })).toBeInTheDocument()
     expect(screen.getByText(/Pawn contract/i)).toBeInTheDocument()
-    expect(screen.getAllByText('Active').length).toBeGreaterThan(0)
+    // Status appears once in the balance card; the header must not duplicate it.
+    expect(screen.getAllByText('Active')).toHaveLength(1)
 
     // Customer & Item info
     expect(screen.getByText(mockPawnRecord.customer!.name)).toBeInTheDocument()
@@ -110,8 +111,11 @@ describe('PawnDetailModal component', () => {
     // Redundant Print ticket button is NOT rendered
     expect(screen.queryByRole('button', { name: /Print ticket/i })).not.toBeInTheDocument()
 
-    // Claim collateral is NOT available on active pawns (reserved only when eligible & overdue)
-    expect(screen.queryByRole('button', { name: /Claim collateral/i })).not.toBeInTheDocument()
+    // Authorized staff can always see Claim collateral on an open pawn, but it
+    // remains disabled until the contract passes its protected grace period.
+    const claimBtn = screen.getByRole('button', { name: /Claim collateral/i })
+    expect(claimBtn).toBeDisabled()
+    expect(claimBtn.closest('.detail-modal-transaction-group')).toBeInTheDocument()
   })
 
   it('supports dashboard reuse with onOpenAll action', async () => {

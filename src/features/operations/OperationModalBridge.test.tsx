@@ -2339,7 +2339,9 @@ describe('OperationModalBridge component', () => {
     // Step 1: Fill a walk-in customer without adding them to Customer management
     fireEvent.click(screen.getByRole('tab', { name: /Walk-in customer/i }))
     expect(screen.getByText(/will not be added to Customer management/i)).toBeInTheDocument()
-    fireEvent.change(screen.getByPlaceholderText(/Full name/i), { target: { value: 'Pawn Customer Sok' } })
+    const walkInNameInput = screen.getByPlaceholderText(/Full name/i)
+    expect(walkInNameInput).not.toBeRequired()
+    expect(walkInNameInput.closest('label')).toHaveTextContent('Optional')
     fireEvent.change(screen.getByPlaceholderText(/012 345 678/i), { target: { value: '012334455' } })
     fireEvent.click(screen.getByRole('checkbox', { name: /Customer identity and collateral ownership confirmed/i }))
 
@@ -2378,7 +2380,7 @@ describe('OperationModalBridge component', () => {
     expect(postCallCount).toBe(1)
     expect(submittedPawn).toMatchObject({
       walkInCustomer: true,
-      customerDetails: { name: 'Pawn Customer Sok', phone: '012334455' },
+      customerDetails: { name: '', phone: '012334455' },
     })
     expect(submittedPawn?.customer).toBeUndefined()
 

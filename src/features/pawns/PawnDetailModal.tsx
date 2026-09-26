@@ -169,7 +169,7 @@ export default function PawnDetailModal({
   }
 
   function openAction(nextAction: PawnAction) {
-    if (nextAction === 'forfeit' && !canClaim) return
+    if (nextAction === 'forfeit' && (!canClaim || !canClaimCollateral)) return
     setAction(nextAction)
     setActionError('')
     setNote('')
@@ -249,7 +249,6 @@ export default function PawnDetailModal({
           title={pawn.pawnNo}
           titleId="pawn-detail-title"
           description={`${pawn.customer?.name || 'Unknown customer'} · ${pawn.itemSnapshot.name}`}
-          badge={<StatusBadge status={pawn.status} />}
           onClose={onClose}
           closeLabel={`Close ${pawn.pawnNo}`}
         />
@@ -521,15 +520,6 @@ export default function PawnDetailModal({
                         <strong>{canClaimCollateral ? 'Claim is available' : `Claim available ${claimAvailableText}`}</strong>
                         <small>Recommended claim window: 5-7 days overdue{claimRecommendedByMilliseconds > claimAvailableAtMilliseconds ? `, by ${claimRecommendedByText}` : ''}.</small>
                       </span>
-                      <button
-                        type="button"
-                        className="ghost-button danger-link"
-                        onClick={() => openAction('forfeit')}
-                        disabled={!canClaimCollateral}
-                        title={canClaimCollateral ? 'Claim this collateral for shop inventory' : `Wait until ${claimAvailableText} to claim this collateral`}
-                      >
-                        Claim collateral
-                      </button>
                     </div>
                   ) : null}
                 </>
@@ -597,6 +587,17 @@ export default function PawnDetailModal({
                   >
                     Extend pawn
                   </button>
+                  {canClaim ? (
+                    <button
+                      type="button"
+                      className="secondary-button pawn-claim-footer-action"
+                      onClick={() => openAction('forfeit')}
+                      disabled={!canClaimCollateral}
+                      title={canClaimCollateral ? 'Claim this collateral for shop inventory' : `Wait until ${claimAvailableText} to claim this collateral`}
+                    >
+                      Claim collateral
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     className="primary-button pawn-redeem-action"

@@ -342,7 +342,9 @@ export default function OperationModalBridge() {
     : Boolean(pawnWalkInNationalId.trim())
   const pawnCustomerValid = pawnCustomerMode === 'EXISTING'
     ? Boolean(selectedPawnCustomer && pawnOwnershipConfirmed)
-    : Boolean(pawnWalkInName.trim() && pawnOwnershipConfirmed)
+    : pawnCustomerMode === 'WALK_IN'
+      ? pawnOwnershipConfirmed
+      : Boolean(pawnWalkInName.trim() && pawnOwnershipConfirmed)
   const pawnReuseBlocked = Boolean(pawnReuseStatus?.matched && (!pawnReuseStatus.canReuse || !pawnReuseAccepted))
   const purchaseTotal = useMemo(
     () => purchaseDevices.reduce((sum, item) => sum + Math.max(0, Number(item.purchasePrice) || 0) * (item.category === 'PHONE' ? 1 : Math.max(1, Number(item.quantity) || 1)), 0),
@@ -2582,7 +2584,7 @@ export default function OperationModalBridge() {
               />
               <div id="pawn-customer-panel" role="tabpanel" aria-labelledby={`pawn-customer-tab-${pawnCustomerMode.toLowerCase().replace('_', '-')}`} className="operation-form-grid purchase-fields-grid">
                 {pawnCustomerMode === 'EXISTING' ? <label className={`operation-wide ${pawnAttempted && !pawnCustomerId ? 'field-invalid' : ''}`}>Customer<select required value={pawnCustomerId} onChange={(event) => { setPawnCustomerId(event.target.value); setPawnOwnershipConfirmed(false); setError('') }}><option value="" disabled>Select customer</option>{customers.map((customer) => <option key={customer._id} value={customer._id}>{customer.name}{customer.phone ? ` — ${customer.phone}` : ' — No phone recorded'}{customer.nationalIdNumber ? ' — ID recorded' : ' — ID not provided'}</option>)}</select>{pawnAttempted && !pawnCustomerId && <small>Select a customer</small>}</label> : <>
-                  <label className={pawnAttempted && !pawnWalkInName.trim() ? 'field-invalid' : ''}>Customer name<input required value={pawnWalkInName} onChange={(event) => setPawnWalkInName(event.target.value)} placeholder="Full name" />{pawnAttempted && !pawnWalkInName.trim() && <small>Name is required</small>}</label>
+                  <label className={pawnCustomerMode === 'NEW' && pawnAttempted && !pawnWalkInName.trim() ? 'field-invalid' : ''}>Customer name {pawnCustomerMode === 'WALK_IN' && <small className="optional-marker">Optional</small>}<input required={pawnCustomerMode === 'NEW'} value={pawnWalkInName} onChange={(event) => setPawnWalkInName(event.target.value)} placeholder="Full name" />{pawnCustomerMode === 'NEW' && pawnAttempted && !pawnWalkInName.trim() && <small>Name is required</small>}</label>
                   <label>Phone number <small className="optional-marker">Optional</small><input value={pawnWalkInPhone} onChange={(event) => setPawnWalkInPhone(event.target.value)} placeholder="012 345 678" /></label>
                   <label>National ID <small className="optional-marker">Optional</small><input value={pawnWalkInNationalId} onChange={(event) => { setPawnWalkInNationalId(event.target.value); setPawnOwnershipConfirmed(false) }} placeholder="Leave blank to protect privacy" /></label>
                   <label>Address <small className="optional-marker">Optional</small><input value={pawnWalkInAddress} onChange={(event) => setPawnWalkInAddress(event.target.value)} placeholder="Current address" /></label>
