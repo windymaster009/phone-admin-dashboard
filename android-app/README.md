@@ -122,7 +122,25 @@ http://127.0.0.1:5173
 
 Keep `npm run dev` running on the computer while testing this way.
 
+### Automatic same-Wi-Fi connection
+
+The installable debug APK searches the phone's private Wi-Fi subnet for a verified
+PhoneFlow server on port 5000. Start PhoneFlow on the computer and put both devices
+on the same private Wi-Fi; the app saves the discovered address automatically.
+The Windows network must be marked **Private** so the PhoneFlow firewall rule applies.
+Use **Settings → Find server on Wi-Fi** after changing networks. Release builds still
+require HTTPS; private-LAN HTTP discovery is limited to debug APKs.
+
 ## Scanner behavior
+
+Native scans also appear in open desktop dashboards signed in to the **same staff account**.
+Pairing the phone from that desktop's Security page signs it in to the matching account.
+The desktop checks for new scans every two seconds. A pawn receipt opens its exact pawn
+contract popup, while a product label opens its exact stock record. The intermediate scanner
+screen is skipped. If a form or dialog is open, scans wait until it closes. Keep the desktop dashboard
+open before scanning; old scans are not replayed when a new dashboard is opened.
+Scans expire after one hour. The phone still displays its result if sharing fails and shows
+a message so staff can retry. Both devices must reach the same PhoneFlow backend.
 
 The scanner recognizes:
 

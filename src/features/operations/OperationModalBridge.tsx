@@ -44,6 +44,8 @@ import OperationModalShell from './OperationModalShell'
 import CameraBarcodeReader from '../../components/scanner/CameraBarcodeReader'
 import ScannerWorkflow from '../../components/scanner/ScannerWorkflow'
 import ScannerTriggerButton, { PRODUCT_SCANNER_EVENT } from '../../components/scanner/ScannerTriggerButton'
+import { usePhoneScans } from '../../components/scanner/usePhoneScans'
+import { openPhoneScanResult, type PhoneScanResult } from '../../components/scanner/openPhoneScanResult'
 import { notifyPawnCreated } from '../pawns/pawnEvents'
 import { ModalKind, StockCategory, Customer, InventoryItem, RelatedPawn, Supplier, SellerType, PurchaseCurrency, SaleCurrency, PawnCurrency, PurchaseInventoryMode, PawnCustomerMode, SalePaymentMethod, SalePaymentPhase, StockAdjustmentMode, StockAdjustmentStatus, PawnValuationSnapshot, PawnReuseStatus, CreatedPawn, CompletedStockAdjustment, SaleDraft, SaleKhqr, CreatedSaleTrade, CompletedSale, completedSaleFromTrade, paywayImageSource, PurchaseDevice, newPurchaseDevice, canRestockExisting, localDateValue, roundPawnAmount, pawnAmountText, pawnEquivalentAmountText, money, riel, saleAmountText, inventorySalePrice, inventoryNativeSalePriceText } from './operationDomain'
 import './pawn-guide.css'
@@ -1255,6 +1257,18 @@ export default function OperationModalBridge() {
       }
     }
   }, [])
+
+  usePhoneScans(async (code) => {
+    if (kind || busy || document.querySelector('[role="dialog"], dialog[open]')) return false
+    try {
+      const result = await api<PhoneScanResult>(`/inventory/scan/${encodeURIComponent(code)}`)
+      openPhoneScanResult(result)
+      return true
+    } catch (reason) {
+      console.error('Unable to open the phone scan on this desktop:', reason)
+      return false
+    }
+  })
 
   const handleCameraError = useCallback((message: string) => setError(message), [])
 

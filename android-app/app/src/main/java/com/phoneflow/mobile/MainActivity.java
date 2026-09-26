@@ -66,6 +66,8 @@ public class MainActivity extends AppCompatActivity {
     private ActivityResultLauncher<Intent> scannerLauncher;
     private String serverUrl = "";
     private String apiBaseUrl = "";
+    private boolean discoveryInProgress;
+    private boolean automaticDiscoveryAttempted;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -79,7 +81,7 @@ public class MainActivity extends AppCompatActivity {
         bindActions();
 
         String savedServer = preferences.getServerUrl();
-        if (savedServer == null || savedServer.isBlank()) showSetup("");
+        if (savedServer == null || savedServer.isBlank() || isLoopbackServer(savedServer)) discoverServer();
         else connect(savedServer);
     }
 
@@ -125,6 +127,31 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.backButton).setOnClickListener(view -> navigateBack());
         findViewById(R.id.browserButton).setOnClickListener(view -> openExternal(Uri.parse(currentPageUrl())));
         findViewById(R.id.settingsButton).setOnClickListener(view -> showSettings());
+    }
+
+    private boolean isLoopbackServer(String value) {
+        String host = Uri.parse(value == null ? "" : value).getHost();
+        return "localhost".equalsIgnoreCase(host) || "127.0.0.1".equals(host) || "10.0.2.2".equals(host);
+    }
+
+    private void discoverServer() {
+        if (discoveryInProgress) return;
+        discoveryInProgress = true;
+        automaticDiscoveryAttempted = true;
+        showSetup("Searching for PhoneFlow on this Wi-Fi…");
+        ServerDiscovery.find(new ServerDiscovery.Callback() {
+            @Override public void onFound(String foundUrl) {
+                if (isFinishing() || isDestroyed()) return;
+                discoveryInProgress = false;
+                toast("PhoneFlow found at " + foundUrl);
+                connect(foundUrl);
+            }
+            @Override public void onNotFound() {
+                if (isFinishing() || isDestroyed()) return;
+                discoveryInProgress = false;
+                showSetup("PhoneFlow was not found. Start it on the computer and confirm both devices use the same Wi-Fi, then reopen the app.");
+            }
+        });
     }
 
     private void connect(String rawUrl) {
@@ -195,9 +222,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void loadDashboard() {
         if (serverUrl.isBlank()) return;
-        String redirect = serverUrl + "/dashboard";
-        String encodedRedirect = Uri.encode(redirect);
-        webView.loadUrl(apiBaseUrl + "/api/auth/android-lan-session?redirect=" + encodedRedirect);
+        webView.loadUrl(serverUrl + "/dashboard");
     }
 
     private void navigateBack() {
@@ -211,14 +236,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void showSettings() {
-        String[] actions = {"Refresh", "Open in browser", "Clear signed-in session", "Change server"};
+        String[] actions = {"Refresh", "Find server on Wi-Fi", "Open in browser", "Clear signed-in session", "Change server"};
         new AlertDialog.Builder(this)
             .setTitle("PhoneFlow Android")
             .setItems(actions, (dialog, which) -> {
                 if (which == 0) webView.reload();
-                if (which == 1) openExternal(Uri.parse(currentPageUrl()));
-                if (which == 2) clearWebSession();
-                if (which == 3) {
+                if (which == 1) discoverServer();
+                if (which == 2) openExternal(Uri.parse(currentPageUrl()));
+                if (which == 3) clearWebSession();
+                if (which == 4) {
                     preferences.clearServerUrl();
                     showSetup("");
                 }
@@ -258,8 +284,11 @@ public class MainActivity extends AppCompatActivity {
 
         PhoneFlowApi.lookupInventory(apiBaseUrl, cookie, code, new PhoneFlowApi.Callback() {
             @Override
-            public void onSuccess(JSONObject item) {
+            public void onSuccess(JSONObject item, boolean desktopShared) {
                 openStockRecord(item);
+                toast(desktopShared
+                    ? "Scan shared with desktops signed in to your account"
+                    : "Product found, but desktop sharing failed. Scan again to retry.");
             }
 
             @Override
@@ -530,7 +559,8 @@ public class MainActivity extends AppCompatActivity {
         ) {
             if (primary && request.isForMainFrame()) {
                 pageProgress.setVisibility(View.GONE);
-                toast("Unable to load PhoneFlow. Check the server and Wi-Fi connection.");
+                if (!automaticDiscoveryAttempted) discoverServer();
+                else toast("Unable to load PhoneFlow. Check the server and Wi-Fi connection.");
             }
         }
     }

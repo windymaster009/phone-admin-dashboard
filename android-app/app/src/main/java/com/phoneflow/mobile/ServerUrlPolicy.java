@@ -58,6 +58,22 @@ final class ServerUrlPolicy {
         String value = host.toLowerCase(Locale.US);
         return value.equals("localhost")
             || value.equals("127.0.0.1")
-            || value.equals("10.0.2.2");
+            || value.equals("10.0.2.2")
+            || isPrivateIpv4(value);
+    }
+
+    private static boolean isPrivateIpv4(String host) {
+        String[] parts = host.split("\\.");
+        if (parts.length != 4) return false;
+        int[] octets = new int[4];
+        try {
+            for (int index = 0; index < 4; index++) {
+                octets[index] = Integer.parseInt(parts[index]);
+                if (octets[index] < 0 || octets[index] > 255) return false;
+            }
+        } catch (NumberFormatException error) { return false; }
+        return octets[0] == 10
+            || (octets[0] == 172 && octets[1] >= 16 && octets[1] <= 31)
+            || (octets[0] == 192 && octets[1] == 168);
     }
 }

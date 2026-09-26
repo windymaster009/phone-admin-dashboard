@@ -22,6 +22,7 @@ import serviceRouter from './serviceRoutes.js'
 import router from './routes.js'
 import sessionSecurityRouter from './sessionSecurityRoutes.js'
 import { shopProfile } from './shopProfile.js'
+import { helmetOptions } from './deploymentMode.js'
 
 const app = express()
 const port = Number(process.env.PORT || 5000)
@@ -122,14 +123,7 @@ app.use((req, res, next) => {
   res.setHeader('X-Request-ID', req.id)
   next()
 })
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: 'cross-origin' },
-  contentSecurityPolicy: {
-    directives: {
-      imgSrc: ["'self'", 'data:', 'https://ik.imagekit.io'],
-    },
-  },
-}))
+app.use(helmet(helmetOptions()))
 app.use(cors((req, callback) => {
   const origin = req.get('Origin') || ''
   const host = req.get('host') || ''

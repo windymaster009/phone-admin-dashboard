@@ -25,7 +25,7 @@ public class ServerUrlPolicyTest {
     }
 
     @Test
-    public void debugAllowsOnlyExactLoopbackAndEmulatorHosts() {
+    public void debugAllowsLoopbackEmulatorAndPrivateLanHosts() {
         assertEquals(
             "http://10.0.2.2:5000",
             ServerUrlPolicy.normalizeBaseUrl("http://10.0.2.2:5000/", true)
@@ -34,10 +34,10 @@ public class ServerUrlPolicyTest {
             "http://127.0.0.1:5000",
             ServerUrlPolicy.normalizeBaseUrl("http://127.0.0.1:5000", true)
         );
-        assertThrows(
-            IllegalArgumentException.class,
-            () -> ServerUrlPolicy.normalizeBaseUrl("http://192.168.1.25:5000", true)
-        );
+        assertEquals("http://192.168.1.25:5000", ServerUrlPolicy.normalizeBaseUrl("http://192.168.1.25:5000", true));
+        assertEquals("http://10.20.30.40:5000", ServerUrlPolicy.normalizeBaseUrl("http://10.20.30.40:5000", true));
+        assertEquals("http://172.31.4.9:5000", ServerUrlPolicy.normalizeBaseUrl("http://172.31.4.9:5000", true));
+        assertThrows(IllegalArgumentException.class, () -> ServerUrlPolicy.normalizeBaseUrl("http://172.32.4.9:5000", true));
         assertThrows(
             IllegalArgumentException.class,
             () -> ServerUrlPolicy.normalizeBaseUrl("http://10.evil.example:5000", true)

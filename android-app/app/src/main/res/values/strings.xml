@@ -2,8 +2,8 @@
 <resources>
     <string name="app_name">PhoneFlow</string>
     <string name="setup_title">Connect PhoneFlow</string>
-    <string name="setup_description">Enter the PhoneFlow server address. Use HTTPS for a public server or your computer LAN IP while developing.</string>
-    <string name="server_url_hint">https://phoneflow.example.com</string>
+    <string name="setup_description">PhoneFlow searches this Wi-Fi automatically. You can also enter the computer address below.</string>
+    <string name="server_url_hint">http://192.168.1.10:5000</string>
     <string name="connect">Connect</string>
     <string name="dashboard">Dashboard</string>
     <string name="scan">Scan</string>

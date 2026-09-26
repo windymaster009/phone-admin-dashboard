@@ -3,6 +3,9 @@
   "private": true,
   "version": "1.9.6",
   "type": "module",
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  },
   "scripts": {
     "dev": "concurrently \"npm:dev:client\" \"npm:dev:server\"",
     "dev:client": "vite",
@@ -18,7 +21,7 @@
     "seed:dashboard": "node server/seed-dashboard-demo.js seed",
     "seed:dashboard:clean": "node server/seed-dashboard-demo.js clean",
     "preview": "vite preview",
-    "test:server": "node --test server/activityLogRetention.test.js server/backupService.test.js server/documentSecurity.test.js server/pawnFeeService.test.js server/tradeRefundService.test.js server/twoFactorService.test.js server/reportCurrency.test.js server/loanCreationExchangeRate.test.js server/reportRoutes.test.js server/dataIntegrity.test.js server/inventoryDepreciation.test.js server/backupRoutes.test.js server/documentRoutes.test.js server/receiptRoutes.test.js server/refundRoutes.test.js server/businessOverviewAndReportRoutes.test.js server/tradeRoutes.test.js server/authSecurity.test.js server/deploymentMode.test.js server/corsPolicy.test.js server/loanLifecycle.test.js server/pawnLifecycle.test.js server/serviceLifecycle.test.js server/searchRoutes.test.js",
+    "test:server": "node --test server/scanRelay.test.js server/activityLogRetention.test.js server/backupService.test.js server/documentSecurity.test.js server/pawnFeeService.test.js server/tradeRefundService.test.js server/twoFactorService.test.js server/reportCurrency.test.js server/loanCreationExchangeRate.test.js server/reportRoutes.test.js server/dataIntegrity.test.js server/inventoryDepreciation.test.js server/backupRoutes.test.js server/documentRoutes.test.js server/receiptRoutes.test.js server/refundRoutes.test.js server/businessOverviewAndReportRoutes.test.js server/tradeRoutes.test.js server/authSecurity.test.js server/deploymentMode.test.js server/corsPolicy.test.js server/loanLifecycle.test.js server/pawnLifecycle.test.js server/serviceLifecycle.test.js server/searchRoutes.test.js",
     "test:client": "vitest run",
     "test:client:watch": "vitest",
     "test:coverage": "node scripts/run-coverage.js",

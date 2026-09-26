@@ -3,6 +3,7 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import mongoose from 'mongoose'
 import sharp from 'sharp'
+import { publishScan, readScans } from './scanRelay.js'
 import {
   allowRoles,
   clearSessionCookie,
@@ -2426,9 +2427,11 @@ router.get('/inventory/:id', requireAuth, asyncRoute(async (req, res) => {
   res.json({ item: { ...item.toObject(), relatedPawn: relatedPawn || null } })
 }))
 
-router.get('/inventory/scan/:code', requireAuth, asyncRoute(async (req, res) => {
+router.get('/scanner/events', requireAuth, asyncRoute(readScans))
+
+const scanInventory = asyncRoute(async (req, res) => {
   const code = clean(decodeURIComponent(req.params.code || '')).toUpperCase()
-  if (!code || isInvalidCode(code)) return res.status(400).json({ message: 'Scan a barcode, SKU, IMEI, or serial number' })
+  if (!code || code.length > 256 || isInvalidCode(code)) return res.status(400).json({ message: 'Scan a barcode, SKU, IMEI, or serial number' })
   const exactCode = new RegExp(`^${escapeRegex(code)}$`, 'i')
 
   let item = await InventoryItem.findOne({
@@ -2457,8 +2460,19 @@ router.get('/inventory/scan/:code', requireAuth, asyncRoute(async (req, res) => 
     item = relatedPawn?.inventoryItem || null
   }
   if (!item) return res.status(404).json({ message: `No product or pawn found for ${code}` })
-  res.json({ item, relatedPawn })
-}))
+  let desktopShared = false
+  if (req.method === 'POST') {
+    try {
+      await publishScan(req, code)
+      desktopShared = true
+    } catch (error) {
+      console.error(`[request ${req.id || 'unknown'}] Scan sharing failed:`, error.message)
+    }
+  }
+  res.json({ item, relatedPawn, ...(req.method === 'POST' ? { desktopShared } : {}) })
+})
+router.get('/inventory/scan/:code', requireAuth, scanInventory)
+router.post('/inventory/scan/:code', requireAuth, scanInventory)
 
 router.post('/inventory', requireAuth, allowRoles('OWNER', 'MANAGER', 'STOCK'), asyncRoute(async (req, res) => {
   const category = clean(req.body.category)?.toUpperCase()

@@ -6,6 +6,11 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'
 
+# `npm run` exports user configuration as environment variables to child
+# processes. npm 11 rejects a global allow-scripts value during a nested,
+# project-scoped `npm ci`, so let package.json provide the reviewed policy.
+Remove-Item Env:NPM_CONFIG_ALLOW_SCRIPTS -ErrorAction SilentlyContinue
+
 $installerRoot = [System.IO.Path]::GetFullPath($PSScriptRoot)
 $repositoryRoot = [System.IO.Path]::GetFullPath((Join-Path $installerRoot '..'))
 $buildRoot = [System.IO.Path]::GetFullPath((Join-Path $installerRoot '.build'))
@@ -69,6 +74,8 @@ if (Test-Path -LiteralPath $buildRoot) {
   Remove-Item -LiteralPath $buildRoot -Recurse -Force
 }
 New-Item -ItemType Directory -Force -Path $buildRoot, $cacheRoot | Out-Null
+$buildNpmConfig = Join-Path $buildRoot 'npmrc'
+[System.IO.File]::WriteAllText($buildNpmConfig, "audit=false`nfund=false`n", [System.Text.UTF8Encoding]::new($false))
 
 Push-Location $repositoryRoot
 try {
@@ -93,7 +100,9 @@ Copy-Item -LiteralPath (Join-Path $repositoryRoot 'package-lock.json') -Destinat
 Push-Location $applicationRoot
 try {
   Write-Host 'Installing production dependencies into the release payload...'
-  Invoke-CheckedCommand 'npm.cmd' 'ci' '--omit=dev' '--no-audit' '--no-fund'
+  # Use an isolated npm config so a developer's global allow-scripts policy
+  # cannot make this project-scoped, lockfile-based install fail.
+  Invoke-CheckedCommand 'npm.cmd' 'ci' '--omit=dev' '--no-audit' '--no-fund' "--userconfig=$buildNpmConfig"
 } finally {
   Pop-Location
 }

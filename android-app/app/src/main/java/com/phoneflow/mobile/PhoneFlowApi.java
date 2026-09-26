@@ -17,7 +17,7 @@ import java.util.concurrent.Executors;
 
 final class PhoneFlowApi {
     interface Callback {
-        void onSuccess(JSONObject item);
+        void onSuccess(JSONObject item, boolean desktopShared);
         void onError(String message);
     }
 
@@ -37,11 +37,12 @@ final class PhoneFlowApi {
                     BuildConfig.DEBUG
                 );
                 connection = (HttpURLConnection) url.openConnection();
-                connection.setRequestMethod("GET");
+                connection.setRequestMethod("POST");
                 connection.setConnectTimeout(12_000);
                 connection.setReadTimeout(12_000);
                 connection.setRequestProperty("Accept", "application/json");
                 connection.setRequestProperty("Cookie", sessionCookie);
+                connection.setRequestProperty("X-PhoneFlow-Request", "1");
 
                 int status = connection.getResponseCode();
                 InputStream stream = status >= 200 && status < 300
@@ -57,7 +58,8 @@ final class PhoneFlowApi {
 
                 JSONObject item = payload.optJSONObject("item");
                 if (item == null) throw new IllegalStateException("The server returned no product details");
-                MAIN.post(() -> callback.onSuccess(item));
+                boolean desktopShared = payload.optBoolean("desktopShared", false);
+                MAIN.post(() -> callback.onSuccess(item, desktopShared));
             } catch (Exception error) {
                 String message = error.getMessage();
                 MAIN.post(() -> callback.onError(message == null || message.isBlank()
