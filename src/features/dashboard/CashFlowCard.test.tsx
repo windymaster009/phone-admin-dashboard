@@ -40,6 +40,9 @@ const mockPerformanceData = {
     { _id: { date: currentCambodiaWeekDate(), type: 'SELL' as const }, total: 3000 },
     { _id: { date: currentCambodiaWeekDate(), type: 'BUY' as const }, total: 1000 },
     { _id: { date: currentCambodiaWeekDate(), type: 'REFUND' as const }, total: 250 },
+    { _id: { date: currentCambodiaWeekDate(-7), type: 'SELL' as const }, total: 6000 },
+    { _id: { date: currentCambodiaWeekDate(-7), type: 'BUY' as const }, total: 2000 },
+    { _id: { date: currentCambodiaWeekDate(-7), type: 'REFUND' as const }, total: 500 },
   ],
 }
 
@@ -64,15 +67,15 @@ describe('CashFlowCard', () => {
       expect(screen.getByText('Net cash flow')).toBeInTheDocument()
     })
 
-    // Month mode: sales 15000, purchases 9000, refunds 1000, net = +5000
-    expect(screen.getByText('$5,000')).toBeInTheDocument()
-    expect(screen.getByText('$15,000')).toBeInTheDocument()
-    expect(screen.getByText('$10,000')).toBeInTheDocument()
-    expect(screen.getByText('$1,000 refunds')).toBeInTheDocument()
+    // This week: sales 3000, purchases 1000, refunds 250, net = +1750
+    expect(screen.getByText('$1,750')).toBeInTheDocument()
+    expect(screen.getAllByText('$3,000')).toHaveLength(2)
+    expect(screen.getByText('$1,250')).toBeInTheDocument()
+    expect(screen.getByText('$250 refunds')).toBeInTheDocument()
     expect(screen.getByText('More cash in than out')).toBeInTheDocument()
   })
 
-  it('switches between month, week, and year periods and recalculates net totals', async () => {
+  it('offers only this week and last week and recalculates their totals', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       status: 200,
@@ -88,14 +91,15 @@ describe('CashFlowCard', () => {
     })
 
     const periodSelect = screen.getByLabelText('Performance period')
-
-    // Switch to This week
-    await user.selectOptions(periodSelect, 'week')
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['This week', 'Last week'])
+    expect(periodSelect).toHaveValue('this_week')
     expect(screen.getByText('Mon–Sun')).toBeInTheDocument()
 
-    // Switch to This year
-    await user.selectOptions(periodSelect, 'year')
-    expect(screen.getByText(/Jan–/)).toBeInTheDocument()
+    await user.selectOptions(periodSelect, 'last_week')
+    expect(screen.getByText('$3,500')).toBeInTheDocument()
+    expect(screen.getAllByText('$6,000')).toHaveLength(2)
+    expect(screen.getByText('$2,500')).toBeInTheDocument()
+    expect(screen.getByText('$500 refunds')).toBeInTheDocument()
   })
 
   it('displays empty state when no sales or purchases exist', async () => {
@@ -151,7 +155,7 @@ describe('CashFlowCard', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Net cash flow')).toBeInTheDocument()
-      expect(screen.getByText('$5,000')).toBeInTheDocument()
+      expect(screen.getByText('$1,750')).toBeInTheDocument()
     })
   })
 })

@@ -1125,6 +1125,7 @@ router.get('/dashboard', requireAuth, asyncRoute(async (req, res) => {
     cambodiaNow.getUTCMonth(),
     cambodiaNow.getUTCDate() - daysSinceMonday,
   ) - cambodiaOffsetMs)
+  const lastWeekStart = new Date(weekStart.getTime() - (7 * 24 * 60 * 60 * 1000))
   const dashboardCashFlowStages = (from) => [
     {
       $match: {
@@ -1260,7 +1261,7 @@ router.get('/dashboard', requireAuth, asyncRoute(async (req, res) => {
       { $sort: { '_id.day': 1 } },
     ]),
     Trade.aggregate([
-      ...dashboardCashFlowStages(weekStart),
+      ...dashboardCashFlowStages(lastWeekStart),
       {
         $group: {
           _id: {

@@ -1,14 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import './dashboard-performance.css'
 import { ArrowDownRight, ArrowUpRight, BarChart3, RefreshCcw, TrendingDown, TrendingUp } from 'lucide-react'
 import { api } from '../../lib/api'
 
-type PerformancePeriod = 'week' | 'month' | 'year'
+type PerformancePeriod = 'this_week' | 'last_week'
 
 type DashboardPerformanceData = {
-  monthPerformance: Array<{ _id: 'BUY' | 'SELL' | 'REFUND'; total: number }>
-  monthlyPerformance: Array<{ _id: { month: number; type: 'BUY' | 'SELL' | 'REFUND' }; total: number }>
-  dailyPerformance: Array<{ _id: { day: number; type: 'BUY' | 'SELL' | 'REFUND' }; total: number }>
   weekPerformance: Array<{ _id: { date: string; type: 'BUY' | 'SELL' | 'REFUND' }; total: number }>
 }
 
@@ -36,40 +33,17 @@ const compactMoney = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 1,
 })
 
-const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const weekNames = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const CAMBODIA_OFFSET_MS = 7 * 60 * 60 * 1000
 
-function valueForType(rows: DashboardPerformanceData['monthPerformance'], type: 'BUY' | 'SELL' | 'REFUND') {
-  return Number(rows.find((row) => row._id === type)?.total) || 0
-}
-
-function buildMonthPoints(rows: DashboardPerformanceData['dailyPerformance']) {
-  const now = new Date()
-  const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
-  return Array.from({ length: days }, (_, index): PerformancePoint => {
-    const day = index + 1
-    const sales = Number(rows.find((row) => row._id.day === day && row._id.type === 'SELL')?.total) || 0
-    const purchases = Number(rows.find((row) => row._id.day === day && row._id.type === 'BUY')?.total) || 0
-    const refunds = Number(rows.find((row) => row._id.day === day && row._id.type === 'REFUND')?.total) || 0
-    const outflow = purchases + refunds
-    return {
-      key: day,
-      label: new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' }).format(new Date(now.getFullYear(), now.getMonth(), day)),
-      shortLabel: String(day),
-      sales,
-      purchases,
-      refunds,
-      outflow,
-      net: sales - outflow,
-    }
-  })
-}
-
-function buildWeekPoints(rows: DashboardPerformanceData['weekPerformance']) {
+function buildWeekPoints(rows: DashboardPerformanceData['weekPerformance'], weekOffset: 0 | -1) {
   const cambodiaNow = new Date(Date.now() + CAMBODIA_OFFSET_MS)
   const daysSinceMonday = (cambodiaNow.getUTCDay() + 6) % 7
-  const monday = new Date(Date.UTC(cambodiaNow.getUTCFullYear(), cambodiaNow.getUTCMonth(), cambodiaNow.getUTCDate() - daysSinceMonday))
+  const monday = new Date(Date.UTC(
+    cambodiaNow.getUTCFullYear(),
+    cambodiaNow.getUTCMonth(),
+    cambodiaNow.getUTCDate() - daysSinceMonday + (weekOffset * 7),
+  ))
 
   return weekNames.map((shortLabel, index): PerformancePoint => {
     const date = new Date(monday)
@@ -92,28 +66,6 @@ function buildWeekPoints(rows: DashboardPerformanceData['weekPerformance']) {
   })
 }
 
-function buildYearPoints(rows: DashboardPerformanceData['monthlyPerformance']) {
-  const now = new Date()
-  const monthCount = now.getMonth() + 1
-  return Array.from({ length: monthCount }, (_, index): PerformancePoint => {
-    const month = index + 1
-    const sales = Number(rows.find((row) => row._id.month === month && row._id.type === 'SELL')?.total) || 0
-    const purchases = Number(rows.find((row) => row._id.month === month && row._id.type === 'BUY')?.total) || 0
-    const refunds = Number(rows.find((row) => row._id.month === month && row._id.type === 'REFUND')?.total) || 0
-    const outflow = purchases + refunds
-    return {
-      key: month,
-      label: monthNames[index],
-      shortLabel: monthNames[index],
-      sales,
-      purchases,
-      refunds,
-      outflow,
-      net: sales - outflow,
-    }
-  })
-}
-
 function metricTone(value: number) {
   if (value > 0) return 'positive'
   if (value < 0) return 'negative'
@@ -121,12 +73,11 @@ function metricTone(value: number) {
 }
 
 export default function CashFlowCard() {
-  const [period, setPeriod] = useState<PerformancePeriod>('month')
+  const [period, setPeriod] = useState<PerformancePeriod>('this_week')
   const [data, setData] = useState<DashboardPerformanceData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [activeKey, setActiveKey] = useState<number | null>(null)
-  const chartScrollRef = useRef<HTMLDivElement>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -145,25 +96,17 @@ export default function CashFlowCard() {
 
   const points = useMemo(() => {
     if (!data) return []
-    if (period === 'week') return buildWeekPoints(data.weekPerformance || [])
-    return period === 'month' ? buildMonthPoints(data.dailyPerformance || []) : buildYearPoints(data.monthlyPerformance || [])
+    return buildWeekPoints(data.weekPerformance || [], period === 'last_week' ? -1 : 0)
   }, [data, period])
 
   const totals = useMemo(() => {
     if (!data) return { sales: 0, purchases: 0, refunds: 0, outflow: 0, net: 0 }
-    if (period === 'month') {
-      const sales = valueForType(data.monthPerformance || [], 'SELL')
-      const purchases = valueForType(data.monthPerformance || [], 'BUY')
-      const refunds = valueForType(data.monthPerformance || [], 'REFUND')
-      const outflow = purchases + refunds
-      return { sales, purchases, refunds, outflow, net: sales - outflow }
-    }
     const sales = points.reduce((sum, point) => sum + point.sales, 0)
     const purchases = points.reduce((sum, point) => sum + point.purchases, 0)
     const refunds = points.reduce((sum, point) => sum + point.refunds, 0)
     const outflow = purchases + refunds
     return { sales, purchases, refunds, outflow, net: sales - outflow }
-  }, [data, period, points])
+  }, [data, points])
 
   const context = useMemo(() => {
     const activePeriods = points.filter((point) => point.sales > 0 || point.outflow > 0)
@@ -181,17 +124,6 @@ export default function CashFlowCard() {
   const hasMovement = points.some((point) => point.sales > 0 || point.outflow > 0)
   const netTone = metricTone(totals.net)
 
-  useEffect(() => {
-    const chart = chartScrollRef.current
-    if (!chart || period !== 'month') return undefined
-    const handleWheel = (event: WheelEvent) => {
-      event.preventDefault()
-      chart.scrollLeft += event.deltaY || event.deltaX
-    }
-    chart.addEventListener('wheel', handleWheel, { passive: false })
-    return () => chart.removeEventListener('wheel', handleWheel)
-  }, [period, points.length])
-
   return (
     <section className="cashflow-performance" aria-label="Shop cash flow performance">
       <header className="cashflow-heading">
@@ -203,9 +135,8 @@ export default function CashFlowCard() {
         <div className="cashflow-heading-actions">
           <button type="button" className="cashflow-refresh" onClick={() => void load()} disabled={loading} aria-label="Refresh shop performance"><RefreshCcw size={15} /></button>
           <select value={period} onChange={(event) => { setPeriod(event.target.value as PerformancePeriod); setActiveKey(null) }} aria-label="Performance period">
-            <option value="week">This week</option>
-            <option value="month">This month</option>
-            <option value="year">This year</option>
+            <option value="this_week">This week</option>
+            <option value="last_week">Last week</option>
           </select>
         </div>
       </header>
@@ -237,17 +168,17 @@ export default function CashFlowCard() {
           <div className="cashflow-legend" aria-hidden="true">
             <span><i className="income" />Sales · money in</span>
             <span><i className="expense" />Purchases + refunds · money out</span>
-            <small>{period === 'week' ? 'Mon–Sun' : period === 'month' ? `Day 1–${points.length} · Scroll for more days` : `${monthNames[0]}–${monthNames[points.length - 1]}`}</small>
+            <small>Mon–Sun</small>
           </div>
 
           <div className="cashflow-context">
-            <span><small>Active {period === 'year' ? 'months' : 'days'}</small><strong>{context.activePeriods} / {points.length}</strong></span>
-            <span><small>Avg sales / active {period === 'year' ? 'month' : 'day'}</small><strong>{money.format(context.averageSales)}</strong></span>
+            <span><small>Active days</small><strong>{context.activePeriods} / {points.length}</strong></span>
+            <span><small>Avg sales / active day</small><strong>{money.format(context.averageSales)}</strong></span>
             <span><small>Biggest net movement</small><strong className={context.biggestMovement ? metricTone(context.biggestMovement.net) : ''}>{context.biggestMovement ? `${context.biggestMovement.label} · ${money.format(context.biggestMovement.net)}` : '—'}</strong></span>
           </div>
 
-          <div ref={chartScrollRef} className={`cashflow-chart-scroll ${period}`}>
-            <div className="cashflow-chart" style={period === 'month' ? { minWidth: `${Math.max(100, (points.length / 10) * 100)}%` } : undefined} role="img" aria-label={`Sales above the zero line and purchases plus refunds below the zero line for this ${period}`}>
+          <div className="cashflow-chart-scroll week">
+            <div className="cashflow-chart" role="img" aria-label={`Sales above the zero line and purchases plus refunds below the zero line for ${period === 'this_week' ? 'this week' : 'last week'}`}>
               <div className="cashflow-axis-label top">{compactMoney.format(maximum)}</div>
               <div className="cashflow-axis-label zero">$0</div>
               <div className="cashflow-axis-label bottom">-{compactMoney.format(maximum)}</div>

@@ -174,6 +174,7 @@ test('GET /dashboard: aggregates sales, pawn conversions, stock counts, and perf
   const origPawnFind = Pawn.find
   const origTradeFind = Trade.find
   const origInventoryAggregate = InventoryItem.aggregate
+  let weekPerformanceFrom = null
 
   Pawn.updateMany = async () => ({ modifiedCount: 0 })
   InventoryItem.countDocuments = async (query) => {
@@ -193,6 +194,9 @@ test('GET /dashboard: aggregates sales, pawn conversions, stock counts, and perf
       return [{ _id: null, total: 1100 }]
     }
     const group = pipeline.find((stage) => stage.$group)?.$group
+    if (group?._id?.date) {
+      weekPerformanceFrom = pipeline[0]?.$match?.$or?.[0]?.createdAt?.$gte || null
+    }
     if (group?._id === '$type') {
       assert.match(JSON.stringify(pipeline), /refund\.refundedAt/)
       return [
@@ -262,6 +266,9 @@ test('GET /dashboard: aggregates sales, pawn conversions, stock counts, and perf
       { _id: 'BUY', total: 1100 },
       { _id: 'REFUND', total: 300 },
     ])
+    assert.ok(weekPerformanceFrom instanceof Date)
+    const weekHistoryAgeDays = (Date.now() - weekPerformanceFrom.getTime()) / (24 * 60 * 60 * 1000)
+    assert.ok(weekHistoryAgeDays >= 7 && weekHistoryAgeDays < 15, 'dashboard should request this week and last week')
   } finally {
     Pawn.updateMany = origPawnUpdateMany
     Trade.aggregate = origTradeAggregate
