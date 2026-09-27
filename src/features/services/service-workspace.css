@@ -76,6 +76,12 @@
   max-height: min(760px, calc(var(--operation-viewport-height, 100dvh) - 36px));
 }
 
+@media (min-width: 56.25rem) {
+  .operation-modal.operation-modal-service-charge {
+    width: min(920px, 100%);
+  }
+}
+
 .operation-modal.operation-modal-service-price {
   width: min(520px, 100%);
   max-height: min(720px, calc(var(--operation-viewport-height, 100dvh) - 36px));
@@ -409,6 +415,10 @@
 }
 
 @media (max-height: 500px) and (orientation: landscape) {
+  .operation-modal.operation-modal-service-charge {
+    width: min(680px, 100%);
+  }
+
   .service-charge-body,
   .service-price-body {
     padding: 8px 12px;

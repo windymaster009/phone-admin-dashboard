@@ -1,9 +1,13 @@
+import { readFileSync } from 'node:fs'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { RouterProvider } from '../../app/routing'
 import { setSessionUser } from '../../lib/api'
 import ServiceWorkspace from './ServiceWorkspace'
+
+const serviceWorkspaceStyles = readFileSync('src/features/services/service-workspace.css', 'utf8')
+const operationModalStyles = readFileSync('src/features/operations/operation-modals.css', 'utf8')
 
 const sampleServices = [
   {
@@ -1972,5 +1976,20 @@ describe('ServiceWorkspace', () => {
       expect(patchRecorded).not.toBeNull()
       expect(patchRecorded?.price).toBe(15)
     })
+  })
+
+  it('29. Service checkout expands only at desktop width while preserving tablet and mobile sizing', () => {
+    expect(serviceWorkspaceStyles).toMatch(
+      /\.operation-modal\.operation-modal-service-charge\s*\{\s*width:\s*min\(680px,\s*100%\);/,
+    )
+    expect(serviceWorkspaceStyles).toMatch(
+      /@media \(min-width:\s*56\.25rem\)[\s\S]*?\.operation-modal\.operation-modal-service-charge\s*\{\s*width:\s*min\(920px,\s*100%\);/,
+    )
+    expect(serviceWorkspaceStyles).toMatch(
+      /@media \(max-height:\s*500px\) and \(orientation:\s*landscape\)[\s\S]*?\.operation-modal\.operation-modal-service-charge\s*\{\s*width:\s*min\(680px,\s*100%\);/,
+    )
+    expect(operationModalStyles).toMatch(
+      /@media \(max-width:\s*700px\)[\s\S]*?\.operation-modal\s*\{[\s\S]*?width:\s*100%;[\s\S]*?max-width:\s*100%;/,
+    )
   })
 })
