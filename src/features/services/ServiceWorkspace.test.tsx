@@ -236,11 +236,12 @@ describe('ServiceWorkspace', () => {
   it('1. A successful charge appears in recent charges without manually refreshing', async () => {
     const user = userEvent.setup()
     let postCalled = false
+    let recordedBody: Record<string, unknown> | null = null
     const newCharge = {
       _id: 'sc-new-999',
       serviceNo: 'SV-20260312-NEW99',
       serviceSnapshot: { name: 'Gmail account setup', category: 'ACCOUNT_SETUP' },
-      customerSnapshot: { name: 'Walk-in VIP', phone: '' },
+      customerSnapshot: { name: 'Walk-in VIP', phone: '012 345 678' },
       currency: 'USD',
       total: 5,
       paymentMethod: 'CASH',
@@ -252,6 +253,7 @@ describe('ServiceWorkspace', () => {
       '/api/services/charges': async (init) => {
         if (init.method === 'POST') {
           postCalled = true
+          recordedBody = JSON.parse(String(init.body))
           return { charge: newCharge }
         }
         return { charges: [...sampleCharges] }
@@ -281,6 +283,7 @@ describe('ServiceWorkspace', () => {
     const walkInInput = screen.getByPlaceholderText('Walk-in customer')
     await user.clear(walkInInput)
     await user.type(walkInInput, 'Walk-in VIP')
+    await user.type(within(dialog).getByRole('textbox', { name: /phone number/i }), '012 345 678')
 
     // Submit charge
     const submitButton = within(dialog).getByRole('button', { name: /record charge/i })
@@ -289,6 +292,10 @@ describe('ServiceWorkspace', () => {
     await waitFor(() => {
       expect(postCalled).toBe(true)
     })
+    expect(recordedBody).toEqual(expect.objectContaining({
+      customerName: 'Walk-in VIP',
+      customerPhone: '012 345 678',
+    }))
 
     // Success dialog appears
     await waitFor(() => {
@@ -561,6 +568,7 @@ describe('ServiceWorkspace', () => {
 
     // Initially Walk-in: customerName input is visible
     expect(screen.getByPlaceholderText('Walk-in customer')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: /phone number/i })).toBeInTheDocument()
 
     // Choose existing customer Bopha Vorn
     const customerSelect = screen.getByRole('combobox', { name: /customer/i })
@@ -568,6 +576,7 @@ describe('ServiceWorkspace', () => {
 
     // Custom walk-in name input is now hidden
     expect(screen.queryByPlaceholderText('Walk-in customer')).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: /phone number/i })).not.toBeInTheDocument()
 
     // Submit
     const dialog = screen.getByRole('dialog', { name: /record service charge/i })
@@ -586,6 +595,7 @@ describe('ServiceWorkspace', () => {
     const payload = recordedBody as Record<string, unknown> | null
     expect(payload?.customerId).toBe('cust-2')
     expect(payload?.customerName).toBeUndefined()
+    expect(payload?.customerPhone).toBeUndefined()
     expect(payload?.warrantyDays).toBe(30)
   })
 

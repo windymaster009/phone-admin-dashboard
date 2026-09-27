@@ -133,6 +133,7 @@ export default function ServiceWorkspace() {
   const [category, setCategory] = useState<'ALL' | ServiceCategory>('ALL')
   const [customerId, setCustomerId] = useState('')
   const [walkInName, setWalkInName] = useState('')
+  const [walkInPhone, setWalkInPhone] = useState('')
   const [quantity, setQuantity] = useState(1)
   const [discount, setDiscount] = useState('0')
   const [discountType, setDiscountType] = useState<'AMOUNT' | 'PERCENT'>('AMOUNT')
@@ -368,6 +369,7 @@ export default function ServiceWorkspace() {
           offeringId: selected._id,
           customerId: customerId || undefined,
           customerName: customerId ? undefined : walkInName,
+          customerPhone: customerId ? undefined : walkInPhone,
           quantity,
           currency: chargeCurrency,
           discount: discountType === 'PERCENT' ? discountPercent : normalizedDiscount,
@@ -383,6 +385,7 @@ export default function ServiceWorkspace() {
       setSelected(null)
       setCustomerId('')
       setWalkInName('')
+      setWalkInPhone('')
       setQuantity(1)
       setDiscount('0')
       setDiscountType('AMOUNT')
@@ -688,14 +691,29 @@ export default function ServiceWorkspace() {
                 </select>
               </label>
               {!customerId && (
-                <label>
-                  <span>Customer name <small>Optional</small></span>
-                  <input
-                    value={walkInName}
-                    onChange={(event) => setWalkInName(event.target.value)}
-                    placeholder="Walk-in customer"
-                  />
-                </label>
+                <div className="service-form-pair service-walk-in-details">
+                  <label>
+                    <span>Customer name <small>Optional</small></span>
+                    <input
+                      value={walkInName}
+                      onChange={(event) => setWalkInName(event.target.value)}
+                      placeholder="Walk-in customer"
+                      autoComplete="name"
+                    />
+                  </label>
+                  <label>
+                    <span>Phone number <small>Optional</small></span>
+                    <input
+                      type="tel"
+                      inputMode="tel"
+                      maxLength={30}
+                      value={walkInPhone}
+                      onChange={(event) => setWalkInPhone(event.target.value)}
+                      placeholder="012 345 678"
+                      autoComplete="tel"
+                    />
+                  </label>
+                </div>
               )}
               <div className="service-form-pair">
                 <label>
