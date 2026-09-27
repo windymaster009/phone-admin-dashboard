@@ -549,17 +549,17 @@ export default function ServiceWorkspace() {
 
     {selectedCharge && <DetailModalShell onClose={closeChargeDetail} titleId="service-charge-detail-title" className={`service-charge-detail-modal ${editingChargeCorrection ? 'service-charge-correction-mode' : ''}`}>
       <DetailModalHeader
-        eyebrow={editingChargeCorrection ? 'Controlled correction' : 'Service charge'}
+        eyebrow={editingChargeCorrection ? 'Update service charge' : 'Service charge'}
         title={selectedCharge.serviceNo}
         titleId="service-charge-detail-title"
-        description={editingChargeCorrection ? 'Only warranty and work notes can be changed.' : `${selectedCharge.serviceSnapshot.name} · ${dateText(selectedCharge.completedAt)}`}
+        description={editingChargeCorrection ? 'Change the warranty or work note, then explain why.' : `${selectedCharge.serviceSnapshot.name} · ${dateText(selectedCharge.completedAt)}`}
         onClose={closeChargeDetail}
       />
       {editingChargeCorrection ? <form className="service-charge-correction-form" onSubmit={saveChargeCorrection}>
         <DetailModalBody className="service-charge-correction-body">
           <div className="service-charge-correction-lock-note">
-            <strong>Payment and service details stay locked</strong>
-            <p>Customer, service, quantity, price, discount, payment method, and completion date cannot be changed here.</p>
+            <strong>You can update the warranty and work note</strong>
+            <p>Customer, service, quantity, price, discount, payment, and completion date stay locked.</p>
           </div>
           {correctionError && <div className="service-charge-correction-error" role="alert">{correctionError}</div>}
           <WarrantyPeriodField value={correctionWarrantyDays} onChange={setCorrectionWarrantyDays} kind="service" />
@@ -568,12 +568,13 @@ export default function ServiceWorkspace() {
             <textarea maxLength={500} value={correctionNotes} onChange={(event) => setCorrectionNotes(event.target.value)} placeholder="What was completed for the customer?" />
           </label>
           <label className="service-charge-correction-field">
-            <span>Correction reason <small>Required · audit history only</small></span>
-            <textarea required minLength={3} maxLength={500} value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} placeholder="Example: Warranty was omitted during checkout" />
+            <span>Why are you making this change? <small>Required · staff audit only</small></span>
+            <textarea required minLength={3} maxLength={500} value={correctionReason} onChange={(event) => setCorrectionReason(event.target.value)} placeholder="Example: Warranty was missed when this charge was recorded" />
+            <small className="service-charge-correction-help">This reason is saved in the staff audit history and is not printed on the customer receipt.</small>
           </label>
         </DetailModalBody>
         <DetailModalFooter
-          transactionActions={<button className="primary-button" type="submit" disabled={correctionBusy}>{correctionBusy ? 'Saving...' : 'Save correction'}</button>}
+          transactionActions={<button className="primary-button" type="submit" disabled={correctionBusy}>{correctionBusy ? 'Saving changes...' : 'Save changes'}</button>}
           dismissAction={<button className="ghost-button" type="button" onClick={cancelChargeCorrection} disabled={correctionBusy}>Cancel</button>}
         />
       </form> : <>
@@ -597,7 +598,7 @@ export default function ServiceWorkspace() {
         </DetailModalBody>
         <DetailModalFooter
           utilityActions={<button className="secondary-button" type="button" onClick={() => printChargeReceipt(selectedCharge)}><Printer size={16} /> Print receipt</button>}
-          secondaryActions={canPrice && selectedCharge.status === 'COMPLETED' ? <button className="secondary-button" type="button" onClick={openChargeCorrection}><Pencil size={15} /> Correct warranty or note</button> : undefined}
+          secondaryActions={canPrice && selectedCharge.status === 'COMPLETED' ? <button className="secondary-button" type="button" onClick={openChargeCorrection}><Pencil size={15} /> Edit warranty &amp; note</button> : undefined}
           dismissAction={<button className="ghost-button" type="button" onClick={closeChargeDetail}>Close</button>}
         />
       </>}

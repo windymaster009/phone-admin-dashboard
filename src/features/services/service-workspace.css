@@ -214,6 +214,7 @@
 .service-charge-correction-error { padding: 11px 13px; border: 1px solid color-mix(in srgb, var(--rose) 36%, var(--border)); border-radius: 10px; color: var(--rose); background: color-mix(in srgb, var(--rose) 8%, var(--bg-soft)); font-size: .7rem; }
 .service-charge-correction-field { display: grid; gap: 7px; color: var(--muted); font-size: .7rem; font-weight: 700; }
 .service-charge-correction-field small { color: var(--primary); font-size: .6rem; }
+.service-charge-correction-field .service-charge-correction-help { color: var(--muted-2); font-weight: 500; line-height: 1.45; }
 .service-charge-correction-field textarea { width: 100%; min-height: 84px; resize: vertical; padding: 11px 12px; border: 1px solid var(--border-strong); border-radius: 11px; outline: 2px solid transparent; color: var(--text); background: var(--bg-soft); font: inherit; font-weight: 500; }
 .service-charge-correction-field textarea:focus { border-color: var(--primary); outline-color: color-mix(in srgb, var(--primary) 35%, transparent); }
 .service-charge-correction-history { display: flex; align-items: center; gap: 10px; margin-top: 14px; padding: 12px 13px; border: 1px solid color-mix(in srgb, var(--primary) 28%, var(--border)); border-radius: 11px; color: var(--primary); background: color-mix(in srgb, var(--primary) 7%, var(--bg-soft)); }

@@ -204,14 +204,18 @@ describe('ServiceWorkspace', () => {
     render(<RouterProvider><ServiceWorkspace /></RouterProvider>)
     await user.click(await screen.findByRole('button', { name: 'View SV-20260301-A1B2C' }))
     let detail = screen.getByRole('dialog', { name: 'SV-20260301-A1B2C' })
-    await user.click(within(detail).getByRole('button', { name: 'Correct warranty or note' }))
+    await user.click(within(detail).getByRole('button', { name: 'Edit warranty & note' }))
+
+    expect(within(detail).getByText('You can update the warranty and work note')).toBeInTheDocument()
+    expect(within(detail).getByText(/Customer, service, quantity, price, discount, payment, and completion date stay locked/)).toBeInTheDocument()
+    expect(within(detail).getByText(/not printed on the customer receipt/)).toBeInTheDocument()
 
     const warranty = within(detail).getByRole('spinbutton', { name: 'Warranty period in days' })
     await user.clear(warranty)
     await user.type(warranty, '30')
     await user.type(within(detail).getByPlaceholderText('What was completed for the customer?'), 'Warranty confirmed with customer')
-    await user.type(within(detail).getByPlaceholderText('Example: Warranty was omitted during checkout'), 'Warranty omitted during checkout')
-    await user.click(within(detail).getByRole('button', { name: 'Save correction' }))
+    await user.type(within(detail).getByPlaceholderText('Example: Warranty was missed when this charge was recorded'), 'Warranty omitted during checkout')
+    await user.click(within(detail).getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => expect(correctionPayload).not.toBeNull())
     expect(correctionPayload).toEqual({
