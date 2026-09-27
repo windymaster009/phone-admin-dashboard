@@ -104,6 +104,10 @@ function titleCase(value: string) {
   return value.toLowerCase().replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())
 }
 
+function paymentMethodText(value: string) {
+  return value.toUpperCase() === 'KHQR' ? 'KHQR' : titleCase(value)
+}
+
 export default function ServiceWorkspace() {
   const { navigate } = useRouter()
   const go = (path: string) => navigate(path)
@@ -578,25 +582,77 @@ export default function ServiceWorkspace() {
           dismissAction={<button className="ghost-button" type="button" onClick={cancelChargeCorrection} disabled={correctionBusy}>Cancel</button>}
         />
       </form> : <>
-        <DetailModalBody>
-          <div className="detail-grid">
-            <div><span>Customer</span><strong>{selectedCharge.customerSnapshot.name}</strong></div>
-            <div><span>Phone</span><strong>{selectedCharge.customerSnapshot.phone || 'Not recorded'}</strong></div>
-            <div><span>Service</span><strong>{selectedCharge.serviceSnapshot.name}</strong></div>
-            <div><span>Quantity</span><strong>{selectedCharge.quantity ?? 1}</strong></div>
-            <div><span>Unit price</span><strong>{selectedCharge.unitPrice === undefined ? 'Not recorded' : money(selectedCharge.unitPrice, selectedCharge.currency)}</strong></div>
-            <div><span>Subtotal</span><strong>{selectedCharge.subtotal === undefined ? 'Not recorded' : money(selectedCharge.subtotal, selectedCharge.currency)}</strong></div>
-            <div><span>Discount</span><strong>{money(selectedCharge.discount ?? 0, selectedCharge.currency)}{selectedCharge.discountType === 'PERCENT' && selectedCharge.discountPercent !== undefined ? ` (${selectedCharge.discountPercent}%)` : ''}</strong></div>
-            <div><span>Total paid</span><strong>{money(selectedCharge.total, selectedCharge.currency)}</strong></div>
-            <div><span>Payment method</span><strong>{titleCase(selectedCharge.paymentMethod)}</strong></div>
-            <div><span>Warranty</span><strong>{selectedCharge.warrantyDays ? `${selectedCharge.warrantyDays} days` : 'No warranty'}</strong></div>
-            {Boolean(selectedCharge.warrantyDays) && <div><span>Warranty expires</span><strong>{dateText(selectedCharge.warrantyExpiresAt)}</strong></div>}
-            <div><span>Status</span><strong>{titleCase(selectedCharge.status)}</strong></div>
+        <DetailModalBody className="service-charge-detail-body">
+          <div className="service-charge-detail-layout">
+            <aside className="service-charge-customer-panel" aria-labelledby="service-charge-customer-heading">
+              <h4 id="service-charge-customer-heading">Customer details</h4>
+              <dl>
+                <div>
+                  <span className="service-charge-detail-icon"><Users size={17} aria-hidden="true" /></span>
+                  <div><dt>Customer</dt><dd>{selectedCharge.customerSnapshot.name}</dd></div>
+                </div>
+                <div>
+                  <span className="service-charge-detail-icon"><Smartphone size={17} aria-hidden="true" /></span>
+                  <div><dt>Phone</dt><dd>{selectedCharge.customerSnapshot.phone || 'Not recorded'}</dd></div>
+                </div>
+                <div>
+                  <span className="service-charge-detail-icon"><Settings2 size={17} aria-hidden="true" /></span>
+                  <div><dt>Service</dt><dd>{selectedCharge.serviceSnapshot.name}</dd></div>
+                </div>
+              </dl>
+            </aside>
+
+            <section className="service-charge-breakdown" aria-labelledby="service-charge-breakdown-heading">
+              <header>
+                <h4 id="service-charge-breakdown-heading">Service breakdown</h4>
+                <span className={`service-charge-status ${selectedCharge.status === 'COMPLETED' ? 'is-completed' : ''}`}>
+                  <CheckCircle2 size={15} aria-hidden="true" />
+                  <span>Status</span>
+                  <strong>{titleCase(selectedCharge.status)}</strong>
+                </span>
+              </header>
+
+              <div className="service-charge-line-table" role="table" aria-label="Service charge breakdown">
+                <div className="service-charge-line-head" role="row">
+                  <span role="columnheader">Service name</span>
+                  <span role="columnheader">Qty</span>
+                  <span role="columnheader">Unit price</span>
+                  <span role="columnheader">Subtotal</span>
+                </div>
+                <div className="service-charge-line-row" role="row">
+                  <strong role="cell" data-label="Service name">{selectedCharge.serviceSnapshot.name}</strong>
+                  <span role="cell" data-label="Quantity">{selectedCharge.quantity ?? 1}</span>
+                  <span role="cell" data-label="Unit price">{selectedCharge.unitPrice === undefined ? 'Not recorded' : money(selectedCharge.unitPrice, selectedCharge.currency)}</span>
+                  <span role="cell" data-label="Subtotal">{selectedCharge.subtotal === undefined ? 'Not recorded' : money(selectedCharge.subtotal, selectedCharge.currency)}</span>
+                </div>
+              </div>
+
+              <div className="service-charge-totals">
+                <dl className="service-charge-money-summary">
+                  <div><dt>Discount</dt><dd>{money(selectedCharge.discount ?? 0, selectedCharge.currency)}{selectedCharge.discountType === 'PERCENT' && selectedCharge.discountPercent !== undefined ? ` (${selectedCharge.discountPercent}%)` : ''}</dd></div>
+                  <div><dt>Total paid</dt><dd>{money(selectedCharge.total, selectedCharge.currency)}</dd></div>
+                </dl>
+                <dl className="service-charge-payment-summary">
+                  <div>
+                    <span className="service-charge-detail-icon"><Banknote size={17} aria-hidden="true" /></span>
+                    <div><dt>Payment method</dt><dd>{paymentMethodText(selectedCharge.paymentMethod)}</dd></div>
+                  </div>
+                  <div>
+                    <span className="service-charge-detail-icon"><ShieldCheck size={17} aria-hidden="true" /></span>
+                    <div>
+                      <dt>Warranty</dt>
+                      <dd>{selectedCharge.warrantyDays ? `${selectedCharge.warrantyDays} days` : 'No warranty'}</dd>
+                      {Boolean(selectedCharge.warrantyDays) && <small>Expires {dateText(selectedCharge.warrantyExpiresAt)}</small>}
+                    </div>
+                  </div>
+                </dl>
+              </div>
+            </section>
           </div>
           {Number(selectedCharge.correctionVersion || 0) > 0 && <div className="service-charge-correction-history" role="status"><Pencil size={16} /><div><strong>Service details corrected</strong><small>Revision {selectedCharge.correctionVersion}{selectedCharge.lastCorrectedAt ? ` · ${dateText(selectedCharge.lastCorrectedAt)}` : ''}{selectedCharge.lastCorrectedBy?.name ? ` · ${selectedCharge.lastCorrectedBy.name}` : ''}</small></div></div>}
           {selectedCharge.notes && <div className="detail-note"><span className="eyebrow">Work note</span><p>{selectedCharge.notes}</p></div>}
         </DetailModalBody>
-        <DetailModalFooter
+        <DetailModalFooter className="service-charge-detail-footer"
           utilityActions={<button className="secondary-button" type="button" onClick={() => printChargeReceipt(selectedCharge)}><Printer size={16} /> Print receipt</button>}
           secondaryActions={canPrice && selectedCharge.status === 'COMPLETED' ? <button className="secondary-button" type="button" onClick={openChargeCorrection}><Pencil size={15} /> Edit warranty &amp; note</button> : undefined}
           dismissAction={<button className="ghost-button" type="button" onClick={closeChargeDetail}>Close</button>}
