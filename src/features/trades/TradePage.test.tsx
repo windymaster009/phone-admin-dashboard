@@ -206,10 +206,17 @@ describe('TradePage feature integration', () => {
       // Body structure
       const body = dialog.querySelector('.trade-detail-body')
       expect(body).toBeInTheDocument()
-      expect(body).toHaveClass('detail-modal-body')
-      expect(body?.querySelector('.detail-grid')).toBeInTheDocument()
-      expect(body?.querySelector('.detail-sections')).toBeInTheDocument()
-      expect(body?.querySelector('.detail-lines')).toBeInTheDocument()
+      expect(body).toHaveClass('detail-modal-body', 'sale-transaction-detail')
+      expect(body?.querySelector('.sale-detail-dashboard')).toBeInTheDocument()
+      expect(body?.querySelector('.detail-grid')).not.toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Customer overview' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Financials' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Cash details' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Sale status' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Payment' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Warranty & fulfillment' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Items' })).toBeInTheDocument()
+      expect(screen.getByText('1 line item · 1 total unit')).toBeInTheDocument()
 
       // Footer structure
       const footer = dialog.querySelector('.detail-modal-footer')
@@ -362,11 +369,16 @@ describe('TradePage feature integration', () => {
     await user.click(viewBtn)
 
     await waitFor(() => {
-      expect(screen.getByRole('dialog')).toBeInTheDocument()
+      const dialog = screen.getByRole('dialog')
+      expect(dialog).toBeInTheDocument()
       expect(screen.getByText('Purchase transaction')).toBeInTheDocument()
       expect(screen.getByText('Seller')).toBeInTheDocument()
       expect(screen.getByText('Tech Wholesaler')).toBeInTheDocument()
       expect(screen.getByText('012-345-678')).toBeInTheDocument()
+      expect(dialog.querySelector('.sale-detail-dashboard')).not.toBeInTheDocument()
+      expect(dialog.querySelector('.detail-grid')).toBeInTheDocument()
+      expect(dialog.querySelector('.detail-sections')).toBeInTheDocument()
+      expect(dialog.querySelector('.detail-lines')).toBeInTheDocument()
     })
   })
 
@@ -654,7 +666,7 @@ describe('TradePage feature integration', () => {
     expect(screen.getByText('Subtotal').parentElement).toHaveTextContent('41,000 KHR')
     expect(screen.getByText('Amount paid').parentElement).toHaveTextContent('41,000 KHR')
     expect(screen.getByText('Balance').parentElement).toHaveTextContent('0 KHR')
-    expect(screen.getByText('1 line item')).toBeInTheDocument()
+    expect(screen.getByText('1 line item · 2 total units')).toBeInTheDocument()
 
     // Notes
     expect(screen.getByText('Notes')).toBeInTheDocument()
