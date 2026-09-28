@@ -16,7 +16,7 @@ This architecture keeps the Android client aligned with the web dashboard: new P
 - DownloadManager support for normal HTTP/HTTPS files
 - Open-current-page-in-browser action
 - Clear-session and change-server controls
-- Release builds require HTTPS; debug HTTP is limited to localhost and emulator endpoints
+- Dedicated shop APK with private-Wi-Fi discovery and a locked-down HTTPS cloud release
 
 ## Architecture
 
@@ -72,7 +72,7 @@ For an emulator, enter:
 http://10.0.2.2:5173
 ```
 
-For a USB-connected debug device, reverse ports 5173 and 5000 with ADB and use `http://127.0.0.1:5173`. When the app URL uses port 5173, the native scanner automatically sends API lookups to the same host on port 5000. Direct LAN HTTP is rejected; use HTTPS when ADB forwarding is unavailable.
+For a USB-connected debug device, reverse ports 5173 and 5000 with ADB and use `http://127.0.0.1:5173`. When the app URL uses port 5173, the native scanner automatically sends API lookups to the same host on port 5000.
 
 ## Build With Android Studio
 
@@ -91,21 +91,25 @@ This repo is pinned to these Android build versions:
 - Compile SDK 36
 - Target SDK 35
 
-```bash
-gradle -p android-app :app:lintDebug :app:assembleDebug
+Build the installable shop APK from the repository root:
+
+```powershell
+npm run build:android-shop
 ```
 
 APK output:
 
 ```text
-android-app/app/build/outputs/apk/debug/app-debug.apk
+android-app/output/PhoneFlow-Shop-1.9.7.apk
 ```
 
 Install it with:
 
-```bash
-adb install -r android-app/app/build/outputs/apk/debug/app-debug.apk
+```powershell
+adb install -r android-app/output/PhoneFlow-Shop-1.9.7.apk
 ```
+
+The shop build is signed for direct installation, disables WebView debugging, and permits HTTP only when the app's URL policy verifies a private LAN address. It keeps the older `com.phoneflow.mobile.debug` package ID, so Android can update that APK when both were built with the same signing key.
 
 For the Pixel 7 connected over USB, forward both the dashboard and API ports:
 
@@ -124,12 +128,12 @@ Keep `npm run dev` running on the computer while testing this way.
 
 ### Automatic same-Wi-Fi connection
 
-The installable debug APK searches the phone's private Wi-Fi subnet for a verified
+The installable shop APK searches the phone's private Wi-Fi subnet for a verified
 PhoneFlow server on port 5000. Start PhoneFlow on the computer and put both devices
 on the same private Wi-Fi; the app saves the discovered address automatically.
 The Windows network must be marked **Private** so the PhoneFlow firewall rule applies.
-Use **Settings → Find server on Wi-Fi** after changing networks. Release builds still
-require HTTPS; private-LAN HTTP discovery is limited to debug APKs.
+Use **Find server on Wi-Fi** on the connection screen or from Settings after changing
+networks. Connection failures return to this screen instead of leaving a blank WebView.
 
 ## Scanner behavior
 
@@ -161,7 +165,8 @@ The product dialog displays stock, price, SKU/barcode, brand/model, storage/colo
 ## Security rules
 
 - Release builds require HTTPS for every server.
-- Debug builds accept HTTP only for localhost, `127.0.0.1`, and the Android emulator host `10.0.2.2`.
+- Shop and debug builds accept HTTP only for localhost, the Android emulator, and private IPv4 ranges (`10/8`, `172.16/12`, and `192.168/16`).
+- The shop build keeps WebView debugging disabled and uses the same application policy for native scanner requests.
 - Navigation to another host leaves the app and opens the system browser.
 - File-scheme access and universal file URL access are disabled.
 - Third-party cookies are disabled.

@@ -10,20 +10,20 @@ final class ServerUrlPolicy {
     private ServerUrlPolicy() {
     }
 
-    static String normalizeBaseUrl(String rawUrl, boolean debugBuild) {
+    static String normalizeBaseUrl(String rawUrl, boolean allowPrivateLanHttp) {
         String candidate = rawUrl == null ? "" : rawUrl.trim();
         if (candidate.isEmpty()) throw new IllegalArgumentException("Enter the PhoneFlow app URL");
-        if (!candidate.contains("://")) candidate = "https://" + candidate;
+        if (!candidate.contains("://")) candidate = inferredScheme(candidate, allowPrivateLanHttp) + candidate;
         candidate = candidate.replaceAll("/+$", "");
 
-        validate(candidate, debugBuild);
+        validate(candidate, allowPrivateLanHttp);
         return candidate;
     }
 
-    static URL requireAllowedUrl(String rawUrl, boolean debugBuild) throws MalformedURLException {
+    static URL requireAllowedUrl(String rawUrl, boolean allowPrivateLanHttp) throws MalformedURLException {
         String candidate = rawUrl == null ? "" : rawUrl.trim();
         try {
-            validate(candidate, debugBuild);
+            validate(candidate, allowPrivateLanHttp);
             return new URI(candidate).toURL();
         } catch (IllegalArgumentException | URISyntaxException error) {
             MalformedURLException wrapped = new MalformedURLException(error.getMessage());
@@ -32,7 +32,17 @@ final class ServerUrlPolicy {
         }
     }
 
-    private static void validate(String candidate, boolean debugBuild) {
+    private static String inferredScheme(String candidate, boolean allowPrivateLanHttp) {
+        if (!allowPrivateLanHttp) return "https://";
+        try {
+            String host = new URI("http://" + candidate).getHost();
+            return host != null && isAllowedCleartextHost(host) ? "http://" : "https://";
+        } catch (URISyntaxException error) {
+            return "https://";
+        }
+    }
+
+    private static void validate(String candidate, boolean allowPrivateLanHttp) {
         final URI uri;
         try {
             uri = new URI(candidate);
@@ -47,14 +57,14 @@ final class ServerUrlPolicy {
         }
 
         if ("https".equalsIgnoreCase(scheme)) return;
-        if ("http".equalsIgnoreCase(scheme) && debugBuild && isDebugCleartextHost(host)) return;
+        if ("http".equalsIgnoreCase(scheme) && allowPrivateLanHttp && isAllowedCleartextHost(host)) return;
         if ("http".equalsIgnoreCase(scheme)) {
-            throw new IllegalArgumentException("Use HTTPS. Debug HTTP is limited to localhost and the Android emulator.");
+            throw new IllegalArgumentException("Use HTTPS, or a private Wi-Fi address in the PhoneFlow Shop app.");
         }
         throw new IllegalArgumentException("Use an HTTPS PhoneFlow address");
     }
 
-    private static boolean isDebugCleartextHost(String host) {
+    private static boolean isAllowedCleartextHost(String host) {
         String value = host.toLowerCase(Locale.US);
         return value.equals("localhost")
             || value.equals("127.0.0.1")

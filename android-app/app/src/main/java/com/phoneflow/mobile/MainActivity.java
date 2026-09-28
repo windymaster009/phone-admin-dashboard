@@ -26,6 +26,7 @@ import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebSettings;
 import android.webkit.WebStorage;
 import android.webkit.WebView;
@@ -81,8 +82,13 @@ public class MainActivity extends AppCompatActivity {
         bindActions();
 
         String savedServer = preferences.getServerUrl();
-        if (savedServer == null || savedServer.isBlank() || isLoopbackServer(savedServer)) discoverServer();
-        else connect(savedServer);
+        if (BuildConfig.ALLOW_PRIVATE_LAN_HTTP && (savedServer == null || savedServer.isBlank() || isLoopbackServer(savedServer))) {
+            discoverServer();
+        } else if (savedServer == null || savedServer.isBlank()) {
+            showSetup("");
+        } else {
+            connect(savedServer);
+        }
     }
 
     private void bindViews() {
@@ -122,6 +128,9 @@ public class MainActivity extends AppCompatActivity {
 
     private void bindActions() {
         findViewById(R.id.connectButton).setOnClickListener(view -> connect(serverUrlInput.getText().toString()));
+        View findServerButton = findViewById(R.id.findServerButton);
+        findServerButton.setOnClickListener(view -> discoverServer());
+        findServerButton.setVisibility(BuildConfig.ALLOW_PRIVATE_LAN_HTTP ? View.VISIBLE : View.GONE);
         findViewById(R.id.dashboardButton).setOnClickListener(view -> loadDashboard());
         findViewById(R.id.scanButton).setOnClickListener(view -> scannerLauncher.launch(new Intent(this, ScannerActivity.class)));
         findViewById(R.id.backButton).setOnClickListener(view -> navigateBack());
@@ -136,6 +145,10 @@ public class MainActivity extends AppCompatActivity {
 
     private void discoverServer() {
         if (discoveryInProgress) return;
+        if (!BuildConfig.ALLOW_PRIVATE_LAN_HTTP) {
+            showSetup("Automatic Wi-Fi discovery is available in the PhoneFlow Shop app.");
+            return;
+        }
         discoveryInProgress = true;
         automaticDiscoveryAttempted = true;
         showSetup("Searching for PhoneFlow on this Wi-Fi…");
@@ -149,7 +162,7 @@ public class MainActivity extends AppCompatActivity {
             @Override public void onNotFound() {
                 if (isFinishing() || isDestroyed()) return;
                 discoveryInProgress = false;
-                showSetup("PhoneFlow was not found. Start it on the computer and confirm both devices use the same Wi-Fi, then reopen the app.");
+                showSetup("PhoneFlow was not found. Start it on the computer, confirm both devices use the same private Wi-Fi, then tap Find server on Wi-Fi.");
             }
         });
     }
@@ -182,7 +195,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private String normalizeServerUrl(String rawUrl) {
-        return ServerUrlPolicy.normalizeBaseUrl(rawUrl, BuildConfig.DEBUG);
+        return ServerUrlPolicy.normalizeBaseUrl(rawUrl, BuildConfig.ALLOW_PRIVATE_LAN_HTTP);
+    }
+
+    private void showConnectionFailure() {
+        String target = serverUrl.isBlank() ? "the PhoneFlow computer" : serverUrl;
+        showSetup("Could not connect to " + target + ". Make sure PhoneFlow is running, Windows uses a Private network, and both devices are on the same Wi-Fi.");
     }
 
     private String deriveApiBaseUrl(String appUrl) {
@@ -560,7 +578,19 @@ public class MainActivity extends AppCompatActivity {
             if (primary && request.isForMainFrame()) {
                 pageProgress.setVisibility(View.GONE);
                 if (!automaticDiscoveryAttempted) discoverServer();
-                else toast("Unable to load PhoneFlow. Check the server and Wi-Fi connection.");
+                else showConnectionFailure();
+            }
+        }
+
+        @Override
+        public void onReceivedHttpError(
+            WebView view,
+            @NonNull WebResourceRequest request,
+            @NonNull WebResourceResponse errorResponse
+        ) {
+            if (primary && request.isForMainFrame() && errorResponse.getStatusCode() >= 400) {
+                pageProgress.setVisibility(View.GONE);
+                showConnectionFailure();
             }
         }
     }

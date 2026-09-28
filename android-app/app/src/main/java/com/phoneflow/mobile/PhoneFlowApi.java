@@ -34,7 +34,7 @@ final class PhoneFlowApi {
                 String encoded = URLEncoder.encode(code, StandardCharsets.UTF_8.name()).replace("+", "%20");
                 URL url = ServerUrlPolicy.requireAllowedUrl(
                     baseUrl + "/api/inventory/scan/" + encoded,
-                    BuildConfig.DEBUG
+                    BuildConfig.ALLOW_PRIVATE_LAN_HTTP
                 );
                 connection = (HttpURLConnection) url.openConnection();
                 connection.setRequestMethod("POST");

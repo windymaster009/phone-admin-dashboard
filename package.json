@@ -12,6 +12,7 @@
     "dev:server": "node --watch server/index.js",
     "dev:aistudio": "concurrently \"vite --host 0.0.0.0\" \"node server/index.js\"",
     "build": "tsc -b && vite build",
+    "build:android-shop": "powershell -NoProfile -ExecutionPolicy Bypass -File android-app/build-shop-apk.ps1",
     "build:installer": "powershell -NoProfile -ExecutionPolicy Bypass -File installer/build-installer.ps1",
     "start": "node server/index.js",
     "backup:restore": "node server/restore-backup.js",

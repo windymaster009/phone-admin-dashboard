@@ -10,10 +10,11 @@ android {
         applicationId "com.phoneflow.mobile"
         minSdk 26
         targetSdk 35
-        versionCode 10802
-        versionName "1.8.2"
+        versionCode 10907
+        versionName "1.9.7"
 
         buildConfigField "String", "DEFAULT_SERVER_URL", '""'
+        buildConfigField "boolean", "ALLOW_PRIVATE_LAN_HTTP", "false"
     }
 
     buildTypes {
@@ -21,10 +22,20 @@ android {
             applicationIdSuffix ".debug"
             versionNameSuffix "-debug"
             buildConfigField "String", "DEFAULT_SERVER_URL", '"http://127.0.0.1:5173"'
+            buildConfigField "boolean", "ALLOW_PRIVATE_LAN_HTTP", "true"
         }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
+        shop {
+            initWith release
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-shop"
+            signingConfig signingConfigs.debug
+            debuggable false
+            buildConfigField "boolean", "ALLOW_PRIVATE_LAN_HTTP", "true"
+            matchingFallbacks = ["release"]
         }
     }
 

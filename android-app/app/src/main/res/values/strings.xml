@@ -5,6 +5,7 @@
     <string name="setup_description">PhoneFlow searches this Wi-Fi automatically. You can also enter the computer address below.</string>
     <string name="server_url_hint">http://192.168.1.10:5000</string>
     <string name="connect">Connect</string>
+    <string name="find_server">Find server on Wi-Fi</string>
     <string name="dashboard">Dashboard</string>
     <string name="scan">Scan</string>
     <string name="back">Back</string>

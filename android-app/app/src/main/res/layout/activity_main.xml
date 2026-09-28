@@ -76,6 +76,17 @@
                 android:textColor="@color/phoneflow_text"
                 android:textStyle="bold" />
 
+            <Button
+                android:id="@+id/findServerButton"
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_marginTop="10dp"
+                android:backgroundTint="@color/phoneflow_surface_alt"
+                android:text="@string/find_server"
+                android:textAllCaps="false"
+                android:textColor="@color/phoneflow_text"
+                android:textStyle="bold" />
+
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
