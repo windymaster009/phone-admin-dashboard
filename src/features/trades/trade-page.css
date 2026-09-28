@@ -1,6 +1,7 @@
-/* Hallmark · component: sale transaction detail modal · genre: modern-minimal · theme: existing PhoneFlow
+/* Hallmark · component: transaction detail modals · genre: modern-minimal · tone: operational clarity
+ * theme: existing PhoneFlow · anchor: violet with purchase orange · fingerprint: asymmetric workbench
  * states: shared DetailModal actions preserve default · hover · focus · active · disabled · loading · error · success
- * pre-emit critique: P5 H5 E5 S5 R5 V4 · contrast: pass · responsive: 320 / 375 / 414 / 768
+ * pre-emit critique: P5 H5 E5 S5 R5 V4 · contrast: pass (40–41) · mobile: pass (34, 49, 50–57)
  */
 /**
  * Trade Feature Styles (Buy / Sell & Transaction History)
@@ -386,6 +387,155 @@
   margin: var(--space-3) 0 0;
 }
 
+.trade-detail-body.purchase-transaction-detail {
+  display: block;
+  padding: var(--space-4);
+}
+
+.purchase-detail-dashboard {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(260px, 1.35fr);
+  grid-template-areas:
+    'seller cost settlement items'
+    'status payment intake items';
+  gap: var(--space-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.purchase-detail-card,
+.purchase-items-panel {
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  color: var(--text);
+  background: var(--bg-soft);
+}
+
+.purchase-detail-card h4,
+.purchase-items-panel h4 {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font: 800 .78rem/1.3 var(--font-display);
+}
+
+.purchase-detail-card dl {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+}
+
+.purchase-detail-card dl > div {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.purchase-detail-card dt,
+.purchase-seller-primary small,
+.purchase-seller-phone small {
+  color: color-mix(in srgb, var(--muted) 80%, var(--text));
+  font-size: .62rem;
+  line-height: 1.35;
+}
+
+.purchase-detail-card dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-size: .76rem;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.purchase-seller-card { grid-area: seller; }
+.purchase-cost-card { grid-area: cost; }
+.purchase-settlement-card { grid-area: settlement; }
+.purchase-status-card { grid-area: status; }
+.purchase-payment-card { grid-area: payment; }
+.purchase-intake-card { grid-area: intake; }
+.purchase-items-panel { grid-area: items; }
+
+.purchase-seller-primary,
+.purchase-seller-phone {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.purchase-seller-primary { margin-top: var(--space-3); }
+.purchase-seller-phone { margin-top: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--border); color: color-mix(in srgb, var(--muted) 80%, var(--text)); }
+.purchase-seller-primary > div,
+.purchase-seller-phone > div { min-width: 0; display: grid; gap: var(--space-1); }
+.purchase-seller-primary strong,
+.purchase-seller-phone strong { min-width: 0; overflow-wrap: anywhere; color: var(--text); font-size: .78rem; line-height: 1.35; }
+
+.purchase-detail-icon {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-full);
+  color: var(--text);
+  background: color-mix(in srgb, var(--orange) 13%, var(--bg-soft));
+}
+
+.purchase-detail-total {
+  margin-top: var(--space-1);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.purchase-detail-total dd { color: var(--text); font-size: 1rem; }
+.purchase-status-card > .status-badge { width: fit-content; margin-top: var(--space-3); }
+
+.purchase-items-panel {
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+}
+
+.purchase-items-panel > header {
+  min-width: 0;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.purchase-items-panel > header p {
+  margin: var(--space-1) 0 0;
+  color: color-mix(in srgb, var(--muted) 80%, var(--text));
+  font-size: .62rem;
+  line-height: 1.4;
+}
+
+.purchase-item-list { min-width: 0; }
+
+.purchase-item-row {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.purchase-item-row:last-child { border-bottom: 0; }
+.purchase-item-row > div { min-width: 0; display: grid; gap: var(--space-1); }
+.purchase-item-row > div > strong { min-width: 0; overflow-wrap: anywhere; color: var(--text); font-size: .74rem; line-height: 1.35; }
+.purchase-item-row small { min-width: 0; overflow-wrap: anywhere; color: color-mix(in srgb, var(--muted) 80%, var(--text)); font-size: .6rem; line-height: 1.4; }
+.purchase-item-row > strong { flex: 0 0 auto; color: var(--text); font-size: .76rem; line-height: 1.35; }
+
+.purchase-transaction-detail > .detail-note,
+.purchase-transaction-detail > .trade-refund-record {
+  margin: var(--space-3) 0 0;
+}
+
 .trade-correction-history {
   grid-column: 1 / -1;
   display: flex;
@@ -499,6 +649,15 @@
       'customer status'
       'financial cash'
       'payment warranty'
+      'items items';
+  }
+
+  .purchase-detail-dashboard {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      'seller status'
+      'cost settlement'
+      'payment intake'
       'items items';
   }
 
@@ -703,6 +862,10 @@
     padding: var(--space-3);
   }
 
+  .trade-detail-body.purchase-transaction-detail {
+    padding: var(--space-3);
+  }
+
   .sale-detail-dashboard {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
@@ -721,6 +884,24 @@
     padding: var(--space-3);
   }
 
+  .purchase-detail-dashboard {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'seller'
+      'items'
+      'status'
+      'cost'
+      'settlement'
+      'payment'
+      'intake';
+    gap: var(--space-2);
+  }
+
+  .purchase-detail-card,
+  .purchase-items-panel {
+    padding: var(--space-3);
+  }
+
   .trade-detail-body .detail-sections {
     grid-template-columns: 1fr;
     padding: 12px;
@@ -735,6 +916,11 @@
   .sale-transaction-detail > .trade-correction-history,
   .sale-transaction-detail > .detail-note,
   .sale-transaction-detail > .trade-refund-record {
+    margin: var(--space-3) 0 0;
+  }
+
+  .purchase-transaction-detail > .detail-note,
+  .purchase-transaction-detail > .trade-refund-record {
     margin: var(--space-3) 0 0;
   }
 

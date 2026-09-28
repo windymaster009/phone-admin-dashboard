@@ -375,10 +375,19 @@ describe('TradePage feature integration', () => {
       expect(screen.getByText('Seller')).toBeInTheDocument()
       expect(screen.getByText('Tech Wholesaler')).toBeInTheDocument()
       expect(screen.getByText('012-345-678')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Seller overview' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Cost summary' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Settlement' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Purchase status' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Payment' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Intake summary' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Items received' })).toBeInTheDocument()
+      expect(dialog.querySelector('.purchase-transaction-detail')).toBeInTheDocument()
+      expect(dialog.querySelector('.purchase-detail-dashboard')).toBeInTheDocument()
       expect(dialog.querySelector('.sale-detail-dashboard')).not.toBeInTheDocument()
-      expect(dialog.querySelector('.detail-grid')).toBeInTheDocument()
-      expect(dialog.querySelector('.detail-sections')).toBeInTheDocument()
-      expect(dialog.querySelector('.detail-lines')).toBeInTheDocument()
+      expect(dialog.querySelector('.detail-grid')).not.toBeInTheDocument()
+      expect(dialog.querySelector('.detail-sections')).not.toBeInTheDocument()
+      expect(dialog.querySelector('.detail-lines')).not.toBeInTheDocument()
     })
   })
 
@@ -412,7 +421,7 @@ describe('TradePage feature integration', () => {
     })
 
     // Detail modal total should be $0, NOT -$0
-    const totalSection = screen.getByText('Total').parentElement
+    const totalSection = screen.getByText('Total cost').parentElement
     expect(totalSection?.textContent).not.toMatch(/^-\$0/)
     expect(totalSection?.textContent).toMatch(/\$0/)
   })
@@ -737,10 +746,10 @@ describe('TradePage feature integration', () => {
 
     // Walk-in seller and no phone
     expect(screen.getByText('Walk-in seller')).toBeInTheDocument()
-    expect(screen.getByText('No phone recorded')).toBeInTheDocument()
+    expect(document.querySelector('.purchase-seller-phone')).toHaveTextContent('Not recorded')
 
     // Multiple line items count
-    expect(screen.getByText('2 line items')).toBeInTheDocument()
+    expect(screen.getByText('2 line items · 4 total units')).toBeInTheDocument()
 
     // Refund shows scrap disposition text
     const refundRecord = screen.getByRole('status')

@@ -306,7 +306,7 @@ export default function TradeView() {
               dismissAction={<button className="ghost-button" type="button" onClick={cancelCorrection} disabled={correctionBusy}>Cancel</button>}
             />
           </form> : <>
-          <DetailModalBody className={`trade-detail-body ${selectedTrade.type === 'SELL' ? 'sale-transaction-detail' : ''}`}>
+          <DetailModalBody className={`trade-detail-body ${selectedTrade.type === 'SELL' ? 'sale-transaction-detail' : 'purchase-transaction-detail'}`}>
             {selectedTrade.type === 'SELL' ? (
               <div className="sale-detail-dashboard">
                 <section className="sale-detail-card sale-customer-card" aria-labelledby="sale-customer-heading">
@@ -390,56 +390,90 @@ export default function TradeView() {
                   </div>
                 </section>
               </div>
-            ) : <>
-            <div className="detail-grid">
-              <div><span>Type</span><strong>Purchase</strong></div>
-              <div><span>Payment status</span><strong><StatusBadge status={selectedTrade.paymentStatus || selectedTrade.status} /></strong></div>
-              <div><span>Payment</span><strong>{titleStatus(selectedTrade.paymentMethod)}</strong></div>
-              <div><span>Date and time</span><strong>{dateTimeText(selectedTrade.purchaseDate || selectedTrade.createdAt)}</strong></div>
-              <div><span>Currency</span><strong>{selectedTrade.currency || 'USD'}{selectedTrade.currency === 'KHR' && Number(selectedTrade.exchangeRate) > 0 ? ` · 1 USD = ${Number(selectedTrade.exchangeRate).toLocaleString()} KHR` : ''}</strong></div>
-              <div><span>Payment status</span><strong>{titleStatus(selectedTrade.paymentStatus || (selectedTrade.balance > 0 ? 'PARTIAL' : 'PAID'))}</strong></div>
-              <div><span>Subtotal</span><strong>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionSubtotal, selectedTrade.subtotal)}</strong></div>
-              <div><span>Discount</span><strong>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionSubtotal === undefined || selectedTrade.transactionTotal === undefined ? undefined : selectedTrade.transactionSubtotal - selectedTrade.transactionTotal, selectedTrade.discount)}</strong></div>
-              <div><span>Total</span><strong>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionTotal, selectedTrade.total)}</strong></div>
-              <div><span>Amount paid</span><strong>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionAmountPaid, selectedTrade.amountPaid)}</strong></div>
-              <div><span>Amount received</span><strong>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionAmountReceived, selectedTrade.amountReceived ?? selectedTrade.amountPaid)}</strong></div>
-              <div><span>Change returned</span><strong>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionChangeDue, selectedTrade.changeDue ?? 0)}</strong></div>
-              <div><span>Balance</span><strong>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionBalance, selectedTrade.balance)}</strong></div>
-              <div><span>Processed by</span><strong>{selectedTrade.createdBy?.name || 'Not recorded'}</strong></div>
-            </div>
+            ) : (
+              <div className="purchase-detail-dashboard">
+                <section className="purchase-detail-card purchase-seller-card" aria-labelledby="purchase-seller-heading">
+                  <h4 id="purchase-seller-heading">Seller overview</h4>
+                  <div className="purchase-seller-primary">
+                    <span className="purchase-detail-icon"><UserRound size={19} aria-hidden="true" /></span>
+                    <div><small>Seller</small><strong>{tradePartyName(selectedTrade)}</strong></div>
+                  </div>
+                  <div className="purchase-seller-phone">
+                    <Phone size={16} aria-hidden="true" />
+                    <div><small>Phone</small><strong>{tradePartyPhone(selectedTrade) || 'Not recorded'}</strong></div>
+                  </div>
+                </section>
 
-            <div className="detail-sections">
-              <article>
-                <span className="eyebrow">Seller</span>
-                <p><strong>{tradePartyName(selectedTrade)}</strong></p>
-                <p>{tradePartyPhone(selectedTrade) || 'No phone recorded'}</p>
-              </article>
-              <article>
-                <span className="eyebrow">Transaction summary</span>
-                <p><strong>{selectedTrade.items.reduce((sum, item) => sum + item.quantity, 0)} total unit{selectedTrade.items.reduce((sum, item) => sum + item.quantity, 0) === 1 ? '' : 's'}</strong></p>
-                <p>{selectedTrade.items.length} line item{selectedTrade.items.length === 1 ? '' : 's'}</p>
-              </article>
-            </div>
+                <section className="purchase-detail-card purchase-cost-card" aria-labelledby="purchase-cost-heading">
+                  <h4 id="purchase-cost-heading">Cost summary</h4>
+                  <dl>
+                    <div><dt>Subtotal</dt><dd>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionSubtotal, selectedTrade.subtotal)}</dd></div>
+                    <div><dt>Discount</dt><dd>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionSubtotal === undefined || selectedTrade.transactionTotal === undefined ? undefined : selectedTrade.transactionSubtotal - selectedTrade.transactionTotal, selectedTrade.discount)}</dd></div>
+                    <div className="purchase-detail-total"><dt>Total cost</dt><dd>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionTotal, selectedTrade.total)}</dd></div>
+                  </dl>
+                </section>
 
-            <div className="detail-lines">
-              <span className="eyebrow">Items</span>
-              {selectedTrade.items.map((item, index) => (
-                <div className="detail-line" key={`${item.name}-${index}`}>
-                  <p>
-                    <strong>{item.name}</strong>
-                    <small>Quantity {item.quantity} · {tradeTransactionMoney(selectedTrade, item.originalUnitPrice, item.unitPrice)} each</small>
-                    {(item.inventoryItem?.sku || item.inventoryItem?.barcode || item.inventoryItem?.imei1 || item.inventoryItem?.serialNumber) && <small>{[
-                      item.inventoryItem?.sku ? `SKU ${item.inventoryItem.sku}` : '',
-                      item.inventoryItem?.barcode ? `Barcode ${item.inventoryItem.barcode}` : '',
-                      item.inventoryItem?.imei1 ? `IMEI ${item.inventoryItem.imei1}` : '',
-                      item.inventoryItem?.serialNumber ? `Serial ${item.inventoryItem.serialNumber}` : '',
-                    ].filter(Boolean).join(' · ')}</small>}
-                  </p>
-                  <strong>{tradeTransactionMoney(selectedTrade, item.originalUnitPrice === undefined ? undefined : item.originalUnitPrice * item.quantity, item.unitPrice * item.quantity)}</strong>
-                </div>
-              ))}
-            </div>
-            </>}
+                <section className="purchase-detail-card purchase-settlement-card" aria-labelledby="purchase-settlement-heading">
+                  <h4 id="purchase-settlement-heading">Settlement</h4>
+                  <dl>
+                    <div><dt>Amount paid</dt><dd>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionAmountPaid, selectedTrade.amountPaid)}</dd></div>
+                    <div><dt>Balance</dt><dd>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionBalance, selectedTrade.balance)}</dd></div>
+                    <div><dt>Payment status</dt><dd>{titleStatus(selectedTrade.paymentStatus || (selectedTrade.balance > 0 ? 'PARTIAL' : 'PAID'))}</dd></div>
+                  </dl>
+                </section>
+
+                <section className="purchase-detail-card purchase-status-card" aria-labelledby="purchase-status-heading">
+                  <h4 id="purchase-status-heading">Purchase status</h4>
+                  <StatusBadge status={selectedTrade.status} />
+                  <dl>
+                    <div><dt>Type</dt><dd>Purchase</dd></div>
+                    <div><dt>Date and time</dt><dd>{dateTimeText(selectedTrade.purchaseDate || selectedTrade.createdAt)}</dd></div>
+                  </dl>
+                </section>
+
+                <section className="purchase-detail-card purchase-payment-card" aria-labelledby="purchase-payment-heading">
+                  <h4 id="purchase-payment-heading">Payment</h4>
+                  <dl>
+                    <div><dt>Method</dt><dd>{titleStatus(selectedTrade.paymentMethod)}</dd></div>
+                    <div><dt>Currency</dt><dd>{selectedTrade.currency || 'USD'}{selectedTrade.currency === 'KHR' && Number(selectedTrade.exchangeRate) > 0 ? ` · 1 USD = ${Number(selectedTrade.exchangeRate).toLocaleString()} KHR` : ''}</dd></div>
+                    <div><dt>Amount tendered</dt><dd>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionAmountReceived, selectedTrade.amountReceived ?? selectedTrade.amountPaid)}</dd></div>
+                    <div><dt>Change returned</dt><dd>{tradeTransactionMoney(selectedTrade, selectedTrade.transactionChangeDue, selectedTrade.changeDue ?? 0)}</dd></div>
+                  </dl>
+                </section>
+
+                <section className="purchase-detail-card purchase-intake-card" aria-labelledby="purchase-intake-heading">
+                  <h4 id="purchase-intake-heading">Intake summary</h4>
+                  <dl>
+                    <div><dt>Total units</dt><dd>{selectedTrade.items.reduce((sum, item) => sum + item.quantity, 0)}</dd></div>
+                    <div><dt>Line items</dt><dd>{selectedTrade.items.length}</dd></div>
+                    <div><dt>Processed by</dt><dd>{selectedTrade.createdBy?.name || 'Not recorded'}</dd></div>
+                  </dl>
+                </section>
+
+                <section className="purchase-items-panel" aria-labelledby="purchase-items-heading">
+                  <header>
+                    <div><h4 id="purchase-items-heading">Items received</h4><p>{selectedTrade.items.length} line item{selectedTrade.items.length === 1 ? '' : 's'} · {selectedTrade.items.reduce((sum, item) => sum + item.quantity, 0)} total unit{selectedTrade.items.reduce((sum, item) => sum + item.quantity, 0) === 1 ? '' : 's'}</p></div>
+                  </header>
+                  <div className="purchase-item-list">
+                    {selectedTrade.items.map((item, index) => (
+                      <article className="purchase-item-row" key={`${item.name}-${index}`}>
+                        <div>
+                          <strong>{item.name}</strong>
+                          <small>Quantity {item.quantity} · {tradeTransactionMoney(selectedTrade, item.originalUnitPrice, item.unitPrice)} each</small>
+                          {(item.inventoryItem?.sku || item.inventoryItem?.barcode || item.inventoryItem?.imei1 || item.inventoryItem?.serialNumber) && <small>{[
+                            item.inventoryItem?.sku ? `SKU ${item.inventoryItem.sku}` : '',
+                            item.inventoryItem?.barcode ? `Barcode ${item.inventoryItem.barcode}` : '',
+                            item.inventoryItem?.imei1 ? `IMEI ${item.inventoryItem.imei1}` : '',
+                            item.inventoryItem?.serialNumber ? `Serial ${item.inventoryItem.serialNumber}` : '',
+                          ].filter(Boolean).join(' · ')}</small>}
+                        </div>
+                        <strong>{tradeTransactionMoney(selectedTrade, item.originalUnitPrice === undefined ? undefined : item.originalUnitPrice * item.quantity, item.unitPrice * item.quantity)}</strong>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              </div>
+            )}
 
             {Number(selectedTrade.correctionVersion || 0) > 0 && (
               <div className="trade-correction-history" role="status">
