@@ -134,7 +134,6 @@ public class MainActivity extends AppCompatActivity {
         View findServerButton = findViewById(R.id.findServerButton);
         findServerButton.setOnClickListener(view -> discoverServer());
         findServerButton.setVisibility(BuildConfig.ALLOW_PRIVATE_LAN_HTTP ? View.VISIBLE : View.GONE);
-        findViewById(R.id.dashboardButton).setOnClickListener(view -> loadDashboard());
         findViewById(R.id.scanButton).setOnClickListener(view -> scannerLauncher.launch(new Intent(this, ScannerActivity.class)));
         findViewById(R.id.backButton).setOnClickListener(view -> navigateBack());
         findViewById(R.id.settingsButton).setOnClickListener(view -> showSettings());
