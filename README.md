@@ -158,6 +158,18 @@ CLIENT_ORIGIN=http://localhost:5173
 NODE_ENV=development
 ```
 
+When this computer serves the production build directly to the Android shop
+app over trusted private Wi-Fi/LAN HTTP, use these values instead:
+
+```env
+NODE_ENV=production
+PHONEFLOW_DEPLOYMENT_MODE=local-lan
+```
+
+The LAN deployment flag prevents the browser security policy from upgrading
+local `http://<computer-ip>:5000` assets to unavailable HTTPS URLs. Do not use
+this mode for a public Internet deployment.
+
 The USD/KHR display is prepared to use ABA PayWay's signed exchange-rate API.
 Configure it only in the backend `.env` file:
 
