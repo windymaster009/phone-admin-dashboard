@@ -4,7 +4,11 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
+import android.view.KeyEvent;
+import android.view.WindowManager;
+import android.view.inputmethod.EditorInfo;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -35,6 +39,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ScannerActivity extends AppCompatActivity {
     static final String RESULT_CODE = "phoneflow_scan_code";
+    static final String EXTRA_MODE = "phoneflow_scan_mode";
+    static final String MODE_GUN = "gun";
     private static final int CAMERA_PERMISSION_REQUEST = 2301;
 
     private final ExecutorService cameraExecutor = Executors.newSingleThreadExecutor();
@@ -61,6 +67,11 @@ public class ScannerActivity extends AppCompatActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (MODE_GUN.equals(getIntent().getStringExtra(EXTRA_MODE))) {
+            configureGunScanner();
+            return;
+        }
+
         setContentView(R.layout.activity_scanner);
 
         previewView = findViewById(R.id.cameraPreview);
@@ -80,6 +91,48 @@ public class ScannerActivity extends AppCompatActivity {
                 CAMERA_PERMISSION_REQUEST
             );
         }
+    }
+
+    private void configureGunScanner() {
+        setContentView(R.layout.activity_gun_scanner);
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
+
+        EditText codeInput = findViewById(R.id.gunScannerInput);
+        TextView gunStatus = findViewById(R.id.gunScannerStatus);
+        codeInput.setShowSoftInputOnFocus(false);
+        codeInput.requestFocus();
+
+        findViewById(R.id.cancelGunScanButton).setOnClickListener(view -> finish());
+        findViewById(R.id.submitGunScanButton).setOnClickListener(view -> submitGunCode(codeInput, gunStatus));
+        codeInput.setOnEditorActionListener((view, actionId, event) -> {
+            boolean submitted = actionId == EditorInfo.IME_ACTION_DONE
+                || (event != null && event.getAction() == KeyEvent.ACTION_DOWN
+                    && (event.getKeyCode() == KeyEvent.KEYCODE_ENTER || event.getKeyCode() == KeyEvent.KEYCODE_TAB));
+            if (submitted) submitGunCode(codeInput, gunStatus);
+            return submitted;
+        });
+        codeInput.setOnKeyListener((view, keyCode, event) -> {
+            boolean submitted = event.getAction() == KeyEvent.ACTION_DOWN
+                && (keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_TAB);
+            if (submitted) submitGunCode(codeInput, gunStatus);
+            return submitted;
+        });
+    }
+
+    private void submitGunCode(EditText codeInput, TextView gunStatus) {
+        if (!resolving.compareAndSet(false, true)) return;
+        String value = ScanCodePolicy.normalizeGunCode(codeInput.getText().toString());
+        if (value.isEmpty()) {
+            resolving.set(false);
+            gunStatus.setText("No barcode received. Keep the field selected and scan again.");
+            codeInput.requestFocus();
+            return;
+        }
+
+        gunStatus.setText("Found " + value);
+        Intent result = new Intent().putExtra(RESULT_CODE, value);
+        setResult(RESULT_OK, result);
+        finish();
     }
 
     @OptIn(markerClass = ExperimentalGetImage.class)

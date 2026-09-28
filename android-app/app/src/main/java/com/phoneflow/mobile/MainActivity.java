@@ -134,7 +134,7 @@ public class MainActivity extends AppCompatActivity {
         View findServerButton = findViewById(R.id.findServerButton);
         findServerButton.setOnClickListener(view -> discoverServer());
         findServerButton.setVisibility(BuildConfig.ALLOW_PRIVATE_LAN_HTTP ? View.VISIBLE : View.GONE);
-        findViewById(R.id.scanButton).setOnClickListener(view -> scannerLauncher.launch(new Intent(this, ScannerActivity.class)));
+        findViewById(R.id.scanButton).setOnClickListener(view -> showScannerOptions());
         findViewById(R.id.backButton).setOnClickListener(view -> navigateBack());
         findViewById(R.id.settingsButton).setOnClickListener(view -> showSettings());
     }
@@ -296,6 +296,22 @@ public class MainActivity extends AppCompatActivity {
             .show();
     }
 
+    private void showScannerOptions() {
+        String[] options = {
+            "Camera scanner\nUse this phone's camera",
+            "Gun scanner\nUse a connected USB or Bluetooth scanner",
+        };
+        new AlertDialog.Builder(this)
+            .setTitle("Choose scanner")
+            .setItems(options, (dialog, which) -> {
+                Intent intent = new Intent(this, ScannerActivity.class);
+                if (which == 1) intent.putExtra(ScannerActivity.EXTRA_MODE, ScannerActivity.MODE_GUN);
+                scannerLauncher.launch(intent);
+            })
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+
     private void clearWebSession() {
         webView.evaluateJavascript(
             "try{localStorage.clear();sessionStorage.clear();}catch(e){}",
@@ -378,7 +394,7 @@ public class MainActivity extends AppCompatActivity {
             .setTitle("Product found")
             .setView(scroll)
             .setPositiveButton("Open stock", (dialog, which) -> webView.loadUrl(serverUrl + "/inventory"))
-            .setNeutralButton("Scan again", (dialog, which) -> scannerLauncher.launch(new Intent(this, ScannerActivity.class)))
+            .setNeutralButton("Scan again", (dialog, which) -> showScannerOptions())
             .setNegativeButton("Close", null)
             .show();
     }

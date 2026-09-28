@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/phoneflow_background"
+    android:orientation="vertical"
+    android:padding="22dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/gun_scanner_title"
+        android:textColor="@color/phoneflow_text"
+        android:textSize="24sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="@string/gun_scanner_hint"
+        android:textColor="@color/phoneflow_muted"
+        android:textSize="14sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:text="@string/gun_scanner_ready"
+            android:textAllCaps="true"
+            android:textColor="@color/phoneflow_primary"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/gunScannerInput"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:layout_marginTop="16dp"
+            android:backgroundTint="@color/phoneflow_primary"
+            android:hint="@string/gun_scanner_code_hint"
+            android:imeOptions="actionDone"
+            android:inputType="textNoSuggestions"
+            android:paddingHorizontal="16dp"
+            android:selectAllOnFocus="true"
+            android:singleLine="true"
+            android:textColor="@color/phoneflow_text"
+            android:textColorHint="@color/phoneflow_muted"
+            android:textSize="18sp" />
+
+        <TextView
+            android:id="@+id/gunScannerStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="14dp"
+            android:gravity="center"
+            android:text="@string/gun_scanner_share_hint"
+            android:textColor="@color/phoneflow_muted"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/cancelGunScanButton"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:backgroundTint="@color/phoneflow_surface_alt"
+            android:text="@string/cancel"
+            android:textAllCaps="false"
+            android:textColor="@color/phoneflow_text" />
+
+        <Button
+            android:id="@+id/submitGunScanButton"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="10dp"
+            android:layout_weight="1"
+            android:backgroundTint="@color/phoneflow_primary"
+            android:text="@string/use_code"
+            android:textAllCaps="false"
+            android:textColor="@color/phoneflow_text"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+</LinearLayout>
