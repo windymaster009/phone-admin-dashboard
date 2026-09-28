@@ -179,7 +179,20 @@
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:backgroundTint="@color/phoneflow_primary"
-                android:text="@string/scan"
+                android:text="@string/product_scan"
+                android:textAllCaps="false"
+                android:textColor="@color/phoneflow_text"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <Button
+                android:id="@+id/gunScanButton"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:backgroundTint="@color/phoneflow_surface_alt"
+                android:text="@string/gun_scan"
                 android:textAllCaps="false"
                 android:textColor="@color/phoneflow_text"
                 android:textSize="11sp"

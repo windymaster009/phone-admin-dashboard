@@ -137,7 +137,8 @@ public class MainActivity extends AppCompatActivity {
         View findServerButton = findViewById(R.id.findServerButton);
         findServerButton.setOnClickListener(view -> discoverServer());
         findServerButton.setVisibility(BuildConfig.ALLOW_PRIVATE_LAN_HTTP ? View.VISIBLE : View.GONE);
-        findViewById(R.id.scanButton).setOnClickListener(view -> showScannerOptions());
+        findViewById(R.id.scanButton).setOnClickListener(view -> launchScanner(ScannerActivity.MODE_LOOKUP));
+        findViewById(R.id.gunScanButton).setOnClickListener(view -> launchScanner(ScannerActivity.MODE_GUN));
         findViewById(R.id.backButton).setOnClickListener(view -> navigateBack());
         findViewById(R.id.settingsButton).setOnClickListener(view -> showSettings());
     }
@@ -299,20 +300,12 @@ public class MainActivity extends AppCompatActivity {
             .show();
     }
 
-    private void showScannerOptions() {
-        String[] options = {
-            "Product scanner\nFind and open a product",
-            "Gun scanner\nHold the camera trigger and type on the PC",
-        };
-        new AlertDialog.Builder(this)
-            .setTitle("Choose scanner")
-            .setItems(options, (dialog, which) -> {
-                Intent intent = new Intent(this, ScannerActivity.class);
-                if (which == 1) intent.putExtra(ScannerActivity.EXTRA_MODE, ScannerActivity.MODE_GUN);
-                scannerLauncher.launch(intent);
-            })
-            .setNegativeButton("Cancel", null)
-            .show();
+    private void launchScanner(String mode) {
+        Intent intent = new Intent(this, ScannerActivity.class);
+        if (ScannerActivity.MODE_GUN.equals(mode)) {
+            intent.putExtra(ScannerActivity.EXTRA_MODE, ScannerActivity.MODE_GUN);
+        }
+        scannerLauncher.launch(intent);
     }
 
     private void clearWebSession() {
@@ -425,7 +418,7 @@ public class MainActivity extends AppCompatActivity {
             .setTitle("Product found")
             .setView(scroll)
             .setPositiveButton("Open stock", (dialog, which) -> webView.loadUrl(serverUrl + "/inventory"))
-            .setNeutralButton("Scan again", (dialog, which) -> showScannerOptions())
+            .setNeutralButton("Scan again", (dialog, which) -> launchScanner(ScannerActivity.MODE_LOOKUP))
             .setNegativeButton("Close", null)
             .show();
     }
