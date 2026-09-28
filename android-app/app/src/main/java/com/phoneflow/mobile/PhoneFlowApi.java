@@ -109,8 +109,13 @@ final class PhoneFlowApi {
                     ? connection.getInputStream()
                     : connection.getErrorStream();
                 String body = readAll(stream);
-                JSONObject response = body.isEmpty() ? new JSONObject() : new JSONObject(body);
+                boolean jsonResponse = connection.getContentType() != null
+                    && connection.getContentType().toLowerCase().contains("application/json");
+                JSONObject response = jsonResponse && !body.isEmpty() ? new JSONObject(body) : new JSONObject();
                 if (status == 401) throw new IllegalStateException("Your session expired. Sign in again before scanning.");
+                if (!jsonResponse) {
+                    throw new IllegalStateException("PhoneFlow on the computer is out of date. Restart or update it, then scan again.");
+                }
                 if (status < 200 || status >= 300) {
                     throw new IllegalStateException(response.optString("message", "Unable to send scan (" + status + ")"));
                 }

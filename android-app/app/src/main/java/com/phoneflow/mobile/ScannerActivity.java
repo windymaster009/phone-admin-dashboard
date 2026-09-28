@@ -3,6 +3,8 @@ package com.phoneflow.mobile;
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.media.AudioManager;
+import android.media.ToneGenerator;
 import android.os.Bundle;
 import android.view.MotionEvent;
 import android.widget.Button;
@@ -36,8 +38,9 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ScannerActivity extends AppCompatActivity {
     static final String RESULT_CODE = "phoneflow_scan_code";
-    static final String RESULT_MODE = "phoneflow_scan_result_mode";
     static final String EXTRA_MODE = "phoneflow_scan_mode";
+    static final String EXTRA_API_BASE_URL = "phoneflow_api_base_url";
+    static final String EXTRA_SESSION_COOKIE = "phoneflow_session_cookie";
     static final String MODE_GUN = "gun";
     static final String MODE_LOOKUP = "lookup";
     private static final int CAMERA_PERMISSION_REQUEST = 2301;
@@ -64,6 +67,10 @@ public class ScannerActivity extends AppCompatActivity {
     private boolean torchEnabled;
     private boolean gunMode;
     private volatile boolean gunTriggerHeld;
+    private String gunApiBaseUrl = "";
+    private String gunSessionCookie = "";
+    private Button gunTriggerButton;
+    private ToneGenerator feedbackTone;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -92,23 +99,29 @@ public class ScannerActivity extends AppCompatActivity {
         previewView = findViewById(R.id.gunCameraPreview);
         statusText = findViewById(R.id.gunScannerStatus);
         torchButton = findViewById(R.id.torchButton);
-        Button trigger = findViewById(R.id.gunScanButton);
+        gunTriggerButton = findViewById(R.id.gunScanButton);
+        gunApiBaseUrl = getIntent().getStringExtra(EXTRA_API_BASE_URL);
+        gunSessionCookie = getIntent().getStringExtra(EXTRA_SESSION_COOKIE);
+        if (gunApiBaseUrl == null) gunApiBaseUrl = "";
+        if (gunSessionCookie == null) gunSessionCookie = "";
+        feedbackTone = new ToneGenerator(AudioManager.STREAM_MUSIC, 90);
 
         findViewById(R.id.cancelGunScanButton).setOnClickListener(view -> finish());
         torchButton.setOnClickListener(view -> toggleTorch());
         torchButton.setEnabled(false);
-        trigger.setOnClickListener(view -> { });
-        trigger.setOnTouchListener((view, event) -> {
+        gunTriggerButton.setOnClickListener(view -> { });
+        gunTriggerButton.setOnTouchListener((view, event) -> {
             if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                if (resolving.get()) return true;
                 gunTriggerHeld = true;
                 statusText.setText(R.string.gun_scanner_scanning);
-                trigger.setText(R.string.gun_scanner_release);
+                gunTriggerButton.setText(R.string.gun_scanner_release);
                 return true;
             }
             if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
                 gunTriggerHeld = false;
-                statusText.setText(R.string.gun_scanner_ready);
-                trigger.setText(R.string.gun_scanner_trigger);
+                if (!resolving.get()) statusText.setText(R.string.gun_scanner_ready);
+                gunTriggerButton.setText(R.string.gun_scanner_trigger);
                 view.performClick();
                 return true;
             }
@@ -180,17 +193,42 @@ public class ScannerActivity extends AppCompatActivity {
                     if (value == null || value.trim().isEmpty()) continue;
                     if (!resolving.compareAndSet(false, true)) return;
 
-                    statusText.setText("Found " + value.trim());
-                    Intent result = new Intent()
-                        .putExtra(RESULT_CODE, value.trim())
-                        .putExtra(RESULT_MODE, gunMode ? MODE_GUN : MODE_LOOKUP);
-                    setResult(RESULT_OK, result);
+                    String scannedValue = value.trim();
+                    if (gunMode) {
+                        relayGunBarcode(scannedValue);
+                        return;
+                    }
+                    statusText.setText("Found " + scannedValue);
+                    setResult(RESULT_OK, new Intent().putExtra(RESULT_CODE, scannedValue));
                     finish();
                     return;
                 }
             })
             .addOnFailureListener(error -> statusText.setText("Keep the label steady and try again"))
             .addOnCompleteListener(task -> proxy.close());
+    }
+
+    private void relayGunBarcode(String code) {
+        gunTriggerHeld = false;
+        statusText.setText(getString(R.string.gun_scanner_sending, code));
+        gunTriggerButton.setText(R.string.gun_scanner_trigger);
+        PhoneFlowApi.relayInput(gunApiBaseUrl, gunSessionCookie, code, new PhoneFlowApi.RelayCallback() {
+            @Override
+            public void onSuccess() {
+                if (isFinishing() || isDestroyed()) return;
+                feedbackTone.startTone(ToneGenerator.TONE_PROP_BEEP, 180);
+                statusText.setText(getString(R.string.gun_scanner_sent, code));
+                resolving.set(false);
+            }
+
+            @Override
+            public void onError(String message) {
+                if (isFinishing() || isDestroyed()) return;
+                feedbackTone.startTone(ToneGenerator.TONE_PROP_NACK, 240);
+                statusText.setText(getString(R.string.gun_scanner_send_failed, message));
+                resolving.set(false);
+            }
+        });
     }
 
     private void toggleTorch() {
@@ -207,6 +245,7 @@ public class ScannerActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         if (cameraProvider != null) cameraProvider.unbindAll();
+        if (feedbackTone != null) feedbackTone.release();
         barcodeScanner.close();
         cameraExecutor.shutdownNow();
         super.onDestroy();

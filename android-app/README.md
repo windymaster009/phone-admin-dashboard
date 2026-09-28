@@ -140,7 +140,9 @@ networks. Connection failures return to this screen instead of leaving a blank W
 PhoneFlow has two camera modes. **Product scanner** finds the matching product or pawn and opens
 its record. **Gun scanner** acts like a wireless barcode gun: focus an editable field on the PC,
 then hold the purple camera trigger on the phone. The scanned text is inserted at the PC cursor
-and followed by Enter. Gun mode does not look up or change inventory.
+and followed by Enter. A successful send plays a confirmation beep and keeps the camera open;
+release and hold the trigger again for the next item, or tap Cancel to leave gun mode. Gun mode
+does not look up or change inventory.
 
 Native scans appear in open desktop dashboards signed in to the **same staff account**.
 Pairing the phone from that desktop's Security page signs it in to the matching account.

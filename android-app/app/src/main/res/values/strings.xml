@@ -18,6 +18,9 @@
     <string name="gun_scanner_hint">Focus an input on the computer, aim this camera at the barcode, then hold the purple trigger.</string>
     <string name="gun_scanner_ready">Ready — hold the trigger to scan</string>
     <string name="gun_scanner_scanning">Scanning… keep the barcode inside the frame</string>
+    <string name="gun_scanner_sending">Sending %1$s…</string>
+    <string name="gun_scanner_sent">Sent %1$s — release, then hold to scan again</string>
+    <string name="gun_scanner_send_failed">Could not send: %1$s</string>
     <string name="gun_scanner_trigger">Hold to scan</string>
     <string name="gun_scanner_release">Release to stop</string>
     <string name="cancel">Cancel</string>
