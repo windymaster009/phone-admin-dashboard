@@ -4,13 +4,19 @@ const scanEventSchema = new mongoose.Schema({
   user: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   sourceSession: { type: String, required: true },
   code: { type: String, required: true, maxlength: 256 },
+  mode: { type: String, enum: ['lookup', 'input'], default: 'lookup' },
   createdAt: { type: Date, default: Date.now, expires: 3600 },
 }, { versionKey: false })
 scanEventSchema.index({ user: 1, _id: 1 })
 export const ScanEvent = mongoose.model('ScanEvent', scanEventSchema)
 
-export async function publishScan(req, code) {
-  await ScanEvent.create({ user: req.user._id, sourceSession: req.authSession.sessionId, code })
+export async function publishScan(req, code, mode = 'lookup') {
+  await ScanEvent.create({
+    user: req.user._id,
+    sourceSession: req.authSession.sessionId,
+    code,
+    mode: mode === 'input' ? 'input' : 'lookup',
+  })
 }
 
 export async function readScans(req, res) {
@@ -30,6 +36,6 @@ export async function readScans(req, res) {
     return res.json({ events: [], cursor: latest?._id.toString() || '0' })
   }
   if (after !== '0') filter._id = { $gt: new mongoose.Types.ObjectId(after) }
-  const events = await ScanEvent.find(filter).sort({ _id: 1 }).limit(50).select('_id code').lean()
+  const events = await ScanEvent.find(filter).sort({ _id: 1 }).limit(50).select('_id code mode').lean()
   res.json({ events, cursor: events.at(-1)?._id.toString() || after })
 }

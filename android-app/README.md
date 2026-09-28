@@ -137,12 +137,17 @@ networks. Connection failures return to this screen instead of leaving a blank W
 
 ## Scanner behavior
 
-Native scans also appear in open desktop dashboards signed in to the **same staff account**.
+PhoneFlow has two camera modes. **Product scanner** finds the matching product or pawn and opens
+its record. **Gun scanner** acts like a wireless barcode gun: focus an editable field on the PC,
+then hold the purple camera trigger on the phone. The scanned text is inserted at the PC cursor
+and followed by Enter. Gun mode does not look up or change inventory.
+
+Native scans appear in open desktop dashboards signed in to the **same staff account**.
 Pairing the phone from that desktop's Security page signs it in to the matching account.
-The desktop checks for new scans every two seconds. A pawn receipt opens its exact pawn
+The desktop checks for new scans twice per second. A pawn receipt opens its exact pawn
 contract popup, while a product label opens its exact stock record. The intermediate scanner
-screen is skipped. If a form or dialog is open, scans wait until it closes. Keep the desktop dashboard
-open before scanning; old scans are not replayed when a new dashboard is opened.
+screen is skipped. Product scans wait while a form or dialog is open. Gun scans wait until an editable
+field is focused. Keep the desktop dashboard open before scanning; old scans are not replayed when a new dashboard is opened.
 Scans expire after one hour. The phone still displays its result if sharing fails and shows
 a message so staff can retry. Both devices must reach the same PhoneFlow backend.
 
@@ -157,7 +162,7 @@ The scanner recognizes:
 After scanning, Android reads the signed-in PhoneFlow token from the app WebView and calls:
 
 ```text
-GET /api/inventory/scan/:code
+POST /api/inventory/scan/:code
 ```
 
 The product dialog displays stock, price, SKU/barcode, brand/model, storage/color, IMEI/serial, and notes.

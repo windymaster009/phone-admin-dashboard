@@ -2429,6 +2429,14 @@ router.get('/inventory/:id', requireAuth, asyncRoute(async (req, res) => {
 }))
 
 router.get('/scanner/events', requireAuth, asyncRoute(readScans))
+router.post('/scanner/events', requireAuth, asyncRoute(async (req, res) => {
+  const code = clean(req.body.code)
+  if (typeof code !== 'string' || code.length > 256 || isInvalidCode(code)) {
+    return res.status(400).json({ message: 'Scan a valid barcode or code' })
+  }
+  await publishScan(req, code, 'input')
+  res.status(202).json({ published: true })
+}))
 
 const scanInventory = asyncRoute(async (req, res) => {
   const code = clean(decodeURIComponent(req.params.code || '')).toUpperCase()

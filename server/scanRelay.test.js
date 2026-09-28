@@ -58,7 +58,40 @@ test('invalid cursors are rejected before querying', async (t) => {
 test('publication uses authenticated identity, not client supplied user or session', async (t) => {
   const create = t.mock.method(ScanEvent, 'create', async () => ({}))
   await publishScan({ ...req(), body: { user: 'other-user' } }, 'SKU-1')
-  assert.deepEqual(create.mock.calls[0].arguments[0], { user, sourceSession: 'desktop-session', code: 'SKU-1' })
+  assert.deepEqual(create.mock.calls[0].arguments[0], { user, sourceSession: 'desktop-session', code: 'SKU-1', mode: 'lookup' })
+})
+
+test('gun scanner endpoint publishes input events without inventory lookup', async (t) => {
+  const create = t.mock.method(ScanEvent, 'create', async () => ({}))
+  const route = router.stack.find((layer) => layer.route?.path === '/scanner/events' && layer.route.methods.post).route
+  assert.equal(route.stack[0].handle, requireAuth)
+  const res = response()
+  await new Promise((resolve, reject) => {
+    res.json = (body) => { res.body = body; resolve() }
+    route.stack.at(-1).handle({ ...req(), body: { code: ' AbC-123 ' } }, res, reject)
+  })
+  assert.equal(res.statusCode, 202)
+  assert.deepEqual(res.body, { published: true })
+  assert.deepEqual(create.mock.calls[0].arguments[0], {
+    user,
+    sourceSession: 'desktop-session',
+    code: 'AbC-123',
+    mode: 'input',
+  })
+})
+
+test('gun scanner endpoint rejects blank or oversized input', async (t) => {
+  const create = t.mock.method(ScanEvent, 'create', async () => ({}))
+  const route = router.stack.find((layer) => layer.route?.path === '/scanner/events' && layer.route.methods.post).route
+  for (const code of ['   ', 'x'.repeat(257)]) {
+    const res = response()
+    await new Promise((resolve, reject) => {
+      res.json = (body) => { res.body = body; resolve() }
+      route.stack.at(-1).handle({ ...req(), body: { code } }, res, reject)
+    })
+    assert.equal(res.statusCode, 400)
+  }
+  assert.equal(create.mock.callCount(), 0)
 })
 
 test('only POST publishes successful scans; GET lookups do not echo them', async (t) => {

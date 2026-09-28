@@ -45,6 +45,7 @@ import CameraBarcodeReader from '../../components/scanner/CameraBarcodeReader'
 import ScannerWorkflow from '../../components/scanner/ScannerWorkflow'
 import ScannerTriggerButton, { PRODUCT_SCANNER_EVENT } from '../../components/scanner/ScannerTriggerButton'
 import { usePhoneScans } from '../../components/scanner/usePhoneScans'
+import { sendPhoneScanToFocusedInput } from '../../components/scanner/sendPhoneScanToFocusedInput'
 import { openPhoneScanResult, type PhoneScanResult } from '../../components/scanner/openPhoneScanResult'
 import { notifyPawnCreated } from '../pawns/pawnEvents'
 import { ModalKind, StockCategory, Customer, InventoryItem, RelatedPawn, Supplier, SellerType, PurchaseCurrency, SaleCurrency, PawnCurrency, PurchaseInventoryMode, PawnCustomerMode, SalePaymentMethod, SalePaymentPhase, StockAdjustmentMode, StockAdjustmentStatus, PawnValuationSnapshot, PawnReuseStatus, CreatedPawn, CompletedStockAdjustment, SaleDraft, SaleKhqr, CreatedSaleTrade, CompletedSale, completedSaleFromTrade, paywayImageSource, PurchaseDevice, newPurchaseDevice, canRestockExisting, localDateValue, roundPawnAmount, pawnAmountText, pawnEquivalentAmountText, money, riel, saleAmountText, inventorySalePrice, inventoryNativeSalePriceText } from './operationDomain'
@@ -1258,10 +1259,11 @@ export default function OperationModalBridge() {
     }
   }, [])
 
-  usePhoneScans(async (code) => {
+  usePhoneScans(async (event) => {
+    if (event.mode === 'input') return sendPhoneScanToFocusedInput(event.code)
     if (kind || busy || document.querySelector('[role="dialog"], dialog[open]')) return false
     try {
-      const result = await api<PhoneScanResult>(`/inventory/scan/${encodeURIComponent(code)}`)
+      const result = await api<PhoneScanResult>(`/inventory/scan/${encodeURIComponent(event.code)}`)
       openPhoneScanResult(result)
       return true
     } catch (reason) {

@@ -13,11 +13,11 @@
     <string name="scanner_title">Scan PhoneFlow label</string>
     <string name="scanner_hint">Place the barcode or QR code inside the camera view.</string>
     <string name="gun_scanner_title">Gun scanner</string>
-    <string name="gun_scanner_hint">Connect a USB or Bluetooth scanner to this phone, then scan a barcode. Enter or Tab sends it automatically.</string>
-    <string name="gun_scanner_code_hint">Waiting for barcode…</string>
-    <string name="gun_scanner_ready">Ready for scanner</string>
-    <string name="gun_scanner_share_hint">The scanned code will be sent to PhoneFlow on this phone and the signed-in computer.</string>
-    <string name="use_code">Use code</string>
+    <string name="gun_scanner_hint">Focus an input on the computer, aim this camera at the barcode, then hold the purple trigger.</string>
+    <string name="gun_scanner_ready">Ready — hold the trigger to scan</string>
+    <string name="gun_scanner_scanning">Scanning… keep the barcode inside the frame</string>
+    <string name="gun_scanner_trigger">Hold to scan</string>
+    <string name="gun_scanner_release">Release to stop</string>
     <string name="cancel">Cancel</string>
     <string name="torch">Torch</string>
 </resources>

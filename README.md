@@ -39,7 +39,7 @@ temporary-file cleanup behavior.
 - Buy transactions that add inventory
 - Sell transactions that reduce inventory
 - Code 128 inventory labels with purchase-time printing and later reprinting
-- USB/Bluetooth scanner input and mobile camera barcode scanning
+- USB/Bluetooth scanner input and phone-as-wireless-gun camera scanning
 - Scan-to-sale product lookup and sale-form prefilling
 - Pawn valuation limited to a configurable 40–50%
 - Pawn contracts, due dates, overdue state, redemption, and forfeiture

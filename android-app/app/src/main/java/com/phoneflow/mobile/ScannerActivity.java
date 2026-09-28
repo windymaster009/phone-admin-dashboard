@@ -4,11 +4,8 @@ import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Bundle;
-import android.view.KeyEvent;
-import android.view.WindowManager;
-import android.view.inputmethod.EditorInfo;
+import android.view.MotionEvent;
 import android.widget.Button;
-import android.widget.EditText;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -39,8 +36,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ScannerActivity extends AppCompatActivity {
     static final String RESULT_CODE = "phoneflow_scan_code";
+    static final String RESULT_MODE = "phoneflow_scan_result_mode";
     static final String EXTRA_MODE = "phoneflow_scan_mode";
     static final String MODE_GUN = "gun";
+    static final String MODE_LOOKUP = "lookup";
     private static final int CAMERA_PERMISSION_REQUEST = 2301;
 
     private final ExecutorService cameraExecutor = Executors.newSingleThreadExecutor();
@@ -63,11 +62,14 @@ public class ScannerActivity extends AppCompatActivity {
     private ProcessCameraProvider cameraProvider;
     private Camera camera;
     private boolean torchEnabled;
+    private boolean gunMode;
+    private volatile boolean gunTriggerHeld;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if (MODE_GUN.equals(getIntent().getStringExtra(EXTRA_MODE))) {
+        gunMode = MODE_GUN.equals(getIntent().getStringExtra(EXTRA_MODE));
+        if (gunMode) {
             configureGunScanner();
             return;
         }
@@ -82,6 +84,40 @@ public class ScannerActivity extends AppCompatActivity {
         torchButton.setOnClickListener(view -> toggleTorch());
         torchButton.setEnabled(false);
 
+        requestCamera();
+    }
+
+    private void configureGunScanner() {
+        setContentView(R.layout.activity_gun_scanner);
+        previewView = findViewById(R.id.gunCameraPreview);
+        statusText = findViewById(R.id.gunScannerStatus);
+        torchButton = findViewById(R.id.torchButton);
+        Button trigger = findViewById(R.id.gunScanButton);
+
+        findViewById(R.id.cancelGunScanButton).setOnClickListener(view -> finish());
+        torchButton.setOnClickListener(view -> toggleTorch());
+        torchButton.setEnabled(false);
+        trigger.setOnClickListener(view -> { });
+        trigger.setOnTouchListener((view, event) -> {
+            if (event.getAction() == MotionEvent.ACTION_DOWN) {
+                gunTriggerHeld = true;
+                statusText.setText(R.string.gun_scanner_scanning);
+                trigger.setText(R.string.gun_scanner_release);
+                return true;
+            }
+            if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
+                gunTriggerHeld = false;
+                statusText.setText(R.string.gun_scanner_ready);
+                trigger.setText(R.string.gun_scanner_trigger);
+                view.performClick();
+                return true;
+            }
+            return false;
+        });
+        requestCamera();
+    }
+
+    private void requestCamera() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             startCamera();
         } else {
@@ -93,51 +129,9 @@ public class ScannerActivity extends AppCompatActivity {
         }
     }
 
-    private void configureGunScanner() {
-        setContentView(R.layout.activity_gun_scanner);
-        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN);
-
-        EditText codeInput = findViewById(R.id.gunScannerInput);
-        TextView gunStatus = findViewById(R.id.gunScannerStatus);
-        codeInput.setShowSoftInputOnFocus(false);
-        codeInput.requestFocus();
-
-        findViewById(R.id.cancelGunScanButton).setOnClickListener(view -> finish());
-        findViewById(R.id.submitGunScanButton).setOnClickListener(view -> submitGunCode(codeInput, gunStatus));
-        codeInput.setOnEditorActionListener((view, actionId, event) -> {
-            boolean submitted = actionId == EditorInfo.IME_ACTION_DONE
-                || (event != null && event.getAction() == KeyEvent.ACTION_DOWN
-                    && (event.getKeyCode() == KeyEvent.KEYCODE_ENTER || event.getKeyCode() == KeyEvent.KEYCODE_TAB));
-            if (submitted) submitGunCode(codeInput, gunStatus);
-            return submitted;
-        });
-        codeInput.setOnKeyListener((view, keyCode, event) -> {
-            boolean submitted = event.getAction() == KeyEvent.ACTION_DOWN
-                && (keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_TAB);
-            if (submitted) submitGunCode(codeInput, gunStatus);
-            return submitted;
-        });
-    }
-
-    private void submitGunCode(EditText codeInput, TextView gunStatus) {
-        if (!resolving.compareAndSet(false, true)) return;
-        String value = ScanCodePolicy.normalizeGunCode(codeInput.getText().toString());
-        if (value.isEmpty()) {
-            resolving.set(false);
-            gunStatus.setText("No barcode received. Keep the field selected and scan again.");
-            codeInput.requestFocus();
-            return;
-        }
-
-        gunStatus.setText("Found " + value);
-        Intent result = new Intent().putExtra(RESULT_CODE, value);
-        setResult(RESULT_OK, result);
-        finish();
-    }
-
     @OptIn(markerClass = ExperimentalGetImage.class)
     private void startCamera() {
-        statusText.setText(R.string.scanner_hint);
+        statusText.setText(gunMode ? R.string.gun_scanner_ready : R.string.scanner_hint);
         ListenableFuture<ProcessCameraProvider> future = ProcessCameraProvider.getInstance(this);
         future.addListener(() -> {
             try {
@@ -168,7 +162,7 @@ public class ScannerActivity extends AppCompatActivity {
 
     @OptIn(markerClass = ExperimentalGetImage.class)
     private void analyzeImage(@NonNull ImageProxy proxy) {
-        if (resolving.get() || proxy.getImage() == null) {
+        if (resolving.get() || proxy.getImage() == null || (gunMode && !gunTriggerHeld)) {
             proxy.close();
             return;
         }
@@ -180,14 +174,16 @@ public class ScannerActivity extends AppCompatActivity {
 
         barcodeScanner.process(input)
             .addOnSuccessListener(barcodes -> {
-                if (resolving.get()) return;
+                if (resolving.get() || (gunMode && !gunTriggerHeld)) return;
                 for (Barcode barcode : barcodes) {
                     String value = barcode.getRawValue();
                     if (value == null || value.trim().isEmpty()) continue;
                     if (!resolving.compareAndSet(false, true)) return;
 
                     statusText.setText("Found " + value.trim());
-                    Intent result = new Intent().putExtra(RESULT_CODE, value.trim());
+                    Intent result = new Intent()
+                        .putExtra(RESULT_CODE, value.trim())
+                        .putExtra(RESULT_MODE, gunMode ? MODE_GUN : MODE_LOOKUP);
                     setResult(RESULT_OK, result);
                     finish();
                     return;

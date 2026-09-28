@@ -124,7 +124,10 @@ public class MainActivity extends AppCompatActivity {
             result -> {
                 if (result.getResultCode() != RESULT_OK || result.getData() == null) return;
                 String code = result.getData().getStringExtra(ScannerActivity.RESULT_CODE);
-                if (code != null && !code.isBlank()) resolveScannedCode(code);
+                String mode = result.getData().getStringExtra(ScannerActivity.RESULT_MODE);
+                if (code == null || code.isBlank()) return;
+                if (ScannerActivity.MODE_GUN.equals(mode)) relayGunScan(code);
+                else resolveScannedCode(code);
             }
         );
     }
@@ -298,8 +301,8 @@ public class MainActivity extends AppCompatActivity {
 
     private void showScannerOptions() {
         String[] options = {
-            "Camera scanner\nUse this phone's camera",
-            "Gun scanner\nUse a connected USB or Bluetooth scanner",
+            "Product scanner\nFind and open a product",
+            "Gun scanner\nHold the camera trigger and type on the PC",
         };
         new AlertDialog.Builder(this)
             .setTitle("Choose scanner")
@@ -348,6 +351,34 @@ public class MainActivity extends AppCompatActivity {
                 toast(desktopShared
                     ? "Scan shared with desktops signed in to your account"
                     : "Product found, but desktop sharing failed. Scan again to retry.");
+            }
+
+            @Override
+            public void onError(String message) {
+                toast(message);
+            }
+        });
+    }
+
+    private void relayGunScan(String code) {
+        if (serverUrl.isBlank()) {
+            showSetup("Connect to PhoneFlow before scanning");
+            return;
+        }
+
+        String cookie = CookieManager.getInstance().getCookie(apiBaseUrl);
+        if (cookie == null || cookie.isBlank()) cookie = CookieManager.getInstance().getCookie(serverUrl);
+        if (cookie == null || cookie.isBlank()) {
+            toast("Sign in to PhoneFlow before using the gun scanner");
+            loadDashboard();
+            return;
+        }
+
+        toast("Sending " + code + " to the PC...");
+        PhoneFlowApi.relayInput(apiBaseUrl, cookie, code, new PhoneFlowApi.RelayCallback() {
+            @Override
+            public void onSuccess() {
+                toast("Sent to the focused PC input");
             }
 
             @Override

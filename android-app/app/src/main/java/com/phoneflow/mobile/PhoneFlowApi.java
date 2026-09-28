@@ -8,6 +8,7 @@ import org.json.JSONObject;
 import java.io.BufferedReader;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
@@ -18,6 +19,11 @@ import java.util.concurrent.Executors;
 final class PhoneFlowApi {
     interface Callback {
         void onSuccess(JSONObject item, boolean desktopShared);
+        void onError(String message);
+    }
+
+    interface RelayCallback {
+        void onSuccess();
         void onError(String message);
     }
 
@@ -60,6 +66,55 @@ final class PhoneFlowApi {
                 if (item == null) throw new IllegalStateException("The server returned no product details");
                 boolean desktopShared = payload.optBoolean("desktopShared", false);
                 MAIN.post(() -> callback.onSuccess(item, desktopShared));
+            } catch (Exception error) {
+                String message = error.getMessage();
+                MAIN.post(() -> callback.onError(message == null || message.isBlank()
+                    ? "Unable to reach the PhoneFlow server"
+                    : message));
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        });
+    }
+
+    static void relayInput(String baseUrl, String sessionCookie, String code, RelayCallback callback) {
+        IO.execute(() -> {
+            HttpURLConnection connection = null;
+            try {
+                URL url = ServerUrlPolicy.requireAllowedUrl(
+                    baseUrl + "/api/scanner/events",
+                    BuildConfig.ALLOW_PRIVATE_LAN_HTTP
+                );
+                connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("POST");
+                connection.setConnectTimeout(12_000);
+                connection.setReadTimeout(12_000);
+                connection.setDoOutput(true);
+                connection.setRequestProperty("Accept", "application/json");
+                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                connection.setRequestProperty("Cookie", sessionCookie);
+                connection.setRequestProperty("X-PhoneFlow-Request", "1");
+
+                byte[] payload = new JSONObject()
+                    .put("code", ScanCodePolicy.normalizeGunCode(code))
+                    .toString()
+                    .getBytes(StandardCharsets.UTF_8);
+                connection.setFixedLengthStreamingMode(payload.length);
+                try (OutputStream output = connection.getOutputStream()) {
+                    output.write(payload);
+                }
+
+                int status = connection.getResponseCode();
+                InputStream stream = status >= 200 && status < 300
+                    ? connection.getInputStream()
+                    : connection.getErrorStream();
+                String body = readAll(stream);
+                JSONObject response = body.isEmpty() ? new JSONObject() : new JSONObject(body);
+                if (status == 401) throw new IllegalStateException("Your session expired. Sign in again before scanning.");
+                if (status < 200 || status >= 300) {
+                    throw new IllegalStateException(response.optString("message", "Unable to send scan (" + status + ")"));
+                }
+                MAIN.post(callback::onSuccess);
             } catch (Exception error) {
                 String message = error.getMessage();
                 MAIN.post(() -> callback.onError(message == null || message.isBlank()
