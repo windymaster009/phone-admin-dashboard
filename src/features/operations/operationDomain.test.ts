@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   canRestockExisting,
   completedSaleFromTrade,
@@ -199,6 +199,20 @@ describe('operationDomain', () => {
       expect(dev1.quantity).toBe('1')
       expect(dev1.condition).toBe('GOOD')
       expect(dev1.inventoryMode).toBe('NEW')
+    })
+
+    it('creates unique draft IDs when randomUUID is unavailable on a LAN WebView', () => {
+      const originalCrypto = globalThis.crypto
+      vi.stubGlobal('crypto', undefined)
+
+      try {
+        const dev1 = newPurchaseDevice()
+        const dev2 = newPurchaseDevice()
+        expect(dev1.id).toMatch(/^purchase-device-/)
+        expect(dev1.id).not.toBe(dev2.id)
+      } finally {
+        vi.stubGlobal('crypto', originalCrypto)
+      }
     })
   })
 

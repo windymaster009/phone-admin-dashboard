@@ -137,7 +137,6 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.dashboardButton).setOnClickListener(view -> loadDashboard());
         findViewById(R.id.scanButton).setOnClickListener(view -> scannerLauncher.launch(new Intent(this, ScannerActivity.class)));
         findViewById(R.id.backButton).setOnClickListener(view -> navigateBack());
-        findViewById(R.id.browserButton).setOnClickListener(view -> openExternal(Uri.parse(currentPageUrl())));
         findViewById(R.id.settingsButton).setOnClickListener(view -> showSettings());
     }
 
@@ -281,21 +280,15 @@ public class MainActivity extends AppCompatActivity {
         else loadDashboard();
     }
 
-    private String currentPageUrl() {
-        String current = webView.getUrl();
-        return current == null || current.isBlank() ? serverUrl : current;
-    }
-
     private void showSettings() {
-        String[] actions = {"Refresh", "Find server on Wi-Fi", "Open in browser", "Clear signed-in session", "Change server"};
+        String[] actions = {"Refresh", "Find server on Wi-Fi", "Clear signed-in session", "Change server"};
         new AlertDialog.Builder(this)
             .setTitle("PhoneFlow Android")
             .setItems(actions, (dialog, which) -> {
                 if (which == 0) webView.reload();
                 if (which == 1) discoverServer();
-                if (which == 2) openExternal(Uri.parse(currentPageUrl()));
-                if (which == 3) clearWebSession();
-                if (which == 4) {
+                if (which == 2) clearWebSession();
+                if (which == 3) {
                     preferences.clearServerUrl();
                     showSetup("");
                 }

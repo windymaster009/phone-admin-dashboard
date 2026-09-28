@@ -220,9 +220,19 @@ export type PurchaseDevice = {
   notes: string
 }
 
+let purchaseDeviceSequence = 0
+
+function purchaseDeviceId() {
+  const secureId = globalThis.crypto?.randomUUID?.()
+  if (secureId) return secureId
+
+  purchaseDeviceSequence += 1
+  return `purchase-device-${Date.now().toString(36)}-${purchaseDeviceSequence.toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+}
+
 export function newPurchaseDevice(): PurchaseDevice {
   return {
-    id: crypto.randomUUID(), collapsed: false, inventoryMode: 'NEW', existingInventoryItem: '', category: 'PHONE', name: '', sku: '', quantity: '1', imei: '', brand: '', model: '', storage: '', ram: '', color: '',
+    id: purchaseDeviceId(), collapsed: false, inventoryMode: 'NEW', existingInventoryItem: '', category: 'PHONE', name: '', sku: '', quantity: '1', imei: '', brand: '', model: '', storage: '', ram: '', color: '',
     condition: 'GOOD', batteryHealth: '', carrierLock: 'UNKNOWN', compatibleModels: '', oemQuality: '', purchasePrice: '', accessoriesIncluded: [], notes: '',
   }
 }
