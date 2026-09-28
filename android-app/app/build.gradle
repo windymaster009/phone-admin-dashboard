@@ -10,8 +10,8 @@ android {
         applicationId "com.phoneflow.mobile"
         minSdk 26
         targetSdk 35
-        versionCode 10907
-        versionName "1.9.7"
+        versionCode 10908
+        versionName "1.9.8"
 
         buildConfigField "String", "DEFAULT_SERVER_URL", '""'
         buildConfigField "boolean", "ALLOW_PRIVATE_LAN_HTTP", "false"

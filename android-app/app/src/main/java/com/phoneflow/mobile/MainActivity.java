@@ -53,6 +53,8 @@ import java.text.NumberFormat;
 import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
+    private static final long WEB_APP_STARTUP_TIMEOUT_MS = 6_000L;
+
     private AppPreferences preferences;
     private View setupPanel;
     private View browserPanel;
@@ -69,6 +71,7 @@ public class MainActivity extends AppCompatActivity {
     private String apiBaseUrl = "";
     private boolean discoveryInProgress;
     private boolean automaticDiscoveryAttempted;
+    private int primaryPageLoadGeneration;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -201,6 +204,36 @@ public class MainActivity extends AppCompatActivity {
     private void showConnectionFailure() {
         String target = serverUrl.isBlank() ? "the PhoneFlow computer" : serverUrl;
         showSetup("Could not connect to " + target + ". Make sure PhoneFlow is running, Windows uses a Private network, and both devices are on the same Wi-Fi.");
+    }
+
+    private void verifyWebAppStarted(WebView view, String completedUrl, int loadGeneration) {
+        view.postDelayed(() -> {
+            if (isFinishing() || isDestroyed()
+                || browserPanel.getVisibility() != View.VISIBLE
+                || loadGeneration != primaryPageLoadGeneration
+                || completedUrl == null
+                || !completedUrl.equals(view.getUrl())) {
+                return;
+            }
+
+            view.evaluateJavascript(
+                "(function(){var root=document.getElementById('root');return !!(root&&root.childElementCount>0);})()",
+                result -> {
+                    if (!"false".equals(result)
+                        || isFinishing()
+                        || isDestroyed()
+                        || browserPanel.getVisibility() != View.VISIBLE
+                        || loadGeneration != primaryPageLoadGeneration) {
+                        return;
+                    }
+
+                    showSetup(
+                        "PhoneFlow connected, but the dashboard could not start. Restart PhoneFlow on the computer "
+                            + "and update Android System WebView or Chrome, then tap Connect."
+                    );
+                }
+            );
+        }, WEB_APP_STARTUP_TIMEOUT_MS);
     }
 
     private String deriveApiBaseUrl(String appUrl) {
@@ -554,6 +587,7 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onPageStarted(WebView view, String url, Bitmap favicon) {
             if (primary) {
+                primaryPageLoadGeneration += 1;
                 pageProgress.setVisibility(View.VISIBLE);
                 pageTitle.setText("Loading PhoneFlow…");
             }
@@ -566,6 +600,7 @@ public class MainActivity extends AppCompatActivity {
                 pageProgress.setVisibility(View.GONE);
                 String title = view.getTitle();
                 pageTitle.setText(title == null || title.isBlank() ? "PhoneFlow" : title);
+                verifyWebAppStarted(view, url, primaryPageLoadGeneration);
             }
         }
 
