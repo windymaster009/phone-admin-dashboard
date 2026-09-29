@@ -100,13 +100,13 @@ npm run build:android-shop
 APK output:
 
 ```text
-android-app/output/PhoneFlow-Shop-1.9.7.apk
+android-app/output/PhoneFlow-Shop-1.9.15.apk
 ```
 
 Install it with:
 
 ```powershell
-adb install -r android-app/output/PhoneFlow-Shop-1.9.7.apk
+adb install -r android-app/output/PhoneFlow-Shop-1.9.15.apk
 ```
 
 The shop build is signed for direct installation, disables WebView debugging, and permits HTTP only when the app's URL policy verifies a private LAN address. It keeps the older `com.phoneflow.mobile.debug` package ID, so Android can update that APK when both were built with the same signing key.
