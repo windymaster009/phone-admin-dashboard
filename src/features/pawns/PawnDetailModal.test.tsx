@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { act, render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import PawnDetailModal from './PawnDetailModal'
@@ -660,6 +660,53 @@ describe('PawnDetailModal component', () => {
 
     expect(screen.getByRole('button', { name: /Due payment/i })).toBeEnabled()
     expect(screen.getByRole('button', { name: /Extend pawn/i })).toBeDisabled()
+  })
+
+  it('highlights the current overdue fee separately from the original due-date fee', async () => {
+    const pawn: Pawn = {
+      ...mockPawnRecord,
+      status: 'OVERDUE',
+      currency: 'KHR',
+      principal: 100_000,
+      remainingPrincipal: 100_000,
+      dailyFeeRate: 2,
+      feeModel: 'DAILY_SIMPLE',
+      termDays: 7,
+      fees: 0,
+      feeSummary: {
+        feeModel: 'DAILY_SIMPLE', dailyFeeRate: 2, dailyFeeAmount: 2_000,
+        termDays: 7, contractLengthDays: 7, accruedDays: 9,
+        accruedFee: 18_000, feeAtDueDate: 14_000, totalAtDueDate: 114_000,
+        redemptionTotal: 118_000, remainingPrincipal: 100_000,
+      },
+    }
+    render(<PawnDetailModal pawn={pawn} onClose={vi.fn()} onAction={vi.fn()} />)
+
+    const currentFeeRow = screen.getByText('Fee due today').closest('div')!
+    expect(currentFeeRow).toHaveClass('pawn-overdue-value')
+    expect(within(currentFeeRow).getByText('18,000 KHR')).toBeInTheDocument()
+    expect(within(currentFeeRow).getByText('2,000 KHR per day × 9 days')).toBeInTheDocument()
+    expect(screen.getByText('Fee if paid on due date').nextElementSibling).toHaveTextContent('14,000 KHR')
+    expect(screen.getByText('Total contract length').nextElementSibling).toHaveTextContent('7 days')
+
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Due payment' }))
+    expect(screen.getByRole('textbox', { name: /Fee due today/i })).toHaveValue('18,000')
+  })
+
+  it('blocks balance-changing actions when the current quote could not be refreshed', () => {
+    render(
+      <PawnDetailModal
+        pawn={mockPawnRecord}
+        quoteError="Current balance could not be refreshed"
+        onClose={vi.fn()}
+        onAction={vi.fn()}
+      />,
+    )
+
+    expect(screen.getByRole('alert')).toHaveTextContent('Current balance could not be refreshed')
+    expect(screen.getByRole('button', { name: 'Due payment' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Extend pawn' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Redeem item' })).toBeDisabled()
   })
 
   it('generates an idempotency key on renewal preparation, reuses it on retry, and generates a new key after cancel', async () => {

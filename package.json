@@ -1,7 +1,7 @@
 {
   "name": "phone-admin-dashboard",
   "private": true,
-  "version": "1.9.15",
+  "version": "1.9.16",
   "type": "module",
   "allowScripts": {
     "esbuild@0.28.2": true

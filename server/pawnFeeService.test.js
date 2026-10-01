@@ -48,6 +48,24 @@ test('counts the deposit date as billable day one for workflow version 5', () =>
   assert.equal(due.toISOString(), '2026-08-23T00:00:00.000Z')
 })
 
+test('a seven-day KHR pawn continues accruing after due date through billable day nine', () => {
+  const start = new Date('2026-09-23T08:00:00.000Z')
+  const pawn = {
+    feeModel: 'DAILY_SIMPLE', status: 'OVERDUE', workflowVersion: 5, currency: 'KHR',
+    remainingPrincipal: 100_000, dailyFeeRate: 2, termDays: 7,
+    startDate: start, currentTermStartDate: start, feeAccrualStartedAt: start,
+    dueDate: addPawnDays(start, 6), accruedPawnFee: 0, fees: 0,
+  }
+
+  const summary = calculateDailyPawnSummary(pawn, addPawnDays(start, 8))
+  assert.equal(summary.contractLengthDays, 7)
+  assert.equal(summary.accruedDays, 9)
+  assert.equal(summary.dailyFeeAmount, 2_000)
+  assert.equal(summary.accruedFee, 18_000)
+  assert.equal(summary.feeAtDueDate, 14_000)
+  assert.equal(summary.redemptionTotal, 118_000)
+})
+
 test('does not charge day one twice after its due payment is materialized', () => {
   const start = new Date('2026-08-17T00:00:00.000Z')
   const pawn = {

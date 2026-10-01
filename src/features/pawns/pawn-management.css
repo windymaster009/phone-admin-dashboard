@@ -51,6 +51,14 @@
   background-clip: padding-box;
 }
 
+.pawn-quote-error {
+  margin: 12px 18px 0;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--rose) 35%, var(--border));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--rose) 10%, var(--surface));
+}
+
 
 
 .pawn-delete-action {
@@ -304,6 +312,23 @@
   font-weight: 800;
   text-align: right;
   overflow-wrap: anywhere;
+}
+
+.pawn-detail-group .pawn-current-fee dd {
+  display: grid;
+  gap: 3px;
+}
+
+.pawn-detail-group .pawn-current-fee small {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.pawn-detail-group .pawn-overdue-value dt,
+.pawn-detail-group .pawn-overdue-value dd,
+.pawn-detail-group .pawn-overdue-value small {
+  color: var(--orange);
 }
 
 .pawn-detail-group .pawn-total-at-due {
@@ -831,6 +856,11 @@
 
   .pawn-detail-body > .pawn-balance-summary {
     order: 1;
+  }
+
+  .pawn-detail-body > .pawn-quote-error {
+    order: 0;
+    margin: 10px 12px 0;
   }
 
   .pawn-detail-body > .pawn-action-form {

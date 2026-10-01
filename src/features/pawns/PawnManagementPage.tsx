@@ -22,10 +22,13 @@ export default function PawnView({ user }: { user: SessionUser }) {
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [pawnSort, setPawnSort] = useState<'newest' | 'oldest' | 'due-soonest' | 'due-latest'>('newest')
   const [error, setError] = useState('')
+  const [detailRefreshError, setDetailRefreshError] = useState('')
   const [successToast, setSuccessToast] = useState('')
   const exchangeRate = useExchangeRate()
   const updatingPawnRef = useRef(false)
   const deletingPawnRef = useRef(false)
+  const detailRefreshRequestRef = useRef(0)
+  const selectedPawnId = selectedPawn?._id
 
   useEffect(() => {
     api<{ pawns: Pawn[] }>('/pawns')
@@ -88,6 +91,43 @@ export default function PawnView({ user }: { user: SessionUser }) {
     return () => window.removeEventListener(PAWN_CREATED_EVENT, addCreatedPawn)
   }, [])
 
+  useEffect(() => {
+    if (!selectedPawnId) return
+    let disposed = false
+    setDetailRefreshError('')
+
+    const refreshSelectedPawn = () => {
+      if (document.visibilityState === 'hidden' || updatingPawnRef.current) return
+      const request = ++detailRefreshRequestRef.current
+      void api<{ pawn: Pawn }>(`/pawns/${encodeURIComponent(selectedPawnId)}`)
+        .then((result) => {
+          if (disposed || request !== detailRefreshRequestRef.current || result.pawn?._id !== selectedPawnId) return
+          setPawns((current) => current.map((pawn) => pawn._id === selectedPawnId ? result.pawn : pawn))
+          setSelectedPawn((current) => current?._id === selectedPawnId ? result.pawn : current)
+          setDetailRefreshError('')
+        })
+        .catch((reason: Error) => {
+          if (!disposed && request === detailRefreshRequestRef.current) setDetailRefreshError(`Current balance could not be refreshed: ${reason.message}`)
+        })
+    }
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') refreshSelectedPawn()
+    }
+
+    refreshSelectedPawn()
+    const timer = window.setInterval(refreshSelectedPawn, 60_000)
+    window.addEventListener('focus', refreshSelectedPawn)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      disposed = true
+      ++detailRefreshRequestRef.current
+      window.clearInterval(timer)
+      window.removeEventListener('focus', refreshSelectedPawn)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [selectedPawnId])
+
   const visiblePawns = pawns
     .filter((pawn) => {
       if (statusFilter !== 'ALL' && pawn.status !== statusFilter) return false
@@ -107,6 +147,7 @@ export default function PawnView({ user }: { user: SessionUser }) {
   async function updatePawn(action: PawnAction, payload: Record<string, unknown>) {
     if (updatingPawnRef.current || !selectedPawn) return
     updatingPawnRef.current = true
+    ++detailRefreshRequestRef.current
     try {
       const headers: Record<string, string> = {}
       if (typeof payload.idempotencyKey === 'string' && payload.idempotencyKey) {
@@ -234,6 +275,7 @@ export default function PawnView({ user }: { user: SessionUser }) {
       {selectedPawn && (
         <PawnDetailModal
           pawn={selectedPawn}
+          quoteError={detailRefreshError}
           onClose={() => setSelectedPawn(null)}
           onAction={updatePawn}
           canDelete={user.role === 'OWNER'}

@@ -195,6 +195,38 @@ describe('PawnManagementPage feature integration', () => {
     })
   })
 
+  it('refreshes an open pawn quote when the detail opens and when the window regains focus', async () => {
+    let accruedDays = 9
+    const pawnAt = (days: number) => ({
+      ...mockPawnRecord,
+      status: 'OVERDUE', currency: 'KHR', feeModel: 'DAILY_SIMPLE',
+      principal: 100_000, remainingPrincipal: 100_000, dailyFeeRate: 2, termDays: 7,
+      feeSummary: {
+        feeModel: 'DAILY_SIMPLE', dailyFeeRate: 2, dailyFeeAmount: 2_000,
+        termDays: 7, contractLengthDays: 7, accruedDays: days,
+        accruedFee: days * 2_000, feeAtDueDate: 14_000,
+        totalAtDueDate: 114_000, redemptionTotal: 100_000 + days * 2_000,
+        remainingPrincipal: 100_000,
+      },
+    })
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => ({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => String(input).includes('/pawns/')
+        ? { pawn: pawnAt(accruedDays) }
+        : { pawns: [pawnAt(7)] },
+    } as Response))
+
+    render(<PawnManagementPage user={mockOwnerUser} />)
+    await userEvent.setup().click(await screen.findByRole('button', { name: `View ${mockPawnRecord.pawnNo}` }))
+    await waitFor(() => expect(screen.getByText('Fee due today').nextElementSibling).toHaveTextContent('18,000 KHR'))
+
+    accruedDays = 10
+    act(() => window.dispatchEvent(new Event('focus')))
+    await waitFor(() => expect(screen.getByText('Fee due today').nextElementSibling).toHaveTextContent('20,000 KHR'))
+  })
+
   it('displays error state when API request fails', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: false,

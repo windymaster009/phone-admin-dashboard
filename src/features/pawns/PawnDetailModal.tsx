@@ -19,6 +19,7 @@ export function pawnOutstanding(pawn: Pawn) {
 
 export type PawnDetailModalProps = {
   pawn: Pawn
+  quoteError?: string
   onClose: () => void
   onOpenAll?: () => void
   onAction?: (action: PawnAction, payload: Record<string, unknown>) => Promise<void>
@@ -30,6 +31,7 @@ export type PawnDetailModalProps = {
 
 export default function PawnDetailModal({
   pawn,
+  quoteError = '',
   onClose,
   onOpenAll,
   onAction,
@@ -84,6 +86,7 @@ export default function PawnDetailModal({
   const pawnCurrency: PawnCurrency = pawn.currency === 'KHR' ? 'KHR' : 'USD'
   const currencyLabel = pawnCurrency === 'KHR' ? 'KHR' : '$'
   const isOpen = ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'RENEWED'].includes(pawn.status)
+  const isOverdue = pawn.status === 'OVERDUE'
   const deleteEligible = isOpen && !pawn.amountPaid && !(pawn.renewals?.length)
   const remainingPrincipal = pawn.remainingPrincipal ?? pawn.principal
   const currentFee = pawn.feeModel === 'DAILY_SIMPLE' ? pawn.feeSummary?.accruedFee || 0 : pawn.accruedInterest || 0
@@ -93,6 +96,13 @@ export default function PawnDetailModal({
     : Math.round((duePaymentRaw + Number.EPSILON) * 100) / 100
   const dailyFeeRate = Number(pawn.dailyFeeRate || 2.5).toLocaleString(undefined, { maximumFractionDigits: 2 })
   const dailyFeeAmount = pawn.feeSummary?.dailyFeeAmount ?? remainingPrincipal * Number(pawn.dailyFeeRate || 2.5) / 100
+  const accruedDays = pawn.feeSummary?.accruedDays || 0
+
+  useEffect(() => {
+    if (action === 'payment' && !actionBusy) {
+      setAmount(pawnCurrency === 'KHR' ? String(duePayment) : duePayment.toFixed(2))
+    }
+  }, [action, actionBusy, duePayment, pawnCurrency])
   const dayInMilliseconds = 86_400_000
   const dueDateMilliseconds = new Date(pawn.dueDate).getTime()
   const originalDueDate = pawn.renewals?.[0]?.previousDueDate || pawn.dueDate
@@ -196,7 +206,7 @@ export default function PawnDetailModal({
 
   async function submitAction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (actionSubmittingRef.current || actionBusy || !action || !onAction) return
+    if (actionSubmittingRef.current || actionBusy || quoteError || !action || !onAction) return
     actionSubmittingRef.current = true
     setActionBusy(true)
     setActionError('')
@@ -254,6 +264,7 @@ export default function PawnDetailModal({
         />
 
         <DetailModalBody className="pawn-detail-body">
+          {quoteError && <p className="pawn-action-error pawn-quote-error" role="alert">{quoteError} Please wait for a fresh quote before recording a payment.</p>}
           <section className="pawn-balance-summary" aria-label="Current pawn balance">
             <div className="pawn-balance-heading">
               <div>
@@ -299,8 +310,17 @@ export default function PawnDetailModal({
               </header>
               <dl>
                 <div><dt>Pawned on</dt><dd>{dateText(pawn.startDate || pawn.createdAt)}</dd></div>
-                <div><dt>Due date</dt><dd>{dateText(pawn.dueDate)}</dd></div>
-                {pawn.feeModel === 'DAILY_SIMPLE' && <div><dt>Days accumulated</dt><dd>{pawn.feeSummary?.accruedDays || 0} days</dd></div>}
+                <div className={isOverdue ? 'pawn-overdue-value' : undefined}><dt>Due date</dt><dd>{dateText(pawn.dueDate)}</dd></div>
+                {pawn.feeModel === 'DAILY_SIMPLE' && <div className={isOverdue ? 'pawn-overdue-value' : undefined}><dt>Days accumulated</dt><dd>{accruedDays} days</dd></div>}
+                {pawn.feeModel === 'DAILY_SIMPLE' && (
+                  <div className={isOverdue && currentFee > 0 ? 'pawn-current-fee pawn-overdue-value' : 'pawn-current-fee'}>
+                    <dt>Fee due today</dt>
+                    <dd>
+                      <strong>{pawnMoney(currentFee, pawnCurrency)}</strong>
+                      <small>{pawnMoney(dailyFeeAmount, pawnCurrency)} per day × {accruedDays} days{(pawn.amountPaid || 0) > 0 ? ' before prior payments' : ''}</small>
+                    </dd>
+                  </div>
+                )}
                 {pawn.feeModel === 'DAILY_SIMPLE' && <div><dt>Fee if paid on due date</dt><dd>{pawnMoney(pawn.feeSummary?.feeAtDueDate || 0, pawnCurrency)}</dd></div>}
                 {pawn.feeModel === 'DAILY_SIMPLE' && <div className="pawn-total-at-due"><dt>Total to pay on due date</dt><dd>{pawnMoney(pawn.feeSummary?.totalAtDueDate || 0, pawnCurrency)}</dd></div>}
                 {pawn.feeModel !== 'DAILY_SIMPLE' && <div><dt>Record created</dt><dd>{dateText(pawn.createdAt)}</dd></div>}
@@ -410,7 +430,7 @@ export default function PawnDetailModal({
                   <span>
                     {action === 'redeem' ? 'Redemption amount' : action === 'renew' ? 'Required fee payment' : 'Fee due today'}
                     {action === 'redeem' && <small>Minimum due: {pawnMoney(outstanding, pawnCurrency)}</small>}
-                    {action === 'payment' && pawn.feeModel === 'DAILY_SIMPLE' && <small>{pawnMoney(dailyFeeAmount, pawnCurrency)} per day × {pawn.feeSummary?.accruedDays || 0} days</small>}
+                    {action === 'payment' && pawn.feeModel === 'DAILY_SIMPLE' && <small>{pawnMoney(dailyFeeAmount, pawnCurrency)} per day × {accruedDays} days{(pawn.amountPaid || 0) > 0 ? ' before prior payments' : ''}</small>}
                   </span>
                   <div className="input-prefix">
                     <span>{currencyLabel}</span>
@@ -495,7 +515,7 @@ export default function PawnDetailModal({
                 <button
                   type="submit"
                   className={`primary-button ${action === 'forfeit' ? 'danger-button' : ''}`}
-                  disabled={actionBusy || (action === 'payment' && duePayment <= 0)}
+                  disabled={actionBusy || Boolean(quoteError) || (action === 'payment' && duePayment <= 0)}
                 >
                   {actionBusy ? 'Saving...' : action === 'payment' ? 'Save due payment' : action === 'renew' ? 'Confirm extension' : action === 'redeem' ? 'Confirm redemption' : 'Confirm claim'}
                 </button>
@@ -573,7 +593,7 @@ export default function PawnDetailModal({
                     type="button"
                     className="secondary-button pawn-payment-action"
                     onClick={() => openAction('payment')}
-                    disabled={duePayment <= 0}
+                    disabled={Boolean(quoteError) || duePayment <= 0}
                     title={duePayment <= 0 ? 'No fee is due today' : `Pay ${pawnMoney(duePayment, pawnCurrency)} due today`}
                   >
                     Due payment
@@ -582,7 +602,7 @@ export default function PawnDetailModal({
                     type="button"
                     className="secondary-button pawn-extend-action"
                     onClick={() => openAction('renew')}
-                    disabled={pawn.feeModel === 'DAILY_SIMPLE' && duePayment > 0}
+                    disabled={Boolean(quoteError) || (pawn.feeModel === 'DAILY_SIMPLE' && duePayment > 0)}
                     title={pawn.feeModel === 'DAILY_SIMPLE' && duePayment > 0 ? `Pay ${pawnMoney(duePayment, pawnCurrency)} due first` : 'Add more days to this pawn'}
                   >
                     Extend pawn
@@ -592,7 +612,7 @@ export default function PawnDetailModal({
                       type="button"
                       className="secondary-button pawn-claim-footer-action"
                       onClick={() => openAction('forfeit')}
-                      disabled={!canClaimCollateral}
+                      disabled={Boolean(quoteError) || !canClaimCollateral}
                       title={canClaimCollateral ? 'Claim this collateral for shop inventory' : `Wait until ${claimAvailableText} to claim this collateral`}
                     >
                       Claim collateral
@@ -602,6 +622,7 @@ export default function PawnDetailModal({
                     type="button"
                     className="primary-button pawn-redeem-action"
                     onClick={() => openAction('redeem')}
+                    disabled={Boolean(quoteError)}
                   >
                     Redeem item
                   </button>
