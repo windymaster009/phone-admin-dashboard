@@ -2818,7 +2818,6 @@ export default function OperationModalBridge() {
                         <RefreshCw size={15} />
                         Yes, re-pawn phone
                       </button>
-                      <small>Nothing is saved until you create the new contract.</small>
                     </> : <>
                       <span className="pawn-reuse-ready-label"><CheckCircle2 size={13} /> Ready</span>
                       <button type="button" className="pawn-reuse-undo-action" onClick={() => setPawnReuseAccepted(false)}>Undo</button>

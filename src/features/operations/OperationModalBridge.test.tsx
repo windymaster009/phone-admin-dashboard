@@ -793,7 +793,7 @@ describe('OperationModalBridge component', () => {
     fireEvent.change(screen.getByPlaceholderText(/15-digit IMEI/i), { target: { value: '358901234567890' } })
     await waitFor(() => expect(screen.getByText('Re-pawn this phone?')).toBeInTheDocument())
     expect(screen.getByText('PW-OLD-REDEEMED')).toBeInTheDocument()
-    expect(screen.getByText(/Nothing is saved until you create the new contract/i)).toBeInTheDocument()
+    expect(screen.queryByText(/Nothing is saved until you create the new contract/i)).not.toBeInTheDocument()
     expect(screen.getByPlaceholderText(/Apple/i)).toHaveValue('Samsung')
     expect(screen.getByPlaceholderText(/iPhone 13 Pro/i)).toHaveValue('Galaxy S22')
     expect(screen.getByRole('button', { name: /Confirm phone re-pawn/i })).toBeDisabled()
