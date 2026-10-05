@@ -294,6 +294,11 @@ export type BusinessOverviewData = {
     refunds: number
     refundWriteOffCost: number
     grossProfit: number
+    salesProfit: number
+    pawnProfit: number
+    loanProfit: number
+    serviceProfit: number
+    totalProfit: number
   }
   pawn: {
     active: number
@@ -328,6 +333,13 @@ export type BusinessOverviewData = {
     }>
   }
   chart: Array<{
+    key: string
+    label: string
+    sales: number
+    purchases: number
+    grossProfit: number
+  }>
+  profitChart: Array<{
     key: string
     label: string
     sales: number

@@ -1143,7 +1143,19 @@ describe('Reports Hub, Navigation & Placeholder View', () => {
       headers: new Headers(),
       json: async () => ({
         period: { key: 'this_month', label: 'This Month', from: '2026-10-01T00:00:00.000Z', to: '2026-10-31T23:59:59.999Z', granularity: 'day' },
-        financial: { salesRevenue: 1250, purchases: 400, cogs: 700, refunds: 50, refundWriteOffCost: 0, grossProfit: 550 },
+        financial: {
+          salesRevenue: 1250,
+          purchases: 400,
+          cogs: 700,
+          refunds: 50,
+          refundWriteOffCost: 0,
+          grossProfit: 550,
+          salesProfit: 550,
+          pawnProfit: 80,
+          loanProfit: 40,
+          serviceProfit: 30,
+          totalProfit: 700,
+        },
         pawn: { active: 2, dueSoon: 1, overdue: 0, outstandingPrincipal: { USD: 300, KHR: 0 } },
         loans: { active: 1, dueSoon: 0, overdue: 0, outstandingBalance: { USD: 200, KHR: 0 } },
         inventory: {
@@ -1160,6 +1172,7 @@ describe('Reports Hub, Navigation & Placeholder View', () => {
           lowStockItems: [],
         },
         chart: [{ key: '2026-10-01', label: '1 Oct', sales: 1250, purchases: 400, grossProfit: 550 }],
+        profitChart: [{ key: '2026-10-01', label: '1 Oct', sales: 550, purchases: 150, grossProfit: 700 }],
         recentTransactions: [],
         recentActivity: [],
       }),
@@ -1183,9 +1196,12 @@ describe('Reports Hub, Navigation & Placeholder View', () => {
       expect.stringContaining('/api/business-overview?period=this_month'),
       expect.anything(),
     )
-    const businessSummary = screen.getByLabelText('Business summary')
-    expect(businessSummary).toBeInTheDocument()
-    expect(within(businessSummary).getByText('$1,250')).toBeInTheDocument()
+    expect(screen.getByLabelText('Total profit')).toHaveTextContent('$700')
+    const profitBreakdown = screen.getByLabelText('Profit breakdown')
+    expect(within(profitBreakdown).getByText('$550')).toBeInTheDocument()
+    expect(within(profitBreakdown).getByText('$80')).toBeInTheDocument()
+    expect(within(profitBreakdown).getByText('$40')).toBeInTheDocument()
+    expect(within(profitBreakdown).getByText('$30')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /Back to reports/i }))
     expect(screen.getByRole('heading', { level: 2, name: 'Reports & Analytics' })).toBeInTheDocument()

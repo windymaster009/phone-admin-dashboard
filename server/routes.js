@@ -25,7 +25,7 @@ import { Receipt } from './receiptModels.js'
 import { CustomerDocument } from './documentModels.js'
 import { AndroidPairing, AuthSession } from './authSessionModels.js'
 import { TwoFactorChallenge, TwoFactorCredential, TwoFactorSetup } from './twoFactorModels.js'
-import { Loan } from './loanModels.js'
+import { Loan, LoanPayment } from './loanModels.js'
 import { ServiceCharge } from './serviceModels.js'
 import { refreshLoanStatuses } from './loanDashboardRoutes.js'
 import { preventCustomerDeletionWithDocuments } from './documentGuards.js'
@@ -1404,7 +1404,18 @@ router.get('/business-overview', requireAuth, allowRoles('OWNER', 'MANAGER'), as
       ? '%Y-%m'
       : '%Y-%m-%d'
 
-  const [financialRows, chartRows, recentTransactions, pawnRecords, loanRecords, inventoryRecords, recentActivity] = await Promise.all([
+  const [
+    financialRows,
+    chartRows,
+    recentTransactions,
+    pawnRecords,
+    loanRecords,
+    inventoryRecords,
+    recentActivity,
+    pawnIncomeRecords,
+    loanPaymentRecords,
+    serviceIncomeRecords,
+  ] = await Promise.all([
     Trade.aggregate([
       ...overviewEventStages,
       {
@@ -1465,6 +1476,16 @@ router.get('/business-overview', requireAuth, allowRoles('OWNER', 'MANAGER'), as
       .sort({ createdAt: -1 })
       .limit(8)
       .lean(),
+    Pawn.find({ 'payments.paidAt': { $gte: period.from, $lt: period.to } })
+      .select('currency exchangeRate payments')
+      .lean(),
+    LoanPayment.find({ paidAt: { $lt: period.to } })
+      .populate({ path: 'loan', select: 'principal interestAmount currency exchangeRate' })
+      .sort({ paidAt: 1, createdAt: 1 })
+      .lean(),
+    ServiceCharge.find({ status: 'COMPLETED', completedAt: { $gte: period.from, $lt: period.to } })
+      .select('currency exchangeRate total completedAt')
+      .lean(),
   ])
 
   const financialRow = financialRows[0] || {}
@@ -1473,6 +1494,59 @@ router.get('/business-overview', requireAuth, allowRoles('OWNER', 'MANAGER'), as
   const cogs = roundMoney(financialRow.cogs || 0)
   const refunds = roundMoney(financialRow.refunds || 0)
   const refundWriteOffCost = roundMoney(financialRow.refundWriteOffCost || 0)
+  const salesProfit = roundMoney(salesRevenue - cogs)
+  const profitBuckets = new Map()
+  const addProfit = (dateValue, source, amount) => {
+    const date = new Date(dateValue)
+    if (Number.isNaN(date.getTime()) || date < period.from || date >= period.to) return
+    const key = overviewDateKey(date, period.granularity)
+    const bucket = profitBuckets.get(key) || { pawn: 0, loan: 0, service: 0 }
+    bucket[source] = roundMoney(bucket[source] + amount)
+    profitBuckets.set(key, bucket)
+  }
+
+  let pawnProfit = 0
+  for (const pawn of pawnIncomeRecords) {
+    const sourceCurrency = pawn.currency === 'KHR' ? 'KHR' : 'USD'
+    for (const payment of pawn.payments || []) {
+      const paidAt = new Date(payment.paidAt)
+      if (Number.isNaN(paidAt.getTime()) || paidAt < period.from || paidAt >= period.to) continue
+      const earnedAmount = ['feesApplied', 'pawnFeeApplied', 'interestApplied', 'additionalCollected']
+        .reduce((sum, field) => sum + Math.max(0, Number(payment[field]) || 0), 0)
+      const earnedUsd = reportAmountToUsd(earnedAmount, sourceCurrency, pawn.exchangeRate)
+      pawnProfit = roundMoney(pawnProfit + earnedUsd)
+      addProfit(paidAt, 'pawn', earnedUsd)
+    }
+  }
+
+  let loanProfit = 0
+  const paidByLoan = new Map()
+  for (const payment of loanPaymentRecords) {
+    if (!payment.loan) continue
+    const loanId = String(payment.loan._id)
+    const previousPaid = paidByLoan.get(loanId) || 0
+    const nextPaid = previousPaid + Math.max(0, Number(payment.amount) || 0)
+    paidByLoan.set(loanId, nextPaid)
+    const principal = Math.max(0, Number(payment.loan.principal) || 0)
+    const interest = Math.max(0, Number(payment.loan.interestAmount) || 0)
+    const previousInterest = Math.min(interest, Math.max(0, previousPaid - principal))
+    const nextInterest = Math.min(interest, Math.max(0, nextPaid - principal))
+    const earnedAmount = roundMoney(nextInterest - previousInterest)
+    const earnedUsd = reportAmountToUsd(earnedAmount, payment.loan.currency, payment.loan.exchangeRate)
+    const paidAt = new Date(payment.paidAt)
+    if (!Number.isNaN(paidAt.getTime()) && paidAt >= period.from && paidAt < period.to) {
+      loanProfit = roundMoney(loanProfit + earnedUsd)
+      addProfit(paidAt, 'loan', earnedUsd)
+    }
+  }
+
+  let serviceProfit = 0
+  for (const charge of serviceIncomeRecords) {
+    const earnedUsd = reportAmountToUsd(charge.total, charge.currency, charge.exchangeRate)
+    serviceProfit = roundMoney(serviceProfit + earnedUsd)
+    addProfit(charge.completedAt, 'service', earnedUsd)
+  }
+  const totalProfit = roundMoney(salesProfit + pawnProfit + loanProfit + serviceProfit)
   const chartByKey = new Map(chartRows.map((row) => [row._id, row]))
   const chart = []
 
@@ -1524,6 +1598,18 @@ router.get('/business-overview', requireAuth, allowRoles('OWNER', 'MANAGER'), as
     }
   }
 
+  const profitChart = chart.map((point) => {
+    const otherProfit = profitBuckets.get(point.key) || { pawn: 0, loan: 0, service: 0 }
+    const incomeProfit = roundMoney(otherProfit.pawn + otherProfit.loan + otherProfit.service)
+    return {
+      key: point.key,
+      label: point.label,
+      sales: point.grossProfit,
+      purchases: incomeProfit,
+      grossProfit: roundMoney(point.grossProfit + incomeProfit),
+    }
+  })
+
   const pawnOutstandingRecords = pawnRecords.map((pawn) => ({
     ...pawn,
     outstanding: pawn.remainingPrincipal ?? pawn.principal,
@@ -1572,7 +1658,12 @@ router.get('/business-overview', requireAuth, allowRoles('OWNER', 'MANAGER'), as
       cogs,
       refunds,
       refundWriteOffCost,
-      grossProfit: roundMoney(salesRevenue - cogs),
+      grossProfit: salesProfit,
+      salesProfit,
+      pawnProfit,
+      loanProfit,
+      serviceProfit,
+      totalProfit,
     },
     pawn: {
       active: pawnRecords.filter((pawn) => ['ACTIVE', 'RENEWED'].includes(pawn.status)).length,
@@ -1598,6 +1689,7 @@ router.get('/business-overview', requireAuth, allowRoles('OWNER', 'MANAGER'), as
       })),
     },
     chart,
+    profitChart,
     recentTransactions,
     recentActivity,
   })

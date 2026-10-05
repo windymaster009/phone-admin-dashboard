@@ -4,7 +4,8 @@ import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
 import { ActivityLog, Customer, InventoryItem, Pawn, Trade, User } from './models.js'
 import { AuthSession } from './authSessionModels.js'
-import { Loan } from './loanModels.js'
+import { Loan, LoanPayment } from './loanModels.js'
+import { ServiceCharge } from './serviceModels.js'
 import appRouter from './routes.js'
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret-for-business-reports'
@@ -62,13 +63,20 @@ async function callRoute(path, query = {}, token = createToken('MANAGER')) {
   })
 }
 
-function mockPawnFind(routePawns = []) {
+function mockPawnFind(routePawns = [], incomePawns = routePawns) {
   return (query) => {
     if (query?.dueDate && query?.status?.$in) {
       // reminder query from refreshPawnStatuses
       return {
         populate: async () => [],
         then(resolve) { resolve([]) },
+      }
+    }
+    if (query?.['payments.paidAt']) {
+      return {
+        select: () => ({
+          lean: async () => incomePawns,
+        }),
       }
     }
     // Route query
@@ -290,6 +298,8 @@ test('GET /business-overview: calculates revenue, COGS, gross profit, and preser
   const origTradeFind = Trade.find
   const origPawnFind = Pawn.find
   const origLoanFind = Loan.find
+  const origLoanPaymentFind = LoanPayment.find
+  const origServiceChargeFind = ServiceCharge.find
   const origInventoryFind = InventoryItem.find
   const origActivityFind = ActivityLog.find
 
@@ -332,10 +342,18 @@ test('GET /business-overview: calculates revenue, COGS, gross profit, and preser
     }),
   })
 
-  Pawn.find = mockPawnFind([
-    { _id: 'p-1', status: 'ACTIVE', currency: 'USD', principal: 1000, remainingPrincipal: 800 },
-    { _id: 'p-2', status: 'ACTIVE', currency: 'KHR', principal: 4100000, remainingPrincipal: 4100000 },
-  ])
+  Pawn.find = mockPawnFind(
+    [
+      { _id: 'p-1', status: 'ACTIVE', currency: 'USD', principal: 1000, remainingPrincipal: 800 },
+      { _id: 'p-2', status: 'ACTIVE', currency: 'KHR', principal: 4100000, remainingPrincipal: 4100000 },
+    ],
+    [{
+      _id: 'p-income',
+      currency: 'USD',
+      exchangeRate: 1,
+      payments: [{ paidAt: new Date(), feesApplied: 5, pawnFeeApplied: 20, interestApplied: 5, principalApplied: 100 }],
+    }],
+  )
 
   Loan.find = () => ({
     select: () => ({
@@ -343,6 +361,33 @@ test('GET /business-overview: calculates revenue, COGS, gross profit, and preser
         { _id: 'l-1', status: 'ACTIVE', currency: 'USD', remainingBalance: 600 },
         { _id: 'l-2', status: 'ACTIVE', currency: 'KHR', remainingBalance: 2050000 },
       ],
+    }),
+  })
+
+  LoanPayment.find = () => ({
+    populate: () => ({
+      sort: () => ({
+        lean: async () => [
+          {
+            _id: 'lp-old',
+            amount: 1000,
+            paidAt: new Date(Date.now() - 40 * 24 * 60 * 60 * 1000),
+            loan: { _id: 'loan-profit', principal: 1000, interestAmount: 200, currency: 'USD', exchangeRate: 1 },
+          },
+          {
+            _id: 'lp-current',
+            amount: 100,
+            paidAt: new Date(),
+            loan: { _id: 'loan-profit', principal: 1000, interestAmount: 200, currency: 'USD', exchangeRate: 1 },
+          },
+        ],
+      }),
+    }),
+  })
+
+  ServiceCharge.find = () => ({
+    select: () => ({
+      lean: async () => [{ total: 41000, currency: 'KHR', exchangeRate: 4100, completedAt: new Date() }],
     }),
   })
 
@@ -375,6 +420,11 @@ test('GET /business-overview: calculates revenue, COGS, gross profit, and preser
     assert.equal(res.body.financial.refunds, 700)
     assert.equal(res.body.financial.refundWriteOffCost, 600)
     assert.equal(res.body.financial.grossProfit, 1500)
+    assert.equal(res.body.financial.salesProfit, 1500)
+    assert.equal(res.body.financial.pawnProfit, 30)
+    assert.equal(res.body.financial.loanProfit, 100)
+    assert.equal(res.body.financial.serviceProfit, 10)
+    assert.equal(res.body.financial.totalProfit, 1640)
 
     assert.equal(res.body.pawn.outstandingPrincipal.USD, 800)
     assert.equal(res.body.pawn.outstandingPrincipal.KHR, 4100000)
@@ -396,6 +446,8 @@ test('GET /business-overview: calculates revenue, COGS, gross profit, and preser
     Trade.find = origTradeFind
     Pawn.find = origPawnFind
     Loan.find = origLoanFind
+    LoanPayment.find = origLoanPaymentFind
+    ServiceCharge.find = origServiceChargeFind
     InventoryItem.find = origInventoryFind
     ActivityLog.find = origActivityFind
   }

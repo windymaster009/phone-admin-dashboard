@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertTriangle, ArrowLeft, Banknote, BarChart3, Boxes, CircleDollarSign, FileText, HandCoins, Package, RefreshCcw, TrendingDown, Type, WalletCards } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Banknote, BarChart3, Boxes, CircleDollarSign, FileText, HandCoins, Landmark, Package, RefreshCcw, TrendingDown, TrendingUp, WalletCards, Wrench } from 'lucide-react'
 import { api } from '../../lib/api'
 import type { Customer, Supplier, Pawn, ActivityLog, OverviewCurrencyTotals, BusinessOverviewPeriod, BusinessOverviewData } from '../../types/domain'
 import { currency, money, tradePartyName, tradeTransactionMoney, riel, dateText, titleStatus } from '../../lib/presentation'
@@ -183,6 +183,11 @@ export default function BusinessOverviewView({
   const refundsValue = money.format(data?.financial.refunds || 0)
   const purchasesValue = money.format(data?.financial.purchases || 0)
   const grossProfitValue = money.format(data?.financial.grossProfit || 0)
+  const salesProfitValue = money.format(data?.financial.salesProfit || 0)
+  const pawnProfitValue = money.format(data?.financial.pawnProfit || 0)
+  const loanProfitValue = money.format(data?.financial.loanProfit || 0)
+  const serviceProfitValue = money.format(data?.financial.serviceProfit || 0)
+  const totalProfitValue = money.format(data?.financial.totalProfit || 0)
   const stockValue = money.format(data?.inventory.costValue || 0)
   const periodOptions: Array<{ value: BusinessOverviewPeriod; label: string }> = [
     { value: 'today', label: 'Today' },
@@ -197,7 +202,7 @@ export default function BusinessOverviewView({
   const pageEyebrow = reportMode ? 'Reports & analytics' : 'Owner overview'
   const pageTitle = reportMode ? 'Overall Report' : 'Business Overview'
   const pageDescription = reportMode
-    ? 'Sales, refunds, purchases, profit, pawn, loans, inventory, and recent activity in one view.'
+    ? 'See total profit from product sales, pawn fees, loan interest, and service charges in one place.'
     : 'Quick snapshot of sales, purchases, profit, pawn, loans, and inventory.'
   const backButton = onBack ? (
     <button type="button" className="ghost-button overview-report-back-button" onClick={onBack}>
@@ -231,7 +236,57 @@ export default function BusinessOverviewView({
         )}
       />
       {error && <p className="overview-error" role="alert"><AlertTriangle size={16} />{error}</p>}
-      <SummaryStats
+      {reportMode ? <>
+        <section className="surface-card overview-total-profit" aria-label="Total profit">
+          <span className="summary-stat-icon tone-green" aria-hidden="true"><TrendingUp /></span>
+          <div>
+            <span className="eyebrow">{periodLabel}</span>
+            <h3>Total Profit</h3>
+            <p>Sales profit + collected pawn fees + collected loan interest + completed service charges</p>
+          </div>
+          <strong className={(data?.financial.totalProfit || 0) < 0 ? 'is-negative' : ''}>{totalProfitValue}</strong>
+        </section>
+        <SummaryStats
+          label="Profit breakdown"
+          variant="standard"
+          columns={4}
+          className="overview-profit-breakdown"
+          items={[
+            {
+              label: 'Product Sales Profit',
+              value: salesProfitValue,
+              valueTone: (data?.financial.salesProfit || 0) < 0 ? 'negative' : 'positive',
+              icon: CircleDollarSign,
+              tone: 'violet',
+              detail: 'Sales after product cost and returns',
+            },
+            {
+              label: 'Pawn Profit',
+              value: pawnProfitValue,
+              valueTone: (data?.financial.pawnProfit || 0) < 0 ? 'negative' : 'positive',
+              icon: HandCoins,
+              tone: 'blue',
+              detail: 'Fees and interest collected',
+            },
+            {
+              label: 'Loan Profit',
+              value: loanProfitValue,
+              valueTone: (data?.financial.loanProfit || 0) < 0 ? 'negative' : 'positive',
+              icon: Landmark,
+              tone: 'orange',
+              detail: 'Interest collected after principal',
+            },
+            {
+              label: 'Service Profit',
+              value: serviceProfitValue,
+              valueTone: (data?.financial.serviceProfit || 0) < 0 ? 'negative' : 'positive',
+              icon: Wrench,
+              tone: 'rose',
+              detail: 'Completed service charges',
+            },
+          ]}
+        />
+      </> : <SummaryStats
         label="Business summary"
         variant="compact"
         columns={6}
@@ -285,11 +340,19 @@ export default function BusinessOverviewView({
             detail: 'Current cost value',
           },
         ]}
-      />
+      />}
 
       <section className="surface-card overview-performance-card">
-        <div className="card-heading"><div><span className="eyebrow">{periodLabel}</span><h3>Business Performance</h3><p>Net sales after refunds, purchases, and gross profit over time.</p></div>{loading && <RefreshCcw className="overview-refreshing" size={18} />}</div>
-        <BusinessPerformanceChart points={data?.chart || []} firstLabel="Net sales" ariaLabel="Net sales after refunds, purchases, and gross profit over the selected period" />
+        <div className="card-heading"><div><span className="eyebrow">{periodLabel}</span><h3>{reportMode ? 'Profit Over Time' : 'Business Performance'}</h3><p>{reportMode ? 'Compare sales profit with profit earned from pawn, loan, and service activity.' : 'Net sales after refunds, purchases, and gross profit over time.'}</p></div>{loading && <RefreshCcw className="overview-refreshing" size={18} />}</div>
+        <BusinessPerformanceChart
+          points={reportMode ? data?.profitChart || [] : data?.chart || []}
+          firstLabel={reportMode ? 'Sales profit' : 'Net sales'}
+          secondLabel={reportMode ? 'Pawn, loan & service' : 'Purchases'}
+          thirdLabel={reportMode ? 'Total profit' : 'Gross profit'}
+          ariaLabel={reportMode ? 'Sales profit, other earned profit, and total profit over the selected period' : 'Net sales after refunds, purchases, and gross profit over the selected period'}
+          emptyTitle={reportMode ? 'No profit recorded' : 'No completed transactions'}
+          emptyDescription={reportMode ? 'Profit appears after a sale, fee, interest payment, or service charge is completed.' : 'Sales and purchases will appear for this period once recorded.'}
+        />
       </section>
 
       <section className="overview-snapshot-grid">

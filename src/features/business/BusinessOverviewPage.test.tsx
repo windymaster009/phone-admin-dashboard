@@ -18,6 +18,11 @@ const mockOverviewData = {
     refunds: 500,
     refundWriteOffCost: 200,
     grossProfit: 4300,
+    salesProfit: 4300,
+    pawnProfit: 275,
+    loanProfit: 180,
+    serviceProfit: 95,
+    totalProfit: 4850,
   },
   pawn: {
     active: 14,
@@ -55,6 +60,10 @@ const mockOverviewData = {
   chart: [
     { key: '2026-09-01', label: '1 Sep', sales: 4000, purchases: 2000, grossProfit: 1500 },
     { key: '2026-09-02', label: '2 Sep', sales: 8500, purchases: 5800, grossProfit: 2800 },
+  ],
+  profitChart: [
+    { key: '2026-09-01', label: '1 Sep', sales: 1500, purchases: 200, grossProfit: 1700 },
+    { key: '2026-09-02', label: '2 Sep', sales: 2800, purchases: 350, grossProfit: 3150 },
   ],
   recentTransactions: [
     {
@@ -114,6 +123,33 @@ describe('BusinessOverviewPage', () => {
     expect(screen.getByText('$7,800')).toBeInTheDocument() // purchases
     expect(screen.getByText('$4,300')).toBeInTheDocument() // gross profit
     expect(screen.getAllByText('$18,500')).toHaveLength(2) // stat card + inventory snapshot
+  })
+
+  it('shows combined profit and its four sources in report mode', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => mockOverviewData,
+    } as Response)
+
+    render(<BusinessOverviewPage reportMode onReady={vi.fn()} />)
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 2, name: 'Overall Report' })).toBeInTheDocument()
+    })
+    expect(screen.getByRole('heading', { level: 3, name: 'Total Profit' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Total profit')).toHaveTextContent('$4,850')
+    const breakdown = screen.getByLabelText('Profit breakdown')
+    expect(breakdown).toHaveTextContent('Product Sales Profit')
+    expect(breakdown).toHaveTextContent('$4,300')
+    expect(breakdown).toHaveTextContent('Pawn Profit')
+    expect(breakdown).toHaveTextContent('$275')
+    expect(breakdown).toHaveTextContent('Loan Profit')
+    expect(breakdown).toHaveTextContent('$180')
+    expect(breakdown).toHaveTextContent('Service Profit')
+    expect(breakdown).toHaveTextContent('$95')
+    expect(screen.getByRole('heading', { level: 3, name: 'Profit Over Time' })).toBeInTheDocument()
   })
 
   it('preserves dual currency isolation for pawn and loan outstanding balances without cross-currency addition', async () => {
