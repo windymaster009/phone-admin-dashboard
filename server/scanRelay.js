@@ -153,7 +153,9 @@ export async function readScans(req, res) {
     createdAt: { $gt: new Date(Date.now() - 3600_000) },
   }
   const requestedWait = Number(req.query.wait)
-  const waitSeconds = Number.isFinite(requestedWait)
+  const waitSeconds = req.query.wait === undefined
+    ? (after === undefined ? 0 : 25)
+    : Number.isFinite(requestedWait)
     ? Math.min(MAX_LONG_POLL_SECONDS, Math.max(0, requestedWait))
     : 0
   res.setHeader('Cache-Control', 'no-store')

@@ -83,7 +83,7 @@ test('relay automatically becomes inactive 60 seconds after the last activity', 
   await enableRelay(t)
   now += 60_001
   const res = response()
-  await readScans(req({ after: '0' }), res)
+  await readScans(req({ after: '0', wait: '0' }), res)
   assert.deepEqual(res.body, { events: [], cursor: '0', active: false })
 })
 
