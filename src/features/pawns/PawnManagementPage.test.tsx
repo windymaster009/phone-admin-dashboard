@@ -245,6 +245,8 @@ describe('PawnManagementPage feature integration', () => {
         repawnCustomerMode: 'EXISTING',
         repawnCustomerName: redeemedPawn.customer?.name,
         repawnCustomerPhone: redeemedPawn.customer?.phone,
+        repawnEstimatedValue: redeemedPawn.estimatedValue,
+        repawnCurrency: redeemedPawn.currency,
       })
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     } finally {

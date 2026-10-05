@@ -597,6 +597,7 @@ export default function OperationModalBridge() {
         kind?: ModalKind; itemId?: string; item?: InventoryItem;
         repawnImei?: string; repawnPawnNo?: string; repawnCustomerId?: string;
         repawnCustomerMode?: PawnCustomerMode; repawnCustomerName?: string; repawnCustomerPhone?: string;
+        repawnEstimatedValue?: number; repawnCurrency?: PawnCurrency;
       }>).detail
       if (detail?.kind) {
         setError('')
@@ -624,6 +625,8 @@ export default function OperationModalBridge() {
           const requestedImei = detail.repawnImei || ''
           const repawnImei = /^\d{15}$/.test(requestedImei) ? requestedImei : ''
           const sourcePawnNo = detail.repawnPawnNo?.trim() || ''
+          const previousResaleValue = Math.max(0, Number(detail.repawnEstimatedValue) || 0)
+          const previousCurrency: PawnCurrency = detail.repawnCurrency === 'KHR' ? 'KHR' : 'USD'
           skipValuationImportRef.current = Boolean(sourcePawnNo)
           setRepawnSourcePawnNo(sourcePawnNo)
           setPawnCreated(null)
@@ -636,6 +639,11 @@ export default function OperationModalBridge() {
           setPawnWalkInNationalId('')
           setPawnWalkInAddress('')
           setPawnOwnershipConfirmed(false)
+          if (sourcePawnNo) {
+            setPawnCurrency(previousCurrency)
+            setPawnMarketPrice(previousResaleValue)
+            setEstimatedValue(previousResaleValue)
+          }
           setPawnImei(repawnImei)
           setPawnBrand('')
           setPawnModel('')

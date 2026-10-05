@@ -768,10 +768,12 @@ describe('OperationModalBridge component', () => {
         kind: 'pawn', repawnImei: '358901234567890', repawnPawnNo: 'PW-OLD-REDEEMED',
         repawnCustomerId: customer._id, repawnCustomerMode: 'EXISTING',
         repawnCustomerName: customer.name, repawnCustomerPhone: customer.phone,
+        repawnEstimatedValue: 320, repawnCurrency: 'USD',
       } }))
     })
     await waitFor(() => expect(screen.getByRole('heading', { name: /New pawn contract/i })).toBeInTheDocument())
     expect(screen.getByText(/Re-pawning phone from PW-OLD-REDEEMED/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Resale value (USD)')).toHaveValue('320')
     const changeCustomer = screen.getByRole('button', { name: /Change customer/i })
     expect(changeCustomer).toBeInTheDocument()
     expect(changeCustomer).toHaveClass('pawn-change-customer-action')

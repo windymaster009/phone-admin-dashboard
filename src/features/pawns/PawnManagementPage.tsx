@@ -292,6 +292,8 @@ export default function PawnView({ user }: { user: SessionUser }) {
                 repawnCustomerMode: customerId ? 'EXISTING' : selectedPawn.customerSnapshot?.type === 'WALK_IN' ? 'WALK_IN' : 'NEW',
                 repawnCustomerName: selectedPawn.customerSnapshot?.name || selectedPawn.customer?.name || '',
                 repawnCustomerPhone: selectedPawn.customerSnapshot?.phone || selectedPawn.customer?.phone || '',
+                repawnEstimatedValue: selectedPawn.estimatedValue,
+                repawnCurrency: selectedPawn.currency || 'USD',
               },
             }))
           } : undefined}
