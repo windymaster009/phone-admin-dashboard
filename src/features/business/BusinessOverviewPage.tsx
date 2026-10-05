@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertTriangle, Banknote, BarChart3, Boxes, CircleDollarSign, FileText, HandCoins, Package, RefreshCcw, TrendingDown, Type, WalletCards } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Banknote, BarChart3, Boxes, CircleDollarSign, FileText, HandCoins, Package, RefreshCcw, TrendingDown, Type, WalletCards } from 'lucide-react'
 import { api } from '../../lib/api'
 import type { Customer, Supplier, Pawn, ActivityLog, OverviewCurrencyTotals, BusinessOverviewPeriod, BusinessOverviewData } from '../../types/domain'
 import { currency, money, tradePartyName, tradeTransactionMoney, riel, dateText, titleStatus } from '../../lib/presentation'
@@ -129,7 +129,17 @@ export function BusinessPerformanceChart({
   )
 }
 
-export default function BusinessOverviewView({ onReady }: { onReady: () => void }) {
+const ignoreReady = () => undefined
+
+export default function BusinessOverviewView({
+  onReady = ignoreReady,
+  reportMode = false,
+  onBack,
+}: {
+  onReady?: () => void
+  reportMode?: boolean
+  onBack?: () => void
+}) {
   const now = new Date()
   const todayInput = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
   const monthStartInput = `${todayInput.slice(0, 8)}01`
@@ -184,11 +194,21 @@ export default function BusinessOverviewView({ onReady }: { onReady: () => void 
     { value: 'this_year', label: 'This Year' },
     { value: 'custom', label: 'Custom Range' },
   ]
+  const pageEyebrow = reportMode ? 'Reports & analytics' : 'Owner overview'
+  const pageTitle = reportMode ? 'Overall Report' : 'Business Overview'
+  const pageDescription = reportMode
+    ? 'Sales, refunds, purchases, profit, pawn, loans, inventory, and recent activity in one view.'
+    : 'Quick snapshot of sales, purchases, profit, pawn, loans, and inventory.'
+  const backButton = onBack ? (
+    <button type="button" className="ghost-button overview-report-back-button" onClick={onBack}>
+      <ArrowLeft size={16} /> Back to reports
+    </button>
+  ) : null
 
   if (loading && !data) {
     return (
       <>
-        <SectionHeader eyebrow="Owner overview" title="Business Overview" description="Quick snapshot of sales, purchases, profit, pawn, loans, and inventory." />
+        <SectionHeader eyebrow={pageEyebrow} title={pageTitle} description={pageDescription} action={backButton} />
         <section className="surface-card"><LoadingState label="Loading business overview" detail="Calculating business totals and current snapshots…" /></section>
       </>
     )
@@ -197,13 +217,16 @@ export default function BusinessOverviewView({ onReady }: { onReady: () => void 
   return (
     <div className="business-overview-page">
       <SectionHeader
-        eyebrow="Owner overview"
-        title="Business Overview"
-        description="Quick snapshot of sales, purchases, profit, pawn, loans, and inventory."
+        eyebrow={pageEyebrow}
+        title={pageTitle}
+        description={pageDescription}
         action={(
-          <div className="overview-period-controls">
-            <label><span>Period</span><select value={period} onChange={(event) => setPeriod(event.target.value as BusinessOverviewPeriod)}>{periodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-            {period === 'custom' && <><label><span>From</span><input type="date" value={customFrom} max={customTo || undefined} onChange={(event) => setCustomFrom(event.target.value)} /></label><label><span>To</span><input type="date" value={customTo} min={customFrom || undefined} onChange={(event) => setCustomTo(event.target.value)} /></label></>}
+          <div className="overview-header-actions">
+            {backButton}
+            <div className="overview-period-controls">
+              <label><span>Period</span><select value={period} onChange={(event) => setPeriod(event.target.value as BusinessOverviewPeriod)}>{periodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+              {period === 'custom' && <><label><span>From</span><input type="date" value={customFrom} max={customTo || undefined} onChange={(event) => setCustomFrom(event.target.value)} /></label><label><span>To</span><input type="date" value={customTo} min={customFrom || undefined} onChange={(event) => setCustomTo(event.target.value)} /></label></>}
+            </div>
           </div>
         )}
       />

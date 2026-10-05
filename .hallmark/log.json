@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-10-06",
+    "macrostructure": "Stat-Led",
+    "theme": "existing PhoneFlow",
+    "enrichment": "none",
+    "brief": "Read-only overall report reusing the verified business overview and existing report hub"
+  },
+  {
     "date": "2026-08-26",
     "macrostructure": "Index-First",
     "theme": "existing PhoneFlow",

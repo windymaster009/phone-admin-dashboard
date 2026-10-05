@@ -1085,6 +1085,7 @@ describe('Reports Hub, Navigation & Placeholder View', () => {
     expect(screen.getByRole('button', { name: /^Sales/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Purchases/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Payments/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Overall/i })).toBeInTheDocument()
 
     // Operational report cards
     expect(screen.getByRole('button', { name: /^Inventory/i })).toBeInTheDocument()
@@ -1118,7 +1119,7 @@ describe('Reports Hub, Navigation & Placeholder View', () => {
       </RouterProvider>,
     )
 
-    const salesCard = screen.getByRole('button', { name: /Sales/i })
+    const salesCard = screen.getByRole('button', { name: 'Sales' })
     await user.click(salesCard)
 
     await waitFor(() => {
@@ -1133,6 +1134,62 @@ describe('Reports Hub, Navigation & Placeholder View', () => {
       expect(document.title).toContain('Reports & Analytics · PhoneFlow')
       expect(screen.getByRole('heading', { level: 2, name: 'Reports & Analytics' })).toBeInTheDocument()
     })
+  })
+
+  it('opens the read-only overall report with the existing business overview and returns to the hub', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      json: async () => ({
+        period: { key: 'this_month', label: 'This Month', from: '2026-10-01T00:00:00.000Z', to: '2026-10-31T23:59:59.999Z', granularity: 'day' },
+        financial: { salesRevenue: 1250, purchases: 400, cogs: 700, refunds: 50, refundWriteOffCost: 0, grossProfit: 550 },
+        pawn: { active: 2, dueSoon: 1, overdue: 0, outstandingPrincipal: { USD: 300, KHR: 0 } },
+        loans: { active: 1, dueSoon: 0, overdue: 0, outstandingBalance: { USD: 200, KHR: 0 } },
+        inventory: {
+          inStockCount: 12,
+          productCount: 5,
+          phoneCount: 3,
+          tabletCount: 0,
+          accessoryCount: 7,
+          sparePartCount: 2,
+          otherCount: 0,
+          lowStockCount: 0,
+          costValue: 900,
+          retailValue: 1400,
+          lowStockItems: [],
+        },
+        chart: [{ key: '2026-10-01', label: '1 Oct', sales: 1250, purchases: 400, grossProfit: 550 }],
+        recentTransactions: [],
+        recentActivity: [],
+      }),
+    } as Response)
+    const user = userEvent.setup()
+
+    render(
+      <RouterProvider>
+        <ReportsPage />
+      </RouterProvider>,
+    )
+
+    await user.click(screen.getByRole('button', { name: /^Overall/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 2, name: 'Overall Report' })).toBeInTheDocument()
+      expect(window.location.pathname).toBe('/reports/overall')
+      expect(document.title).toContain('Overall Report · PhoneFlow')
+    })
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining('/api/business-overview?period=this_month'),
+      expect.anything(),
+    )
+    const businessSummary = screen.getByLabelText('Business summary')
+    expect(businessSummary).toBeInTheDocument()
+    expect(within(businessSummary).getByText('$1,250')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /Back to reports/i }))
+    expect(screen.getByRole('heading', { level: 2, name: 'Reports & Analytics' })).toBeInTheDocument()
+    expect(window.location.pathname).toBe('/reports')
   })
 
   it('handles popstate browser navigation events gracefully', async () => {

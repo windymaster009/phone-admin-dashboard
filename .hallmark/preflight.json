@@ -1,12 +1,12 @@
 {
-  "date": "2026-09-28",
+  "date": "2026-10-06",
   "font_stack": "Inter body with Manrope display",
-  "palette": "Existing dark/light PhoneFlow tokens in src/styles/styles.css",
+  "palette": "Existing dark/light PhoneFlow tokens in src/styles/tokens.css",
   "motion": "Restrained CSS state transitions with a reduced-motion fallback",
   "spacing": "Existing compact operational spacing with a 4pt rhythm and 44px touch targets",
   "framework": "React 19 with Vite 7",
   "preserve": ["font stack", "palette", "navigation", "surface language"],
   "scope": "Operational dashboard components on desktop and mobile",
   "audience": "Phone shop owners, managers, and cashiers",
-  "primary_task": "Present completed transaction records clearly across desktop and mobile"
+  "primary_task": "Expose the verified business overview as one read-only overall report across desktop and mobile"
 }

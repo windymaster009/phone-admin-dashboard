@@ -7,7 +7,7 @@ import LoadingState from '../../components/LoadingState'
 import SectionHeader from '../../components/SectionHeader'
 import StatusBadge from '../../components/StatusBadge'
 import SummaryStats, { type SummaryStatTone } from '../../components/SummaryStats'
-import { BusinessPerformanceChart } from '../business/BusinessOverviewPage'
+import BusinessOverviewPage, { BusinessPerformanceChart } from '../business/BusinessOverviewPage'
 import DetailModalShell from '../../components/DetailModalShell'
 import DetailModalHeader from '../../components/DetailModalHeader'
 import DetailModalBody from '../../components/DetailModalBody'
@@ -20,6 +20,7 @@ const reportSections = [
   { slug: 'pawns', title: 'Pawn', description: 'Outstanding principal, overdue, redeemed, and claimed collateral', icon: HandCoins, tone: 'violet' },
   { slug: 'loans', title: 'Loans', description: 'Outstanding loans, repayments, and overdue balances', icon: WalletCards, tone: 'blue' },
   { slug: 'payments', title: 'Payments', description: 'Cash, KHQR, bank, card, and daily closing', icon: Banknote, tone: 'rose' },
+  { slug: 'overall', title: 'Overall', description: 'Sales, profit, pawn, loans, stock, and recent activity', icon: BarChart3, tone: 'blue' },
   { slug: 'services', title: 'Service charges', description: 'Paid setup, assistance, transfer, and software work', icon: Wrench, tone: 'violet' },
   { slug: 'customers', title: 'Customer report', description: 'Customer profiles, contact records, and transaction history', icon: Users, tone: 'blue' },
   { slug: 'suppliers', title: 'Supplier report', description: 'Supplier profiles, contacts, and purchase history', icon: Building2, tone: 'orange' },
@@ -29,8 +30,9 @@ const reportSections = [
 function ReportLanding({ navigate }: { navigate: (path: string) => void }) {
   const [customerReportOpen, setCustomerReportOpen] = useState(false)
   const [supplierReportOpen, setSupplierReportOpen] = useState(false)
-  const financialReports = reportSections.filter((report) => ['sales', 'purchases', 'payments'].includes(report.slug))
-  const operationalReports = reportSections.filter((report) => !['sales', 'purchases', 'payments'].includes(report.slug))
+  const financialReportSlugs = ['sales', 'purchases', 'payments', 'overall']
+  const financialReports = reportSections.filter((report) => financialReportSlugs.includes(report.slug))
+  const operationalReports = reportSections.filter((report) => !financialReportSlugs.includes(report.slug))
   const reportCard = (report: typeof reportSections[number]) => {
     const { slug, title, description, icon: Icon, tone } = report
 
@@ -40,6 +42,7 @@ function ReportLanding({ navigate }: { navigate: (path: string) => void }) {
         className="surface-card report-hub-card"
         key={slug}
         onClick={() => slug === 'customers' ? setCustomerReportOpen(true) : slug === 'suppliers' ? setSupplierReportOpen(true) : navigate(`/reports/${slug}`)}
+        aria-label={title}
         aria-haspopup={slug === 'customers' || slug === 'suppliers' ? 'dialog' : undefined}
       >
         <span className={`metric-icon tone-${tone}`}><Icon size={21} /></span>
@@ -400,7 +403,11 @@ function UpcomingReportView({ slug, navigate }: { slug: string; navigate: (path:
 }
 
 function ReportBackButton({ navigate }: { navigate: (path: string) => void }) {
-  return <button className="ghost-button report-back-button" onClick={() => navigate('/reports')}><ArrowLeft size={16} /> Back to reports</button>
+  return <button type="button" className="ghost-button report-back-button" onClick={() => navigate('/reports')}><ArrowLeft size={16} /> Back to reports</button>
+}
+
+function OverallReportView({ navigate }: { navigate: (path: string) => void }) {
+  return <BusinessOverviewPage reportMode onBack={() => navigate('/reports')} />
 }
 
 function SalesReportView({ navigate }: { navigate: (path: string) => void }) {
@@ -862,6 +869,7 @@ export default function ReportsView() {
 
   if (path === '/reports/sales') return <SalesReportView navigate={navigate} />
   if (path === '/reports/purchases') return <PurchasesReportView navigate={navigate} />
+  if (path === '/reports/overall') return <OverallReportView navigate={navigate} />
   if (path === '/reports/inventory') return <OperationalReportView key={path} kind="inventory" navigate={navigate} />
   if (path === '/reports/pawns') return <OperationalReportView key={path} kind="pawns" navigate={navigate} />
   if (path === '/reports/loans') return <OperationalReportView key={path} kind="loans" navigate={navigate} />

@@ -1,3 +1,6 @@
+/* Hallmark · macrostructure: Stat-Led · genre: modern-minimal operations · tone: utilitarian · anchor hue: violet · theme: existing PhoneFlow
+ * enrichment: none · pre-emit critique: P5 H5 E5 S5 R5 V4 · contrast: pass (40–41) · honest: pass (46) · chrome: pass (47) · tokens: pass (48) · icons: pass (30) · mobile: pass (34, 49–57)
+ */
 /**
  * Business Overview Feature Styles
  * Business performance KPIs, revenue/cost charts, financial snapshots, and activity logs.
@@ -10,6 +13,25 @@
 
 .business-overview-page > .section-header {
   margin-bottom: 0;
+}
+
+.business-overview-page > .section-header h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.overview-header-actions {
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.overview-report-back-button {
+  min-height: 44px;
+  white-space: nowrap;
 }
 
 .overview-period-controls {
@@ -382,7 +404,14 @@
   }
 
   .overview-period-controls {
+    min-width: 0;
+    flex: 1;
     justify-content: stretch;
+  }
+
+  .overview-header-actions {
+    width: 100%;
+    align-items: stretch;
   }
 
   .overview-period-controls label {
@@ -414,6 +443,16 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     padding: 5px;
+  }
+
+  .overview-header-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .overview-report-back-button {
+    width: 100%;
+    justify-content: center;
   }
 
   .overview-period-controls label {
