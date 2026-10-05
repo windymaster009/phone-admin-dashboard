@@ -33,6 +33,58 @@ final class PhoneFlowApi {
     private PhoneFlowApi() {
     }
 
+    static void activateScanner(String baseUrl, String sessionCookie, String mode, RelayCallback callback) {
+        IO.execute(() -> {
+            HttpURLConnection connection = null;
+            try {
+                URL url = ServerUrlPolicy.requireAllowedUrl(
+                    baseUrl + "/api/scanner/activate",
+                    BuildConfig.ALLOW_PRIVATE_LAN_HTTP
+                );
+                connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("POST");
+                connection.setConnectTimeout(12_000);
+                connection.setReadTimeout(15_000);
+                connection.setDoOutput(true);
+                connection.setRequestProperty("Accept", "application/json");
+                connection.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                connection.setRequestProperty("Cookie", sessionCookie);
+                connection.setRequestProperty("X-PhoneFlow-Request", "1");
+
+                byte[] payload = new JSONObject()
+                    .put("mode", "gun".equals(mode) ? "input" : "lookup")
+                    .toString()
+                    .getBytes(StandardCharsets.UTF_8);
+                connection.setFixedLengthStreamingMode(payload.length);
+                try (OutputStream output = connection.getOutputStream()) {
+                    output.write(payload);
+                }
+
+                int status = connection.getResponseCode();
+                InputStream stream = status >= 200 && status < 300
+                    ? connection.getInputStream()
+                    : connection.getErrorStream();
+                String body = readAll(stream);
+                JSONObject response = body.isEmpty() ? new JSONObject() : new JSONObject(body);
+                if (status == 401) throw new IllegalStateException("Your session expired. Sign in again before scanning.");
+                if (status < 200 || status >= 300) {
+                    throw new IllegalStateException(response.optString("message", "Unable to start scanner (" + status + ")"));
+                }
+                if (!response.optBoolean("ready", false)) {
+                    throw new IllegalStateException("The desktop scanner is not ready. Keep PhoneFlow open on the computer.");
+                }
+                MAIN.post(callback::onSuccess);
+            } catch (Exception error) {
+                String message = error.getMessage();
+                MAIN.post(() -> callback.onError(message == null || message.isBlank()
+                    ? "Unable to reach the PhoneFlow server"
+                    : message));
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        });
+    }
+
     static void lookupInventory(String baseUrl, String sessionCookie, String code, Callback callback) {
         IO.execute(() -> {
             HttpURLConnection connection = null;

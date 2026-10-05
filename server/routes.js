@@ -3,7 +3,7 @@ import { Router } from 'express'
 import bcrypt from 'bcryptjs'
 import mongoose from 'mongoose'
 import sharp from 'sharp'
-import { publishScan, readScans } from './scanRelay.js'
+import { activateScanRelay, publishScan, readScans } from './scanRelay.js'
 import {
   allowRoles,
   clearSessionCookie,
@@ -2428,6 +2428,7 @@ router.get('/inventory/:id', requireAuth, asyncRoute(async (req, res) => {
   res.json({ item: { ...item.toObject(), relatedPawn: relatedPawn || null } })
 }))
 
+router.post('/scanner/activate', requireAuth, asyncRoute(activateScanRelay))
 router.get('/scanner/events', requireAuth, asyncRoute(readScans))
 router.post('/scanner/events', requireAuth, asyncRoute(async (req, res) => {
   const code = clean(req.body.code)

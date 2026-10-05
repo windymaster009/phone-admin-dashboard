@@ -213,4 +213,50 @@
         </LinearLayout>
     </LinearLayout>
 
+    <FrameLayout
+        android:id="@+id/scannerLoadingOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#D908101F"
+        android:clickable="true"
+        android:focusable="true"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="280dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:background="@drawable/scanner_loading_card"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:padding="28dp">
+
+            <ProgressBar
+                android:layout_width="46dp"
+                android:layout_height="46dp"
+                android:indeterminateTint="@color/phoneflow_primary" />
+
+            <TextView
+                android:id="@+id/scannerLoadingTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:gravity="center"
+                android:text="Starting scanner"
+                android:textColor="@color/phoneflow_text"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:lineSpacingExtra="2dp"
+                android:text="Connecting to the desktop. This may take a few seconds."
+                android:textColor="@color/phoneflow_muted"
+                android:textSize="13sp" />
+        </LinearLayout>
+    </FrameLayout>
+
 </FrameLayout>

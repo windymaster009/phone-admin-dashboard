@@ -63,6 +63,8 @@ public class MainActivity extends AppCompatActivity {
     private TextView connectionLabel;
     private TextView pageTitle;
     private ProgressBar pageProgress;
+    private View scannerLoadingOverlay;
+    private TextView scannerLoadingTitle;
     private WebView webView;
     private ValueCallback<Uri[]> fileUploadCallback;
     private ActivityResultLauncher<Intent> filePickerLauncher;
@@ -70,6 +72,7 @@ public class MainActivity extends AppCompatActivity {
     private String serverUrl = "";
     private String apiBaseUrl = "";
     private boolean discoveryInProgress;
+    private boolean scannerActivationInProgress;
     private boolean automaticDiscoveryAttempted;
     private int primaryPageLoadGeneration;
 
@@ -102,6 +105,8 @@ public class MainActivity extends AppCompatActivity {
         connectionLabel = findViewById(R.id.connectionLabel);
         pageTitle = findViewById(R.id.pageTitle);
         pageProgress = findViewById(R.id.pageProgress);
+        scannerLoadingOverlay = findViewById(R.id.scannerLoadingOverlay);
+        scannerLoadingTitle = findViewById(R.id.scannerLoadingTitle);
         webView = findViewById(R.id.phoneFlowWebView);
     }
 
@@ -135,8 +140,8 @@ public class MainActivity extends AppCompatActivity {
         View findServerButton = findViewById(R.id.findServerButton);
         findServerButton.setOnClickListener(view -> discoverServer());
         findServerButton.setVisibility(BuildConfig.ALLOW_PRIVATE_LAN_HTTP ? View.VISIBLE : View.GONE);
-        findViewById(R.id.scanButton).setOnClickListener(view -> launchScanner(ScannerActivity.MODE_LOOKUP));
-        findViewById(R.id.gunScanButton).setOnClickListener(view -> launchScanner(ScannerActivity.MODE_GUN));
+        findViewById(R.id.scanButton).setOnClickListener(view -> prepareScanner(ScannerActivity.MODE_LOOKUP));
+        findViewById(R.id.gunScanButton).setOnClickListener(view -> prepareScanner(ScannerActivity.MODE_GUN));
         findViewById(R.id.backButton).setOnClickListener(view -> navigateBack());
         findViewById(R.id.settingsButton).setOnClickListener(view -> showSettings());
     }
@@ -301,8 +306,7 @@ public class MainActivity extends AppCompatActivity {
     private void launchScanner(String mode) {
         Intent intent = new Intent(this, ScannerActivity.class);
         if (ScannerActivity.MODE_GUN.equals(mode)) {
-            String cookie = CookieManager.getInstance().getCookie(apiBaseUrl);
-            if (cookie == null || cookie.isBlank()) cookie = CookieManager.getInstance().getCookie(serverUrl);
+            String cookie = sessionCookie();
             if (serverUrl.isBlank() || apiBaseUrl.isBlank() || cookie == null || cookie.isBlank()) {
                 toast("Sign in to PhoneFlow before using the gun scanner");
                 return;
@@ -312,6 +316,49 @@ public class MainActivity extends AppCompatActivity {
             intent.putExtra(ScannerActivity.EXTRA_SESSION_COOKIE, cookie);
         }
         scannerLauncher.launch(intent);
+    }
+
+    private void prepareScanner(String mode) {
+        if (scannerActivationInProgress) return;
+        if (serverUrl.isBlank() || apiBaseUrl.isBlank()) {
+            showSetup("Connect to PhoneFlow before scanning");
+            return;
+        }
+        String cookie = sessionCookie();
+        if (cookie == null || cookie.isBlank()) {
+            toast("Sign in to PhoneFlow before scanning");
+            loadDashboard();
+            return;
+        }
+
+        scannerActivationInProgress = true;
+        scannerLoadingTitle.setText(ScannerActivity.MODE_GUN.equals(mode)
+            ? "Starting gun scanner"
+            : "Starting product scanner");
+        scannerLoadingOverlay.setVisibility(View.VISIBLE);
+        PhoneFlowApi.activateScanner(apiBaseUrl, cookie, mode, new PhoneFlowApi.RelayCallback() {
+            @Override
+            public void onSuccess() {
+                if (isFinishing() || isDestroyed()) return;
+                scannerActivationInProgress = false;
+                scannerLoadingOverlay.setVisibility(View.GONE);
+                launchScanner(mode);
+            }
+
+            @Override
+            public void onError(String message) {
+                if (isFinishing() || isDestroyed()) return;
+                scannerActivationInProgress = false;
+                scannerLoadingOverlay.setVisibility(View.GONE);
+                toast(message);
+            }
+        });
+    }
+
+    private String sessionCookie() {
+        String cookie = CookieManager.getInstance().getCookie(apiBaseUrl);
+        if (cookie == null || cookie.isBlank()) cookie = CookieManager.getInstance().getCookie(serverUrl);
+        return cookie;
     }
 
     private void clearWebSession() {
@@ -396,7 +443,7 @@ public class MainActivity extends AppCompatActivity {
             .setTitle("Product found")
             .setView(scroll)
             .setPositiveButton("Open stock", (dialog, which) -> webView.loadUrl(serverUrl + "/inventory"))
-            .setNeutralButton("Scan again", (dialog, which) -> launchScanner(ScannerActivity.MODE_LOOKUP))
+            .setNeutralButton("Scan again", (dialog, which) -> prepareScanner(ScannerActivity.MODE_LOOKUP))
             .setNegativeButton("Close", null)
             .show();
     }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import mongoose from 'mongoose'
-import { ScanEvent, publishScan, readScans } from './scanRelay.js'
+import { activateScanRelay, ScanEvent, publishScan, readScans, resetScanRelaysForTests } from './scanRelay.js'
 import router from './routes.js'
 import { requireAuth } from './auth.js'
 import { InventoryItem, Pawn } from './models.js'
@@ -15,6 +15,17 @@ function queryResult(value, inspect = () => {}) {
   return { sort(v) { inspect('sort', v); return this }, select() { return this }, limit(v) { inspect('limit', v); return this }, lean: async () => value }
 }
 
+test.beforeEach(() => resetScanRelaysForTests())
+
+async function enableRelay(t, mode = 'lookup') {
+  t.mock.method(ScanEvent, 'findOne', () => queryResult(null))
+  const activateResponse = response()
+  const activation = activateScanRelay({ ...req(), body: { mode } }, activateResponse)
+  await readScans(req(), response())
+  await activation
+  assert.equal(activateResponse.body.ready, true)
+}
+
 test('initial subscription skips old events and scopes results to this user and other sessions', async (t) => {
   const id = new mongoose.Types.ObjectId()
   t.mock.method(ScanEvent, 'findOne', (filter) => {
@@ -25,11 +36,12 @@ test('initial subscription skips old events and scopes results to this user and 
   })
   const res = response()
   await readScans(req(), res)
-  assert.deepEqual(res.body, { events: [], cursor: String(id) })
+  assert.deepEqual(res.body, { events: [], cursor: String(id), active: false })
   assert.equal(res.headers['Cache-Control'], 'no-store')
 })
 
 test('poll returns ordered scans after cursor without leaking another account', async (t) => {
+  await enableRelay(t)
   const before = new mongoose.Types.ObjectId()
   const after = new mongoose.Types.ObjectId()
   const events = [{ _id: after, code: 'SKU-1' }]
@@ -44,7 +56,10 @@ test('poll returns ordered scans after cursor without leaking another account', 
   })
   const res = response()
   await readScans(req({ after: String(before) }), res)
-  assert.deepEqual(res.body, { events, cursor: String(after) })
+  assert.equal(res.body.active, true)
+  assert.equal(res.body.mode, 'lookup')
+  assert.deepEqual(res.body.events, events)
+  assert.equal(res.body.cursor, String(after))
 })
 
 test('invalid cursors are rejected before querying', async (t) => {
@@ -56,12 +71,24 @@ test('invalid cursors are rejected before querying', async (t) => {
 })
 
 test('publication uses authenticated identity, not client supplied user or session', async (t) => {
+  await enableRelay(t)
   const create = t.mock.method(ScanEvent, 'create', async () => ({}))
   await publishScan({ ...req(), body: { user: 'other-user' } }, 'SKU-1')
   assert.deepEqual(create.mock.calls[0].arguments[0], { user, sourceSession: 'desktop-session', code: 'SKU-1', mode: 'lookup' })
 })
 
+test('relay automatically becomes inactive 60 seconds after the last activity', async (t) => {
+  let now = 1_000_000
+  t.mock.method(Date, 'now', () => now)
+  await enableRelay(t)
+  now += 60_001
+  const res = response()
+  await readScans(req({ after: '0' }), res)
+  assert.deepEqual(res.body, { events: [], cursor: '0', active: false })
+})
+
 test('gun scanner endpoint publishes input events without inventory lookup', async (t) => {
+  await enableRelay(t, 'input')
   const create = t.mock.method(ScanEvent, 'create', async () => ({}))
   const route = router.stack.find((layer) => layer.route?.path === '/scanner/events' && layer.route.methods.post).route
   assert.equal(route.stack[0].handle, requireAuth)
@@ -95,6 +122,7 @@ test('gun scanner endpoint rejects blank or oversized input', async (t) => {
 })
 
 test('only POST publishes successful scans; GET lookups do not echo them', async (t) => {
+  await enableRelay(t)
   const item = { _id: new mongoose.Types.ObjectId(), sku: 'SKU-1' }
   t.mock.method(InventoryItem, 'findOne', async () => item)
   t.mock.method(Pawn, 'findOne', () => ({ ...queryResult(null), populate() { return this } }))
@@ -114,6 +142,7 @@ test('only POST publishes successful scans; GET lookups do not echo them', async
 })
 
 test('phone lookup still succeeds when desktop publication fails', async (t) => {
+  await enableRelay(t)
   t.mock.method(InventoryItem, 'findOne', async () => ({ _id: new mongoose.Types.ObjectId() }))
   t.mock.method(Pawn, 'findOne', () => ({ ...queryResult(null), populate() { return this } }))
   t.mock.method(ScanEvent, 'create', async () => { throw new Error('offline') })

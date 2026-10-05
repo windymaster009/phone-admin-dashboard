@@ -146,7 +146,7 @@ does not look up or change inventory.
 
 Native scans appear in open desktop dashboards signed in to the **same staff account**.
 Pairing the phone from that desktop's Security page signs it in to the matching account.
-The desktop checks for new scans twice per second. A pawn receipt opens its exact pawn
+Tapping Product or Gun scan first wakes the desktop listener, then opens the camera. The desktop keeps one waiting request open instead of polling every second, and the relay shuts down after 60 seconds without a scan. A pawn receipt opens its exact pawn
 contract popup, while a product label opens its exact stock record. The intermediate scanner
 screen is skipped. Product scans wait while a form or dialog is open. Gun scans wait until an editable
 field is focused. Keep the desktop dashboard open before scanning; old scans are not replayed when a new dashboard is opened.
