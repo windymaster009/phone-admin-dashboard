@@ -1986,6 +1986,7 @@ body.operation-modal-open {
 .pawn-customer-summary strong.verified { color: #34d399; }
 .pawn-customer-summary strong.missing { color: #fb7185; }
 .pawn-customer-summary strong.optional { color: var(--muted, #8f9bb4); }
+.pawn-change-customer-action { flex: 0 0 auto; min-height: 36px; padding: 8px 12px; white-space: nowrap; }
 .pawn-verification-check { display: flex !important; flex-direction: row !important; align-items: flex-start; gap: 11px !important; margin-top: 14px; padding: 13px; border: 1px solid var(--border, rgba(255,255,255,.08)); border-radius: 11px; background: rgba(139,92,246,.045); }
 .pawn-verification-check > input { width: 17px; min-height: 17px; flex: 0 0 auto; margin: 1px 0 0; accent-color: #8b5cf6; }
 .pawn-verification-check > span { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }

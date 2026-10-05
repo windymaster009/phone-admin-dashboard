@@ -2702,6 +2702,11 @@ export default function OperationModalBridge() {
                 marker="1"
                 title="Customer verification"
                 description="Confirm who owns the phone for this new contract. You can change the customer if needed."
+                headerAction={(
+                  <button type="button" className="secondary-button pawn-change-customer-action" onClick={() => { setError(''); setPawnStep(1) }}>
+                    Change customer
+                  </button>
+                )}
               >
                 <KeyValueSummary
                   className="pawn-customer-summary"
@@ -2719,9 +2724,6 @@ export default function OperationModalBridge() {
                     },
                   ]}
                 />
-                <button type="button" className="secondary-button" onClick={() => { setError(''); setPawnStep(1) }}>
-                  Change customer
-                </button>
                 <label htmlFor="pawn-repawn-ownership-checkbox" className={`pawn-verification-check ${pawnAttempted && !pawnCustomerValid ? 'field-invalid' : ''}`}>
                   <input
                     id="pawn-repawn-ownership-checkbox"
