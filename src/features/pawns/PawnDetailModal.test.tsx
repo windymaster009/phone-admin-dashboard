@@ -138,6 +138,20 @@ describe('PawnDetailModal component', () => {
     expect(handleOpenAll).toHaveBeenCalledTimes(1)
   })
 
+  it('offers a re-pawn shortcut only for a redeemed contract', async () => {
+    const onRepawn = vi.fn()
+    const { rerender } = render(
+      <PawnDetailModal pawn={mockPawnRecord} onClose={vi.fn()} onRepawn={onRepawn} />,
+    )
+    expect(screen.queryByRole('button', { name: 'Re-pawn phone' })).not.toBeInTheDocument()
+
+    rerender(
+      <PawnDetailModal pawn={{ ...mockPawnRecord, status: 'REDEEMED' }} onClose={vi.fn()} onRepawn={onRepawn} />,
+    )
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Re-pawn phone' }))
+    expect(onRepawn).toHaveBeenCalledTimes(1)
+  })
+
   it('triggers onOpenDocuments callback when provided, or dispatches phoneflow:open-documents event', async () => {
     const handleOpenDocs = vi.fn()
     const user = userEvent.setup()

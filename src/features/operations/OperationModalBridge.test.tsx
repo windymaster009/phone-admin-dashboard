@@ -705,9 +705,10 @@ describe('OperationModalBridge component', () => {
     })
   })
 
-  it('detects a redeemed IMEI, requires confirmation, and submits the existing inventory item for re-pawn', async () => {
+  it('prefills a redeemed phone from the shortcut but still requires confirmation before re-pawn', async () => {
     let capturedPayload: Record<string, unknown> | null = null
     const customer = { _id: 'cust-returning', name: 'Returning Customer', phone: '012999111', nationalIdNumber: 'ID-RETURN', active: true }
+    sessionStorage.setItem('phoneflow_last_valuation', JSON.stringify({ eligible: true, currency: 'USD', estimatedValue: 9999 }))
 
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const url = String(input)
@@ -763,18 +764,23 @@ describe('OperationModalBridge component', () => {
 
     renderModalBridge()
     act(() => {
-      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'pawn' } }))
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: {
+        kind: 'pawn', repawnImei: '358901234567890', repawnPawnNo: 'PW-OLD-REDEEMED',
+      } }))
     })
     await waitFor(() => expect(screen.getByRole('heading', { name: /New pawn contract/i })).toBeInTheDocument())
+    expect(screen.getByText(/Re-pawning phone from PW-OLD-REDEEMED/)).toBeInTheDocument()
 
     fireEvent.change(screen.getByRole('combobox'), { target: { value: customer._id } })
     fireEvent.click(screen.getByRole('checkbox'))
     fireEvent.click(screen.getByRole('button', { name: /Continue to collateral/i }))
     await waitFor(() => expect(screen.getByPlaceholderText(/15-digit IMEI/i)).toBeInTheDocument())
 
-    fireEvent.change(screen.getByPlaceholderText(/15-digit IMEI/i), { target: { value: '358901234567890' } })
+    expect(screen.getByPlaceholderText(/15-digit IMEI/i)).toHaveValue('358901234567890')
+    expect(screen.queryByText(/Standalone calculator offer imported/i)).not.toBeInTheDocument()
+    expect(sessionStorage.getItem('phoneflow_last_valuation')).not.toBeNull()
     await waitFor(() => expect(screen.getByText('This phone was pawned before')).toBeInTheDocument())
-    expect(screen.getByText(/PW-OLD-REDEEMED/)).toBeInTheDocument()
+    expect(screen.getByText(/Previous contract PW-OLD-REDEEMED/)).toBeInTheDocument()
     expect(screen.getByPlaceholderText(/Apple/i)).toHaveValue('Samsung')
     expect(screen.getByPlaceholderText(/iPhone 13 Pro/i)).toHaveValue('Galaxy S22')
     expect(screen.getByRole('button', { name: /Confirm phone re-pawn/i })).toBeDisabled()

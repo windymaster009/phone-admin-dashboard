@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { AlertTriangle, ArrowUpRight, FileText, LoaderCircle, Printer, Trash2, X } from 'lucide-react'
+import { AlertTriangle, ArrowUpRight, FileText, LoaderCircle, Printer, RefreshCw, Trash2, X } from 'lucide-react'
 import type { Pawn, PawnAction, PawnCurrency } from '../../types/domain'
 import { dateText, pawnMoney } from '../../lib/presentation'
 import MoneyInput from '../../components/MoneyInput'
@@ -22,6 +22,7 @@ export type PawnDetailModalProps = {
   quoteError?: string
   onClose: () => void
   onOpenAll?: () => void
+  onRepawn?: () => void
   onAction?: (action: PawnAction, payload: Record<string, unknown>) => Promise<void>
   onDelete?: () => Promise<void>
   canDelete?: boolean
@@ -34,6 +35,7 @@ export default function PawnDetailModal({
   quoteError = '',
   onClose,
   onOpenAll,
+  onRepawn,
   onAction,
   onDelete,
   canDelete = false,
@@ -587,7 +589,11 @@ export default function PawnDetailModal({
               ) : null
             }
             transactionActions={
-              onAction && isOpen ? (
+              onRepawn && pawn.status === 'REDEEMED' ? (
+                <button type="button" className="primary-button pawn-repawn-action" onClick={onRepawn}>
+                  <RefreshCw size={15} /> Re-pawn phone
+                </button>
+              ) : onAction && isOpen ? (
                 <>
                   <button
                     type="button"

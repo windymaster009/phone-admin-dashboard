@@ -278,6 +278,16 @@ export default function PawnView({ user }: { user: SessionUser }) {
           quoteError={detailRefreshError}
           onClose={() => setSelectedPawn(null)}
           onAction={updatePawn}
+          onRepawn={user.role === 'OWNER' || user.role === 'MANAGER' ? () => {
+            const linkedItem = typeof selectedPawn.inventoryItem === 'object' ? selectedPawn.inventoryItem : null
+            const imei = [linkedItem?.imei1, selectedPawn.itemSnapshot.imei]
+              .find((candidate) => /^\d{15}$/.test(candidate || '')) || ''
+            const pawnNo = selectedPawn.pawnNo
+            setSelectedPawn(null)
+            window.dispatchEvent(new CustomEvent('phoneflow:open-operation', {
+              detail: { kind: 'pawn', repawnImei: imei, repawnPawnNo: pawnNo },
+            }))
+          } : undefined}
           canDelete={user.role === 'OWNER'}
           canClaim={user.role === 'OWNER' || user.role === 'MANAGER'}
           onDelete={deletePawn}

@@ -118,6 +118,7 @@ export default function OperationModalBridge() {
   const [pawnStep, setPawnStep] = useState<1 | 2>(1)
   const [pawnAttempted, setPawnAttempted] = useState(false)
   const [pawnImei, setPawnImei] = useState('')
+  const [repawnSourcePawnNo, setRepawnSourcePawnNo] = useState('')
   const [pawnBrand, setPawnBrand] = useState('')
   const [pawnModel, setPawnModel] = useState('')
   const [pawnStorage, setPawnStorage] = useState('')
@@ -198,6 +199,7 @@ export default function OperationModalBridge() {
   const submittingSaleRef = useRef(false)
   const submittingPawnRef = useRef(false)
   const pawnReuseRequestRef = useRef(0)
+  const skipValuationImportRef = useRef(false)
   const submittingStockRef = useRef(false)
   const scanRequestSeqRef = useRef(0)
   const scanInFlightRef = useRef(false)
@@ -588,7 +590,7 @@ export default function OperationModalBridge() {
 
   useEffect(() => {
     const handleOpenOperation = (event: Event) => {
-      const detail = (event as CustomEvent<{ kind?: ModalKind; itemId?: string; item?: InventoryItem }>).detail
+      const detail = (event as CustomEvent<{ kind?: ModalKind; itemId?: string; item?: InventoryItem; repawnImei?: string; repawnPawnNo?: string }>).detail
       if (detail?.kind) {
         setError('')
         if (detail.kind === 'purchase') {
@@ -612,10 +614,15 @@ export default function OperationModalBridge() {
           setImeiScanError('')
         }
         if (detail.kind === 'pawn') {
+          const requestedImei = detail.repawnImei || ''
+          const repawnImei = /^\d{15}$/.test(requestedImei) ? requestedImei : ''
+          const sourcePawnNo = detail.repawnPawnNo?.trim() || ''
+          skipValuationImportRef.current = Boolean(sourcePawnNo)
+          setRepawnSourcePawnNo(sourcePawnNo)
           setPawnCreated(null)
           setPawnAttempted(false)
           setPawnStep(1)
-          setPawnImei('')
+          setPawnImei(repawnImei)
           setPawnBrand('')
           setPawnModel('')
           setPawnStorage('')
@@ -693,6 +700,8 @@ export default function OperationModalBridge() {
 
   useEffect(() => {
     const openPawn = () => {
+      skipValuationImportRef.current = false
+      setRepawnSourcePawnNo('')
       setError('')
       setPawnCreated(null)
       setPawnAttempted(false)
@@ -839,7 +848,7 @@ export default function OperationModalBridge() {
         })
     }
     if (kind === 'pawn') {
-      const saved = safeStorage.getItem('phoneflow_last_valuation', 'session')
+      const saved = skipValuationImportRef.current ? null : safeStorage.getItem('phoneflow_last_valuation', 'session')
       let importedExchangeRate = false
       if (saved) {
         try {
@@ -934,6 +943,8 @@ export default function OperationModalBridge() {
     setPawnStep(1)
     setPawnAttempted(false)
     setPawnImei('')
+    setRepawnSourcePawnNo('')
+    skipValuationImportRef.current = false
     setPawnBrand('')
     setPawnModel('')
     setPawnStorage('')
@@ -2156,6 +2167,7 @@ export default function OperationModalBridge() {
   return (
     <OperationModalShell
       kind={kind}
+      description={kind === 'pawn' && repawnSourcePawnNo ? `Re-pawning phone from ${repawnSourcePawnNo}. Verify the customer and contract terms again.` : undefined}
       error={error}
       busy={busy}
       compact={kind === 'label' || (kind === 'sale' && Boolean(saleKhqr || saleCompleted)) || (kind === 'pawn' && Boolean(pawnCreated)) || (kind === 'stock' && Boolean(stockAdjustmentComplete))}

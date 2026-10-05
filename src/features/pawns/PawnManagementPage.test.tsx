@@ -227,6 +227,36 @@ describe('PawnManagementPage feature integration', () => {
     await waitFor(() => expect(screen.getByText('Fee due today').nextElementSibling).toHaveTextContent('20,000 KHR'))
   })
 
+  it('opens a fresh pawn form from a redeemed contract with its IMEI', async () => {
+    const redeemedPawn = { ...mockPawnRecord, status: 'REDEEMED' as const }
+    mockPawnFetch({ pawns: [redeemedPawn] })
+    const openOperation = vi.fn()
+    window.addEventListener('phoneflow:open-operation', openOperation)
+
+    try {
+      render(<PawnManagementPage user={mockOwnerUser} />)
+      await userEvent.setup().click(await screen.findByRole('button', { name: `View ${redeemedPawn.pawnNo}` }))
+      await userEvent.setup().click(screen.getByRole('button', { name: 'Re-pawn phone' }))
+
+      expect(openOperation).toHaveBeenCalledTimes(1)
+      expect((openOperation.mock.calls[0][0] as CustomEvent).detail).toEqual({
+        kind: 'pawn', repawnImei: redeemedPawn.itemSnapshot.imei, repawnPawnNo: redeemedPawn.pawnNo,
+      })
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    } finally {
+      window.removeEventListener('phoneflow:open-operation', openOperation)
+    }
+  })
+
+  it('does not offer re-pawn from a redeemed contract to a cashier', async () => {
+    const redeemedPawn = { ...mockPawnRecord, status: 'REDEEMED' as const }
+    mockPawnFetch({ pawns: [redeemedPawn] })
+
+    render(<PawnManagementPage user={{ ...mockOwnerUser, role: 'CASHIER' }} />)
+    await userEvent.setup().click(await screen.findByRole('button', { name: `View ${redeemedPawn.pawnNo}` }))
+    expect(screen.queryByRole('button', { name: 'Re-pawn phone' })).not.toBeInTheDocument()
+  })
+
   it('displays error state when API request fails', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: false,
