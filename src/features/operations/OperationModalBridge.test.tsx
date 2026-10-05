@@ -766,19 +766,26 @@ describe('OperationModalBridge component', () => {
     act(() => {
       window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: {
         kind: 'pawn', repawnImei: '358901234567890', repawnPawnNo: 'PW-OLD-REDEEMED',
+        repawnCustomerId: customer._id, repawnCustomerMode: 'EXISTING',
+        repawnCustomerName: customer.name, repawnCustomerPhone: customer.phone,
       } }))
     })
     await waitFor(() => expect(screen.getByRole('heading', { name: /New pawn contract/i })).toBeInTheDocument())
     expect(screen.getByText(/Re-pawning phone from PW-OLD-REDEEMED/)).toBeInTheDocument()
-
-    fireEvent.change(screen.getByRole('combobox'), { target: { value: customer._id } })
-    fireEvent.click(screen.getByRole('checkbox'))
-    fireEvent.click(screen.getByRole('button', { name: /Continue to collateral/i }))
+    expect(screen.getByRole('button', { name: /Change customer/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Verify customer first/i })).toBeDisabled()
+    await waitFor(() => expect(screen.getByText(customer.name)).toBeInTheDocument())
+    fireEvent.click(screen.getByRole('checkbox', { name: /Customer identity and collateral ownership confirmed/i }))
     await waitFor(() => expect(screen.getByPlaceholderText(/15-digit IMEI/i)).toBeInTheDocument())
 
     expect(screen.getByPlaceholderText(/15-digit IMEI/i)).toHaveValue('358901234567890')
     expect(screen.queryByText(/Standalone calculator offer imported/i)).not.toBeInTheDocument()
     expect(sessionStorage.getItem('phoneflow_last_valuation')).not.toBeNull()
+    await waitFor(() => expect(screen.getByText('This phone was pawned before')).toBeInTheDocument())
+    fireEvent.change(screen.getByPlaceholderText(/15-digit IMEI/i), { target: { value: '358901234567891' } })
+    await waitFor(() => expect(screen.getByText(/This IMEI does not match PW-OLD-REDEEMED/)).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: /Verify previous phone/i })).toBeDisabled()
+    fireEvent.change(screen.getByPlaceholderText(/15-digit IMEI/i), { target: { value: '358901234567890' } })
     await waitFor(() => expect(screen.getByText('This phone was pawned before')).toBeInTheDocument())
     expect(screen.getByText(/Previous contract PW-OLD-REDEEMED/)).toBeInTheDocument()
     expect(screen.getByPlaceholderText(/Apple/i)).toHaveValue('Samsung')

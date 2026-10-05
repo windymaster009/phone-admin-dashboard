@@ -283,9 +283,16 @@ export default function PawnView({ user }: { user: SessionUser }) {
             const imei = [linkedItem?.imei1, selectedPawn.itemSnapshot.imei]
               .find((candidate) => /^\d{15}$/.test(candidate || '')) || ''
             const pawnNo = selectedPawn.pawnNo
+            const customerId = selectedPawn.customer?._id || ''
             setSelectedPawn(null)
             window.dispatchEvent(new CustomEvent('phoneflow:open-operation', {
-              detail: { kind: 'pawn', repawnImei: imei, repawnPawnNo: pawnNo },
+              detail: {
+                kind: 'pawn', repawnImei: imei, repawnPawnNo: pawnNo,
+                repawnCustomerId: customerId,
+                repawnCustomerMode: customerId ? 'EXISTING' : selectedPawn.customerSnapshot?.type === 'WALK_IN' ? 'WALK_IN' : 'NEW',
+                repawnCustomerName: selectedPawn.customerSnapshot?.name || selectedPawn.customer?.name || '',
+                repawnCustomerPhone: selectedPawn.customerSnapshot?.phone || selectedPawn.customer?.phone || '',
+              },
             }))
           } : undefined}
           canDelete={user.role === 'OWNER'}

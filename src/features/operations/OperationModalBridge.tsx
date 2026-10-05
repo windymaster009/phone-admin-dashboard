@@ -350,7 +350,10 @@ export default function OperationModalBridge() {
     : pawnCustomerMode === 'WALK_IN'
       ? pawnOwnershipConfirmed
       : Boolean(pawnWalkInName.trim() && pawnOwnershipConfirmed)
-  const pawnReuseBlocked = Boolean(pawnReuseStatus?.matched && (!pawnReuseStatus.canReuse || !pawnReuseAccepted))
+  const repawnSourceBlocked = Boolean(repawnSourcePawnNo && (
+    !pawnReuseStatus?.canReuse || pawnReuseStatus.previousPawn?.pawnNo !== repawnSourcePawnNo
+  ))
+  const pawnReuseBlocked = Boolean(pawnReuseChecking || repawnSourceBlocked || (pawnReuseStatus?.matched && (!pawnReuseStatus.canReuse || !pawnReuseAccepted)))
   const purchaseTotal = useMemo(
     () => purchaseDevices.reduce((sum, item) => sum + Math.max(0, Number(item.purchasePrice) || 0) * (item.category === 'PHONE' ? 1 : Math.max(1, Number(item.quantity) || 1)), 0),
     [purchaseDevices],
@@ -590,7 +593,11 @@ export default function OperationModalBridge() {
 
   useEffect(() => {
     const handleOpenOperation = (event: Event) => {
-      const detail = (event as CustomEvent<{ kind?: ModalKind; itemId?: string; item?: InventoryItem; repawnImei?: string; repawnPawnNo?: string }>).detail
+      const detail = (event as CustomEvent<{
+        kind?: ModalKind; itemId?: string; item?: InventoryItem;
+        repawnImei?: string; repawnPawnNo?: string; repawnCustomerId?: string;
+        repawnCustomerMode?: PawnCustomerMode; repawnCustomerName?: string; repawnCustomerPhone?: string;
+      }>).detail
       if (detail?.kind) {
         setError('')
         if (detail.kind === 'purchase') {
@@ -621,7 +628,14 @@ export default function OperationModalBridge() {
           setRepawnSourcePawnNo(sourcePawnNo)
           setPawnCreated(null)
           setPawnAttempted(false)
-          setPawnStep(1)
+          setPawnStep(sourcePawnNo ? 2 : 1)
+          setPawnCustomerMode(sourcePawnNo ? detail.repawnCustomerMode || 'EXISTING' : 'EXISTING')
+          setPawnCustomerId(sourcePawnNo ? detail.repawnCustomerId || '' : '')
+          setPawnWalkInName(sourcePawnNo ? detail.repawnCustomerName || '' : '')
+          setPawnWalkInPhone(sourcePawnNo ? detail.repawnCustomerPhone || '' : '')
+          setPawnWalkInNationalId('')
+          setPawnWalkInAddress('')
+          setPawnOwnershipConfirmed(false)
           setPawnImei(repawnImei)
           setPawnBrand('')
           setPawnModel('')
@@ -2061,6 +2075,15 @@ export default function OperationModalBridge() {
     event.preventDefault()
     if (submittingPawnRef.current || busy) return
     setError('')
+    if (!pawnCustomerValid) {
+      setPawnAttempted(true)
+      setError('Confirm the customer identity and collateral ownership before creating this pawn.')
+      return
+    }
+    if (repawnSourceBlocked) {
+      setError(`Verify that this IMEI belongs to ${repawnSourcePawnNo} before re-pawning the phone.`)
+      return
+    }
     if (pawnReuseStatus?.matched && !pawnReuseStatus.canReuse) {
       setError(pawnReuseStatus.message || 'This phone cannot be used for a new pawn contract.')
       return
@@ -2674,6 +2697,45 @@ export default function OperationModalBridge() {
 
         {pawnStep === 2 && <>
           <div className="purchase-step-content">
+            {repawnSourcePawnNo && (
+              <OperationSectionCard
+                marker="1"
+                title="Customer verification"
+                description="Confirm who owns the phone for this new contract. You can change the customer if needed."
+              >
+                <KeyValueSummary
+                  className="pawn-customer-summary"
+                  columns={2}
+                  items={[
+                    {
+                      id: 'customer', label: 'Customer',
+                      value: pawnCustomerMode === 'EXISTING'
+                        ? selectedPawnCustomer?.name || (customersLoading ? 'Loading customer...' : 'Select a customer')
+                        : pawnWalkInName || 'Walk-in customer',
+                    },
+                    {
+                      id: 'phone', label: 'Phone',
+                      value: pawnCustomerMode === 'EXISTING' ? selectedPawnCustomer?.phone || 'Not recorded' : pawnWalkInPhone || 'Not recorded',
+                    },
+                  ]}
+                />
+                <button type="button" className="secondary-button" onClick={() => { setError(''); setPawnStep(1) }}>
+                  Change customer
+                </button>
+                <label htmlFor="pawn-repawn-ownership-checkbox" className={`pawn-verification-check ${pawnAttempted && !pawnCustomerValid ? 'field-invalid' : ''}`}>
+                  <input
+                    id="pawn-repawn-ownership-checkbox"
+                    type="checkbox"
+                    checked={pawnOwnershipConfirmed}
+                    onChange={(event) => setPawnOwnershipConfirmed(event.target.checked)}
+                  />
+                  <span className="pawn-verification-text">
+                    <strong>Customer identity and collateral ownership confirmed</strong>
+                    <small>{pawnCustomerHasId ? 'I checked the recorded National ID and confirmed this customer owns the phone.' : 'I confirmed ownership using the information and evidence available to the shop.'}</small>
+                  </span>
+                </label>
+              </OperationSectionCard>
+            )}
             <OperationSectionCard
               marker="2"
               title="Phone collateral"
@@ -2705,6 +2767,10 @@ export default function OperationModalBridge() {
                   }}
                   onScan={() => setPawnScannerOpen(true)}
                 />
+                {repawnSourcePawnNo && !pawnImei && <p className="operation-field-warning" role="note">Enter the IMEI from {repawnSourcePawnNo} to verify this is the same phone.</p>}
+                {repawnSourcePawnNo && pawnReuseStatus && pawnReuseStatus.reason !== 'LOOKUP_FAILED' && pawnReuseStatus.previousPawn?.pawnNo !== repawnSourcePawnNo && (
+                  <p className="operation-field-warning" role="alert">This IMEI does not match {repawnSourcePawnNo}. Use New pawn for a different phone.</p>
+                )}
                 {(pawnReuseChecking || pawnReuseStatus?.matched) && <div className={`pawn-reuse-status ${pawnReuseChecking ? 'checking' : pawnReuseStatus?.canReuse ? pawnReuseAccepted ? 'accepted' : 'available' : 'blocked'}`} role="note" aria-live="polite">
                   <span>{pawnReuseChecking ? <LoaderCircle className="spin" size={18} /> : pawnReuseStatus?.canReuse ? <RefreshCw size={18} /> : <AlertTriangle size={18} />}</span>
                   <div>
@@ -2817,7 +2883,7 @@ export default function OperationModalBridge() {
               detailText: `${pawnAmountText(Number(pawnPrincipal || 0), pawnCurrency)} principal`,
             }}
             secondaryAction={<button type="button" className="ghost-button" onClick={() => { setError(''); setPawnStep(1) }}>Back</button>}
-            primaryAction={<button className="primary-button" disabled={busy || pawnReuseBlocked || !pawnAssessment.eligible || maximumPawn <= 0 || pawnPrincipalAmount <= 0 || pawnPrincipalAmount > maximumPawn}>{busy ? 'Saving contract...' : pawnReuseStatus?.matched && !pawnReuseStatus.canReuse ? 'Phone unavailable for pawn' : pawnReuseStatus?.canReuse && !pawnReuseAccepted ? 'Confirm phone re-pawn' : !pawnAssessment.eligible ? 'Activation lock must be removed' : maximumPawn <= 0 ? 'Enter valuation details' : pawnPrincipalAmount <= 0 ? 'Enter principal' : pawnPrincipalAmount > maximumPawn ? 'Principal exceeds maximum' : 'Create pawn contract'}</button>}
+            primaryAction={<button className="primary-button" disabled={busy || !pawnCustomerValid || pawnReuseBlocked || !pawnAssessment.eligible || maximumPawn <= 0 || pawnPrincipalAmount <= 0 || pawnPrincipalAmount > maximumPawn}>{busy ? 'Saving contract...' : !pawnCustomerValid ? 'Verify customer first' : repawnSourceBlocked ? pawnReuseChecking ? 'Checking previous phone' : 'Verify previous phone' : pawnReuseStatus?.matched && !pawnReuseStatus.canReuse ? 'Phone unavailable for pawn' : pawnReuseStatus?.canReuse && !pawnReuseAccepted ? 'Confirm phone re-pawn' : !pawnAssessment.eligible ? 'Activation lock must be removed' : maximumPawn <= 0 ? 'Enter valuation details' : pawnPrincipalAmount <= 0 ? 'Enter principal' : pawnPrincipalAmount > maximumPawn ? 'Principal exceeds maximum' : 'Create pawn contract'}</button>}
           />
         </>}
       </form>}

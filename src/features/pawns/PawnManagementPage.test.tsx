@@ -241,6 +241,10 @@ describe('PawnManagementPage feature integration', () => {
       expect(openOperation).toHaveBeenCalledTimes(1)
       expect((openOperation.mock.calls[0][0] as CustomEvent).detail).toEqual({
         kind: 'pawn', repawnImei: redeemedPawn.itemSnapshot.imei, repawnPawnNo: redeemedPawn.pawnNo,
+        repawnCustomerId: redeemedPawn.customer?._id,
+        repawnCustomerMode: 'EXISTING',
+        repawnCustomerName: redeemedPawn.customer?.name,
+        repawnCustomerPhone: redeemedPawn.customer?.phone,
       })
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     } finally {
