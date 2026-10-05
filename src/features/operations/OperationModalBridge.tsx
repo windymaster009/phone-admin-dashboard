@@ -638,7 +638,7 @@ export default function OperationModalBridge() {
           setPawnWalkInPhone(sourcePawnNo ? detail.repawnCustomerPhone || '' : '')
           setPawnWalkInNationalId('')
           setPawnWalkInAddress('')
-          setPawnOwnershipConfirmed(false)
+          setPawnOwnershipConfirmed(Boolean(sourcePawnNo))
           if (sourcePawnNo) {
             setPawnCurrency(previousCurrency)
             setPawnMarketPrice(previousResaleValue)
@@ -2711,7 +2711,7 @@ export default function OperationModalBridge() {
                 title="Customer verification"
                 description="Confirm who owns the phone for this new contract. You can change the customer if needed."
                 headerAction={(
-                  <button type="button" className="secondary-button pawn-change-customer-action" onClick={() => { setError(''); setPawnStep(1) }}>
+                  <button type="button" className="secondary-button pawn-change-customer-action" onClick={() => { setError(''); setPawnOwnershipConfirmed(false); setPawnStep(1) }}>
                     Change customer
                   </button>
                 )}
@@ -2816,7 +2816,7 @@ export default function OperationModalBridge() {
                     {!pawnReuseAccepted ? <>
                       <button type="button" className="secondary-button pawn-reuse-confirm-action" onClick={() => { setPawnReuseAccepted(true); setError('') }}>
                         <RefreshCw size={15} />
-                        Yes, re-pawn phone
+                        Re-pawn this phone?
                       </button>
                     </> : <>
                       <span className="pawn-reuse-ready-label"><CheckCircle2 size={13} /> Ready</span>
