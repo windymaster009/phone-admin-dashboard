@@ -2782,18 +2782,48 @@ export default function OperationModalBridge() {
                   <p className="operation-field-warning" role="alert">This IMEI does not match {repawnSourcePawnNo}. Use New pawn for a different phone.</p>
                 )}
                 {(pawnReuseChecking || pawnReuseStatus?.matched) && <div className={`pawn-reuse-status ${pawnReuseChecking ? 'checking' : pawnReuseStatus?.canReuse ? pawnReuseAccepted ? 'accepted' : 'available' : 'blocked'}`} role="note" aria-live="polite">
-                  <span>{pawnReuseChecking ? <LoaderCircle className="spin" size={18} /> : pawnReuseStatus?.canReuse ? <RefreshCw size={18} /> : <AlertTriangle size={18} />}</span>
-                  <div>
-                    <strong>{pawnReuseChecking ? 'Checking previous pawn history' : pawnReuseStatus?.canReuse ? pawnReuseAccepted ? 'Phone approved for re-pawn' : 'This phone was pawned before' : 'This phone cannot start a new pawn'}</strong>
-                    {!pawnReuseChecking && <p>{pawnReuseStatus?.message}</p>}
-                    {!pawnReuseChecking && pawnReuseStatus?.previousPawn && <small>
-                      Previous contract {pawnReuseStatus.previousPawn.pawnNo}
-                      {pawnReuseStatus.previousPawn.customer?.name ? ` · ${pawnReuseStatus.previousPawn.customer.name}` : ''}
-                      {pawnReuseStatus.previousPawn.redeemedAt ? ` · Redeemed ${new Intl.DateTimeFormat('en-GB').format(new Date(pawnReuseStatus.previousPawn.redeemedAt))}` : ''}
-                    </small>}
+                  <span className="pawn-reuse-status-icon" aria-hidden="true">
+                    {pawnReuseChecking
+                      ? <LoaderCircle className="spin" size={18} />
+                      : pawnReuseStatus?.canReuse
+                        ? pawnReuseAccepted ? <CheckCircle2 size={18} /> : <RefreshCw size={18} />
+                        : <AlertTriangle size={18} />}
+                  </span>
+                  <div className="pawn-reuse-status-copy">
+                    <strong>{pawnReuseChecking ? 'Checking previous pawn history' : pawnReuseStatus?.canReuse ? pawnReuseAccepted ? 'Re-pawn confirmed' : 'Re-pawn this phone?' : 'This phone cannot start a new pawn'}</strong>
+                    {!pawnReuseChecking && pawnReuseStatus?.canReuse && <p>
+                      {pawnReuseAccepted
+                        ? 'This phone is ready for new terms. Its previous contract stays closed in history.'
+                        : 'The IMEI matches a redeemed phone. Confirm that you want to reuse it for a new pawn contract.'}
+                    </p>}
+                    {!pawnReuseChecking && !pawnReuseStatus?.canReuse && <p>{pawnReuseStatus?.message}</p>}
+                    {!pawnReuseChecking && pawnReuseStatus?.previousPawn && <dl className="pawn-reuse-history">
+                      <div>
+                        <dt>Previous contract</dt>
+                        <dd>{pawnReuseStatus.previousPawn.pawnNo}</dd>
+                      </div>
+                      {pawnReuseStatus.previousPawn.customer?.name && <div>
+                        <dt>Customer</dt>
+                        <dd>{pawnReuseStatus.previousPawn.customer.name}</dd>
+                      </div>}
+                      {pawnReuseStatus.previousPawn.redeemedAt && <div>
+                        <dt>Redeemed</dt>
+                        <dd>{new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(pawnReuseStatus.previousPawn.redeemedAt))}</dd>
+                      </div>}
+                    </dl>}
                   </div>
-                  {!pawnReuseChecking && pawnReuseStatus?.canReuse && !pawnReuseAccepted && <button type="button" className="secondary-button" onClick={() => { setPawnReuseAccepted(true); setError('') }}>Re-pawn this phone</button>}
-                  {!pawnReuseChecking && pawnReuseStatus?.canReuse && pawnReuseAccepted && <b>Confirmed</b>}
+                  {!pawnReuseChecking && pawnReuseStatus?.canReuse && <div className="pawn-reuse-status-actions">
+                    {!pawnReuseAccepted ? <>
+                      <button type="button" className="secondary-button pawn-reuse-confirm-action" onClick={() => { setPawnReuseAccepted(true); setError('') }}>
+                        <RefreshCw size={15} />
+                        Yes, re-pawn phone
+                      </button>
+                      <small>Nothing is saved until you create the new contract.</small>
+                    </> : <>
+                      <span className="pawn-reuse-ready-label"><CheckCircle2 size={13} /> Ready</span>
+                      <button type="button" className="pawn-reuse-undo-action" onClick={() => setPawnReuseAccepted(false)}>Undo</button>
+                    </>}
+                  </div>}
                 </div>}
               </article>
             </OperationSectionCard>
