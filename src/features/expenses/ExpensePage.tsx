@@ -79,7 +79,7 @@ export default function ExpensePage() {
       ]} />
 
       <section className="surface-card expense-ledger">
-        <div className="card-heading"><div><span className="eyebrow">Expense ledger</span><h3>Operating costs</h3></div>{loading && <RefreshCcw className="overview-refreshing" size={18} />}</div>
+        <div className="card-heading table-heading"><div><span className="eyebrow">Expense ledger</span><h3>Operating costs</h3></div>{loading && <RefreshCcw className="overview-refreshing" size={18} />}</div>
         <FilterToolbar className="expense-filter-row" search={search} onSearchChange={setSearch} searchLabel="Search expenses" placeholder="Search description, payee, reference…">
           <select className="ghost-button filter-select" aria-label="Expense category" value={category} onChange={(event) => setCategory(event.target.value)}>{categories.map((value) => <option key={value} value={value}>{value === 'ALL' ? 'All categories' : titleStatus(value)}</option>)}</select>
           <select className="ghost-button filter-select" aria-label="Payment method" value={method} onChange={(event) => setMethod(event.target.value)}>{methods.map((value) => <option key={value} value={value}>{value === 'ALL' ? 'All methods' : titleStatus(value)}</option>)}</select>
