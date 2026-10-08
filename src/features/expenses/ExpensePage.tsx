@@ -80,11 +80,11 @@ export default function ExpensePage() {
 
       <section className="surface-card expense-ledger">
         <div className="card-heading"><div><span className="eyebrow">Expense ledger</span><h3>Operating costs</h3><p>Open a record to review who entered it or void a mistake without deleting history.</p></div>{loading && <RefreshCcw className="overview-refreshing" size={18} />}</div>
-        <FilterToolbar search={search} onSearchChange={setSearch} searchLabel="Search expenses" placeholder="Search description, payee, reference…">
-          <select aria-label="Expense category" value={category} onChange={(event) => setCategory(event.target.value)}>{categories.map((value) => <option key={value} value={value}>{value === 'ALL' ? 'All categories' : titleStatus(value)}</option>)}</select>
-          <select aria-label="Payment method" value={method} onChange={(event) => setMethod(event.target.value)}>{methods.map((value) => <option key={value} value={value}>{value === 'ALL' ? 'All methods' : titleStatus(value)}</option>)}</select>
-          <select aria-label="Expense currency" value={currency} onChange={(event) => setCurrency(event.target.value)}><option value="ALL">All currencies</option><option value="USD">USD</option><option value="KHR">KHR</option></select>
-          <select aria-label="Expense status" value={status} onChange={(event) => setStatus(event.target.value)}><option value="RECORDED">Recorded</option><option value="ALL">All statuses</option><option value="VOIDED">Voided</option></select>
+        <FilterToolbar className="expense-filter-row" search={search} onSearchChange={setSearch} searchLabel="Search expenses" placeholder="Search description, payee, reference…">
+          <select className="ghost-button filter-select" aria-label="Expense category" value={category} onChange={(event) => setCategory(event.target.value)}>{categories.map((value) => <option key={value} value={value}>{value === 'ALL' ? 'All categories' : titleStatus(value)}</option>)}</select>
+          <select className="ghost-button filter-select" aria-label="Payment method" value={method} onChange={(event) => setMethod(event.target.value)}>{methods.map((value) => <option key={value} value={value}>{value === 'ALL' ? 'All methods' : titleStatus(value)}</option>)}</select>
+          <select className="ghost-button filter-select" aria-label="Expense currency" value={currency} onChange={(event) => setCurrency(event.target.value)}><option value="ALL">All currencies</option><option value="USD">USD</option><option value="KHR">KHR</option></select>
+          <select className="ghost-button filter-select" aria-label="Expense status" value={status} onChange={(event) => setStatus(event.target.value)}><option value="RECORDED">Recorded</option><option value="ALL">All statuses</option><option value="VOIDED">Voided</option></select>
         </FilterToolbar>
 
         {loading && data.expenses.length === 0 ? <LoadingState label="Loading expenses" detail="Reading the expense ledger…" /> : <>

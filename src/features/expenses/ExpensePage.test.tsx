@@ -26,6 +26,9 @@ describe('ExpensePage', () => {
     expect(screen.getByLabelText('Expense summary')).toHaveTextContent('$41')
     expect(screen.getAllByText('Electricity bill').length).toBeGreaterThan(0)
     expect(document.querySelector('.expense-mobile-list')).not.toBeNull()
+    for (const label of ['Expense category', 'Payment method', 'Expense currency', 'Expense status']) {
+      expect(screen.getByLabelText(label)).toHaveClass('ghost-button', 'filter-select')
+    }
 
     const desktopRow = screen.getByText('EX-20261009-ONE').closest('tr')
     await user.click(desktopRow as HTMLElement)
