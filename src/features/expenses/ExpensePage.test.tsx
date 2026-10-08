@@ -33,6 +33,8 @@ describe('ExpensePage', () => {
     const desktopRow = screen.getByText('EX-20261009-ONE').closest('tr')
     await user.click(desktopRow as HTMLElement)
     const dialog = await screen.findByRole('dialog', { name: 'EX-20261009-ONE' })
+    expect(dialog.querySelector('.operation-form.expense-detail-shell')).not.toBeNull()
+    expect(dialog.querySelector('.operation-modal-actions.expense-modal-actions')).not.toBeNull()
     expect(within(dialog).getByText('Electric company')).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Void expense' })).toBeDisabled()
   })
@@ -47,6 +49,9 @@ describe('ExpensePage', () => {
     await user.click(screen.getByRole('button', { name: 'Record expense' }))
 
     const dialog = await screen.findByRole('dialog', { name: 'Record expense' })
+    expect(dialog.querySelector('form.operation-form.expense-form')).not.toBeNull()
+    expect(dialog.querySelector('.operation-form-grid.expense-form-grid')).not.toBeNull()
+    expect(dialog.querySelector('.operation-modal-actions.expense-modal-actions')).not.toBeNull()
     expect(within(dialog).getByLabelText('Description')).toBeRequired()
     expect(within(dialog).getByLabelText('Expense date')).toHaveAttribute('max')
     expect(within(dialog).getByRole('button', { name: 'Record expense' })).toBeInTheDocument()

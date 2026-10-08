@@ -15,9 +15,8 @@
 .expense-ledger td:nth-child(2) strong, .expense-ledger td:nth-child(2) small { display: block; }
 .expense-ledger td:nth-child(2) small { margin-top: 3px; color: var(--muted); font-size: 10px; }
 .expense-mobile-list { display: none; }
-.expense-form { display: contents; }
-.expense-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding: 18px; overflow-y: auto; }
-.expense-form-grid label, .expense-void-field { display: grid; gap: 6px; min-width: 0; color: var(--muted); font-size: 11px; font-weight: 700; }
+.expense-form-grid { row-gap: var(--space-5); column-gap: var(--space-4); }
+.expense-form-grid label, .expense-void-field { display: grid; gap: var(--space-2); min-width: 0; color: var(--muted); font-size: 11px; font-weight: 700; }
 .expense-form-grid label > span small { color: var(--purple-light); }
 .expense-form-grid input, .expense-form-grid select, .expense-form-grid textarea, .expense-void-field textarea { width: 100%; min-width: 0; min-height: 44px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); background: var(--input-bg); outline: 2px solid transparent; outline-offset: 1px; }
 .expense-form-grid input:focus-visible, .expense-form-grid select:focus-visible, .expense-form-grid textarea:focus-visible, .expense-void-field textarea:focus-visible { outline-color: var(--purple); }
@@ -26,7 +25,7 @@
 .expense-money-input { display: grid; grid-template-columns: 42px minmax(0, 1fr); align-items: center; min-height: 44px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--input-bg); }
 .expense-money-input > span { display: grid; place-items: center; height: 100%; border-inline-end: 1px solid var(--border); color: var(--purple-light); font-weight: 800; }
 .expense-money-input input { border: 0; background: transparent; }
-.expense-detail { display: grid; gap: 16px; padding: 18px; overflow-y: auto; }
+.expense-detail { display: grid; gap: var(--space-4); }
 .expense-detail-total { display: grid; grid-template-columns: 1fr auto; gap: 4px 16px; align-items: center; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
 .expense-detail-total > span { color: var(--muted); font-size: 11px; font-weight: 700; }
 .expense-detail-total > strong { grid-row: 2; font-size: 28px; font-variant-numeric: tabular-nums; }
@@ -40,6 +39,10 @@
 .expense-void-field small { min-height: 1lh; font-weight: 500; }
 .expense-voided-note { display: flex; gap: 10px; padding: 12px; border: 1px solid color-mix(in srgb, var(--rose) 35%, var(--border)); border-radius: var(--radius-md); color: var(--rose); background: color-mix(in srgb, var(--rose) 7%, var(--panel)); }
 .expense-voided-note span { display: grid; gap: 3px; font-size: 12px; }
+.operation-modal-actions.expense-modal-actions { position: sticky; display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.expense-action-note { min-width: 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
+.expense-action-buttons { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-2); }
+.expense-action-buttons button { min-height: 44px; }
 .expense-page button { white-space: nowrap; }
 .expense-mobile-list > button:focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; }
 .expense-mobile-list > button:active { transform: translateY(1px); }
@@ -63,6 +66,11 @@
   .expense-filter-row .search-field, .expense-filter-row .filter-select { width: 100%; min-width: 0; }
   .expense-form-grid, .expense-detail dl { grid-template-columns: minmax(0, 1fr); }
   .expense-field-wide { grid-column: auto; }
+  .operation-modal-actions.expense-modal-actions { display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+  .expense-action-note { text-align: center; }
+  .expense-action-buttons { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .expense-action-buttons:has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
+  .expense-action-buttons button { width: 100%; min-width: 0; }
   .expense-detail dl div, .expense-detail dl div:nth-child(odd), .expense-detail dl div:nth-last-child(-n+2) { border: 0; border-bottom: 1px solid var(--border); }
   .expense-detail dl div:last-child { border-bottom: 0; }
 }

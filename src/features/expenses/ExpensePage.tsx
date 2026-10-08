@@ -128,8 +128,8 @@ function ExpenseCreateModal({ exchangeRate, onClose, onCreated }: { exchangeRate
   }
 
   return <OperationModalShell title="Record expense" eyebrow="Finance operation" description="Add a shop operating cost. Inventory purchases belong in Buy & Sell." icon={<ReceiptText size={21} />} busy={busy} error={error} onDismissError={() => setError('')} onClose={onClose} className="expense-modal">
-    <form onSubmit={submit} className="expense-form">
-      <div className="operation-modal-body expense-form-grid">
+    <form onSubmit={submit} className="operation-form expense-form">
+      <div className="operation-form-grid expense-form-grid">
         <label className="expense-field-wide"><span>Description</span><input data-modal-initial-focus required maxLength={120} value={form.title} onChange={(event) => update('title', event.target.value)} placeholder="Electricity bill" /></label>
         <label><span>Category</span><select value={form.category} onChange={(event) => update('category', event.target.value)}>{categories.filter((value) => value !== 'ALL').map((value) => <option key={value} value={value}>{titleStatus(value)}</option>)}</select></label>
         <label><span>Expense date</span><input type="date" required max={todayCambodia()} value={form.expenseDate} onChange={(event) => update('expenseDate', event.target.value)} /></label>
@@ -141,7 +141,7 @@ function ExpenseCreateModal({ exchangeRate, onClose, onCreated }: { exchangeRate
         <label><span>Reference <small>Optional</small></span><input maxLength={100} value={form.reference} onChange={(event) => update('reference', event.target.value)} placeholder="Invoice or receipt number" /></label>
         <label className="expense-field-wide"><span>Notes <small>Optional</small></span><textarea maxLength={1000} value={form.notes} onChange={(event) => update('notes', event.target.value)} placeholder="Add information needed for later review." /></label>
       </div>
-      <footer className="operation-modal-footer"><span>Saving creates an audited financial record.</span><div><button type="button" className="ghost-button" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" className="primary-button" disabled={busy}>{busy ? 'Recording…' : 'Record expense'}</button></div></footer>
+      <footer className="operation-modal-actions expense-modal-actions"><span className="expense-action-note">Saving creates an audited financial record.</span><div className="expense-action-buttons"><button type="button" className="ghost-button" onClick={onClose} disabled={busy}>Cancel</button><button type="submit" className="primary-button" disabled={busy}>{busy ? 'Recording…' : 'Record expense'}</button></div></footer>
     </form>
   </OperationModalShell>
 }
@@ -161,11 +161,13 @@ function ExpenseDetailModal({ expense, onClose, onVoided }: { expense: Expense; 
     }
   }
   return <OperationModalShell title={expense.expenseNo} eyebrow="Expense record" description={`${dateText(expense.expenseDate)} · ${titleStatus(expense.category)}`} icon={<ReceiptText size={21} />} busy={busy} error={error} onDismissError={() => setError('')} onClose={onClose} className="expense-modal" compact>
-    <div className="operation-modal-body expense-detail">
-      <div className="expense-detail-total"><span>Amount</span><strong>{pawnMoney(expense.amount, expense.currency)}</strong><StatusBadge status={expense.status} /></div>
-      <dl><div><dt>Description</dt><dd>{expense.title}</dd></div><div><dt>Paid to</dt><dd>{expense.payee || 'Not recorded'}</dd></div><div><dt>Payment</dt><dd>{titleStatus(expense.paymentMethod)}</dd></div><div><dt>Reference</dt><dd>{expense.reference || 'Not recorded'}</dd></div><div><dt>Recorded by</dt><dd>{expense.createdBy?.name || 'System'}</dd></div><div><dt>Notes</dt><dd>{expense.notes || 'No notes'}</dd></div></dl>
-      {expense.status === 'VOIDED' ? <div className="expense-voided-note"><XCircle size={18} /><span><strong>Voided {expense.voidedAt ? dateText(expense.voidedAt) : ''}</strong>{expense.voidReason || 'No reason recorded'}</span></div> : <label className="expense-void-field"><span>Void reason</span><textarea minLength={5} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Explain why this record should be excluded from totals." /><small>This does not delete the record. It remains visible for audit review.</small></label>}
+    <div className="operation-form expense-detail-shell">
+      <div className="expense-detail">
+        <div className="expense-detail-total"><span>Amount</span><strong>{pawnMoney(expense.amount, expense.currency)}</strong><StatusBadge status={expense.status} /></div>
+        <dl><div><dt>Description</dt><dd>{expense.title}</dd></div><div><dt>Paid to</dt><dd>{expense.payee || 'Not recorded'}</dd></div><div><dt>Payment</dt><dd>{titleStatus(expense.paymentMethod)}</dd></div><div><dt>Reference</dt><dd>{expense.reference || 'Not recorded'}</dd></div><div><dt>Recorded by</dt><dd>{expense.createdBy?.name || 'System'}</dd></div><div><dt>Notes</dt><dd>{expense.notes || 'No notes'}</dd></div></dl>
+        {expense.status === 'VOIDED' ? <div className="expense-voided-note"><XCircle size={18} /><span><strong>Voided {expense.voidedAt ? dateText(expense.voidedAt) : ''}</strong>{expense.voidReason || 'No reason recorded'}</span></div> : <label className="expense-void-field"><span>Void reason</span><textarea minLength={5} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Explain why this record should be excluded from totals." /><small>This does not delete the record. It remains visible for audit review.</small></label>}
+      </div>
+      <footer className="operation-modal-actions expense-modal-actions"><span className="expense-action-note">{expense.status === 'VOIDED' ? 'Voided expenses are excluded from totals.' : 'Use void only to correct a mistaken entry.'}</span><div className="expense-action-buttons"><button type="button" className="ghost-button" onClick={onClose}>Close</button>{expense.status === 'RECORDED' && <button type="button" className="danger-button" disabled={busy || reason.trim().length < 5} onClick={voidExpense}>{busy ? 'Voiding…' : 'Void expense'}</button>}</div></footer>
     </div>
-    <footer className="operation-modal-footer"><span>{expense.status === 'VOIDED' ? 'Voided expenses are excluded from totals.' : 'Use void only to correct a mistaken entry.'}</span><div><button type="button" className="ghost-button" onClick={onClose}>Close</button>{expense.status === 'RECORDED' && <button type="button" className="danger-button" disabled={busy || reason.trim().length < 5} onClick={voidExpense}>{busy ? 'Voiding…' : 'Void expense'}</button>}</div></footer>
   </OperationModalShell>
 }
