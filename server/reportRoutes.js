@@ -5,6 +5,7 @@ import { ActivityLog, InventoryItem, Pawn, Trade, User } from './models.js'
 import { Loan, LoanPayment } from './loanModels.js'
 import { refreshLoanStatuses } from './loanDashboardRoutes.js'
 import { ServiceCharge } from './serviceModels.js'
+import { Expense } from './expenseModels.js'
 import { convertToUsd, roundMoney } from './reportCurrency.js'
 
 const router = Router()
@@ -405,7 +406,7 @@ router.get('/payments', requireAuth, allowRoles(...reportRoles), asyncRoute(asyn
     'payments.paidAt': { $gte: period.from, $lt: period.to },
   }
 
-  const [trades, loanPayments, pawnRecords] = await Promise.all([
+  const [trades, loanPayments, pawnRecords, expenseRecords] = await Promise.all([
     Trade.find({
       ...methodMatch,
       $or: [
@@ -419,6 +420,12 @@ router.get('/payments', requireAuth, allowRoles(...reportRoles), asyncRoute(asyn
       ? Pawn.find(pawnMatch)
         .populate('customer', 'name').populate('payments.receivedBy', 'name').lean()
       : [],
+    Expense.find({
+      status: 'RECORDED',
+      expenseDate: { $gte: period.from, $lt: period.to },
+      ...(isAll ? {} : { currency }),
+      ...methodMatch,
+    }).populate('createdBy', 'name').lean(),
   ])
 
   const entries = []
@@ -499,6 +506,17 @@ router.get('/payments', requireAuth, allowRoles(...reportRoles), asyncRoute(asyn
       })
     }
   }
+  for (const expense of expenseRecords) {
+    const expenseCurrency = expense.currency === 'KHR' ? 'KHR' : 'USD'
+    const amount = Number(expense.amount || 0)
+    entries.push({
+      id: expense._id, date: expense.expenseDate, reference: expense.expenseNo,
+      party: expense.payee || expense.title, source: 'EXPENSE', direction: 'OUT', method: expense.paymentMethod,
+      currency: expenseCurrency, amount,
+      normalizedAmount: normalizeAmount(amount, expenseCurrency, expense.exchangeRate),
+      staff: publicStaff(expense.createdBy), status: expense.status,
+    })
+  }
   const filtered = entries
     .filter((entry) => direction === 'ALL' || entry.direction === direction)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -523,7 +541,7 @@ router.get('/payments', requireAuth, allowRoles(...reportRoles), asyncRoute(asyn
     filters: { currency, method, direction },
     summary: [
       { label: 'Money In', value: inflow, format: 'currency', detail: isAll ? 'USD equivalent across USD and KHR' : period.label, tone: 'blue' },
-      { label: 'Money Out', value: outflow, format: 'currency', detail: isAll ? 'USD equivalent across USD and KHR' : 'Purchases and refunds', tone: 'orange' },
+      { label: 'Money Out', value: outflow, format: 'currency', detail: isAll ? 'USD equivalent across USD and KHR' : 'Purchases, refunds, and expenses', tone: 'orange' },
       { label: 'Net Movement', value: roundMoney(inflow - outflow), format: 'currency', detail: isAll ? 'USD equivalent across USD and KHR' : 'Money in minus money out', tone: 'violet' },
       { label: 'Payments', value: filtered.length, format: 'number', detail: 'Recorded entries', tone: 'blue' },
       { label: 'Cash Volume', value: roundMoney(filtered.filter((entry) => entry.method === 'CASH').reduce((sum, entry) => sum + entryVal(entry), 0)), format: 'currency', detail: isAll ? 'USD equivalent across USD and KHR' : 'Cash handled', tone: 'violet' },
@@ -531,7 +549,7 @@ router.get('/payments', requireAuth, allowRoles(...reportRoles), asyncRoute(asyn
     ],
     breakdowns: [
       { title: 'Volume by Method', description: 'Total payment volume by recorded method.', format: 'currency', rows: methodRows },
-      { title: 'Net by Source', description: 'Incoming sources minus purchases and refunds.', format: 'currency', rows: sourceRows },
+      { title: 'Net by Source', description: 'Incoming sources minus purchases, refunds, and expenses.', format: 'currency', rows: sourceRows },
     ],
     columns: [
       { key: 'date', label: 'Date', format: 'dateTime' }, { key: 'reference', label: 'Reference' }, { key: 'party', label: 'Customer / Seller' },
@@ -640,6 +658,74 @@ router.get('/services', requireAuth, allowRoles(...reportRoles), asyncRoute(asyn
       ...(isAll && hasEstimatedKhrRate
         ? ['Some KHR service totals contain estimated USD equivalents calculated with the fallback exchange rate.']
         : []),
+    ],
+  })
+}))
+
+router.get('/expenses', requireAuth, allowRoles(...reportRoles), asyncRoute(async (req, res) => {
+  const period = resolvePeriod(req.query, 'this_month')
+  const currency = validChoice(req.query.currency || 'ALL', ['ALL', 'USD', 'KHR'], 'currency')
+  const status = validChoice(req.query.status || 'RECORDED', ['ALL', 'RECORDED', 'VOIDED'], 'expense status')
+  const category = validChoice(req.query.category, ['ALL', 'RENT', 'UTILITIES', 'SALARY', 'TRANSPORT', 'REPAIR', 'SUPPLIES', 'MARKETING', 'TAX', 'OTHER'], 'expense category')
+  const method = validChoice(req.query.method, ['ALL', 'CASH', 'KHQR', 'BANK', 'CARD', 'OTHER'], 'payment method')
+  const staff = staffFilter(req.query.staff)
+  const isAll = currency === 'ALL'
+  const reportingCurrency = isAll ? 'USD' : currency
+  const match = {
+    ...(period.key !== 'all_time' ? { expenseDate: { $gte: period.from, $lt: period.to } } : {}),
+    ...(currency !== 'ALL' ? { currency } : {}),
+    ...(status !== 'ALL' ? { status } : {}),
+    ...(category !== 'ALL' ? { category } : {}),
+    ...(method !== 'ALL' ? { paymentMethod: method } : {}),
+    ...(staff ? { createdBy: staff } : {}),
+  }
+  const expenses = await Expense.find(match)
+    .populate('createdBy voidedBy', 'name email role')
+    .sort({ expenseDate: -1, createdAt: -1 })
+    .lean()
+  const recorded = expenses.filter((expense) => expense.status === 'RECORDED')
+  let hasEstimatedKhrRate = false
+  const reportAmount = (expense) => {
+    if (!isAll) return Number(expense.amount || 0)
+    const conversion = convertToUsd(expense.amount, expense.currency, expense.exchangeRate)
+    if (expense.currency === 'KHR' && conversion.isFallback) hasEstimatedKhrRate = true
+    return conversion.amountUsd
+  }
+  const total = roundMoney(recorded.reduce((sum, expense) => sum + reportAmount(expense), 0))
+  const largest = recorded.reduce((maximum, expense) => Math.max(maximum, reportAmount(expense)), 0)
+
+  res.json({
+    title: 'Expense Report',
+    description: 'Operating expenses by category, payment method, staff member, and period.',
+    meta: { currency: reportingCurrency, currencyFilter: currency, normalized: isAll, period, totalRecords: expenses.length, limited: expenses.length > 500 },
+    filters: { currency, status, category, method, staff: staff ? String(staff) : 'ALL' },
+    staff: await reportStaff(),
+    summary: [
+      { label: 'Operating Expenses', value: total, format: 'currency', detail: isAll ? 'USD equivalent across USD and KHR' : `Recorded in ${currency}`, tone: 'rose' },
+      { label: 'Recorded Entries', value: recorded.length, format: 'number', detail: period.label, tone: 'blue' },
+      { label: 'Average Expense', value: recorded.length ? roundMoney(total / recorded.length) : 0, format: 'currency', detail: 'Per recorded entry', tone: 'violet' },
+      { label: 'Largest Expense', value: roundMoney(largest), format: 'currency', detail: period.label, tone: 'orange' },
+      { label: 'Voided Entries', value: expenses.filter((expense) => expense.status === 'VOIDED').length, format: 'number', detail: 'Excluded from totals', tone: 'rose' },
+    ],
+    breakdowns: [
+      { title: 'Spending by Category', description: 'Recorded operating expenses grouped by purpose.', format: 'currency', rows: breakdown(recorded, (expense) => expense.category, reportAmount) },
+      { title: 'Spending by Payment', description: 'Recorded operating expenses grouped by payment method.', format: 'currency', rows: breakdown(recorded, (expense) => expense.paymentMethod, reportAmount) },
+    ],
+    columns: [
+      { key: 'date', label: 'Date', format: 'date' }, { key: 'reference', label: 'Expense #' },
+      { key: 'title', label: 'Description' }, { key: 'category', label: 'Category', format: 'status' },
+      { key: 'payee', label: 'Paid to' }, { key: 'method', label: 'Payment', format: 'status' },
+      { key: 'currency', label: 'Currency', format: 'status' }, { key: 'amount', label: 'Amount', format: 'currency' },
+      { key: 'staff', label: 'Staff' }, { key: 'status', label: 'Status', format: 'status' },
+    ],
+    rows: expenses.slice(0, 500).map((expense) => ({
+      id: expense._id, date: expense.expenseDate, reference: expense.expenseNo, title: expense.title,
+      category: expense.category, payee: expense.payee || '—', method: expense.paymentMethod,
+      currency: expense.currency, amount: expense.amount, staff: publicStaff(expense.createdBy), status: expense.status,
+    })),
+    notes: [
+      'Voided expenses remain in the audit history and are excluded from expense totals.',
+      ...(isAll && hasEstimatedKhrRate ? ['Some KHR totals use the configured fallback exchange rate.'] : []),
     ],
   })
 }))

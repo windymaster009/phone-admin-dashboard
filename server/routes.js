@@ -27,6 +27,7 @@ import { AndroidPairing, AuthSession } from './authSessionModels.js'
 import { TwoFactorChallenge, TwoFactorCredential, TwoFactorSetup } from './twoFactorModels.js'
 import { Loan, LoanPayment } from './loanModels.js'
 import { ServiceCharge } from './serviceModels.js'
+import { Expense } from './expenseModels.js'
 import { refreshLoanStatuses } from './loanDashboardRoutes.js'
 import { preventCustomerDeletionWithDocuments } from './documentGuards.js'
 import { normalizeSaleWarrantyDays, normalizeTradeRefundRequest, restoreReturnedInventory } from './tradeRefundService.js'
@@ -1225,7 +1226,7 @@ router.get('/dashboard', requireAuth, asyncRoute(async (req, res) => {
     Pawn.estimatedDocumentCount(),
   ])
 
-  const [recentPawns, recentTrades, inventoryMix, monthPerformance, monthlyPerformance, dailyPerformance, weekPerformance] = await Promise.all([
+  const [recentPawns, recentTrades, inventoryMix, monthPerformance, monthlyPerformance, dailyPerformance, weekPerformance, monthExpensePerformance, weekExpensePerformance] = await Promise.all([
     Pawn.find()
       .populate('customer', 'name phone')
       .populate('inventoryItem', 'sku barcode name brand model storage color imei1 sellPrice status')
@@ -1273,6 +1274,15 @@ router.get('/dashboard', requireAuth, asyncRoute(async (req, res) => {
       },
       { $sort: { '_id.date': 1 } },
     ]),
+    Expense.aggregate([
+      { $match: { status: 'RECORDED', expenseDate: { $gte: month } } },
+      { $group: { _id: { $literal: 'EXPENSE' }, total: { $sum: { $cond: [{ $eq: ['$currency', 'KHR'] }, { $divide: ['$amount', { $cond: [{ $gt: ['$exchangeRate', 0] }, '$exchangeRate', fallbackExchangeRate()] }] }, '$amount'] } } } },
+    ]),
+    Expense.aggregate([
+      { $match: { status: 'RECORDED', expenseDate: { $gte: lastWeekStart } } },
+      { $group: { _id: { date: { $dateToString: { format: '%Y-%m-%d', date: '$expenseDate', timezone: '+07:00' } }, type: { $literal: 'EXPENSE' } }, total: { $sum: { $cond: [{ $eq: ['$currency', 'KHR'] }, { $divide: ['$amount', { $cond: [{ $gt: ['$exchangeRate', 0] }, '$exchangeRate', fallbackExchangeRate()] }] }, '$amount'] } } } },
+      { $sort: { '_id.date': 1 } },
+    ]),
   ])
 
   res.json({
@@ -1289,10 +1299,10 @@ router.get('/dashboard', requireAuth, asyncRoute(async (req, res) => {
     recentPawns: recentPawns.map((pawn) => pawnResponse(pawn, now, req.user.role !== 'CASHIER')),
     recentTrades,
     inventoryMix,
-    monthPerformance,
+    monthPerformance: [...monthPerformance, ...monthExpensePerformance],
     monthlyPerformance,
     dailyPerformance,
-    weekPerformance,
+    weekPerformance: [...weekPerformance, ...weekExpensePerformance],
   })
 }))
 
@@ -1415,6 +1425,7 @@ router.get('/business-overview', requireAuth, allowRoles('OWNER', 'MANAGER'), as
     pawnIncomeRecords,
     loanPaymentRecords,
     serviceIncomeRecords,
+    expenseRecords,
   ] = await Promise.all([
     Trade.aggregate([
       ...overviewEventStages,
@@ -1471,7 +1482,7 @@ router.get('/business-overview', requireAuth, allowRoles('OWNER', 'MANAGER'), as
     InventoryItem.find({ status: 'IN_STOCK', quantity: { $gt: 0 } })
       .select('sku name category quantity reorderLevel buyPrice sellPrice')
       .lean(),
-    ActivityLog.find({ entity: { $in: ['TRADE', 'PAWN', 'LOAN', 'INVENTORY'] } })
+    ActivityLog.find({ entity: { $in: ['TRADE', 'PAWN', 'LOAN', 'INVENTORY', 'EXPENSE'] } })
       .populate('user', 'name email role')
       .sort({ createdAt: -1 })
       .limit(8)
@@ -1485,6 +1496,9 @@ router.get('/business-overview', requireAuth, allowRoles('OWNER', 'MANAGER'), as
       .lean(),
     ServiceCharge.find({ status: 'COMPLETED', completedAt: { $gte: period.from, $lt: period.to } })
       .select('currency exchangeRate total completedAt')
+      .lean(),
+    Expense.find({ status: 'RECORDED', expenseDate: { $gte: period.from, $lt: period.to } })
+      .select('currency exchangeRate amount expenseDate')
       .lean(),
   ])
 
@@ -1500,7 +1514,7 @@ router.get('/business-overview', requireAuth, allowRoles('OWNER', 'MANAGER'), as
     const date = new Date(dateValue)
     if (Number.isNaN(date.getTime()) || date < period.from || date >= period.to) return
     const key = overviewDateKey(date, period.granularity)
-    const bucket = profitBuckets.get(key) || { pawn: 0, loan: 0, service: 0 }
+    const bucket = profitBuckets.get(key) || { pawn: 0, loan: 0, service: 0, expense: 0 }
     bucket[source] = roundMoney(bucket[source] + amount)
     profitBuckets.set(key, bucket)
   }
@@ -1546,7 +1560,14 @@ router.get('/business-overview', requireAuth, allowRoles('OWNER', 'MANAGER'), as
     serviceProfit = roundMoney(serviceProfit + earnedUsd)
     addProfit(charge.completedAt, 'service', earnedUsd)
   }
-  const totalProfit = roundMoney(salesProfit + pawnProfit + loanProfit + serviceProfit)
+  let operatingExpenses = 0
+  for (const expense of expenseRecords) {
+    const costUsd = reportAmountToUsd(expense.amount, expense.currency, expense.exchangeRate)
+    operatingExpenses = roundMoney(operatingExpenses + costUsd)
+    addProfit(expense.expenseDate, 'expense', costUsd)
+  }
+  const profitBeforeExpenses = roundMoney(salesProfit + pawnProfit + loanProfit + serviceProfit)
+  const totalProfit = roundMoney(profitBeforeExpenses - operatingExpenses)
   const chartByKey = new Map(chartRows.map((row) => [row._id, row]))
   const chart = []
 
@@ -1599,14 +1620,15 @@ router.get('/business-overview', requireAuth, allowRoles('OWNER', 'MANAGER'), as
   }
 
   const profitChart = chart.map((point) => {
-    const otherProfit = profitBuckets.get(point.key) || { pawn: 0, loan: 0, service: 0 }
+    const otherProfit = profitBuckets.get(point.key) || { pawn: 0, loan: 0, service: 0, expense: 0 }
     const incomeProfit = roundMoney(otherProfit.pawn + otherProfit.loan + otherProfit.service)
+    const beforeExpenses = roundMoney(point.grossProfit + incomeProfit)
     return {
       key: point.key,
       label: point.label,
-      sales: point.grossProfit,
-      purchases: incomeProfit,
-      grossProfit: roundMoney(point.grossProfit + incomeProfit),
+      sales: beforeExpenses,
+      purchases: otherProfit.expense,
+      grossProfit: roundMoney(beforeExpenses - otherProfit.expense),
     }
   })
 
@@ -1663,6 +1685,8 @@ router.get('/business-overview', requireAuth, allowRoles('OWNER', 'MANAGER'), as
       pawnProfit,
       loanProfit,
       serviceProfit,
+      profitBeforeExpenses,
+      operatingExpenses,
       totalProfit,
     },
     pawn: {

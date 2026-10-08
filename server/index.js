@@ -17,6 +17,7 @@ import loanDashboardRouter from './loanDashboardRoutes.js'
 import loanRouter from './loanRoutes.js'
 import receiptRouter from './receiptRoutes.js'
 import reportRouter from './reportRoutes.js'
+import expenseRouter from './expenseRoutes.js'
 import searchRouter from './searchRoutes.js'
 import serviceRouter from './serviceRoutes.js'
 import router from './routes.js'
@@ -180,6 +181,7 @@ app.use('/api/loan-dashboard', loanDashboardRouter)
 app.use('/api/loans', loanRouter)
 app.use('/api/receipts', receiptRouter)
 app.use('/api/reports', reportRouter)
+app.use('/api/expenses', expenseRouter)
 app.use('/api/search', searchRouter)
 app.use('/api/services', serviceRouter)
 app.use('/api', router)

@@ -6,6 +6,7 @@ import { ActivityLog, InventoryItem, Pawn, Trade, User } from './models.js'
 import { AuthSession } from './authSessionModels.js'
 import { Loan, LoanPayment } from './loanModels.js'
 import { ServiceCharge } from './serviceModels.js'
+import { Expense } from './expenseModels.js'
 import reportRouter from './reportRoutes.js'
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret-for-reports'
@@ -65,6 +66,7 @@ const origUserFindById = User.findById
 const origUserFind = User.find
 const origPawnUpdateMany = Pawn.updateMany
 const origLoanFind = Loan.find
+const origExpenseFind = Expense.find
 
 function createMockQuery(data = []) {
   const query = {
@@ -79,6 +81,7 @@ function createMockQuery(data = []) {
 test.beforeEach(() => {
   Pawn.updateMany = async () => ({ modifiedCount: 0 })
   Loan.find = () => createMockQuery([])
+  Expense.find = () => createMockQuery([])
   User.find = () => createMockQuery([])
   AuthSession.findOne = async () => ({
     _id: new mongoose.Types.ObjectId(),
@@ -106,6 +109,24 @@ test.afterEach(() => {
   User.find = origUserFind
   Pawn.updateMany = origPawnUpdateMany
   Loan.find = origLoanFind
+  Expense.find = origExpenseFind
+})
+
+test('Expense Report: normalizes recorded USD and KHR expenses and excludes voided entries from totals', async () => {
+  const sample = [
+    { _id: 'e1', expenseNo: 'EX-1', title: 'Rent', category: 'RENT', amount: 100, currency: 'USD', exchangeRate: 1, paymentMethod: 'CASH', expenseDate: new Date(), status: 'RECORDED', createdBy: { name: 'Manager' } },
+    { _id: 'e2', expenseNo: 'EX-2', title: 'Power', category: 'UTILITIES', amount: 410000, currency: 'KHR', exchangeRate: 4100, paymentMethod: 'KHQR', expenseDate: new Date(), status: 'RECORDED', createdBy: { name: 'Manager' } },
+    { _id: 'e3', expenseNo: 'EX-3', title: 'Mistake', category: 'OTHER', amount: 90, currency: 'USD', exchangeRate: 1, paymentMethod: 'CASH', expenseDate: new Date(), status: 'VOIDED', createdBy: { name: 'Manager' } },
+  ]
+  Expense.find = () => createMockQuery(sample)
+
+  const res = await callReportRoute('/expenses', { period: 'this_month', currency: 'ALL', status: 'ALL', category: 'ALL', method: 'ALL', staff: 'ALL' })
+  assert.equal(res.status, 200)
+  assert.equal(res.body.meta.currency, 'USD')
+  assert.equal(res.body.summary.find((item) => item.label === 'Operating Expenses').value, 200)
+  assert.equal(res.body.summary.find((item) => item.label === 'Voided Entries').value, 1)
+  assert.equal(res.body.rows.length, 3)
+  assert.match(res.body.notes[0], /excluded/i)
 })
 
 test('Pawn Report: defaults to currency=ALL and normalizes mixed USD/KHR totals', async () => {

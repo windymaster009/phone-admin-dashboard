@@ -33,6 +33,7 @@ describe('routes and navigation configuration', () => {
       expect(findRouteByPath('/stock')?.key).toBe('inventory')
       expect(findRouteByPath('/pawn-management')?.key).toBe('pawn')
       expect(findRouteByPath('/buy-sell')?.key).toBe('trade')
+      expect(findRouteByPath('/expenses')?.key).toBe('expenses')
       expect(findRouteByPath('/settings')?.key).toBe('settings')
     })
 
@@ -72,13 +73,14 @@ describe('routes and navigation configuration', () => {
       expect(groups.map((g) => g.label)).toEqual(['Overview', 'Operations', 'Finance & Control'])
     })
 
-    it('allows OWNER full access to all routes including security and refunds', () => {
+    it('allows OWNER full access to all routes including security, refunds, and expenses', () => {
       const groups = getNavGroups('OWNER')
       const allKeys = groups.flatMap((g) => g.items.map((i) => i.key))
 
       expect(allKeys).toContain('dashboard')
       expect(allKeys).toContain('pawn')
       expect(allKeys).toContain('refunds')
+      expect(allKeys).toContain('expenses')
       expect(allKeys).toContain('security')
       expect(allKeys).toContain('secureDocuments')
     })
@@ -89,17 +91,19 @@ describe('routes and navigation configuration', () => {
 
       expect(allKeys).not.toContain('security')
       expect(allKeys).not.toContain('refunds')
+      expect(allKeys).not.toContain('expenses')
       expect(allKeys).toContain('secureDocuments')
       expect(allKeys).toContain('trade')
       expect(allKeys).toContain('inventory')
     })
 
-    it('hides security from MANAGER role but includes refunds', () => {
+    it('hides security from MANAGER role but includes refunds and expenses', () => {
       const groups = getNavGroups('MANAGER')
       const allKeys = groups.flatMap((g) => g.items.map((i) => i.key))
 
       expect(allKeys).not.toContain('security')
       expect(allKeys).toContain('refunds')
+      expect(allKeys).toContain('expenses')
       expect(allKeys).toContain('secureDocuments')
     })
 

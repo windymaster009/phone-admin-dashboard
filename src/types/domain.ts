@@ -241,7 +241,7 @@ export type DashboardData = {
   recentPawns: Pawn[]
   recentTrades: Trade[]
   inventoryMix: { _id: string; count: number; value: number }[]
-  monthPerformance: { _id: 'BUY' | 'SELL'; total: number }[]
+  monthPerformance: { _id: 'BUY' | 'SELL' | 'EXPENSE'; total: number }[]
   monthlyPerformance: { _id: { month: number; type: 'BUY' | 'SELL' }; total: number }[]
   dailyPerformance: { _id: { day: number; type: 'BUY' | 'SELL' }; total: number }[]
 }
@@ -276,6 +276,28 @@ export type ActivityLog = {
 
 export type OverviewCurrencyTotals = { USD: number; KHR: number }
 
+export type Expense = {
+  _id: string
+  expenseNo: string
+  title: string
+  category: 'RENT' | 'UTILITIES' | 'SALARY' | 'TRANSPORT' | 'REPAIR' | 'SUPPLIES' | 'MARKETING' | 'TAX' | 'OTHER'
+  amount: number
+  currency: 'USD' | 'KHR'
+  exchangeRate: number
+  paymentMethod: 'CASH' | 'KHQR' | 'BANK' | 'CARD' | 'OTHER'
+  expenseDate: string
+  payee?: string
+  reference?: string
+  notes?: string
+  status: 'RECORDED' | 'VOIDED'
+  createdBy?: { _id: string; name: string; role?: string }
+  voidedAt?: string
+  voidedBy?: { _id: string; name: string; role?: string }
+  voidReason?: string
+  createdAt: string
+  updatedAt: string
+}
+
 export type BusinessOverviewPeriod = 'today' | 'yesterday' | 'last_7_days' | 'last_30_days' | 'this_month' | 'last_month' | 'this_year' | 'custom'
 export type ReportPeriod = BusinessOverviewPeriod | 'all_time'
 
@@ -298,6 +320,8 @@ export type BusinessOverviewData = {
     pawnProfit: number
     loanProfit: number
     serviceProfit: number
+    profitBeforeExpenses: number
+    operatingExpenses: number
     totalProfit: number
   }
   pawn: {
@@ -439,7 +463,7 @@ export type PurchaseReportData = {
   limited: boolean
 }
 
-export type OperationalReportKind = 'inventory' | 'pawns' | 'loans' | 'payments' | 'services' | 'activity'
+export type OperationalReportKind = 'inventory' | 'pawns' | 'loans' | 'payments' | 'services' | 'expenses' | 'activity'
 
 export type ReportCurrencyFilter = 'ALL' | 'USD' | 'KHR'
 

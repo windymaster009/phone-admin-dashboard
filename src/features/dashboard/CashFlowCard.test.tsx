@@ -40,9 +40,11 @@ const mockPerformanceData = {
     { _id: { date: currentCambodiaWeekDate(), type: 'SELL' as const }, total: 3000 },
     { _id: { date: currentCambodiaWeekDate(), type: 'BUY' as const }, total: 1000 },
     { _id: { date: currentCambodiaWeekDate(), type: 'REFUND' as const }, total: 250 },
+    { _id: { date: currentCambodiaWeekDate(), type: 'EXPENSE' as const }, total: 100 },
     { _id: { date: currentCambodiaWeekDate(-7), type: 'SELL' as const }, total: 6000 },
     { _id: { date: currentCambodiaWeekDate(-7), type: 'BUY' as const }, total: 2000 },
     { _id: { date: currentCambodiaWeekDate(-7), type: 'REFUND' as const }, total: 500 },
+    { _id: { date: currentCambodiaWeekDate(-7), type: 'EXPENSE' as const }, total: 200 },
   ],
 }
 
@@ -67,11 +69,11 @@ describe('CashFlowCard', () => {
       expect(screen.getByText('Net cash flow')).toBeInTheDocument()
     })
 
-    // This week: sales 3000, purchases 1000, refunds 250, net = +1750
-    expect(screen.getByText('$1,750')).toBeInTheDocument()
+    // This week: sales 3000, purchases 1000, refunds 250, expenses 100, net = +1650
+    expect(screen.getByText('$1,650')).toBeInTheDocument()
     expect(screen.getAllByText('$3,000')).toHaveLength(2)
-    expect(screen.getByText('$1,250')).toBeInTheDocument()
-    expect(screen.getByText('$250 refunds')).toBeInTheDocument()
+    expect(screen.getByText('$1,350')).toBeInTheDocument()
+    expect(screen.getByText('$100 operating expenses')).toBeInTheDocument()
     expect(screen.getByText('More cash in than out')).toBeInTheDocument()
   })
 
@@ -96,10 +98,10 @@ describe('CashFlowCard', () => {
     expect(screen.getByText('Mon–Sun')).toBeInTheDocument()
 
     await user.selectOptions(periodSelect, 'last_week')
-    expect(screen.getByText('$3,500')).toBeInTheDocument()
+    expect(screen.getByText('$3,300')).toBeInTheDocument()
     expect(screen.getAllByText('$6,000')).toHaveLength(2)
-    expect(screen.getByText('$2,500')).toBeInTheDocument()
-    expect(screen.getByText('$500 refunds')).toBeInTheDocument()
+    expect(screen.getByText('$2,700')).toBeInTheDocument()
+    expect(screen.getByText('$200 operating expenses')).toBeInTheDocument()
   })
 
   it('displays empty state when no sales or purchases exist', async () => {
@@ -119,7 +121,7 @@ describe('CashFlowCard', () => {
 
     await waitFor(() => {
       expect(screen.getByText('No cash movement yet')).toBeInTheDocument()
-      expect(screen.getByText('Completed sales, purchases, and refunds will appear here.')).toBeInTheDocument()
+      expect(screen.getByText('Completed sales, purchases, refunds, and expenses will appear here.')).toBeInTheDocument()
     })
   })
 
@@ -155,7 +157,7 @@ describe('CashFlowCard', () => {
 
     await waitFor(() => {
       expect(screen.getByText('Net cash flow')).toBeInTheDocument()
-      expect(screen.getByText('$1,750')).toBeInTheDocument()
+      expect(screen.getByText('$1,650')).toBeInTheDocument()
     })
   })
 })

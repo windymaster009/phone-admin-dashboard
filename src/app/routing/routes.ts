@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   ReceiptText,
   RefreshCcw,
+  Receipt,
   Settings,
   ShieldCheck,
   ShoppingCart,
@@ -29,6 +30,7 @@ export type RouteKey =
   | 'customers'
   | 'suppliers'
   | 'refunds'
+  | 'expenses'
   | 'depreciation'
   | 'businessOverview'
   | 'reports'
@@ -117,6 +119,14 @@ export const ROUTES: AppRoute[] = [
     pathname: '/refunds',
     label: 'Refunds',
     icon: RefreshCcw,
+    group: 'Operations',
+    roles: ['OWNER', 'MANAGER'],
+  },
+  {
+    key: 'expenses',
+    pathname: '/expenses',
+    label: 'Expenses',
+    icon: Receipt,
     group: 'Operations',
     roles: ['OWNER', 'MANAGER'],
   },

@@ -1,5 +1,12 @@
 [
   {
+    "date": "2026-10-09",
+    "macrostructure": "Workbench",
+    "theme": "existing PhoneFlow",
+    "enrichment": "none",
+    "brief": "Audit-safe operating expense ledger, create and void workflow, and reusable financial reporting"
+  },
+  {
     "date": "2026-10-06",
     "macrostructure": "Stat-Led",
     "theme": "existing PhoneFlow",

@@ -22,7 +22,9 @@ const mockOverviewData = {
     pawnProfit: 275,
     loanProfit: 180,
     serviceProfit: 95,
-    totalProfit: 4850,
+    profitBeforeExpenses: 4850,
+    operatingExpenses: 350,
+    totalProfit: 4500,
   },
   pawn: {
     active: 14,
@@ -125,7 +127,7 @@ describe('BusinessOverviewPage', () => {
     expect(screen.getAllByText('$18,500')).toHaveLength(2) // stat card + inventory snapshot
   })
 
-  it('shows combined profit and its four sources in report mode', async () => {
+  it('shows net profit with operating expenses in report mode', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
       status: 200,
@@ -135,11 +137,9 @@ describe('BusinessOverviewPage', () => {
 
     render(<BusinessOverviewPage reportMode onReady={vi.fn()} />)
 
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { level: 2, name: 'Overall Report' })).toBeInTheDocument()
-    })
-    expect(screen.getByRole('heading', { level: 3, name: 'Total Profit' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Total profit')).toHaveTextContent('$4,850')
+    await screen.findByRole('heading', { level: 3, name: 'Net Profit' })
+    expect(screen.getByRole('heading', { level: 3, name: 'Net Profit' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Net profit')).toHaveTextContent('$4,500')
     const breakdown = screen.getByLabelText('Profit breakdown')
     expect(breakdown).toHaveTextContent('Product Sales Profit')
     expect(breakdown).toHaveTextContent('$4,300')
@@ -149,6 +149,8 @@ describe('BusinessOverviewPage', () => {
     expect(breakdown).toHaveTextContent('$180')
     expect(breakdown).toHaveTextContent('Service Profit')
     expect(breakdown).toHaveTextContent('$95')
+    expect(breakdown).toHaveTextContent('Operating Expenses')
+    expect(breakdown).toHaveTextContent('$350')
     expect(screen.getByRole('heading', { level: 3, name: 'Profit Over Time' })).toBeInTheDocument()
   })
 

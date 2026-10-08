@@ -6,7 +6,7 @@ import { api } from '../../lib/api'
 type PerformancePeriod = 'this_week' | 'last_week'
 
 type DashboardPerformanceData = {
-  weekPerformance: Array<{ _id: { date: string; type: 'BUY' | 'SELL' | 'REFUND' }; total: number }>
+  weekPerformance: Array<{ _id: { date: string; type: 'BUY' | 'SELL' | 'REFUND' | 'EXPENSE' }; total: number }>
 }
 
 type PerformancePoint = {
@@ -16,6 +16,7 @@ type PerformancePoint = {
   sales: number
   purchases: number
   refunds: number
+  expenses: number
   outflow: number
   net: number
 }
@@ -52,7 +53,8 @@ function buildWeekPoints(rows: DashboardPerformanceData['weekPerformance'], week
     const sales = Number(rows.find((row) => row._id.date === dateKey && row._id.type === 'SELL')?.total) || 0
     const purchases = Number(rows.find((row) => row._id.date === dateKey && row._id.type === 'BUY')?.total) || 0
     const refunds = Number(rows.find((row) => row._id.date === dateKey && row._id.type === 'REFUND')?.total) || 0
-    const outflow = purchases + refunds
+    const expenses = Number(rows.find((row) => row._id.date === dateKey && row._id.type === 'EXPENSE')?.total) || 0
+    const outflow = purchases + refunds + expenses
     return {
       key: index + 1,
       label: new Intl.DateTimeFormat('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }).format(date),
@@ -60,6 +62,7 @@ function buildWeekPoints(rows: DashboardPerformanceData['weekPerformance'], week
       sales,
       purchases,
       refunds,
+      expenses,
       outflow,
       net: sales - outflow,
     }
@@ -100,12 +103,13 @@ export default function CashFlowCard() {
   }, [data, period])
 
   const totals = useMemo(() => {
-    if (!data) return { sales: 0, purchases: 0, refunds: 0, outflow: 0, net: 0 }
+    if (!data) return { sales: 0, purchases: 0, refunds: 0, expenses: 0, outflow: 0, net: 0 }
     const sales = points.reduce((sum, point) => sum + point.sales, 0)
     const purchases = points.reduce((sum, point) => sum + point.purchases, 0)
     const refunds = points.reduce((sum, point) => sum + point.refunds, 0)
-    const outflow = purchases + refunds
-    return { sales, purchases, refunds, outflow, net: sales - outflow }
+    const expenses = points.reduce((sum, point) => sum + point.expenses, 0)
+    const outflow = purchases + refunds + expenses
+    return { sales, purchases, refunds, expenses, outflow, net: sales - outflow }
   }, [data, points])
 
   const context = useMemo(() => {
@@ -130,7 +134,7 @@ export default function CashFlowCard() {
         <div>
           <span className="eyebrow">Cash flow</span>
           <h3>Shop performance</h3>
-          <p>Money coming in from sales versus money going out for purchases and refunds.</p>
+          <p>Money coming in from sales versus purchases, refunds, and operating expenses.</p>
         </div>
         <div className="cashflow-heading-actions">
           <button type="button" className="cashflow-refresh" onClick={() => void load()} disabled={loading} aria-label="Refresh shop performance"><RefreshCcw size={15} /></button>
@@ -153,7 +157,7 @@ export default function CashFlowCard() {
         </article>
         <article>
           <span className="cashflow-kpi-icon expense"><ArrowDownRight size={17} /></span>
-          <div><small>Money out</small><strong>{money.format(totals.outflow)}</strong><span>{money.format(totals.refunds)} refunds</span></div>
+          <div><small>Money out</small><strong>{money.format(totals.outflow)}</strong><span>{money.format(totals.expenses)} operating expenses</span></div>
         </article>
       </div>
 
@@ -162,12 +166,12 @@ export default function CashFlowCard() {
       ) : loading && !data ? (
         <div className="cashflow-state">Loading cash flow…</div>
       ) : !hasMovement ? (
-        <div className="cashflow-state"><BarChart3 size={24} /><strong>No cash movement yet</strong><span>Completed sales, purchases, and refunds will appear here.</span></div>
+        <div className="cashflow-state"><BarChart3 size={24} /><strong>No cash movement yet</strong><span>Completed sales, purchases, refunds, and expenses will appear here.</span></div>
       ) : (
         <>
           <div className="cashflow-legend" aria-hidden="true">
             <span><i className="income" />Sales · money in</span>
-            <span><i className="expense" />Purchases + refunds · money out</span>
+            <span><i className="expense" />Purchases + refunds + expenses · money out</span>
             <small>Mon–Sun</small>
           </div>
 
@@ -178,7 +182,7 @@ export default function CashFlowCard() {
           </div>
 
           <div className="cashflow-chart-scroll week">
-            <div className="cashflow-chart" role="img" aria-label={`Sales above the zero line and purchases plus refunds below the zero line for ${period === 'this_week' ? 'this week' : 'last week'}`}>
+            <div className="cashflow-chart" role="img" aria-label={`Sales above the zero line and purchases, refunds, plus expenses below the zero line for ${period === 'this_week' ? 'this week' : 'last week'}`}>
               <div className="cashflow-axis-label top">{compactMoney.format(maximum)}</div>
               <div className="cashflow-axis-label zero">$0</div>
               <div className="cashflow-axis-label bottom">-{compactMoney.format(maximum)}</div>
@@ -202,7 +206,7 @@ export default function CashFlowCard() {
                       onMouseLeave={() => setActiveKey(null)}
                       onFocus={() => setActiveKey(point.key)}
                       onBlur={() => setActiveKey(null)}
-                      aria-label={`${point.label}: sales ${money.format(point.sales)}, purchases ${money.format(point.purchases)}, refunds ${money.format(point.refunds)}, net ${money.format(point.net)}`}
+                      aria-label={`${point.label}: sales ${money.format(point.sales)}, purchases ${money.format(point.purchases)}, refunds ${money.format(point.refunds)}, operating expenses ${money.format(point.expenses)}, net ${money.format(point.net)}`}
                     >
                       <span className="cashflow-half income-half"><i style={{ height: `${incomeHeight}%` }} /></span>
                       <span className="cashflow-half expense-half"><i style={{ height: `${expenseHeight}%` }} /></span>
@@ -218,6 +222,7 @@ export default function CashFlowCard() {
                   <span><i className="income" />Sales <b>{money.format(activePoint.sales)}</b></span>
                   <span><i className="expense" />Purchases <b>{money.format(activePoint.purchases)}</b></span>
                   <span><i className="expense" />Refunds <b>{money.format(activePoint.refunds)}</b></span>
+                  <span><i className="expense" />Expenses <b>{money.format(activePoint.expenses)}</b></span>
                   <span className={`net ${metricTone(activePoint.net)}`}>Net <b>{money.format(activePoint.net)}</b></span>
                 </div>
               )}

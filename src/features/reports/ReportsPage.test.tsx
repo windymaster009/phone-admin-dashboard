@@ -518,6 +518,32 @@ describe('Operational Reports Mixed-Currency Visibility & Controls', () => {
     unmountServices()
   })
 
+  it('opens the expense report with recorded-only audit-safe defaults', async () => {
+    const requestedUrls: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      requestedUrls.push(String(input))
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({
+          title: 'Expense Report', description: 'Operating expenses.',
+          meta: { currency: 'USD', currencyFilter: 'ALL', normalized: true, totalRecords: 0, limited: false },
+          filters: { status: 'RECORDED' }, summary: [], breakdowns: [], columns: [], rows: [], staff: [],
+        }),
+      } as Response
+    })
+
+    window.history.pushState({}, '', '/reports/expenses')
+    render(<RouterProvider><ReportsPage /></RouterProvider>)
+
+    await screen.findByRole('heading', { level: 2, name: 'Expense Report' })
+    expect(screen.getByLabelText('expenses report filters')).toBeInTheDocument()
+    expect(screen.getByLabelText('Currency')).toHaveValue('ALL')
+    expect(screen.getByLabelText('Status')).toHaveValue('RECORDED')
+    expect(requestedUrls.some((url) => url.includes('/reports/expenses?') && url.includes('status=RECORDED'))).toBe(true)
+  })
+
   it('Service report mobile cards keep the charge total and payment method visible', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,
@@ -1196,7 +1222,7 @@ describe('Reports Hub, Navigation & Placeholder View', () => {
       expect.stringContaining('/api/business-overview?period=this_month'),
       expect.anything(),
     )
-    expect(screen.getByLabelText('Total profit')).toHaveTextContent('$700')
+    expect(screen.getByLabelText('Net profit')).toHaveTextContent('$700')
     const profitBreakdown = screen.getByLabelText('Profit breakdown')
     expect(within(profitBreakdown).getByText('$550')).toBeInTheDocument()
     expect(within(profitBreakdown).getByText('$80')).toBeInTheDocument()

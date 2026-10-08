@@ -6,6 +6,7 @@ import { ActivityLog, Customer, InventoryItem, Pawn, Trade, User } from './model
 import { AuthSession } from './authSessionModels.js'
 import { Loan, LoanPayment } from './loanModels.js'
 import { ServiceCharge } from './serviceModels.js'
+import { Expense } from './expenseModels.js'
 import appRouter from './routes.js'
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret-for-business-reports'
@@ -98,8 +99,12 @@ function mockPawnFind(routePawns = [], incomePawns = routePawns) {
 const origAuthSessionFindOne = AuthSession.findOne
 const origAuthSessionUpdateOne = AuthSession.updateOne
 const origUserFindById = User.findById
+const origExpenseFind = Expense.find
+const origExpenseAggregate = Expense.aggregate
 
 test.beforeEach(() => {
+  Expense.find = () => ({ select: () => ({ lean: async () => [] }) })
+  Expense.aggregate = async () => []
   AuthSession.findOne = async () => ({
     _id: new mongoose.Types.ObjectId(),
     sessionId: testSessionId,
@@ -123,6 +128,8 @@ test.afterEach(() => {
   AuthSession.findOne = origAuthSessionFindOne
   AuthSession.updateOne = origAuthSessionUpdateOne
   User.findById = origUserFindById
+  Expense.find = origExpenseFind
+  Expense.aggregate = origExpenseAggregate
 })
 
 test('RBAC: blocks unauthenticated requests with 401 across dashboard and report endpoints', async () => {
@@ -391,6 +398,12 @@ test('GET /business-overview: calculates revenue, COGS, gross profit, and preser
     }),
   })
 
+  Expense.find = () => ({
+    select: () => ({
+      lean: async () => [{ amount: 41000, currency: 'KHR', exchangeRate: 4100, expenseDate: new Date() }],
+    }),
+  })
+
   InventoryItem.find = () => ({
     select: () => ({
       lean: async () => [
@@ -424,7 +437,9 @@ test('GET /business-overview: calculates revenue, COGS, gross profit, and preser
     assert.equal(res.body.financial.pawnProfit, 30)
     assert.equal(res.body.financial.loanProfit, 100)
     assert.equal(res.body.financial.serviceProfit, 10)
-    assert.equal(res.body.financial.totalProfit, 1640)
+    assert.equal(res.body.financial.profitBeforeExpenses, 1640)
+    assert.equal(res.body.financial.operatingExpenses, 10)
+    assert.equal(res.body.financial.totalProfit, 1630)
 
     assert.equal(res.body.pawn.outstandingPrincipal.USD, 800)
     assert.equal(res.body.pawn.outstandingPrincipal.KHR, 4100000)

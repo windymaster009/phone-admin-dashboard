@@ -690,7 +690,7 @@ describe('OperationModalBridge component', () => {
 
     // Submit the contract
     const submitButton = screen.getByRole('button', { name: /Create pawn contract/i })
-    expect(submitButton).not.toBeDisabled()
+    await waitFor(() => expect(submitButton).not.toBeDisabled())
     fireEvent.click(submitButton)
 
     await waitFor(() => {
@@ -3496,7 +3496,7 @@ describe('OperationModalBridge component', () => {
 
     // Submit pawn contract
     const submitBtn = screen.getByRole('button', { name: /Create pawn contract/i })
-    expect(submitBtn).not.toBeDisabled()
+    await waitFor(() => expect(submitBtn).not.toBeDisabled())
     fireEvent.click(submitBtn)
 
     await waitFor(() => {
@@ -3617,6 +3617,7 @@ describe('OperationModalBridge component', () => {
     fireEvent.change(screen.getByPlaceholderText(/Blue/i), { target: { value: 'Black Titanium' } })
 
     const submitBtn = screen.getByRole('button', { name: /Create pawn contract/i })
+    await waitFor(() => expect(submitBtn).not.toBeDisabled())
     fireEvent.click(submitBtn)
 
     await waitFor(() => {

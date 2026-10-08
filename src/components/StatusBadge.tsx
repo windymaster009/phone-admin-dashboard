@@ -4,7 +4,7 @@ import { titleStatus } from '../lib/presentation'
 export default function StatusBadge({ status }: { status: string }) {
   const label = titleStatus(status)
   const slug = status.toLowerCase().replaceAll('_', '-')
-  const Icon = status === 'IN_STOCK' || status === 'ACTIVE' || status === 'PAID'
+  const Icon = status === 'IN_STOCK' || status === 'ACTIVE' || status === 'PAID' || status === 'RECORDED'
     ? BadgeCheck
     : status === 'RESERVED' || status === 'DUE_SOON'
       ? Clock3

@@ -883,7 +883,8 @@ td strong {
 .status-active,
 .status-in-stock,
 .status-sale,
-.status-paid {
+.status-paid,
+.status-recorded {
   --status-text: var(--status-active);
 }
 
@@ -896,7 +897,8 @@ td strong {
 
 .status-unpaid,
 .status-overdue,
-.status-low-stock {
+.status-low-stock,
+.status-voided {
   --status-text: var(--status-danger);
 }
 

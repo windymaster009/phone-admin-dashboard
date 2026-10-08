@@ -19,6 +19,7 @@ const CustomerPage = lazy(() => import('../features/customers/CustomerPage'))
 const SupplierWorkspace = lazy(() => import('../features/suppliers/SupplierWorkspace'))
 const DepreciationPage = lazy(() => import('../features/depreciation/DepreciationPage'))
 const RefundsPage = lazy(() => import('../features/refunds/RefundsPage'))
+const ExpensePage = lazy(() => import('../features/expenses/ExpensePage'))
 const BusinessOverviewPage = lazy(() => import('../features/business/BusinessOverviewPage'))
 const ReportsPage = lazy(() => import('../features/reports/ReportsPage'))
 const LoanPage = lazy(() => import('../features/loans/LoanPage'))
@@ -196,6 +197,8 @@ function App({
         return <DepreciationPage goTo={changePage} />
       case 'refunds':
         return <RefundsPage user={user} />
+      case 'expenses':
+        return <ExpensePage />
       case 'businessOverview':
         return <BusinessOverviewPage onReady={() => setInitialViewReady(true)} />
       case 'reports':

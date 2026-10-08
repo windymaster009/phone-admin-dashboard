@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { AlertTriangle, ArrowLeft, Banknote, BarChart3, Boxes, CircleDollarSign, FileText, HandCoins, Landmark, Package, RefreshCcw, TrendingDown, TrendingUp, WalletCards, Wrench } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Banknote, BarChart3, Boxes, CircleDollarSign, FileText, HandCoins, Landmark, Package, ReceiptText, RefreshCcw, TrendingDown, TrendingUp, WalletCards, Wrench } from 'lucide-react'
 import { api } from '../../lib/api'
 import type { Customer, Supplier, Pawn, ActivityLog, OverviewCurrencyTotals, BusinessOverviewPeriod, BusinessOverviewData } from '../../types/domain'
 import { currency, money, tradePartyName, tradeTransactionMoney, riel, dateText, titleStatus } from '../../lib/presentation'
@@ -187,6 +187,7 @@ export default function BusinessOverviewView({
   const pawnProfitValue = money.format(data?.financial.pawnProfit || 0)
   const loanProfitValue = money.format(data?.financial.loanProfit || 0)
   const serviceProfitValue = money.format(data?.financial.serviceProfit || 0)
+  const operatingExpensesValue = money.format(data?.financial.operatingExpenses || 0)
   const totalProfitValue = money.format(data?.financial.totalProfit || 0)
   const stockValue = money.format(data?.inventory.costValue || 0)
   const periodOptions: Array<{ value: BusinessOverviewPeriod; label: string }> = [
@@ -202,7 +203,7 @@ export default function BusinessOverviewView({
   const pageEyebrow = reportMode ? 'Reports & analytics' : 'Owner overview'
   const pageTitle = reportMode ? 'Overall Report' : 'Business Overview'
   const pageDescription = reportMode
-    ? 'See total profit from product sales, pawn fees, loan interest, and service charges in one place.'
+    ? 'See net profit from product sales, pawn fees, loan interest, and service charges after operating expenses.'
     : 'Quick snapshot of sales, purchases, profit, pawn, loans, and inventory.'
   const backButton = onBack ? (
     <button type="button" className="ghost-button overview-report-back-button" onClick={onBack}>
@@ -237,19 +238,19 @@ export default function BusinessOverviewView({
       />
       {error && <p className="overview-error" role="alert"><AlertTriangle size={16} />{error}</p>}
       {reportMode ? <>
-        <section className="surface-card overview-total-profit" aria-label="Total profit">
+        <section className="surface-card overview-total-profit" aria-label="Net profit">
           <span className="summary-stat-icon tone-green" aria-hidden="true"><TrendingUp /></span>
           <div>
             <span className="eyebrow">{periodLabel}</span>
-            <h3>Total Profit</h3>
-            <p>Sales profit + collected pawn fees + collected loan interest + completed service charges</p>
+            <h3>Net Profit</h3>
+            <p>Sales profit + pawn fees + loan interest + service charges − operating expenses</p>
           </div>
           <strong className={(data?.financial.totalProfit || 0) < 0 ? 'is-negative' : ''}>{totalProfitValue}</strong>
         </section>
         <SummaryStats
           label="Profit breakdown"
           variant="standard"
-          columns={4}
+          columns={5}
           className="overview-profit-breakdown"
           items={[
             {
@@ -283,6 +284,14 @@ export default function BusinessOverviewView({
               icon: Wrench,
               tone: 'rose',
               detail: 'Completed service charges',
+            },
+            {
+              label: 'Operating Expenses',
+              value: operatingExpensesValue,
+              valueTone: (data?.financial.operatingExpenses || 0) > 0 ? 'negative' : 'default',
+              icon: ReceiptText,
+              tone: 'rose',
+              detail: 'Recorded shop operating costs',
             },
           ]}
         />
@@ -343,15 +352,15 @@ export default function BusinessOverviewView({
       />}
 
       <section className="surface-card overview-performance-card">
-        <div className="card-heading"><div><span className="eyebrow">{periodLabel}</span><h3>{reportMode ? 'Profit Over Time' : 'Business Performance'}</h3><p>{reportMode ? 'Compare sales profit with profit earned from pawn, loan, and service activity.' : 'Net sales after refunds, purchases, and gross profit over time.'}</p></div>{loading && <RefreshCcw className="overview-refreshing" size={18} />}</div>
+        <div className="card-heading"><div><span className="eyebrow">{periodLabel}</span><h3>{reportMode ? 'Profit Over Time' : 'Business Performance'}</h3><p>{reportMode ? 'Compare profit before operating expenses with the shop’s final net profit.' : 'Net sales after refunds, purchases, and gross profit over time.'}</p></div>{loading && <RefreshCcw className="overview-refreshing" size={18} />}</div>
         <BusinessPerformanceChart
           points={reportMode ? data?.profitChart || [] : data?.chart || []}
-          firstLabel={reportMode ? 'Sales profit' : 'Net sales'}
-          secondLabel={reportMode ? 'Pawn, loan & service' : 'Purchases'}
-          thirdLabel={reportMode ? 'Total profit' : 'Gross profit'}
-          ariaLabel={reportMode ? 'Sales profit, other earned profit, and total profit over the selected period' : 'Net sales after refunds, purchases, and gross profit over the selected period'}
+          firstLabel={reportMode ? 'Profit before expenses' : 'Net sales'}
+          secondLabel={reportMode ? 'Operating expenses' : 'Purchases'}
+          thirdLabel={reportMode ? 'Net profit' : 'Gross profit'}
+          ariaLabel={reportMode ? 'Profit before operating expenses, operating expenses, and net profit over the selected period' : 'Net sales after refunds, purchases, and gross profit over the selected period'}
           emptyTitle={reportMode ? 'No profit recorded' : 'No completed transactions'}
-          emptyDescription={reportMode ? 'Profit appears after a sale, fee, interest payment, or service charge is completed.' : 'Sales and purchases will appear for this period once recorded.'}
+          emptyDescription={reportMode ? 'Net profit appears after income or an operating expense is recorded.' : 'Sales and purchases will appear for this period once recorded.'}
         />
       </section>
 
