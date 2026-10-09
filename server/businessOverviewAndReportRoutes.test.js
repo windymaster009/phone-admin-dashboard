@@ -351,8 +351,8 @@ test('GET /business-overview: calculates revenue, COGS, gross profit, and preser
 
   Pawn.find = mockPawnFind(
     [
-      { _id: 'p-1', status: 'ACTIVE', currency: 'USD', principal: 1000, remainingPrincipal: 800 },
-      { _id: 'p-2', status: 'ACTIVE', currency: 'KHR', principal: 4100000, remainingPrincipal: 4100000 },
+      { _id: 'p-1', status: 'ACTIVE', currency: 'USD', exchangeRate: 1, principal: 1000, remainingPrincipal: 800 },
+      { _id: 'p-2', status: 'ACTIVE', currency: 'KHR', exchangeRate: 4000, principal: 4100000, remainingPrincipal: 4100000 },
     ],
     [{
       _id: 'p-income',
@@ -365,8 +365,8 @@ test('GET /business-overview: calculates revenue, COGS, gross profit, and preser
   Loan.find = () => ({
     select: () => ({
       lean: async () => [
-        { _id: 'l-1', status: 'ACTIVE', currency: 'USD', remainingBalance: 600 },
-        { _id: 'l-2', status: 'ACTIVE', currency: 'KHR', remainingBalance: 2050000 },
+        { _id: 'l-1', status: 'ACTIVE', currency: 'USD', exchangeRate: 1, remainingBalance: 600 },
+        { _id: 'l-2', status: 'ACTIVE', currency: 'KHR', exchangeRate: 5000, remainingBalance: 2050000 },
       ],
     }),
   })
@@ -443,9 +443,11 @@ test('GET /business-overview: calculates revenue, COGS, gross profit, and preser
 
     assert.equal(res.body.pawn.outstandingPrincipal.USD, 800)
     assert.equal(res.body.pawn.outstandingPrincipal.KHR, 4100000)
+    assert.equal(res.body.pawn.outstandingPrincipal.usdEquivalent, 1825)
 
     assert.equal(res.body.loans.outstandingBalance.USD, 600)
     assert.equal(res.body.loans.outstandingBalance.KHR, 2050000)
+    assert.equal(res.body.loans.outstandingBalance.usdEquivalent, 1010)
 
     assert.equal(res.body.inventory.productCount, 2)
     assert.equal(res.body.inventory.inStockCount, 3)

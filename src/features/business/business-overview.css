@@ -141,11 +141,14 @@
 
 .overview-currency-value {
   min-width: 0;
-  display: block;
+  display: grid;
+  gap: 4px;
 }
 
 .overview-currency-value small {
+  display: block;
   color: var(--primary);
+  line-height: 1.25;
 }
 
 .overview-performance-card {
@@ -278,6 +281,30 @@
 
 .overview-snapshot-title strong { color: var(--text); font-size: 10px; }
 
+.overview-snapshot-icon {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+}
+
+.overview-snapshot-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.overview-snapshot-icon.sale {
+  color: var(--chart-green);
+  background: color-mix(in srgb, var(--chart-green) 12%, transparent);
+}
+
+.overview-snapshot-icon.purchase {
+  color: var(--chart-orange);
+  background: color-mix(in srgb, var(--chart-orange) 12%, transparent);
+}
+
 .overview-snapshot-group dl { margin: 0; }
 .overview-snapshot-group dl > div {
   min-width: 0;
@@ -294,9 +321,18 @@
 .overview-snapshot-group dd { margin: 0; color: var(--text); font-size: 11px; font-weight: 800; text-align: right; }
 .overview-snapshot-group dd.danger,
 .overview-inventory-stats strong.danger { color: var(--rose); }
-.overview-snapshot-group dl > .total { align-items: flex-start; padding-top: 8px; }
+.overview-snapshot-group dl > .total {
+  padding-top: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+.overview-snapshot-group dl > .total dd {
+  width: 100%;
+  text-align: left;
+}
 .overview-snapshot-group .overview-currency-value > strong { font-size: 12px; }
-.overview-snapshot-group .overview-currency-value small { margin-top: 3px; font-size: 7px; }
+.overview-snapshot-group .overview-currency-value small { font-size: 7px; }
 
 .overview-inventory-stats {
   display: grid;
@@ -353,7 +389,90 @@
 .overview-recent-grid .table-heading { padding: 12px 14px 9px; }
 .overview-transactions-card table th,
 .overview-transactions-card table td { padding-inline: 13px; }
-.overview-activity-card .transaction-list { padding: 0 13px 8px; }
+.overview-activity-list {
+  padding: 0 16px 8px;
+}
+
+.overview-activity-row {
+  min-width: 0;
+  padding: 12px 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.overview-activity-icon {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  color: var(--chart-green);
+  background: color-mix(in srgb, var(--chart-green) 12%, transparent);
+}
+
+.overview-activity-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.overview-activity-copy {
+  min-width: 0;
+  padding-top: 4px;
+  display: grid;
+  gap: 4px;
+}
+
+.overview-activity-copy > strong {
+  min-width: 0;
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.overview-activity-meta {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1.3;
+}
+
+.overview-activity-meta > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-activity-meta time {
+  flex: 0 0 auto;
+  color: var(--muted-2);
+  white-space: nowrap;
+}
+
+.overview-activity-empty {
+  padding: 16px 0;
+  display: grid;
+  gap: 4px;
+  border-top: 1px solid var(--border);
+}
+
+.overview-activity-empty strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.overview-activity-empty span {
+  color: var(--muted);
+  font-size: 9px;
+}
 .overview-transaction-details { grid-template-columns: repeat(3, minmax(0, 1fr)) auto; }
 
 .business-overview-page .transaction-icon.sale {
@@ -393,8 +512,13 @@
 .app[data-theme='light'] .overview-snapshot-group dt,
 .app[data-theme='light'] .overview-inventory-stats span,
 .app[data-theme='light'] .overview-low-stock p small,
-.app[data-theme='light'] .overview-activity-card .transaction-row p small {
+.app[data-theme='light'] .overview-activity-meta,
+.app[data-theme='light'] .overview-activity-empty span {
   color: #536b5c;
+}
+
+.app[data-theme='light'] .overview-activity-meta time {
+  color: #718679;
 }
 
 .app[data-theme='light'] .overview-inventory-stats small {
@@ -429,8 +553,7 @@
 
 .app[data-theme='light'] .overview-transactions-card th { color: #607667; }
 .app[data-theme='light'] .overview-transactions-card td { color: #536b5c; }
-.app[data-theme='light'] .overview-transactions-card tbody tr:hover,
-.app[data-theme='light'] .overview-activity-card .transaction-row:hover {
+.app[data-theme='light'] .overview-transactions-card tbody tr:hover {
   background: rgba(47, 143, 91, 0.055);
 }
 
@@ -541,7 +664,6 @@
   }
 
   .overview-currency-value small {
-    margin-top: 2px;
     font-size: 7px;
   }
 

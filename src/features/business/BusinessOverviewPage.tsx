@@ -21,13 +21,16 @@ function overviewValueSize(value: string) {
 }
 
 function OverviewCurrencyValue({ totals }: { totals: OverviewCurrencyTotals }) {
-  const usdValue = money.format(totals.USD)
+  const usdValue = money.format(totals.usdEquivalent ?? totals.USD)
   const khrValue = overviewKhr(totals.KHR)
+  const accessibleValue = totals.KHR > 0
+    ? `${usdValue} USD equivalent; ${khrValue} original KHR balance`
+    : usdValue
 
   return (
-    <span className="overview-currency-value">
-      <strong className="overview-responsive-value" data-value-size={overviewValueSize(usdValue)} title={usdValue}>{usdValue}</strong>
-      {totals.KHR > 0 && <small className="overview-responsive-value" data-value-size={overviewValueSize(khrValue)} title={khrValue}>{khrValue}</small>}
+    <span className="overview-currency-value" aria-label={accessibleValue}>
+      <strong className="overview-responsive-value" data-value-size={overviewValueSize(usdValue)} title={`${usdValue} USD equivalent`}>{usdValue}</strong>
+      {totals.KHR > 0 && <small className="overview-responsive-value" data-value-size={overviewValueSize(khrValue)} title={`${khrValue} original balance`}>{khrValue}</small>}
     </span>
   )
 }
@@ -335,8 +338,8 @@ export default function BusinessOverviewView({
           },
           {
             label: 'Pawn Outstanding',
-            value: <OverviewCurrencyValue totals={data?.pawn.outstandingPrincipal || { USD: 0, KHR: 0 }} />,
-            valueText: `${money.format(data?.pawn.outstandingPrincipal?.USD || 0)} ${overviewKhr(data?.pawn.outstandingPrincipal?.KHR || 0)}`,
+            value: <OverviewCurrencyValue totals={data?.pawn.outstandingPrincipal || { USD: 0, KHR: 0, usdEquivalent: 0 }} />,
+            valueText: `${money.format(data?.pawn.outstandingPrincipal?.usdEquivalent ?? data?.pawn.outstandingPrincipal?.USD ?? 0)} USD equivalent; ${overviewKhr(data?.pawn.outstandingPrincipal?.KHR || 0)}`,
             icon: HandCoins,
             tone: 'blue',
             detail: 'Current snapshot',
@@ -368,8 +371,8 @@ export default function BusinessOverviewView({
         <article className="surface-card overview-snapshot-card">
           <div className="card-heading"><div><span className="eyebrow">Current</span><h3>Pawn & Loan Snapshot</h3><p>Open contracts and remaining balances right now.</p></div><WalletCards size={20} /></div>
           <div className="overview-finance-snapshots">
-            <div className="overview-snapshot-group"><div className="overview-snapshot-title"><span className="transaction-icon sale"><HandCoins size={17} /></span><strong>Pawn contracts</strong></div><dl><div><dt>Active</dt><dd>{data?.pawn.active || 0}</dd></div><div><dt>Due soon</dt><dd>{data?.pawn.dueSoon || 0}</dd></div><div><dt>Overdue</dt><dd className={(data?.pawn.overdue || 0) > 0 ? 'danger' : ''}>{data?.pawn.overdue || 0}</dd></div><div className="total"><dt>Outstanding principal</dt><dd><OverviewCurrencyValue totals={data?.pawn.outstandingPrincipal || { USD: 0, KHR: 0 }} /></dd></div></dl></div>
-            <div className="overview-snapshot-group"><div className="overview-snapshot-title"><span className="transaction-icon purchase"><Banknote size={17} /></span><strong>Money loans</strong></div><dl><div><dt>Active</dt><dd>{data?.loans.active || 0}</dd></div><div><dt>Due soon</dt><dd>{data?.loans.dueSoon || 0}</dd></div><div><dt>Overdue</dt><dd className={(data?.loans.overdue || 0) > 0 ? 'danger' : ''}>{data?.loans.overdue || 0}</dd></div><div className="total"><dt>Outstanding balance</dt><dd><OverviewCurrencyValue totals={data?.loans.outstandingBalance || { USD: 0, KHR: 0 }} /></dd></div></dl></div>
+            <div className="overview-snapshot-group"><div className="overview-snapshot-title"><span className="overview-snapshot-icon sale" aria-hidden="true"><HandCoins size={17} /></span><strong>Pawn contracts</strong></div><dl><div><dt>Active</dt><dd>{data?.pawn.active || 0}</dd></div><div><dt>Due soon</dt><dd>{data?.pawn.dueSoon || 0}</dd></div><div><dt>Overdue</dt><dd className={(data?.pawn.overdue || 0) > 0 ? 'danger' : ''}>{data?.pawn.overdue || 0}</dd></div><div className="total"><dt>Outstanding principal</dt><dd><OverviewCurrencyValue totals={data?.pawn.outstandingPrincipal || { USD: 0, KHR: 0, usdEquivalent: 0 }} /></dd></div></dl></div>
+            <div className="overview-snapshot-group"><div className="overview-snapshot-title"><span className="overview-snapshot-icon purchase" aria-hidden="true"><Banknote size={17} /></span><strong>Money loans</strong></div><dl><div><dt>Active</dt><dd>{data?.loans.active || 0}</dd></div><div><dt>Due soon</dt><dd>{data?.loans.dueSoon || 0}</dd></div><div><dt>Overdue</dt><dd className={(data?.loans.overdue || 0) > 0 ? 'danger' : ''}>{data?.loans.overdue || 0}</dd></div><div className="total"><dt>Outstanding balance</dt><dd><OverviewCurrencyValue totals={data?.loans.outstandingBalance || { USD: 0, KHR: 0, usdEquivalent: 0 }} /></dd></div></dl></div>
           </div>
         </article>
 
@@ -396,7 +399,7 @@ export default function BusinessOverviewView({
 
         <article className="surface-card table-card overview-activity-card">
           <div className="card-heading table-heading"><div><span className="eyebrow">Latest changes</span><h3>Recent Activity</h3><p>Important shop actions recorded by staff.</p></div></div>
-          <div className="transaction-list">{(data?.recentActivity || []).map((log) => <div className="transaction-row" key={log._id}><span className="transaction-icon sale"><FileText /></span><p><strong>{overviewActivityLabel(log)}</strong><small>{log.user?.name || 'System'} · {dateText(log.createdAt)}</small></p></div>)}{data?.recentActivity.length === 0 && <div className="transaction-row"><p><strong>No recent activity</strong><small>Important actions will appear here.</small></p></div>}</div>
+          <div className="overview-activity-list" role="list">{(data?.recentActivity || []).map((log) => <article className="overview-activity-row" role="listitem" key={log._id}><span className="overview-activity-icon" aria-hidden="true"><FileText /></span><div className="overview-activity-copy"><strong>{overviewActivityLabel(log)}</strong><span className="overview-activity-meta"><span>{log.user?.name || 'System'}</span><time dateTime={log.createdAt}>{dateText(log.createdAt)}</time></span></div></article>)}{data?.recentActivity.length === 0 && <div className="overview-activity-empty"><strong>No recent activity</strong><span>Important actions will appear here.</span></div>}</div>
         </article>
       </section>
     </div>

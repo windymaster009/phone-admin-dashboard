@@ -33,6 +33,7 @@ const mockOverviewData = {
     outstandingPrincipal: {
       USD: 3500,
       KHR: 4100000,
+      usdEquivalent: 4500,
     },
   },
   loans: {
@@ -42,6 +43,7 @@ const mockOverviewData = {
     outstandingBalance: {
       USD: 2400,
       KHR: 2050000,
+      usdEquivalent: 2900,
     },
   },
   inventory: {
@@ -125,6 +127,10 @@ describe('BusinessOverviewPage', () => {
     expect(screen.getByText('$7,800')).toBeInTheDocument() // purchases
     expect(screen.getByText('$4,300')).toBeInTheDocument() // gross profit
     expect(screen.getAllByText('$18,500')).toHaveLength(2) // stat card + inventory snapshot
+    const recentActivity = screen.getByRole('list')
+    expect(recentActivity).toHaveTextContent('Sale created')
+    expect(recentActivity).toHaveTextContent('Sophea Staff')
+    expect(recentActivity).toHaveTextContent('2 Sept 2026')
   })
 
   it('shows net profit with operating expenses in report mode', async () => {
@@ -154,7 +160,7 @@ describe('BusinessOverviewPage', () => {
     expect(screen.getByRole('heading', { level: 3, name: 'Profit Over Time' })).toBeInTheDocument()
   })
 
-  it('preserves dual currency isolation for pawn and loan outstanding balances without cross-currency addition', async () => {
+  it('shows USD equivalents while preserving the original KHR outstanding balances', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
       return {
         ok: true,
@@ -167,10 +173,11 @@ describe('BusinessOverviewPage', () => {
     render(<BusinessOverviewPage onReady={vi.fn()} />)
 
     await waitFor(() => {
-      expect(screen.getAllByText('$3,500')).toHaveLength(2) // Pawn USD (summary + snapshot)
+      expect(screen.getAllByText('$4,500')).toHaveLength(2) // Pawn USD equivalent (summary + snapshot)
       expect(screen.getAllByText('4,100,000 KHR')).toHaveLength(2) // Pawn KHR (summary + snapshot)
-      expect(screen.getAllByText('$2,400')).toHaveLength(1) // Loan USD snapshot
+      expect(screen.getAllByText('$2,900')).toHaveLength(1) // Loan USD equivalent snapshot
       expect(screen.getAllByText('2,050,000 KHR')).toHaveLength(1) // Loan KHR snapshot
+      expect(screen.getAllByLabelText('$4,500 USD equivalent; 4,100,000 KHR original KHR balance')).toHaveLength(2)
     })
   })
 

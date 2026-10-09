@@ -274,7 +274,7 @@ export type ActivityLog = {
   expiresAt?: string
 }
 
-export type OverviewCurrencyTotals = { USD: number; KHR: number }
+export type OverviewCurrencyTotals = { USD: number; KHR: number; usdEquivalent: number }
 
 export type Expense = {
   _id: string

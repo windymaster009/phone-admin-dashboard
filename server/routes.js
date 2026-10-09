@@ -185,13 +185,15 @@ function resolveOverviewPeriod(query) {
 }
 
 function emptyCurrencyTotals() {
-  return { USD: 0, KHR: 0 }
+  return { USD: 0, KHR: 0, usdEquivalent: 0 }
 }
 
 function currencyTotals(records, amountField) {
   return records.reduce((totals, record) => {
     const currency = record.currency === 'KHR' ? 'KHR' : 'USD'
-    totals[currency] = roundMoney(totals[currency] + Math.max(0, Number(record[amountField]) || 0))
+    const amount = Math.max(0, Number(record[amountField]) || 0)
+    totals[currency] = roundMoney(totals[currency] + amount)
+    totals.usdEquivalent = roundMoney(totals.usdEquivalent + reportAmountToUsd(amount, currency, record.exchangeRate))
     return totals
   }, emptyCurrencyTotals())
 }
@@ -1474,10 +1476,10 @@ router.get('/business-overview', requireAuth, allowRoles('OWNER', 'MANAGER'), as
       .limit(8)
       .lean(),
     Pawn.find({ status: { $in: openPawnStatuses } })
-      .select('status currency remainingPrincipal principal')
+      .select('status currency exchangeRate remainingPrincipal principal')
       .lean(),
     Loan.find({ status: { $in: ['ACTIVE', 'DUE_SOON', 'OVERDUE', 'PARTIALLY_PAID'] } })
-      .select('status currency remainingBalance')
+      .select('status currency exchangeRate remainingBalance')
       .lean(),
     InventoryItem.find({ status: 'IN_STOCK', quantity: { $gt: 0 } })
       .select('sku name category quantity reorderLevel buyPrice sellPrice')
