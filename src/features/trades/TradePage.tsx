@@ -12,6 +12,7 @@ import DetailModalBody from '../../components/DetailModalBody'
 import DetailModalFooter from '../../components/DetailModalFooter'
 import WarrantyPeriodField from '../../components/WarrantyPeriodField'
 import FilterToolbar from '../../components/FilterToolbar'
+import FilterSelect from '../../components/FilterSelect'
 import './trade-page.css'
 
 function tradeSignedTotal(trade: Trade) {
@@ -241,17 +242,17 @@ export default function TradeView() {
             searchLabel="Search recent transactions"
             placeholder="Search receipt, product, customer, phone, SKU..."
           >
-            <select className="ghost-button filter-select" value={transactionTypeFilter} onChange={(event) => setTransactionTypeFilter(event.target.value as TradeTypeFilter)} aria-label="Filter transaction type">
+            <FilterSelect value={transactionTypeFilter} onChange={(event) => setTransactionTypeFilter(event.target.value as TradeTypeFilter)} aria-label="Filter transaction type">
               <option value="ALL">All transactions</option>
               <option value="SELL">Sales</option>
               <option value="BUY">Purchases</option>
-            </select>
-            <select className="ghost-button filter-select" value={transactionStatusFilter} onChange={(event) => setTransactionStatusFilter(event.target.value as TradeStatusFilter)} aria-label="Filter transaction status">
+            </FilterSelect>
+            <FilterSelect value={transactionStatusFilter} onChange={(event) => setTransactionStatusFilter(event.target.value as TradeStatusFilter)} aria-label="Filter transaction status">
               <option value="ALL">All statuses</option>
               <option value="COMPLETED">Completed</option>
               <option value="RETURNED">Refunded</option>
               <option value="CANCELLED">Cancelled</option>
-            </select>
+            </FilterSelect>
           </FilterToolbar>
           <div className="transaction-list">
             {filteredTrades.map((transaction) => (

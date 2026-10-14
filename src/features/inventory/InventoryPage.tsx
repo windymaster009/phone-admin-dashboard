@@ -17,6 +17,7 @@ import DetailModalHeader from '../../components/DetailModalHeader'
 import DetailModalBody from '../../components/DetailModalBody'
 import DetailModalFooter from '../../components/DetailModalFooter'
 import FilterToolbar from '../../components/FilterToolbar'
+import FilterSelect from '../../components/FilterSelect'
 import InventoryPricingPanel from './InventoryPricingPanel'
 import './inventory-page.css'
 
@@ -699,12 +700,12 @@ export default function InventoryView({ user }: { user?: SessionUser } = {}) {
             }
           }}
         >
-          <select className="ghost-button filter-select" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} aria-label="Filter inventory category">
+          <FilterSelect value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)} aria-label="Filter inventory category">
             <option value="ALL">All categories</option><option value="PHONE">Phones</option><option value="TABLET">Tablets</option><option value="ACCESSORY">Accessories</option><option value="SPARE_PART">Spare parts</option><option value="OTHER">Other</option>
-          </select>
-          <select className="ghost-button filter-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter stock status">
+          </FilterSelect>
+          <FilterSelect value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter stock status">
             <option value="ALL">All stock statuses</option><option value="IN_STOCK">In stock</option><option value="RESERVED">Reserved</option><option value="SOLD">Sold</option><option value="PAWNED">Pawned</option><option value="REPAIR">Repair</option><option value="ARCHIVED">Archived</option>
-          </select>
+          </FilterSelect>
         </FilterToolbar>
 
         {inventoryView === 'large' ? (

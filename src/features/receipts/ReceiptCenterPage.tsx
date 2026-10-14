@@ -9,13 +9,14 @@ import {
   Printer,
   ReceiptText,
   RefreshCcw,
-  Search,
   ShoppingCart,
   X,
 } from 'lucide-react'
 import { api } from '../../lib/api'
 import LoadingState from '../../components/LoadingState'
 import SummaryStats from '../../components/SummaryStats'
+import FilterToolbar from '../../components/FilterToolbar'
+import FilterSelect from '../../components/FilterSelect'
 import ReceiptDocument from './ReceiptDocument'
 import { formatReceiptDate, formatReceiptDateTime } from './receipt-date'
 import { fitReceiptPrintPage, writeReceiptPrintDocument } from './receipt-print'
@@ -277,12 +278,14 @@ export default function ReceiptCenterPage() {
       />
 
       <article className="surface-card table-card page-table receipt-table-card">
-        <div className="filter-row receipt-filter-row">
-          <div className="search-field">
-            <Search size={17} />
-            <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search receipt, reference, name or phone" />
-          </div>
-          <select className="ghost-button filter-select" value={type} onChange={(event) => setType(event.target.value)}>
+        <FilterToolbar
+          className="receipt-filter-row"
+          search={search}
+          onSearchChange={setSearch}
+          searchLabel="Search receipts"
+          placeholder="Search receipt, reference, name or phone"
+        >
+          <FilterSelect value={type} onChange={(event) => setType(event.target.value)} aria-label="Filter receipt type">
             <option value="ALL">All documents</option>
             <option value="SALE_RECEIPT">Sales receipts</option>
             <option value="PURCHASE_RECEIPT">Purchase receipts</option>
@@ -293,8 +296,8 @@ export default function ReceiptCenterPage() {
             <option value="PAWN_REDEMPTION">Pawn redemptions</option>
             <option value="LOAN_AGREEMENT">Loan agreements</option>
             <option value="LOAN_PAYMENT">Loan repayments</option>
-          </select>
-        </div>
+          </FilterSelect>
+        </FilterToolbar>
         <div className="table-scroll receipt-desktop-table">
           <table>
             <thead>

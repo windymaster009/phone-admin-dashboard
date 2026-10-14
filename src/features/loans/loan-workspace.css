@@ -60,7 +60,11 @@
   align-items: center;
 }
 
-.loan-filter-row > select {
+.loan-filter-row .filter-select-shell {
+  min-width: 180px;
+}
+
+.loan-filter-row .filter-select-shell > select {
   min-height: 40px;
   border: 1px solid var(--border-color, rgba(148, 163, 184, 0.18));
   border-radius: 10px;
@@ -69,12 +73,12 @@
   padding: 0 11px;
 }
 
-.loan-filter-row > select option {
+.loan-filter-row .filter-select-shell > select option {
   color: var(--text-color, #f8fafc);
   background: var(--surface-color, #151e34);
 }
 
-:root[data-theme='light'] .loan-filter-row > select {
+:root[data-theme='light'] .loan-filter-row .filter-select-shell > select {
   color-scheme: light;
   background: var(--surface-solid);
 }
@@ -692,7 +696,7 @@
   background: color-mix(in srgb, var(--rose) 10%, var(--surface-solid));
 }
 
-:root[data-theme='light'] .loan-filter-row > select,
+:root[data-theme='light'] .loan-filter-row .filter-select-shell > select,
 :root[data-theme='light'] .loan-due-form input,
 :root[data-theme='light'] .loan-payment-form input,
 :root[data-theme='light'] .loan-payment-form select,
@@ -703,7 +707,7 @@
   background: var(--surface-solid);
 }
 
-:root[data-theme='light'] .loan-filter-row > select option,
+:root[data-theme='light'] .loan-filter-row .filter-select-shell > select option,
 :root[data-theme='light'] .loan-payment-form select option {
   color: var(--text);
   background: var(--surface-solid);
@@ -798,7 +802,8 @@
   .loan-table-card { border-radius: 14px; }
   .loan-filter-row { grid-template-columns: minmax(0, 1fr) 42px; gap: 7px; padding: 10px; }
   .loan-filter-row .search-field { grid-column: 1 / -1; height: 38px; }
-  .loan-filter-row > select { min-height: 38px; font-size: 11px; }
+  .loan-filter-row .filter-select-shell { min-width: 0; }
+  .loan-filter-row .filter-select-shell > select { min-height: 38px; font-size: 11px; }
   .loan-filter-row > .ghost-button { grid-column: 2; width: 42px; min-height: 38px; padding: 0; }
   .loan-filter-row > .ghost-button span { display: none; }
   .loan-mobile-list { grid-template-columns: 1fr; gap: 7px; padding: 8px 10px 10px; }

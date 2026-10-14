@@ -15,7 +15,6 @@ import {
   Plus,
   Printer,
   RefreshCcw,
-  Search,
   Trash2,
   X,
 } from 'lucide-react'
@@ -32,6 +31,8 @@ import OperationWorkflowFooter from '../../components/OperationWorkflowFooter'
 import OperationSectionCard from '../../components/OperationSectionCard'
 import SegmentedControl from '../../components/SegmentedControl'
 import KeyValueSummary from '../../components/KeyValueSummary'
+import FilterToolbar from '../../components/FilterToolbar'
+import FilterSelect from '../../components/FilterSelect'
 import { useExchangeRate } from '../../lib/presentation'
 import type { ReceiptOption } from '../receipts/receipt-types'
 
@@ -1332,11 +1333,16 @@ export default function LoanPage({ summary: externalSummary, onSummary }: LoanPa
     />
 
     <article className="surface-card table-card page-table loan-table-card">
-      <div className="filter-row loan-filter-row">
-        <div className="search-field"><Search size={17} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search loan number, borrower, phone, ID, or reason" /></div>
-        <select value={status} onChange={(event) => setStatus(event.target.value)}><option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="DUE_SOON">Due soon</option><option value="OVERDUE">Overdue</option><option value="PARTIALLY_PAID">Partially paid</option><option value="PAID">Paid</option><option value="CANCELLED">Cancelled</option></select>
+      <FilterToolbar
+        className="loan-filter-row"
+        search={search}
+        onSearchChange={setSearch}
+        searchLabel="Search loans"
+        placeholder="Search loan number, borrower, phone, ID, or reason"
+      >
+        <FilterSelect value={status} onChange={(event) => setStatus(event.target.value)} aria-label="Filter loan status"><option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="DUE_SOON">Due soon</option><option value="OVERDUE">Overdue</option><option value="PARTIALLY_PAID">Partially paid</option><option value="PAID">Paid</option><option value="CANCELLED">Cancelled</option></FilterSelect>
         <button className="ghost-button" onClick={() => void loadLoans()} aria-label="Refresh loans"><RefreshCcw size={15} /><span>Refresh</span></button>
-      </div>
+      </FilterToolbar>
       <div className="table-scroll"><table><thead><tr><th>Loan</th><th>Borrower</th><th>Lent</th><th>Remaining</th><th>Due date</th><th>Status</th><th /></tr></thead><tbody>
         {loans.map((loan) => <tr key={loan._id} className={loan.status === 'OVERDUE' ? 'loan-overdue-row' : ''}>
           <td><strong>{loan.loanNo}</strong><small className="cell-note">{dateText(loan.loanDate)}</small></td>

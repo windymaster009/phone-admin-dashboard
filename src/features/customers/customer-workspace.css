@@ -37,7 +37,7 @@
   min-width: 320px;
 }
 
-.customer-filter-row .filter-select {
+.customer-filter-row .filter-select-shell {
   flex: 0 0 auto;
   min-width: 160px;
 }
@@ -292,6 +292,11 @@
     min-height: 38px;
     padding-inline: 10px;
     font-size: 9px;
+  }
+
+  .customer-filter-row .filter-select-shell {
+    width: 100%;
+    min-width: 0;
   }
 
   /* Preserve the compact physical footprint when the app Display size is increased. */

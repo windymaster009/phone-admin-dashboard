@@ -9,7 +9,7 @@
     min-width: 320px;
   }
 
-  .pawn-filter-row .filter-select {
+  .pawn-filter-row .filter-select-shell {
     flex: 0 0 auto;
     min-width: 160px;
   }
@@ -739,6 +739,11 @@
     background-repeat: no-repeat;
     background-size: 16px;
     font-size: 9px;
+  }
+
+  .pawn-workspace-card .filter-row .filter-select-shell {
+    width: 100%;
+    min-width: 0;
   }
 
   .pawn-workspace-card .filter-row .filter-select:focus-visible {

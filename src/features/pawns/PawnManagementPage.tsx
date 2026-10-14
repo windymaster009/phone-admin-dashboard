@@ -8,6 +8,7 @@ import SectionHeader from '../../components/SectionHeader'
 import StatusBadge from '../../components/StatusBadge'
 import SummaryStats from '../../components/SummaryStats'
 import FilterToolbar from '../../components/FilterToolbar'
+import FilterSelect from '../../components/FilterSelect'
 import ScannerTriggerButton, { openProductScanner } from '../../components/scanner/ScannerTriggerButton'
 import NotificationToast from '../../components/NotificationToast'
 import PawnDetailModal, { pawnOutstanding } from './PawnDetailModal'
@@ -224,12 +225,12 @@ export default function PawnView({ user }: { user: SessionUser }) {
           searchLabel="Search pawn contracts"
           placeholder="Search contract, customer, phone or IMEI"
         >
-          <select className="ghost-button filter-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter pawn status">
+          <FilterSelect value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} aria-label="Filter pawn status">
             <option value="ALL">All statuses</option><option value="ACTIVE">Active</option><option value="DUE_SOON">Due soon</option><option value="OVERDUE">Overdue</option><option value="REDEEMED">Redeemed</option><option value="FORFEITED">Claimed</option>
-          </select>
-          <select className="ghost-button filter-select" value={pawnSort} onChange={(event) => setPawnSort(event.target.value as 'newest' | 'oldest' | 'due-soonest' | 'due-latest')} aria-label="Sort pawn contracts">
+          </FilterSelect>
+          <FilterSelect value={pawnSort} onChange={(event) => setPawnSort(event.target.value as 'newest' | 'oldest' | 'due-soonest' | 'due-latest')} aria-label="Sort pawn contracts">
             <option value="newest">Newest contracts</option><option value="oldest">Oldest contracts</option><option value="due-soonest">Due soonest</option><option value="due-latest">Due latest</option>
-          </select>
+          </FilterSelect>
         </FilterToolbar>
         <div className="table-scroll pawn-management-table">
           <table>

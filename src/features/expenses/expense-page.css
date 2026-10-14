@@ -9,7 +9,8 @@
 .expense-ledger .filter-row { margin: 0; padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 .expense-filter-row { align-items: center; flex-wrap: wrap; }
 .expense-filter-row .search-field { flex: 1 1 320px; min-width: min(100%, 280px); }
-.expense-filter-row .filter-select { flex: 0 0 auto; min-width: 142px; min-height: 44px; }
+.expense-filter-row .filter-select-shell { flex: 0 0 auto; min-width: 142px; }
+.expense-filter-row .filter-select { min-height: 44px; }
 .expense-ledger table tbody tr { cursor: pointer; }
 .expense-ledger table tbody tr:focus-visible { outline: 2px solid var(--purple); outline-offset: -2px; }
 .expense-ledger td:nth-child(2) strong, .expense-ledger td:nth-child(2) small { display: block; }
@@ -64,7 +65,7 @@
   .expense-mobile-list header strong { overflow-wrap: anywhere; }
   .expense-mobile-list small { color: var(--muted); }
   .expense-filter-row { padding-inline: var(--space-4); }
-  .expense-filter-row .search-field, .expense-filter-row .filter-select { width: 100%; min-width: 0; }
+  .expense-filter-row .search-field, .expense-filter-row .filter-select-shell { width: 100%; min-width: 0; }
   .expense-form-grid, .expense-detail dl { grid-template-columns: minmax(0, 1fr); }
   .expense-field-wide { grid-column: auto; }
   .operation-modal-actions.expense-modal-actions { display: grid; grid-template-columns: minmax(0, 1fr); align-items: stretch; }

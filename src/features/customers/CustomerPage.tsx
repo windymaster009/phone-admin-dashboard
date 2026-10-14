@@ -20,6 +20,7 @@ import LoadingState from '../../components/LoadingState'
 import SummaryStats from '../../components/SummaryStats'
 import OperationModalShell from '../../components/OperationModalShell'
 import FilterToolbar from '../../components/FilterToolbar'
+import FilterSelect from '../../components/FilterSelect'
 
 type Customer = {
   _id: string
@@ -350,12 +351,12 @@ export default function CustomerPage() {
           searchLabel="Search customers"
           placeholder="Search name, phone, National ID, or address"
         >
-          <select className="ghost-button filter-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as CustomerStatusFilter)} aria-label="Filter customer status">
+          <FilterSelect value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as CustomerStatusFilter)} aria-label="Filter customer status">
             <option value="ALL">All customers</option>
             <option value="ID_READY">ID ready</option>
             <option value="BASIC">Basic profile</option>
             <option value="INACTIVE">Inactive</option>
-          </select>
+          </FilterSelect>
         </FilterToolbar>
 
         <div className="table-scroll">

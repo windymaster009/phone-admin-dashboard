@@ -35,6 +35,7 @@ import DetailModalHeader from '../../components/DetailModalHeader'
 import DetailModalBody from '../../components/DetailModalBody'
 import DetailModalFooter from '../../components/DetailModalFooter'
 import FilterToolbar from '../../components/FilterToolbar'
+import FilterSelect from '../../components/FilterSelect'
 import './service-workspace.css'
 
 type Currency = 'USD' | 'KHR'
@@ -503,10 +504,10 @@ export default function ServiceWorkspace() {
           searchLabel="Search services"
           placeholder="Search services"
         >
-          <select className="ghost-button filter-select" value={category} onChange={(event) => setCategory(event.target.value as 'ALL' | ServiceCategory)} aria-label="Service category">
+          <FilterSelect value={category} onChange={(event) => setCategory(event.target.value as 'ALL' | ServiceCategory)} aria-label="Service category">
             <option value="ALL">All categories</option>
             {Object.entries(categoryDetails).map(([value, detail]) => <option value={value} key={value}>{detail.label}</option>)}
-          </select>
+          </FilterSelect>
         </FilterToolbar>
 
         {loading && services.length === 0 ? <section className="surface-card"><LoadingState label="Loading services" detail="Preparing the service catalogue…" /></section> : <section className="service-catalogue-grid" aria-label="Available services">
