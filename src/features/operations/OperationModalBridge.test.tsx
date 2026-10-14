@@ -1369,6 +1369,71 @@ describe('OperationModalBridge component', () => {
     })
   })
 
+  it('filters existing purchase products by name or SKU and supports keyboard selection', async () => {
+    const mockInventory = [
+      {
+        ...mockInventoryItem,
+        _id: 'inv-case-clear',
+        name: 'Clear Case for iPhone 15',
+        sku: 'CASE-CLR-15',
+        category: 'ACCESSORY' as const,
+        quantity: 20,
+      },
+      {
+        ...mockInventoryItem,
+        _id: 'inv-case-red',
+        name: 'Red Silicone Case',
+        sku: 'CASE-RED-15',
+        category: 'ACCESSORY' as const,
+        quantity: 7,
+      },
+    ]
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('/inventory')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ items: mockInventory }) } as Response
+      }
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers(),
+        json: async () => ({ customers: [], suppliers: [], items: mockInventory, usdKhr: 4100 }),
+      } as Response
+    })
+
+    renderModalBridge()
+    act(() => {
+      window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'purchase' } }))
+    })
+
+    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+    fireEvent.change(screen.getByPlaceholderText(/Customer name/i), { target: { value: 'Case Vendor' } })
+    fireEvent.click(screen.getByRole('button', { name: /Continue to items/i }))
+    await waitFor(() => expect(screen.getByLabelText(/Step 2 of 2: Items & payment/i)).toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: /^ACCESSORY$/i }))
+    fireEvent.click(screen.getByRole('button', { name: /Existing product/i }))
+
+    const productSearch = screen.getByRole('combobox', { name: /^Product$/i })
+    fireEvent.focus(productSearch)
+    expect(within(screen.getByRole('listbox', { name: /Existing inventory products/i })).getAllByRole('option')).toHaveLength(2)
+
+    fireEvent.change(productSearch, { target: { value: 'CASE-RED' } })
+    const filteredOptions = within(screen.getByRole('listbox', { name: /Existing inventory products/i })).getAllByRole('option')
+    expect(filteredOptions).toHaveLength(1)
+    expect(filteredOptions[0]).toHaveTextContent('Red Silicone Case')
+    expect(screen.queryByText('Clear Case for iPhone 15')).not.toBeInTheDocument()
+
+    fireEvent.keyDown(productSearch, { key: 'ArrowDown' })
+    fireEvent.keyDown(productSearch, { key: 'Enter' })
+
+    expect(productSearch).toHaveValue('Red Silicone Case')
+    expect(screen.queryByRole('listbox', { name: /Existing inventory products/i })).not.toBeInTheDocument()
+    expect(screen.getByText('Current stock')).toBeInTheDocument()
+    expect(screen.getByText('7')).toBeInTheDocument()
+  })
+
   it('handles camera IMEI scanner dialog, 15-digit validation, error feedback, and focus restoration', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue({
       ok: true,

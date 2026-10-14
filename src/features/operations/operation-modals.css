@@ -1987,7 +1987,34 @@ body.operation-modal-open {
 .purchase-inventory-mode button small { overflow: hidden; color: var(--muted,#8f9bb4); font-size: 8px; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
 .purchase-inventory-mode button > svg { color: #a78bfa; }
 .purchase-inventory-mode button.active { border-color: rgba(139,92,246,.58); background: rgba(139,92,246,.1); box-shadow: 0 0 0 2px rgba(139,92,246,.06); }
-.device-existing-product { grid-column: 1 / -1; }
+.device-existing-product { position: relative; grid-column: 1 / -1; min-width: 0; display: grid; gap: 7px; }
+.device-existing-product > label { color: var(--muted, #8f9bb4); font-size: 11px; font-weight: 700; }
+.purchase-inventory-search input { min-height: 44px; outline: 2px solid transparent; outline-offset: 1px; }
+.purchase-inventory-search input:disabled { opacity: .55; cursor: not-allowed; }
+.purchase-inventory-search input:focus-visible { outline-color: var(--primary, #a78bfa); }
+.purchase-inventory-search .purchase-search-selected { color: var(--green, #34d399); }
+.purchase-inventory-search .purchase-search-loading { color: var(--primary, #a78bfa); }
+.purchase-inventory-search.has-value input { border-color: color-mix(in srgb,var(--green, #34d399) 35%,transparent); }
+.purchase-inventory-search.has-value input:focus { border-color: color-mix(in srgb,var(--green, #34d399) 62%,transparent); box-shadow: 0 0 0 3px color-mix(in srgb,var(--green, #34d399) 10%,transparent); }
+.purchase-product-results-dropdown { max-height: 250px; }
+.purchase-product-option.is-selected { background: color-mix(in srgb,var(--green, #34d399) 8%,transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb,var(--green, #34d399) 20%,transparent); }
+.purchase-option-selected { display: inline-flex; align-items: center; gap: 4px; color: var(--green, #34d399); font-size: 9px; font-weight: 800; white-space: nowrap; }
+.purchase-search-helper { min-height: 1lh; color: var(--muted, #8f9bb4) !important; font-size: 9px; }
+.device-existing-product.field-invalid .purchase-inventory-search input { border-color: color-mix(in srgb,var(--rose, #fb7185) 65%,transparent); box-shadow: 0 0 0 3px color-mix(in srgb,var(--rose, #fb7185) 7%,transparent); }
+:root[data-theme='light'] .purchase-inventory-search .purchase-search-selected,
+:root[data-theme='light'] .purchase-option-selected { color: var(--primary); }
+:root[data-theme='light'] .purchase-inventory-search.has-value input { border-color: color-mix(in srgb,var(--primary) 36%,var(--border-strong)); }
+:root[data-theme='light'] .purchase-inventory-search.has-value input:focus { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb,var(--primary) 12%,transparent); }
+.sale-search-clear-btn:focus-visible,
+.sale-product-option:focus-visible { outline: 2px solid var(--primary, #a78bfa); outline-offset: 2px; }
+.sale-search-clear-btn::before { position: absolute; inset: -10px; content: ''; }
+.sale-search-clear-btn:active { transform: translateY(1px); }
+.sale-search-clear-btn:disabled { opacity: .5; cursor: not-allowed; }
+.sale-product-option:active { transform: translateY(1px); }
+.sale-product-option:disabled { opacity: .5; cursor: not-allowed; }
+@media (hover: hover) and (pointer: fine) {
+  .purchase-inventory-search input:hover:not(:disabled) { background: var(--surface-hover, #1a2540); }
+}
 .purchase-existing-summary { grid-column: 1 / -1; min-width: 0; display: grid; grid-template-columns: auto minmax(0,1fr) auto auto; align-items: center; gap: 12px; padding: 12px; border: 1px solid rgba(52,211,153,.2); border-radius: 11px; background: rgba(52,211,153,.055); }
 .purchase-existing-summary > p { min-width: 0; display: grid; gap: 4px; margin: 0; }
 .purchase-existing-summary > p strong,.purchase-existing-summary > p small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -3543,6 +3570,7 @@ body.operation-modal-open {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .purchase-search-loading { animation-duration: 2s; }
   .sale-addon-toggle:active { transform: none; }
   .pawn-reuse-confirm-action,
   .pawn-reuse-undo-action { transition-duration: .01ms; }
