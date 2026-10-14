@@ -641,6 +641,47 @@ async function buildSaleQuote(lines, session, role, currency = 'USD', exchangeRa
   return { tradeItems, inventoryUpdates, subtotal, minimumTotal }
 }
 
+async function buildSaleAddOnQuote(lines, session, paidInventoryIds = []) {
+  if (lines == null) return { addOns: [], inventoryUpdates: [], expenseTotal: 0 }
+  if (!Array.isArray(lines) || lines.length > 20) throw requestError(400, 'Add up to 20 free add-on items')
+  const inventoryIds = lines.map((line) => String(line.inventoryItem || ''))
+  if (inventoryIds.some((id) => !mongoose.isValidObjectId(id))) throw requestError(400, 'A sale add-on is invalid')
+  if (new Set(inventoryIds).size !== inventoryIds.length) throw requestError(400, 'Add each free item only once per sale')
+  const paidIds = new Set(paidInventoryIds.map(String))
+  if (inventoryIds.some((id) => paidIds.has(id))) throw requestError(400, 'A product cannot be both sold and given as a free add-on')
+
+  const addOns = []
+  const inventoryUpdates = []
+  let expenseTotal = 0
+  for (const line of lines) {
+    const quantity = Number(line.quantity || 1)
+    if (!Number.isInteger(quantity) || quantity < 1) throw requestError(400, 'Add-on quantity must be a whole number greater than zero')
+    const query = InventoryItem.findById(line.inventoryItem)
+    if (session) query.session(session)
+    const item = await query
+    if (!item || item.status !== 'IN_STOCK' || item.quantity < quantity) {
+      throw requestError(409, `${line.name || 'Add-on'} does not have enough available stock`)
+    }
+    if (item.category === 'PHONE' || item.category === 'TABLET') {
+      throw requestError(400, 'Phones and tablets must be sold as regular sale items, not free add-ons')
+    }
+    const costPrice = Number(item.buyPrice) || 0
+    if (costPrice <= 0) throw requestError(409, `${item.name} needs a purchase cost before it can be recorded as an add-on expense`)
+    let pawnQuery = Pawn.findOne({ inventoryItem: item._id })
+    if (typeof pawnQuery?.sort === 'function') pawnQuery = pawnQuery.sort({ createdAt: -1 })
+    pawnQuery = pawnQuery.select('pawnNo status')
+    if (session && typeof pawnQuery?.session === 'function') pawnQuery = pawnQuery.session(session)
+    const pledgedPawn = await pawnQuery
+    if (pledgedPawn && pledgedPawn.status !== 'FORFEITED') {
+      throw requestError(409, `Cannot give ${item.name}: it is linked to pawn contract #${pledgedPawn.pawnNo}`)
+    }
+    addOns.push({ inventoryItem: item._id, name: item.name, quantity, costPrice, currency: 'USD' })
+    inventoryUpdates.push({ item, quantity })
+    expenseTotal = roundMoney(expenseTotal + costPrice * quantity)
+  }
+  return { addOns, inventoryUpdates, expenseTotal }
+}
+
 function calculatePawnOffer(input = {}) {
   const currency = pawnCurrencyCode(input.currency)
   const exchangeRate = pawnExchangeRate(currency, input.exchangeRate)
@@ -3854,6 +3895,7 @@ router.post('/payway/khqr', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER
   const {
     inventoryItem,
     items: rawItems,
+    addOns: rawAddOns = [],
     customer,
     quantity: rawQuantity = 1,
     unitPrice: rawUnitPrice,
@@ -3866,6 +3908,7 @@ router.post('/payway/khqr', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER
     : [{ inventoryItem, quantity: rawQuantity, unitPrice: rawUnitPrice, manualUnitPrice }]
 
   const quote = await buildSaleQuote(lines, undefined, req.user.role, 'USD', 1)
+  const addOnQuote = await buildSaleAddOnQuote(rawAddOns, undefined, quote.tradeItems.map((line) => line.inventoryItem))
   const discount = saleDiscount(rawDiscount, quote.subtotal, quote.minimumTotal, 'USD')
   const amount = roundMoney(quote.subtotal - discount)
   if (amount < 0.01) throw requestError(400, 'KHQR total must be at least $0.01')
@@ -3898,6 +3941,7 @@ router.post('/payway/khqr', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER
       manualUnitPrice: lines.find((l) => String(l.inventoryItem) === String(ti.inventoryItem))?.manualUnitPrice === true,
       name: ti.name,
     })),
+    addOns: addOnQuote.addOns.map((line) => ({ inventoryItem: line.inventoryItem, quantity: line.quantity })),
     customer: customerRecord?._id,
     quantity: quote.tradeItems.reduce((acc, ti) => acc + ti.quantity, 0),
     unitPrice: quote.tradeItems[0].unitPrice,
@@ -3960,6 +4004,7 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
     type,
     customer,
     items = [],
+    addOns = [],
     discount = 0,
     amountPaid,
     amountReceived: requestedAmountReceived,
@@ -3988,6 +4033,7 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
     throw requestError(409, 'This KHQR payment has already been recorded')
   }
   const initialQuote = await buildSaleQuote(items, undefined, req.user.role, currency, exchangeRate)
+  const initialAddOnQuote = await buildSaleAddOnQuote(addOns, undefined, initialQuote.tradeItems.map((line) => line.inventoryItem))
   const verifiedDiscount = saleDiscount(discount, initialQuote.subtotal, initialQuote.minimumTotal, currency)
   const transactionTotal = roundSaleCurrency(initialQuote.subtotal - verifiedDiscount, currency)
   if (transactionTotal <= 0) throw requestError(400, 'Discount must leave a sale total greater than zero')
@@ -4011,6 +4057,16 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
           || Number(matchingSaleItem.quantity) !== Number(intentItem.quantity)
           || Math.abs(Number(matchingSaleItem.unitPrice) - Number(intentItem.unitPrice)) > 0.001) {
           throw requestError(409, 'KHQR payment request does not match this sale')
+        }
+      }
+      const intentAddOns = Array.isArray(paymentIntent.addOns) ? paymentIntent.addOns : []
+      if (intentAddOns.length !== initialAddOnQuote.addOns.length) {
+        throw requestError(409, 'KHQR add-ons do not match this sale')
+      }
+      for (const intentAddOn of intentAddOns) {
+        const matchingAddOn = initialAddOnQuote.addOns.find((line) => String(line.inventoryItem) === String(intentAddOn.inventoryItem))
+        if (!matchingAddOn || Number(matchingAddOn.quantity) !== Number(intentAddOn.quantity)) {
+          throw requestError(409, 'KHQR add-ons do not match this sale')
         }
       }
     } else {
@@ -4059,6 +4115,7 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
       }
 
       const quote = await buildSaleQuote(items, session, req.user.role, currency, exchangeRate)
+      const addOnQuote = await buildSaleAddOnQuote(addOns, session, quote.tradeItems.map((line) => line.inventoryItem))
       const currentDiscount = saleDiscount(discount, quote.subtotal, quote.minimumTotal, currency)
       const currentTransactionTotal = roundSaleCurrency(quote.subtotal - currentDiscount, currency)
       if (Math.abs(currentTransactionTotal - transactionTotal) > paymentTolerance) throw requestError(409, 'Sale pricing changed. Refresh and try again')
@@ -4068,12 +4125,18 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
         if (item.quantity === 0) item.status = item.category === 'PHONE' ? 'SOLD' : 'ARCHIVED'
         await item.save({ session })
       }
+      for (const { item, quantity } of addOnQuote.inventoryUpdates) {
+        item.quantity -= quantity
+        if (item.quantity === 0) item.status = 'ARCHIVED'
+        await item.save({ session })
+      }
 
       ;[trade] = await Trade.create([{
         tradeNo: makeCode('SL'),
         type: 'SELL',
         customer: customer || undefined,
         items: quote.tradeItems,
+        addOns: addOnQuote.addOns,
         currency,
         exchangeRate,
         transactionSubtotal: quote.subtotal,
@@ -4097,6 +4160,25 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
         notes: clean(notes),
         createdBy: req.user._id,
       }], { session })
+      if (addOnQuote.expenseTotal > 0) {
+        await Expense.create([{
+          expenseNo: makeCode('EX'),
+          title: `Free add-ons for ${trade.tradeNo}`,
+          category: 'MARKETING',
+          amount: addOnQuote.expenseTotal,
+          currency: 'USD',
+          exchangeRate: 1,
+          paymentMethod: 'OTHER',
+          expenseDate: new Date(),
+          reference: trade.tradeNo,
+          notes: addOnQuote.addOns.map((line) => `${line.name} x${line.quantity}`).join(', '),
+          status: 'RECORDED',
+          idempotencyKey: `sale-addon:${trade._id}`,
+          sourceType: 'SALE_ADD_ON',
+          sourceId: trade._id,
+          createdBy: req.user._id,
+        }], { session })
+      }
       if (paymentIntent) {
         const completedIntent = await PaywayIntent.findOneAndUpdate(
           { _id: paymentIntent._id, status: { $in: ['PENDING', 'APPROVED'] } },
@@ -4114,9 +4196,10 @@ router.post('/trades', requireAuth, allowTradeWrite, asyncRoute(async (req, res)
       console.error(`Unable to close completed PayWay transaction ${paywayTransactionId}:`, error.message)
     })
   }
-  await writeActivity(req, { action: 'CREATE', entity: 'TRADE', entityId: trade._id, details: { tradeNo: trade.tradeNo, type: 'SELL', currency, total: transactionTotal, amountReceived, changeDue, warrantyDays, manualPrice: items.some((line) => line?.manualUnitPrice === true) } })
+  await writeActivity(req, { action: 'CREATE', entity: 'TRADE', entityId: trade._id, details: { tradeNo: trade.tradeNo, type: 'SELL', currency, total: transactionTotal, amountReceived, changeDue, warrantyDays, addOnCount: initialAddOnQuote.addOns.reduce((sum, line) => sum + line.quantity, 0), manualPrice: items.some((line) => line?.manualUnitPrice === true) } })
   await trade.populate('customer', 'name phone')
   await trade.populate('items.inventoryItem', 'sku barcode name category brand model imei1 condition quantity buyPrice sellPrice status')
+  await trade.populate('addOns.inventoryItem', 'sku barcode name category brand model quantity buyPrice status')
   res.status(201).json({ trade })
 }))
 

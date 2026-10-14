@@ -127,7 +127,7 @@ router.post('/:id/void', requireAuth, allowRoles(...roles), asyncRoute(async (re
   const reason = clean(req.body.reason)
   if (reason.length < 5 || reason.length > 500) throw requestError(400, 'Enter a void reason between 5 and 500 characters')
   const expense = await Expense.findOneAndUpdate(
-    { _id: req.params.id, status: 'RECORDED' },
+    { _id: req.params.id, status: 'RECORDED', sourceType: { $ne: 'SALE_ADD_ON' } },
     { $set: { status: 'VOIDED', voidReason: reason, voidedAt: new Date(), voidedBy: req.user._id } },
     { new: true, runValidators: true },
   )

@@ -293,6 +293,17 @@ const tradeLineSchema = new Schema(
   { _id: false },
 )
 
+const saleAddOnSchema = new Schema(
+  {
+    inventoryItem: { type: Schema.Types.ObjectId, ref: 'InventoryItem', required: true },
+    name: { type: String, required: true, trim: true },
+    quantity: { type: Number, min: 1, required: true },
+    costPrice: { type: Number, min: 0.01, required: true },
+    currency: { type: String, enum: ['USD'], default: 'USD' },
+  },
+  { _id: false },
+)
+
 const tradeSchema = new Schema(
   {
     tradeNo: { type: String, required: true, unique: true, index: true },
@@ -317,6 +328,7 @@ const tradeSchema = new Schema(
     paymentStatus: { type: String, enum: ['PAID', 'PARTIAL', 'UNPAID'] },
     purchaseWorkflowVersion: { type: Number },
     items: { type: [tradeLineSchema], validate: [(items) => items.length > 0, 'At least one item is required'] },
+    addOns: { type: [saleAddOnSchema], default: [] },
     subtotal: { type: Number, min: 0, required: true },
     discount: { type: Number, min: 0, default: 0 },
     total: { type: Number, min: 0, required: true },
@@ -360,6 +372,10 @@ const paywayIntentSchema = new Schema(
       unitPrice: { type: Number, min: 0, required: true },
       manualUnitPrice: { type: Boolean, default: false },
       name: String,
+    }],
+    addOns: [{
+      inventoryItem: { type: Schema.Types.ObjectId, ref: 'InventoryItem', required: true },
+      quantity: { type: Number, min: 1, required: true },
     }],
     customer: { type: Schema.Types.ObjectId, ref: 'Customer' },
     quantity: { type: Number, min: 1 },

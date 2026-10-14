@@ -384,6 +384,10 @@ test('POST /generate: creates immutable receipt snapshot (201 created: true)', a
     createdAt: new Date(),
     customer: { name: 'Alice Customer', phone: '012999000' },
     items: [],
+    addOns: [{
+      name: 'USB-C Charger', quantity: 1, costPrice: 3.5,
+      inventoryItem: { sku: 'ACC-CHARGER-1', barcode: '1234567890123', brand: 'Generic', model: '20W' },
+    }],
   }
   const queryMock = {
     populate: () => queryMock,
@@ -429,6 +433,9 @@ test('POST /generate: creates immutable receipt snapshot (201 created: true)', a
     assert.equal(createdPayload.sourceSubId, 'trade-correction-1')
     assert.equal(createdPayload.snapshot.correctionVersion, 1)
     assert.deepEqual(createdPayload.snapshot.correctedAt, tradeDoc.lastCorrectedAt)
+    assert.equal(createdPayload.snapshot.items[0].name, 'USB-C Charger (Free add-on)')
+    assert.equal(createdPayload.snapshot.items[0].unitPrice, 0)
+    assert.equal(createdPayload.snapshot.items[0].total, 0)
     const log = activityLogs[activityLogs.length - 1]
     assert.ok(log)
     assert.equal(log.action, 'CREATE')

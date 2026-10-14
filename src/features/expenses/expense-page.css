@@ -40,6 +40,9 @@
 .expense-void-field small { min-height: 1lh; font-weight: 500; }
 .expense-voided-note { display: flex; gap: 10px; padding: 12px; border: 1px solid color-mix(in srgb, var(--rose) 35%, var(--border)); border-radius: var(--radius-md); color: var(--rose); background: color-mix(in srgb, var(--rose) 7%, var(--panel)); }
 .expense-voided-note span { display: grid; gap: 3px; font-size: 12px; }
+.expense-linked-note { display: flex; gap: var(--space-3); padding: var(--space-3); border: 1px solid color-mix(in srgb, var(--purple) 35%, var(--border)); border-radius: var(--radius-md); color: var(--purple-light); background: color-mix(in srgb, var(--purple) 7%, var(--panel)); }
+.expense-linked-note span { display: grid; gap: var(--space-1); color: var(--muted); font-size: var(--text-xs); }
+.expense-linked-note strong { color: var(--text); }
 .operation-modal-actions.expense-modal-actions { position: sticky; display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
 .expense-action-note { min-width: 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
 .expense-action-buttons { display: flex; flex: 0 0 auto; align-items: center; gap: var(--space-2); }

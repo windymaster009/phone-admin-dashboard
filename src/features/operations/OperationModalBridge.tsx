@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronUp,
   HandCoins,
+  Gift,
   LoaderCircle,
   Maximize2,
   Minus,
@@ -78,6 +79,11 @@ export interface SaleCartLine {
   quantity: number
 }
 
+export interface SaleAddOnLine {
+  item: InventoryItem
+  quantity: number
+}
+
 export default function OperationModalBridge() {
   const [kind, setKind] = useState<ModalKind | null>(null)
   const [stockSearch, setStockSearch] = useState('')
@@ -137,6 +143,9 @@ export default function OperationModalBridge() {
   const [scannedPawn, setScannedPawn] = useState<RelatedPawn | null>(null)
   const [labelItems, setLabelItems] = useState<InventoryItem[]>([])
   const [saleCart, setSaleCart] = useState<SaleCartLine[]>([])
+  const [saleAddOns, setSaleAddOns] = useState<SaleAddOnLine[]>([])
+  const [saleAddOnPickerOpen, setSaleAddOnPickerOpen] = useState(false)
+  const [saleAddOnItemId, setSaleAddOnItemId] = useState('')
   const [salePriceItemId, setSalePriceItemId] = useState('')
   const [saleSearchText, setSaleSearchText] = useState('')
   const [saleDropdownOpen, setSaleDropdownOpen] = useState(false)
@@ -425,6 +434,17 @@ export default function OperationModalBridge() {
     }).slice(0, 50)
   }, [inventory, saleSearchText])
 
+  const availableSaleAddOns = useMemo(() => {
+    const paidIds = new Set(saleCart.map((line) => line.item._id))
+    const selectedIds = new Set(saleAddOns.map((line) => line.item._id))
+    return inventory.filter((item) => canOfferForSale(item)
+      && item.category !== 'PHONE'
+      && item.category !== 'TABLET'
+      && Number(item.buyPrice || 0) > 0
+      && !paidIds.has(item._id)
+      && !selectedIds.has(item._id))
+  }, [inventory, saleCart, saleAddOns])
+
   const cartLinesWithCalculations = useMemo(() => {
     return saleCart.map((line) => {
       const savedUnitPrice = inventorySalePrice(line.item, saleCurrency, usdKhrRate)
@@ -670,6 +690,9 @@ export default function OperationModalBridge() {
           setSaleDropdownOpen(false)
           setSaleActiveIndex(-1)
           setSalePriceItemId('')
+          setSaleAddOns([])
+          setSaleAddOnPickerOpen(false)
+          setSaleAddOnItemId('')
 
           const preselectedId = detail.itemId || detail.item?._id || ''
           pendingSaleItemIdRef.current = preselectedId || null
@@ -987,6 +1010,9 @@ export default function OperationModalBridge() {
     setLabelItems([])
     pendingSaleItemIdRef.current = null
     setSaleCart([])
+    setSaleAddOns([])
+    setSaleAddOnPickerOpen(false)
+    setSaleAddOnItemId('')
     setSalePriceItemId('')
     setSaleSearchText('')
     setSaleDropdownOpen(false)
@@ -1312,6 +1338,10 @@ export default function OperationModalBridge() {
       setError(`"${item.name}" is not available for sale.`)
       return
     }
+    if (saleAddOns.some((line) => line.item._id === item._id)) {
+      setError(`Remove "${item.name}" from free add-ons before selling it as a regular item.`)
+      return
+    }
     const existingLine = saleCart.find((line) => line.item._id === item._id)
     if (existingLine) {
       if (item.category === 'PHONE' || existingLine.quantity >= item.quantity) {
@@ -1372,6 +1402,30 @@ export default function OperationModalBridge() {
     )
     setSaleDiscount('0')
     setSaleAmountPaid('')
+  }
+
+  const addSelectedSaleAddOn = () => {
+    const item = inventory.find((candidate) => candidate._id === saleAddOnItemId)
+    if (!item || !availableSaleAddOns.some((candidate) => candidate._id === item._id)) {
+      setError('Choose an available add-on with a recorded purchase cost.')
+      return
+    }
+    setSaleAddOns((current) => [...current, { item, quantity: 1 }])
+    setSaleAddOnItemId('')
+    setSaleAddOnPickerOpen(false)
+    setError('')
+  }
+
+  const updateSaleAddOnQuantity = (itemId: string, requested: number) => {
+    setSaleAddOns((current) => current.map((line) => line.item._id === itemId
+      ? { ...line, quantity: Math.max(1, Math.min(line.item.quantity, Math.floor(requested) || 1)) }
+      : line))
+    setError('')
+  }
+
+  const removeSaleAddOn = (itemId: string) => {
+    setSaleAddOns((current) => current.filter((line) => line.item._id !== itemId))
+    setError('')
   }
 
   const handleSaleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -1883,6 +1937,16 @@ export default function OperationModalBridge() {
         return
       }
     }
+    for (const line of saleAddOns) {
+      if (!Number.isInteger(line.quantity) || line.quantity < 1 || line.quantity > line.item.quantity) {
+        setError(`Add-on quantity for ${line.item.name} must be between 1 and ${line.item.quantity}`)
+        return
+      }
+      if (Number(line.item.buyPrice || 0) <= 0) {
+        setError(`${line.item.name} needs a purchase cost before it can be recorded as an expense`)
+        return
+      }
+    }
     if (saleDiscountType === 'PERCENT' && (salePercentInvalid || saleDiscount.trim() === '')) {
       setError('Discount percentage must be between 0 and 100%')
       return
@@ -1912,6 +1976,7 @@ export default function OperationModalBridge() {
       type: 'SELL' as const,
       customer: saleCustomerId || undefined,
       items: tradeItems,
+      addOns: saleAddOns.map((line) => ({ inventoryItem: line.item._id, name: line.item.name, quantity: line.quantity })),
       discount: saleDiscountAmount,
       amountPaid,
       amountReceived,
@@ -1934,6 +1999,7 @@ export default function OperationModalBridge() {
             quantity: tradeItems[0]?.quantity,
             unitPrice: tradeItems[0]?.unitPrice,
             items: tradeItems,
+            addOns: payload.addOns,
             customer: saleCustomerId || undefined,
             discount: saleDiscountAmount,
           }),
@@ -2480,7 +2546,7 @@ export default function OperationModalBridge() {
           marker={<CheckCircle2 size={17} />}
           title="Payment settlement"
           description="Confirm what was paid after reviewing the complete purchase total."
-          className="purchase-settlement-card"
+          className="operation-purchase-settlement-card"
         >
           <div className="operation-form-grid purchase-fields-grid"><label className={purchasePaidInvalid ? 'field-invalid' : ''}>Amount paid ({purchaseCurrency})<MoneyInput currency={purchaseCurrency} minimum={0} maximum={purchaseTotal || undefined} value={purchaseAmountPaid} onValueChange={(nextValue) => { setPurchaseAmountPaidTouched(true); setPurchaseAmountPaid(nextValue) }} placeholder={purchaseCurrency === 'KHR' ? '0' : '0.00'} />{purchasePaid > purchaseTotal ? <small>Amount paid cannot exceed the total</small> : purchaseCurrency === 'KHR' && purchasePaidInvalid ? <small>Use a whole KHR amount in increments of 100</small> : null}</label></div>
           <KeyValueSummary
@@ -2959,6 +3025,13 @@ export default function OperationModalBridge() {
               <small>{saleCompleted.paymentMethod === 'KHQR' ? 'ABA KHQR payment' : 'Cash payment'}</small>
             </div>
           )}
+          {Array.isArray(saleCompleted.addOns) && saleCompleted.addOns.length > 0 && (
+            <div className="sale-complete-addons" aria-label="Free add-ons">
+              <strong><Gift size={15} /> Free add-ons</strong>
+              <span>{saleCompleted.addOns.map((item) => `${item.name} × ${item.quantity}`).join(', ')}</span>
+              <small>Stock updated and inventory cost recorded in Expenses.</small>
+            </div>
+          )}
         </div>
         <OperationWorkflowFooter
           className="record-created-actions"
@@ -3221,6 +3294,60 @@ export default function OperationModalBridge() {
               )}
             </section>
 
+            <section className="sale-addon-section operation-wide" aria-label="Free add-ons">
+              <div className="sale-addon-heading">
+                <div>
+                  <strong><Gift size={15} /> Free add-ons</strong>
+                  <small>Given to the customer at no charge. Inventory cost is recorded in Expenses.</small>
+                </div>
+                <button
+                  type="button"
+                  className="sale-addon-toggle"
+                  aria-expanded={saleAddOnPickerOpen}
+                  disabled={!hasCartItems || availableSaleAddOns.length === 0}
+                  title={!hasCartItems ? 'Add a paid product first' : availableSaleAddOns.length === 0 ? 'No eligible add-on stock with a purchase cost' : undefined}
+                  onClick={() => {
+                    setSaleAddOnPickerOpen((open) => !open)
+                    setSaleAddOnItemId('')
+                    setError('')
+                  }}
+                >
+                  <Plus size={14} /> Add-on
+                </button>
+              </div>
+
+              {saleAddOnPickerOpen && (
+                <div className="sale-addon-picker">
+                  <label>
+                    <span>Free inventory item</span>
+                    <select aria-label="Free add-on item" value={saleAddOnItemId} onChange={(event) => setSaleAddOnItemId(event.target.value)}>
+                      <option value="">Choose accessory, spare part, or other stock</option>
+                      {availableSaleAddOns.map((item) => <option key={item._id} value={item._id}>{item.name} · {item.quantity} available</option>)}
+                    </select>
+                  </label>
+                  <button type="button" className="secondary-button" disabled={!saleAddOnItemId} onClick={addSelectedSaleAddOn}>Add free item</button>
+                </div>
+              )}
+
+              {saleAddOns.length > 0 && (
+                <div className="sale-addon-list" role="list">
+                  {saleAddOns.map((line) => (
+                    <div className="sale-addon-row" role="listitem" key={line.item._id}>
+                      <span className="sale-addon-icon"><Gift size={15} /></span>
+                      <div className="sale-addon-info"><strong>{line.item.name}</strong><small>Free to customer · expense recorded at inventory cost</small></div>
+                      <div className="sale-cart-qty-stepper" role="group" aria-label={`Quantity for free add-on ${line.item.name}`}>
+                        <button type="button" className="sale-cart-qty-btn" aria-label={`Decrease free add-on ${line.item.name}`} disabled={line.quantity <= 1} onClick={() => updateSaleAddOnQuantity(line.item._id, line.quantity - 1)}><Minus size={12} /></button>
+                        <input className="sale-cart-qty-input" type="number" min="1" max={line.item.quantity} aria-label={`Free add-on quantity for ${line.item.name}`} value={line.quantity} onChange={(event) => updateSaleAddOnQuantity(line.item._id, Number(event.target.value))} />
+                        <button type="button" className="sale-cart-qty-btn" aria-label={`Increase free add-on ${line.item.name}`} disabled={line.quantity >= line.item.quantity} onClick={() => updateSaleAddOnQuantity(line.item._id, line.quantity + 1)}><Plus size={12} /></button>
+                      </div>
+                      <span className="sale-addon-free">Free</span>
+                      <button type="button" className="sale-cart-remove-button" aria-label={`Remove free add-on ${line.item.name}`} onClick={() => removeSaleAddOn(line.item._id)}><Trash2 size={16} /></button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
             <div className={`sale-price-display${priceEditorLine?.priceInvalid || priceEditorLine?.belowMinimum ? ' needs-price' : ''}`} role="group" aria-label={`Selling price in ${saleCurrency}`}>
               <div className="sale-price-heading">
                 <span>Selling price ({saleCurrency}){saleCart.length > 1 && priceEditorLine ? ` · ${priceEditorLine.item.name}` : ''}</span>
@@ -3350,6 +3477,12 @@ export default function OperationModalBridge() {
                     <div key={line.item._id} className="sale-summary-line-item">
                       <span>{line.item.name} × {line.quantity}</span>
                       <strong>{saleAmountText(line.lineSubtotal, saleCurrency)}</strong>
+                    </div>
+                  ))}
+                  {saleAddOns.map((line) => (
+                    <div key={`addon-${line.item._id}`} className="sale-summary-line-item sale-summary-addon">
+                      <span><Gift size={13} /> {line.item.name} × {line.quantity}</span>
+                      <strong>Free</strong>
                     </div>
                   ))}
                 </div>

@@ -21,6 +21,8 @@ const expenseSchema = new Schema({
   notes: { type: String, trim: true, maxlength: 1000 },
   status: { type: String, enum: ['RECORDED', 'VOIDED'], default: 'RECORDED', required: true, index: true },
   idempotencyKey: { type: String, trim: true, sparse: true, unique: true, index: true },
+  sourceType: { type: String, enum: ['MANUAL', 'SALE_ADD_ON'], default: 'MANUAL', required: true, index: true },
+  sourceId: { type: Schema.Types.ObjectId, ref: 'Trade', index: true },
   createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   voidedAt: Date,
   voidedBy: { type: Schema.Types.ObjectId, ref: 'User' },
@@ -28,5 +30,6 @@ const expenseSchema = new Schema({
 }, { timestamps: true, versionKey: false })
 
 expenseSchema.index({ expenseDate: -1, createdAt: -1 })
+expenseSchema.index({ sourceType: 1, sourceId: 1 })
 
 export const Expense = model('Expense', expenseSchema)

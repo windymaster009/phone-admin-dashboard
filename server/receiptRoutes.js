@@ -60,6 +60,7 @@ async function findTrade(reference) {
     .populate('createdBy', 'name role')
     .populate('refund.refundedBy', 'name role')
     .populate('items.inventoryItem', 'sku barcode imei1 imei2 serialNumber brand model storage color')
+    .populate('addOns.inventoryItem', 'sku barcode serialNumber brand model')
   if (!trade) throw requestError(404, 'Transaction not found')
   return trade
 }
@@ -140,6 +141,19 @@ function buildTradeSnapshot(trade, documentType) {
       description: [inventory.brand, inventory.model, inventory.storage, inventory.color].filter(Boolean).join(' '),
     }
   })
+  const addOnItems = (trade.addOns || []).map((line) => {
+    const inventory = line.inventoryItem || {}
+    return {
+      name: `${line.name} (Free add-on)`,
+      quantity: Number(line.quantity || 1),
+      unitPrice: 0,
+      total: 0,
+      sku: inventory.sku || '',
+      barcode: inventory.barcode || '',
+      serialNumber: inventory.serialNumber || '',
+      description: [inventory.brand, inventory.model].filter(Boolean).join(' '),
+    }
+  })
   const subtotal = tradeDisplayAmount(trade, trade.transactionSubtotal, trade.subtotal)
   const total = tradeDisplayAmount(trade, trade.transactionTotal, trade.total)
   const amountPaid = tradeDisplayAmount(trade, trade.transactionAmountPaid, trade.amountPaid)
@@ -166,7 +180,7 @@ function buildTradeSnapshot(trade, documentType) {
     party,
     currency,
     exchangeRate: Number(trade.exchangeRate || 1),
-    items,
+    items: [...items, ...addOnItems],
     subtotal,
     discount: currency === 'KHR' ? roundMoney(Math.max(0, subtotal - total)) : roundMoney(trade.discount),
     total,

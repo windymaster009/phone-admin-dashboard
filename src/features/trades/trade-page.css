@@ -451,13 +451,13 @@
   line-height: 1.35;
 }
 
-.purchase-seller-card { grid-area: seller; }
-.purchase-cost-card { grid-area: cost; }
-.purchase-settlement-card { grid-area: settlement; }
-.purchase-status-card { grid-area: status; }
-.purchase-payment-card { grid-area: payment; }
-.purchase-intake-card { grid-area: intake; }
-.purchase-items-panel { grid-area: items; }
+.purchase-transaction-detail > .purchase-seller-card { grid-area: seller; }
+.purchase-transaction-detail > .purchase-cost-card { grid-area: cost; }
+.purchase-transaction-detail > .purchase-settlement-card { grid-area: settlement; }
+.purchase-transaction-detail > .purchase-status-card { grid-area: status; }
+.purchase-transaction-detail > .purchase-payment-card { grid-area: payment; }
+.purchase-transaction-detail > .purchase-intake-card { grid-area: intake; }
+.purchase-transaction-detail > .purchase-items-panel { grid-area: items; }
 
 .purchase-seller-primary,
 .purchase-seller-phone {

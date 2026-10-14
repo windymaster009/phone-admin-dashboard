@@ -281,6 +281,8 @@ export type Expense = {
   expenseNo: string
   title: string
   category: 'RENT' | 'UTILITIES' | 'SALARY' | 'TRANSPORT' | 'REPAIR' | 'SUPPLIES' | 'MARKETING' | 'TAX' | 'OTHER'
+  sourceType?: 'MANUAL' | 'SALE_ADD_ON'
+  sourceId?: string
   amount: number
   currency: 'USD' | 'KHR'
   exchangeRate: number

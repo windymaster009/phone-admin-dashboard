@@ -151,6 +151,7 @@ function ExpenseDetailModal({ expense, onClose, onVoided }: { expense: Expense; 
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const isSaleAddOn = expense.sourceType === 'SALE_ADD_ON'
   async function voidExpense() {
     setBusy(true); setError('')
     try {
@@ -166,9 +167,9 @@ function ExpenseDetailModal({ expense, onClose, onVoided }: { expense: Expense; 
       <div className="expense-detail">
         <div className="expense-detail-total"><span>Amount</span><strong>{pawnMoney(expense.amount, expense.currency)}</strong><StatusBadge status={expense.status} /></div>
         <dl><div><dt>Description</dt><dd>{expense.title}</dd></div><div><dt>Paid to</dt><dd>{expense.payee || 'Not recorded'}</dd></div><div><dt>Payment</dt><dd>{titleStatus(expense.paymentMethod)}</dd></div><div><dt>Reference</dt><dd>{expense.reference || 'Not recorded'}</dd></div><div><dt>Recorded by</dt><dd>{expense.createdBy?.name || 'System'}</dd></div><div><dt>Notes</dt><dd>{expense.notes || 'No notes'}</dd></div></dl>
-        {expense.status === 'VOIDED' ? <div className="expense-voided-note"><XCircle size={18} /><span><strong>Voided {expense.voidedAt ? dateText(expense.voidedAt) : ''}</strong>{expense.voidReason || 'No reason recorded'}</span></div> : <label className="expense-void-field"><span>Void reason</span><textarea minLength={5} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Explain why this record should be excluded from totals." /><small>This does not delete the record. It remains visible for audit review.</small></label>}
+        {expense.status === 'VOIDED' ? <div className="expense-voided-note"><XCircle size={18} /><span><strong>Voided {expense.voidedAt ? dateText(expense.voidedAt) : ''}</strong>{expense.voidReason || 'No reason recorded'}</span></div> : isSaleAddOn ? <div className="expense-linked-note"><ReceiptText size={18} /><span><strong>Created automatically from a sale</strong>This expense stays linked to {expense.reference || 'the sale'} and cannot be voided separately.</span></div> : <label className="expense-void-field"><span>Void reason</span><textarea minLength={5} maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Explain why this record should be excluded from totals." /><small>This does not delete the record. It remains visible for audit review.</small></label>}
       </div>
-      <footer className="operation-modal-actions expense-modal-actions"><span className="expense-action-note">{expense.status === 'VOIDED' ? 'Voided expenses are excluded from totals.' : 'Use void only to correct a mistaken entry.'}</span><div className="expense-action-buttons"><button type="button" className="ghost-button" onClick={onClose}>Close</button>{expense.status === 'RECORDED' && <button type="button" className="danger-button" disabled={busy || reason.trim().length < 5} onClick={voidExpense}>{busy ? 'Voiding…' : 'Void expense'}</button>}</div></footer>
+      <footer className="operation-modal-actions expense-modal-actions"><span className="expense-action-note">{expense.status === 'VOIDED' ? 'Voided expenses are excluded from totals.' : isSaleAddOn ? 'Managed by the linked sale.' : 'Use void only to correct a mistaken entry.'}</span><div className="expense-action-buttons"><button type="button" className="ghost-button" onClick={onClose}>Close</button>{expense.status === 'RECORDED' && !isSaleAddOn && <button type="button" className="danger-button" disabled={busy || reason.trim().length < 5} onClick={voidExpense}>{busy ? 'Voiding…' : 'Void expense'}</button>}</div></footer>
     </div>
   </OperationModalShell>
 }

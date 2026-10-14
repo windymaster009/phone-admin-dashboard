@@ -6,6 +6,7 @@ import apiRouter from './routes.js'
 import serviceRouter from './serviceRoutes.js'
 import { ActivityLog, Customer, InventoryItem, Pawn, Supplier, Trade, User } from './models.js'
 import { ServiceCharge, ServiceOffering } from './serviceModels.js'
+import { Expense } from './expenseModels.js'
 import { AuthSession } from './authSessionModels.js'
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret-trade-routes-12345'
@@ -1681,5 +1682,64 @@ test('POST /trades (SELL): executes multi-item cart sale and deducts inventory f
     InventoryItem.findById = origFindById
     Pawn.findOne = origPawnFindOne
     Trade.create = origTradeCreate
+  }
+})
+
+test('POST /trades (SELL): records free add-on stock cost as one linked expense in the same transaction', async () => {
+  const origFindById = InventoryItem.findById
+  const origTradeCreate = Trade.create
+  const origExpenseCreate = Expense.create
+  const paidId = new mongoose.Types.ObjectId()
+  const addOnId = new mongoose.Types.ObjectId()
+  const paidItem = {
+    _id: paidId, name: 'Used iPhone 13', category: 'PHONE', status: 'IN_STOCK', quantity: 1,
+    sellPrice: 500, minimumSellPrice: 450, buyPrice: 380, save: async function () { return this },
+  }
+  const addOnItem = {
+    _id: addOnId, name: 'USB-C Charger', category: 'ACCESSORY', status: 'IN_STOCK', quantity: 4,
+    sellPrice: 12, minimumSellPrice: 8, buyPrice: 3.5, save: async function () { return this },
+  }
+  InventoryItem.findById = (id) => {
+    const item = String(id) === String(paidId) ? paidItem : String(id) === String(addOnId) ? addOnItem : null
+    const promise = Promise.resolve(item)
+    promise.session = () => promise
+    promise.select = () => promise
+    return promise
+  }
+  let createdTrade
+  let createdExpense
+  Trade.create = async ([data]) => {
+    createdTrade = { _id: new mongoose.Types.ObjectId(), ...data, populate: async function () { return this } }
+    return [createdTrade]
+  }
+  Expense.create = async ([data]) => {
+    createdExpense = data
+    return [{ _id: new mongoose.Types.ObjectId(), ...data }]
+  }
+
+  try {
+    const response = await callRouter(apiRouter, {
+      method: 'POST', url: '/trades', user: mockManager,
+      body: {
+        type: 'SELL', currency: 'USD', paymentMethod: 'CASH', warrantyDays: 0,
+        amountReceived: 500,
+        items: [{ inventoryItem: String(paidId), quantity: 1 }],
+        addOns: [{ inventoryItem: String(addOnId), quantity: 2 }],
+      },
+    })
+    assert.equal(response.status, 201, JSON.stringify(response.body))
+    assert.equal(addOnItem.quantity, 2)
+    assert.equal(createdTrade.addOns[0].name, 'USB-C Charger')
+    assert.equal(createdTrade.addOns[0].quantity, 2)
+    assert.equal(createdExpense.amount, 7)
+    assert.equal(createdExpense.currency, 'USD')
+    assert.equal(createdExpense.category, 'MARKETING')
+    assert.equal(createdExpense.sourceType, 'SALE_ADD_ON')
+    assert.equal(String(createdExpense.sourceId), String(createdTrade._id))
+    assert.equal(createdExpense.reference, createdTrade.tradeNo)
+  } finally {
+    InventoryItem.findById = origFindById
+    Trade.create = origTradeCreate
+    Expense.create = origExpenseCreate
   }
 })

@@ -881,6 +881,11 @@ describe('OperationModalBridge component', () => {
       expect(screen.getByText(/Payment settlement/i)).toBeInTheDocument()
     })
 
+    const settlementHeading = screen.getByRole('heading', { name: /Payment settlement/i })
+    const settlementCard = settlementHeading.closest('.operation-section-card')
+    expect(settlementCard).toHaveClass('operation-purchase-settlement-card')
+    expect(settlementCard).not.toHaveClass('purchase-settlement-card')
+
     // In Step 2, the phone device form has SerializedDeviceFields
     const imeiInput = screen.getByPlaceholderText(/15-digit IMEI/i)
     const brandInput = screen.getByPlaceholderText(/Apple/i)
@@ -5749,6 +5754,7 @@ describe('OperationModalBridge component', () => {
       quantity: 8,
       sellPrice: 40,
       minimumSellPrice: 30,
+      buyPrice: 20,
       khrSellPrice: 164000,
       khrMinimumSellPrice: 123000,
       pricingCurrency: 'USD' as const,
@@ -5838,6 +5844,11 @@ describe('OperationModalBridge component', () => {
                     unitPrice: it.unitPrice,
                   }
                 }),
+                addOns: (body.addOns || []).map((it: any) => ({
+                  inventoryItem: it.inventoryItem,
+                  name: items.find((item) => item._id === it.inventoryItem)?.name || 'Free add-on',
+                  quantity: it.quantity,
+                })),
                 paymentMethod: body.paymentMethod || 'CASH',
                 createdAt: new Date().toISOString(),
               },
@@ -5943,6 +5954,40 @@ describe('OperationModalBridge component', () => {
       const singleOptions = within(singleListbox).getAllByRole('option')
       expect(singleOptions).toHaveLength(1)
       expect(singleOptions[0]).toHaveTextContent('Samsung Galaxy S24 Ultra')
+    })
+
+    it('adds a free inventory add-on without changing the sale total and sends it separately for expense recording', async () => {
+      let submittedTradePayload: any = null
+      setupMultiProductFetch({ onTradePost: (body) => { submittedTradePayload = body } })
+      renderModalBridge()
+
+      act(() => {
+        window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale' } }))
+      })
+      const searchInput = await screen.findByRole('combobox', { name: /inventory item/i })
+      await waitFor(() => expect(searchInput).not.toBeDisabled())
+      fireEvent.change(searchInput, { target: { value: phoneProduct._id } })
+
+      expect(screen.getByRole('button', { name: /^Add-on$/i })).toBeEnabled()
+      fireEvent.click(screen.getByRole('button', { name: /^Add-on$/i }))
+      fireEvent.change(screen.getByRole('combobox', { name: /Free add-on item/i }), { target: { value: accessoryProduct._id } })
+      fireEvent.click(screen.getByRole('button', { name: /Add free item/i }))
+
+      const addOnSection = screen.getByRole('region', { name: /Free add-ons/i })
+      expect(within(addOnSection).getByText(accessoryProduct.name)).toBeInTheDocument()
+      expect(within(addOnSection).getByText(/^Free$/i)).toBeInTheDocument()
+      expect(screen.getByText('$1,200.00', { selector: '.sale-total strong' })).toBeInTheDocument()
+
+      fireEvent.change(screen.getByPlaceholderText(/Enter days/i), { target: { value: '0' } })
+      fireEvent.click(screen.getByRole('button', { name: /Complete sale/i }))
+      await waitFor(() => expect(submittedTradePayload).not.toBeNull())
+      expect(submittedTradePayload.items).toHaveLength(1)
+      expect(submittedTradePayload.addOns).toEqual([{
+        inventoryItem: accessoryProduct._id,
+        name: accessoryProduct.name,
+        quantity: 1,
+      }])
+      expect(await screen.findByLabelText(/Free add-ons/i)).toHaveTextContent(/recorded in Expenses/i)
     })
 
     it('routes typing to inventory search when no form field is selected', async () => {

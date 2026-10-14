@@ -123,6 +123,7 @@ export type SaleDraft = {
   type: 'SELL'
   customer?: string
   items: Array<{ inventoryItem: string; name: string; quantity: number; unitPrice: number; manualUnitPrice?: boolean }>
+  addOns: Array<{ inventoryItem: string; name: string; quantity: number }>
   discount: number
   amountPaid: number
   amountReceived: number
@@ -155,6 +156,7 @@ export type CreatedSaleTrade = {
   balance: number
   paymentMethod?: string
   items?: Array<{ name?: string; quantity?: number }>
+  addOns?: Array<{ name?: string; quantity?: number }>
 }
 
 export type CompletedSale = {
@@ -167,6 +169,7 @@ export type CompletedSale = {
   itemName: string
   quantity: number
   items?: Array<{ name: string; quantity: number; unitPrice?: number }>
+  addOns?: Array<{ name: string; quantity: number }>
 }
 
 export function completedSaleFromTrade(
@@ -186,6 +189,7 @@ export function completedSaleFromTrade(
     itemName: trade.items?.[0]?.name || fallback.itemName,
     quantity: Number(trade.items?.[0]?.quantity) || fallback.quantity,
     items: tradeItems,
+    addOns: trade.addOns?.map((item) => ({ name: item.name || 'Free add-on', quantity: Number(item.quantity) || 1 })) || [],
   }
 }
 
