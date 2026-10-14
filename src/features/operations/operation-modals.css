@@ -1,4 +1,4 @@
-/* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V4
+/* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V4
    Genre: operational product UI · Tone: calm cashier workflow · Anchor: existing violet
    Hallmark · macrostructure: cashier-ledger · selection → payment → summary → receipt · contrast: pass (40–41) · mobile: pass (34, 49–57) */
 body.operation-modal-open {
@@ -1099,6 +1099,19 @@ body.operation-modal-open {
 .sale-price-display strong { min-height: 46px; display: flex; align-items: center; padding: 0 13px; border: 1px solid var(--border-strong, rgba(255,255,255,.12)); border-radius: 11px; color: var(--text, #f4f6fb); background: color-mix(in srgb, var(--bg-soft, #10172a) 78%, transparent); font-size: 15px; }
 .sale-price-display small { color: var(--primary, #a78bfa); font-size: 10px; font-weight: 700; }
 .sale-price-display.needs-price strong { border-color: color-mix(in srgb, var(--primary, #a78bfa) 48%, transparent); }
+
+@media (min-width: 641px) {
+  .sale-form-scroll .sale-price-heading,
+  .sale-form-scroll .warranty-period-field > span:first-child {
+    min-height: 24px;
+  }
+
+  .sale-form-scroll .warranty-period-field > span:first-child {
+    display: flex;
+    align-items: center;
+  }
+}
+
 .detail-modal-backdrop:has(.sale-inventory-pricing-modal) { z-index: 10020; background: rgba(3, 7, 18, 0.84); }
 .sale-discount-mode {
   min-width: 0;

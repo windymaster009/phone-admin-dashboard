@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -5,6 +6,8 @@ import OperationModalBridge from './OperationModalBridge'
 import { RouterProvider } from '../../app/routing'
 import { setStoredSessionUser } from '../../lib/storage'
 import { mockInventoryItem, mockOwnerUser } from '../../test/testUtils'
+
+const operationModalStyles = readFileSync('src/features/operations/operation-modals.css', 'utf8')
 
 vi.mock('../../components/scanner/CameraBarcodeReader', () => ({
   default: ({ onScan, onError }: { onScan: (code: string) => void; onError: (msg: string) => void }) => (
@@ -34,6 +37,14 @@ async function openSaleProductPicker() {
 }
 
 describe('OperationModalBridge component', () => {
+  it('aligns the selling-price and warranty headings in the two-column sale layout', () => {
+    expect(operationModalStyles).toMatch(
+      /@media \(min-width:\s*641px\)[\s\S]*?\.sale-form-scroll \.sale-price-heading,\s*\.sale-form-scroll \.warranty-period-field > span:first-child\s*\{\s*min-height:\s*24px;/,
+    )
+    expect(operationModalStyles).toMatch(
+      /\.sale-form-scroll \.warranty-period-field > span:first-child\s*\{\s*display:\s*flex;\s*align-items:\s*center;/,
+    )
+  })
   beforeEach(() => {
     localStorage.clear()
     sessionStorage.clear()
