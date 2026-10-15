@@ -34,6 +34,7 @@ describe('routes and navigation configuration', () => {
       expect(findRouteByPath('/pawn-management')?.key).toBe('pawn')
       expect(findRouteByPath('/buy-sell')?.key).toBe('trade')
       expect(findRouteByPath('/expenses')?.key).toBe('expenses')
+      expect(findRouteByPath('/customer-repairs')?.key).toBe('repairs')
       expect(findRouteByPath('/settings')?.key).toBe('settings')
     })
 
@@ -79,6 +80,7 @@ describe('routes and navigation configuration', () => {
 
       expect(allKeys).toContain('dashboard')
       expect(allKeys).toContain('pawn')
+      expect(allKeys).toContain('repairs')
       expect(allKeys).toContain('refunds')
       expect(allKeys).toContain('expenses')
       expect(allKeys).toContain('security')
@@ -94,6 +96,7 @@ describe('routes and navigation configuration', () => {
       expect(allKeys).not.toContain('expenses')
       expect(allKeys).toContain('secureDocuments')
       expect(allKeys).toContain('trade')
+      expect(allKeys).toContain('repairs')
       expect(allKeys).toContain('inventory')
     })
 
