@@ -57,6 +57,7 @@ export const MODULE_FILTER_GROUPS = [
   { key: 'CUSTOMER', label: 'Customers' },
   { key: 'SUPPLIER', label: 'Suppliers' },
   { key: 'SERVICE', label: 'Services' },
+  { key: 'REPAIR', label: 'Customer Repair' },
   { key: 'CUSTOMER_DOCUMENT', label: 'Documents' },
   { key: 'RECEIPT', label: 'Receipts' },
   { key: 'BACKUP', label: 'Backups' },
@@ -74,6 +75,7 @@ const entityIcons: Record<string, LucideIcon> = {
   SUPPLIER: Truck,
   SERVICE_OFFERING: Wrench,
   SERVICE_CHARGE: Wrench,
+  REPAIR: Wrench,
   CUSTOMER_DOCUMENT: FileText,
   RECEIPT: FileText,
   BACKUP: Database,
@@ -91,6 +93,7 @@ const entityFriendlyNames: Record<string, string> = {
   SUPPLIER: 'Supplier',
   SERVICE_OFFERING: 'Service',
   SERVICE_CHARGE: 'Service charge',
+  REPAIR: 'Repair',
   CUSTOMER_DOCUMENT: 'Document',
   RECEIPT: 'Receipt',
   BACKUP: 'Backup',
@@ -107,6 +110,14 @@ const actionLabels: Record<string, string> = {
   REDEEM: 'Redeemed',
   FORFEIT: 'Claimed collateral',
   CANCEL: 'Cancelled',
+  ADD_ITEM: 'Added item to',
+  APPROVE: 'Approved item on',
+  DECLINE: 'Declined item on',
+  START: 'Started work on',
+  COMPLETE_ITEM: 'Completed item on',
+  COMPLETE: 'Completed',
+  STATUS: 'Updated status for',
+  CANCEL_ITEM: 'Cancelled item on',
   REFUND: 'Refunded',
   ADJUST: 'Adjusted stock for',
   UPLOAD: 'Uploaded',
@@ -221,6 +232,7 @@ export function activityTitle(log: ActivityLog): string {
   const target = String(
     details.tradeNo
     || details.pawnNo
+    || details.repairNo
     || details.loanNo
     || details.paymentNo
     || details.sku
@@ -245,6 +257,8 @@ export function activitySummary(log: ActivityLog): string {
   if (details.amount !== undefined) {
     pieces.push(formatMoney(details.amount, details.currency))
   }
+  if (details.customerPrice !== undefined) pieces.push(formatMoney(details.customerPrice, 'USD'))
+  if (details.repairType) pieces.push(String(details.repairType))
   if (details.itemSnapshot && typeof details.itemSnapshot === 'object') {
     const item = details.itemSnapshot as { name?: string }
     if (item.name) pieces.push(item.name)
