@@ -516,7 +516,7 @@ router.post('/:id/cancel', requireAuth, operationalRoles, asyncRoute(async (req,
   }
 
   for (const item of ticket.items) {
-    if (['PENDING_APPROVAL', 'APPROVED'].includes(item.status)) {
+    if (['PENDING_APPROVAL', 'APPROVED', 'IN_PROGRESS'].includes(item.status)) {
       item.status = 'CANCELLED'
       item.cancelReason = reason
       item.cancelledAt = new Date()
