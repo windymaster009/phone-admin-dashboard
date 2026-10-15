@@ -45,7 +45,7 @@ function itemPrice(input) {
   return { partCost, serviceFee, customerPrice: roundMoney(supplied) }
 }
 
-function ticketTotals(ticket) {
+export function ticketTotals(ticket) {
   const totals = {
     partCost: 0,
     serviceFee: 0,
@@ -76,7 +76,7 @@ function decorateTicket(ticket) {
   return { ...value, totals: ticketTotals(value) }
 }
 
-function recalculateTicketStatus(ticket) {
+export function recalculateTicketStatus(ticket) {
   if (['COMPLETED', 'CANCELLED'].includes(ticket.status)) return
 
   const items = ticket.items || []
