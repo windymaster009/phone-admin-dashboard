@@ -1,18 +1,14 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import {
   AlertTriangle,
-  Check,
   CheckCircle2,
   Clock3,
   Hammer,
-  PackageCheck,
   Phone,
   Plus,
-  Search,
   ShieldCheck,
   Smartphone,
   Trash2,
-  UserRound,
   Wrench,
   XCircle,
 } from 'lucide-react'
@@ -136,7 +132,6 @@ type RepairSummary = {
   pendingValue: number
 }
 
-type ApprovalMethod = 'IN_SHOP' | 'PHONE' | 'TELEGRAM' | 'MESSENGER' | 'OTHER'
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 })
 
@@ -689,7 +684,7 @@ export default function RepairWorkspace() {
 
       <article className="surface-card repair-list-card">
         <div className="repair-status-tabs" role="tablist" aria-label="Repair status">
-          {[
+          {([
             ['ALL', 'All', summary.counts.total],
             ['RECEIVED', 'Received', summary.counts.received],
             ['CHECKING', 'Checking', summary.counts.checking],
@@ -698,7 +693,7 @@ export default function RepairWorkspace() {
             ['READY_FOR_PICKUP', 'Ready', summary.counts.ready],
             ['COMPLETED', 'Completed', summary.counts.completed],
             ['CANCELLED', 'Cancelled', summary.counts.cancelled],
-          ].map(([value, label, count]) => <button key={String(value)} type="button" className={status === value ? 'active' : ''} onClick={() => setStatus(value as 'ALL' | RepairStatus)}>{label}<small>{count}</small></button>)}
+          ] as Array<['ALL' | RepairStatus, string, number]>).map(([value, label, count]) => <button key={value} type="button" className={status === value ? 'active' : ''} onClick={() => setStatus(value)}>{label}<small>{count}</small></button>)}
         </div>
 
         <FilterToolbar search={search} onSearchChange={setSearch} searchLabel="Search repairs" placeholder="Search repair ID, customer, phone, IMEI, device...">
