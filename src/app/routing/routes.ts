@@ -17,6 +17,7 @@ import {
   TrendingDown,
   Users,
   Wrench,
+  Hammer,
 } from 'lucide-react'
 import type { SessionUser } from '../../lib/api'
 
@@ -26,6 +27,7 @@ export type RouteKey =
   | 'loans'
   | 'trade'
   | 'services'
+  | 'repairs'
   | 'inventory'
   | 'customers'
   | 'suppliers'
@@ -91,6 +93,13 @@ export const ROUTES: AppRoute[] = [
     pathname: '/services',
     label: 'Services',
     icon: Wrench,
+    group: 'Operations',
+  },
+  {
+    key: 'repairs',
+    pathname: '/customer-repairs',
+    label: 'Customer Repair',
+    icon: Hammer,
     group: 'Operations',
   },
   {
