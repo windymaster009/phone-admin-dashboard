@@ -180,6 +180,8 @@ function ShippingFormModal({
   const [items, setItems] = useState<EditableShipmentItem[]>(() => toEditableItems(shipment?.items))
   const [key] = useState(requestKey)
   const [localError, setLocalError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const isBusy = busy || saving
 
   function selectCustomer(id: string) {
     setCustomerId(id)
@@ -196,6 +198,7 @@ function ShippingFormModal({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (isBusy) return
     setLocalError('')
     const payloadItems = items.map((item) => ({
       name: item.name.trim(),
@@ -222,6 +225,7 @@ function ShippingFormModal({
       items: payloadItems,
     }
 
+    setSaving(true)
     try {
       const result = await api<{ shipment: Shipment }>(
         shipment ? `/shipments/${shipment._id}` : '/shipments',
@@ -233,6 +237,8 @@ function ShippingFormModal({
       onSaved(result.shipment)
     } catch (reason) {
       setLocalError(reason instanceof Error ? reason.message : 'Unable to save shipment')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -244,7 +250,7 @@ function ShippingFormModal({
       icon={<Truck size={21} />}
       error={localError || error}
       onDismissError={() => setLocalError('')}
-      busy={busy}
+      busy={isBusy}
       onClose={onClose}
       className="shipping-operation-modal"
     >
@@ -297,8 +303,8 @@ function ShippingFormModal({
         <p className="shipping-form-note"><Package size={14} /> Shipping records are for delivery tracking only. They do not create sales or deduct inventory.</p>
       </form>
       <footer className="operation-modal-actions">
-        <button type="button" className="ghost-button" onClick={onClose} disabled={busy}>Cancel</button>
-        <button type="submit" form="shipping-form" className="primary-button" disabled={busy}>{busy ? 'Saving...' : shipment ? 'Save changes' : 'Create shipment'}</button>
+        <button type="button" className="ghost-button" onClick={onClose} disabled={isBusy}>Cancel</button>
+        <button type="submit" form="shipping-form" className="primary-button" disabled={isBusy}>{isBusy ? 'Saving...' : shipment ? 'Save changes' : 'Create shipment'}</button>
       </footer>
     </OperationModalShell>
   )
