@@ -36,6 +36,33 @@ describe('CustomerPreorderWorkspace', () => {
     expect(within(dialog).getByRole('button', { name: 'Cancel preorder' })).toBeInTheDocument()
   })
 
+  it('confirms cancellation in an app dialog before changing the preorder', async () => {
+    const cancelRequests: { reason: string }[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const path = String(input)
+      if (path.includes('/api/customer-preorders/order-1/cancel')) {
+        const body = JSON.parse(String(init?.body)) as { reason: string }
+        cancelRequests.push(body)
+        return response({ preorder: { ...preorder, status: 'CANCELLED', cancellationReason: body.reason } })
+      }
+      if (path.includes('/api/customer-preorders')) return response({ preorders: [preorder] })
+      if (path.includes('/api/trades')) return response({ trades: [] })
+      throw new Error(`Unexpected request: ${path}`)
+    })
+    const user = userEvent.setup()
+    render(<CustomerPreorderWorkspace />)
+    await user.click(await screen.findByRole('button', { name: /Open preorder PO-20261016-ONE/ }))
+    await user.click(within(screen.getByRole('dialog', { name: preorder.preorderNo })).getByRole('button', { name: 'Cancel preorder' }))
+    const dialog = screen.getByRole('dialog', { name: 'Cancel preorder' })
+    expect(within(dialog).getByText(/purchased remains in stock/)).toBeInTheDocument()
+    expect(within(dialog).getByRole('button', { name: 'Cancel preorder' })).toBeDisabled()
+    expect(cancelRequests).toHaveLength(0)
+    await user.type(within(dialog).getByRole('textbox', { name: 'Reason for cancellation' }), 'Customer changed their mind')
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel preorder' }))
+    expect(await screen.findByText(/Cancelled: Customer changed their mind/)).toBeInTheDocument()
+    expect(cancelRequests).toEqual([{ reason: 'Customer changed their mind' }])
+  })
+
   it('offers searchable existing customers while keeping walk-in details possible', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const path = String(input)

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { PackageCheck, RefreshCcw, ShoppingBag } from 'lucide-react'
+import { AlertTriangle, PackageCheck, RefreshCcw, ShoppingBag } from 'lucide-react'
 import { api } from '../../lib/api'
 import { dateText, titleStatus } from '../../lib/presentation'
 import SectionHeader from '../../components/SectionHeader'
@@ -105,6 +105,8 @@ function PreorderDetail({ preorder, onClose, onChanged }: { preorder: Preorder; 
   const [saleSelection, setSaleSelection] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [cancelOpen, setCancelOpen] = useState(false)
+  const [cancelReason, setCancelReason] = useState('')
   const refreshTrades = useCallback(async () => {
     try {
       const [buy, sell] = await Promise.all([api<{ trades: Trade[] }>('/trades?type=BUY'), api<{ trades: Trade[] }>('/trades?type=SELL')])
@@ -114,21 +116,29 @@ function PreorderDetail({ preorder, onClose, onChanged }: { preorder: Preorder; 
   }, [])
   useEffect(() => { void refreshTrades() }, [refreshTrades])
   async function act(path: string, body: Record<string, unknown>) {
-    if (busy) return
+    if (busy) return false
     setBusy(true); setError('')
     try {
       const result = await api<{ preorder: Preorder }>(`/customer-preorders/${preorder._id}/${path}`, { method: 'POST', body: JSON.stringify(body) })
       onChanged(result.preorder)
-    } catch (reason) { setError(errorMessage(reason)) }
+      return true
+    } catch (reason) { setError(errorMessage(reason)); return false }
     finally { setBusy(false) }
   }
   const purchaseOptions = purchases.flatMap((trade) => trade.items.filter((line) => itemId(line) && line.quantity >= preorder.quantity).map((line) => ({ trade, line, value: `${trade._id}:${itemId(line)}` }))).filter((option) => new Date(option.trade.createdAt) >= new Date(preorder.createdAt) && `${option.trade.tradeNo} ${option.line.name}`.toLowerCase().includes(purchaseSearch.toLowerCase())).slice(0, 50)
   const saleOptions = sales.filter((trade) => new Date(trade.createdAt) >= new Date(preorder.createdAt) && trade.items.some((line) => itemId(line) === preorder.inventoryItem && line.quantity >= preorder.quantity) && `${trade.tradeNo} ${trade.items.map((line) => line.name).join(' ')}`.toLowerCase().includes(saleSearch.toLowerCase())).slice(0, 50)
-  function cancel() {
-    const reason = window.prompt('Why is the customer preorder cancelled? Any product already purchased remains in normal stock. Contact the supplier separately if needed.')
-    if (reason?.trim()) void act('cancel', { reason })
+  function closeCancellation() {
+    setCancelOpen(false)
+    setCancelReason('')
+    setError('')
   }
-  return <OperationModalShell title={preorder.preorderNo} eyebrow="Customer preorder" description={`${preorder.customerName} · ${preorder.productName}`} icon={<PackageCheck size={21} />} busy={busy} error={error} onDismissError={() => setError('')} onClose={onClose} className="preorder-detail-modal">
+  async function confirmCancellation() {
+    const reason = cancelReason.trim()
+    if (reason.length < 3) return
+    if (await act('cancel', { reason })) closeCancellation()
+  }
+  return <>
+  <OperationModalShell title={preorder.preorderNo} eyebrow="Customer preorder" description={`${preorder.customerName} · ${preorder.productName}`} icon={<PackageCheck size={21} />} busy={busy} error={cancelOpen ? '' : error} onDismissError={() => setError('')} onClose={onClose} dismissOnEscape={!cancelOpen} inactive={cancelOpen} className="preorder-detail-modal">
     <div className="operation-form preorder-detail">
       <div className="preorder-facts"><span><small>Status</small><strong>{titleStatus(preorder.status)}</strong></span><span><small>Customer</small><strong>{preorder.customerName} · {preorder.customerPhone}</strong></span><span><small>Product</small><strong>{preorder.quantity} × {preorder.productName}</strong></span><span><small>Details</small><strong>{preorder.specifications || titleStatus(preorder.category)}</strong></span></div>
       {preorder.status === 'REQUESTED' && <section className="preorder-block"><h3>Place supplier order</h3><p className="preorder-help">Contact the supplier first, then record their name and expected date here. This does not create a purchase or charge the customer.</p><div className="preorder-fields"><label>Supplier name<input maxLength={120} value={supplierName} onChange={(event) => setSupplierName(event.target.value)} /></label><label>Expected arrival (optional)<input type="date" value={expectedAt} onChange={(event) => setExpectedAt(event.target.value)} /></label></div><button className="primary-button" type="button" disabled={busy || !supplierName.trim()} onClick={() => void act('order', { supplierName, expectedAt })}>Mark ordered</button></section>}
@@ -136,9 +146,16 @@ function PreorderDetail({ preorder, onClose, onChanged }: { preorder: Preorder; 
       {preorder.status === 'ARRIVED' && <section className="preorder-block"><h3>Customer pickup</h3><p className="preorder-help">The purchased item is in normal stock, not held aside by this page. Complete the sale for this customer in Buy & Sell, then link that sale below. No sale is created by marking pickup here.</p><div className="preorder-actions"><button type="button" className="ghost-button" onClick={() => window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale', itemId: preorder.inventoryItem } }))}>Open New sale</button><button type="button" className="ghost-button" onClick={() => void refreshTrades()}><RefreshCcw size={15} />Refresh sales</button></div><label>Find sale<input value={saleSearch} onChange={(event) => setSaleSearch(event.target.value)} placeholder="Type sale number or product" /></label><label>Completed sale<select value={saleSelection} onChange={(event) => setSaleSelection(event.target.value)}><option value="">Select sale</option>{saleOptions.map((trade) => <option value={trade._id} key={trade._id}>{trade.tradeNo} · {trade.items.map((line) => line.name).join(', ')}</option>)}</select></label><button type="button" className="primary-button" disabled={busy || !saleSelection} onClick={() => { if (!preorder.customer && !window.confirm(`Confirm the selected sale belongs to ${preorder.customerName} (${preorder.customerPhone})?`)) return; void act('complete', { saleTradeId: saleSelection, customerConfirmed: !preorder.customer }) }}>Mark picked up</button></section>}
       {preorder.status === 'COMPLETED' && <p className="preorder-help">Completed through a recorded sale. The sale remains in the normal sales and profit reports.</p>}
       {preorder.status === 'CANCELLED' && <p className="preorder-help">Cancelled: {preorder.cancellationReason}. Any previously purchased product remains in stock; the purchase record is not reversed.</p>}
-      {!['COMPLETED', 'CANCELLED'].includes(preorder.status) && <section className="preorder-block"><div className="preorder-block-heading"><h3>Customer changed their mind?</h3><button type="button" className="danger-button" disabled={busy} onClick={cancel}>Cancel preorder</button></div><p className="preorder-help">Cancelling does not refund money or contact the supplier. No deposit is handled in this workflow.</p></section>}
+      {!['COMPLETED', 'CANCELLED'].includes(preorder.status) && <section className="preorder-block"><div className="preorder-block-heading"><h3>Customer changed their mind?</h3><button type="button" className="danger-button" disabled={busy} onClick={() => { setError(''); setCancelReason(''); setCancelOpen(true) }}>Cancel preorder</button></div><p className="preorder-help">Cancelling does not refund money or contact the supplier. No deposit is handled in this workflow.</p></section>}
       <section className="preorder-block"><h3>History</h3><ol className="preorder-history">{[...preorder.events].reverse().map((entry, index) => <li key={`${entry.at}-${index}`}><strong>{titleStatus(entry.action)}</strong><small>{dateText(entry.at)}{entry.note ? ` · ${entry.note}` : ''}</small></li>)}</ol></section>
       <footer className="operation-modal-actions"><button type="button" className="ghost-button" onClick={onClose}>Close</button></footer>
     </div>
   </OperationModalShell>
+  {cancelOpen && <OperationModalShell title="Cancel preorder" eyebrow="Customer preorder" description="Any product already purchased remains in stock. Contact the supplier separately to cancel their order." icon={<AlertTriangle size={21} />} busy={busy} error={error} onDismissError={() => setError('')} onClose={closeCancellation} className="preorder-cancel-modal">
+    <form className="operation-form preorder-cancel-form" onSubmit={(event) => { event.preventDefault(); void confirmCancellation() }}>
+      <label>Reason for cancellation<textarea data-modal-initial-focus required minLength={3} maxLength={500} value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} placeholder="Why is this customer preorder cancelled?" /></label>
+      <footer className="operation-modal-actions"><button type="button" className="ghost-button" disabled={busy} onClick={closeCancellation}>Go back</button><button type="submit" className="danger-button" disabled={busy || cancelReason.trim().length < 3}>{busy ? 'Cancelling…' : 'Cancel preorder'}</button></footer>
+    </form>
+  </OperationModalShell>}
+  </>
 }

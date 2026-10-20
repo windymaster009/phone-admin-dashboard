@@ -31,4 +31,8 @@
 .preorder-history { display: grid; gap: 7px; margin: 0; padding-left: 20px; }
 .preorder-history small { display: block; }
 .preorder-detail .operation-modal-actions { display: flex; justify-content: flex-end; }
+.operation-modal.preorder-cancel-modal { width: min(520px, 100%); }
+.preorder-cancel-form { display: grid; gap: var(--space-4); padding-top: var(--space-5); }
+.preorder-cancel-form textarea { min-height: 104px; }
+.preorder-cancel-form > .operation-modal-actions { position: static; margin-top: 0; }
 @media (max-width: 48rem) { .preorder-facts, .preorder-fields, .preorder-form-grid { grid-template-columns: 1fr; } .preorder-wide { grid-column: auto; } .preorder-block-heading { align-items: stretch; flex-direction: column; } .preorder-block > .primary-button { justify-self: stretch; } }
