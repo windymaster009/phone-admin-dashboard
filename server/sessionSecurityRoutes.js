@@ -3,8 +3,10 @@ import { Router } from 'express'
 import rateLimit from 'express-rate-limit'
 import bcrypt from 'bcryptjs'
 import mongoose from 'mongoose'
-import { clearSessionCookie, requireAuth, setSessionCookie, signToken, writeActivity } from './auth.js'
+import { allowRoles, clearSessionCookie, requireAuth, setSessionCookie, signToken, writeActivity } from './auth.js'
 import { ActivityLog, User } from './models.js'
+import { AndroidPairing, AuthSession } from './authSessionModels.js'
+import { TwoFactorChallenge } from './twoFactorModels.js'
 import {
   consumeAndroidPairing,
   createAndroidPairing,
@@ -45,6 +47,14 @@ const twoFactorVerifyLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: 'Too many two-factor attempts. Wait a few minutes and try again.' },
+})
+
+const staffPasswordResetLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Too many password reset attempts. Wait 15 minutes and try again.' },
 })
 
 function clean(value) {
@@ -259,6 +269,62 @@ router.post('/auth/pairing/redeem', pairingRedeemLimiter, asyncRoute(async (req,
     details: { sessionId: session.sessionId, deviceName: session.deviceName, twoFactor: Boolean(pairing.twoFactorVerifiedAt) },
   })
   res.json({ user: publicUser(user), paired: true })
+}))
+
+router.post('/users/:id/reset-password', requireAuth, allowRoles('OWNER'), staffPasswordResetLimiter, asyncRoute(async (req, res) => {
+  const targetId = req.params.id
+  if (!mongoose.Types.ObjectId.isValid(targetId)) return res.status(400).json({ message: 'Invalid user ID' })
+  if (String(req.user._id) === targetId) return res.status(409).json({ message: 'Use account settings to change your own password' })
+
+  const currentPassword = typeof req.body.currentPassword === 'string' ? req.body.currentPassword : ''
+  const newPassword = typeof req.body.newPassword === 'string' ? req.body.newPassword : ''
+  if (newPassword.trim().length < 12 || newPassword.length > 128) {
+    return res.status(400).json({ message: 'New password must be 12–128 characters' })
+  }
+
+  const owner = await User.findById(req.user._id).select('passwordHash')
+  if (!await bcrypt.compare(currentPassword, owner?.passwordHash || dummyPasswordHash)) {
+    return res.status(401).json({ message: 'Your current Owner password is incorrect' })
+  }
+  if (await bcrypt.compare(newPassword, owner.passwordHash)) {
+    return res.status(400).json({ message: 'Use a password different from your own' })
+  }
+
+  const target = await User.findById(targetId).select('_id name active')
+  if (!target || !target.active) return res.status(404).json({ message: 'Active staff account not found' })
+
+  const passwordHash = await bcrypt.hash(newPassword, 12)
+  const session = await mongoose.startSession()
+  try {
+    await session.withTransaction(async () => {
+      const updated = await User.updateOne({ _id: target._id, active: true }, { $set: { passwordHash } }, { session })
+      if (updated.matchedCount !== 1) {
+        const error = new Error('The staff account changed. Refresh and try again.')
+        error.status = 409
+        throw error
+      }
+      await AuthSession.updateMany(
+        { user: target._id, revokedAt: null },
+        { $set: { revokedAt: new Date(), revokedReason: 'OWNER_PASSWORD_RESET' } },
+        { session },
+      )
+      await AndroidPairing.deleteMany({ user: target._id, usedAt: null }, { session })
+      await TwoFactorChallenge.deleteMany({ user: target._id }, { session })
+      await ActivityLog.create([{
+        user: req.user._id,
+        action: 'STAFF_PASSWORD_RESET',
+        entity: 'AUTH_SESSION',
+        entityId: target._id,
+        details: { targetUserId: target._id, targetName: target.name },
+        ipAddress: req.ip,
+      }], { session })
+    })
+  } finally {
+    await session.endSession()
+  }
+
+  res.setHeader('Cache-Control', 'no-store')
+  res.json({ reset: true, userId: target._id })
 }))
 
 router.get('/security/sessions', requireAuth, asyncRoute(async (req, res) => {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import QRCode from 'react-qr-code'
 import NotificationToast from '../../components/NotificationToast'
+import OperationModalShell from '../operations/OperationModalShell'
 import './security-workspace.css'
 import './two-factor.css'
 import {
@@ -71,6 +71,7 @@ type SecurityUser = {
 }
 
 const emptyUserForm = { name: '', email: '', password: '', role: 'CASHIER' as SecurityUser['role'] }
+const emptyResetForm = { currentPassword: '', newPassword: '', confirmPassword: '' }
 
 type TwoFactorStatus = {
   configured: boolean
@@ -189,6 +190,9 @@ export default function SecurityWorkspacePage() {
   const [eventsExpanded, setEventsExpanded] = useState(false)
   const [showUserForm, setShowUserForm] = useState(false)
   const [userForm, setUserForm] = useState(emptyUserForm)
+  const [resetTarget, setResetTarget] = useState<SecurityUser | null>(null)
+  const [resetForm, setResetForm] = useState(emptyResetForm)
+  const [resetError, setResetError] = useState('')
   const [userBusy, setUserBusy] = useState('')
   const userMutationRef = useRef(false)
   const securityMutationRef = useRef(false)
@@ -416,6 +420,35 @@ export default function SecurityWorkspacePage() {
       setToastMessage('Staff account deleted successfully.')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Unable to delete the user account')
+    } finally {
+      userMutationRef.current = false
+      setUserBusy('')
+    }
+  }
+
+  const closePasswordReset = () => {
+    setResetTarget(null)
+    setResetForm(emptyResetForm)
+    setResetError('')
+  }
+
+  const resetStaffPassword = async () => {
+    const userId = resetTarget?.id || resetTarget?._id
+    if (!userId || userMutationRef.current || resetForm.newPassword !== resetForm.confirmPassword) return
+    userMutationRef.current = true
+    setUserBusy(userId)
+    setResetError('')
+    try {
+      await api(`/users/${encodeURIComponent(userId)}/reset-password`, {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword: resetForm.currentPassword, newPassword: resetForm.newPassword }),
+      })
+      closePasswordReset()
+      await load()
+      setToastMessage('Password reset. That account has been signed out of all devices.')
+    } catch (reason) {
+      setResetForm((current) => ({ ...current, currentPassword: '' }))
+      setResetError(reason instanceof Error ? reason.message : 'Unable to reset the password')
     } finally {
       userMutationRef.current = false
       setUserBusy('')
@@ -663,7 +696,7 @@ export default function SecurityWorkspacePage() {
 
       {staffUsers && <section className="card security-panel security-users-panel" id="user-management">
         <div className="security-panel-title">
-          <div><h2>User management</h2><p>View staff access, assign roles, and activate or deactivate accounts.</p></div>
+          <div><h2>User management</h2><p>View staff access, assign roles, reset passwords, and activate or deactivate accounts.</p></div>
           {user?.role === 'OWNER' && (
             <button
               type="button"
@@ -701,6 +734,7 @@ export default function SecurityWorkspacePage() {
               <div className="security-user-info"><div><strong>{staffUser.name}</strong>{isCurrentUser && <span className="security-current">Current</span>}<span className={`security-user-status ${staffUser.active ? 'active' : 'inactive'}`}>{staffUser.active ? 'Active' : 'Inactive'}</span></div><span>{staffUser.email}</span><small>{staffUser.lastLoginAt ? `Last signed in ${dateTime(staffUser.lastLoginAt)}` : 'Has not signed in yet'}</small></div>
               <div className="security-user-actions">
                 <label className="security-user-role"><span>Role</span><select value={staffUser.role} disabled={!canManage || userBusy === staffUserId} onChange={(event) => void updateStaffUser(staffUser, { role: event.target.value as SecurityUser['role'] })}><option value="OWNER">Owner</option><option value="MANAGER">Manager</option><option value="CASHIER">Cashier</option><option value="STOCK">Stock</option></select></label>
+                {canManage && <button type="button" className="secondary-button security-user-reset-button" disabled={!staffUser.active || Boolean(userBusy)} onClick={() => { setResetTarget(staffUser); setResetForm(emptyResetForm); setResetError('') }}><KeyRound size={15} />Reset password</button>}
                 {user?.role === 'OWNER' && <button type="button" className={`security-user-status-button ${staffUser.active ? 'danger' : ''}`} disabled={!canManage || userBusy === staffUserId} onClick={() => void updateStaffUser(staffUser, { active: !staffUser.active })}>{staffUser.active ? <UserX size={15} /> : <UserCheck size={15} />}{staffUser.active ? 'Deactivate' : 'Activate'}</button>}
                 {user?.role === 'OWNER' && <button type="button" className="security-user-delete-button" disabled={!canManage || staffUser.active || userBusy === staffUserId} onClick={() => void deleteStaffUser(staffUser)} aria-label={`Delete ${staffUser.name}`} title={staffUser.active ? 'Deactivate this account before deleting it' : `Permanently delete ${staffUser.name}`}><Trash2 size={15} /></button>}
               </div>
@@ -928,6 +962,16 @@ export default function SecurityWorkspacePage() {
           </section>
         </div>
       </div>
+      {resetTarget && <OperationModalShell title={`Reset ${resetTarget.name}'s password`} eyebrow="Owner action" description="This signs the account out of all devices. Two-factor authentication remains enabled if configured." icon={<KeyRound size={21} />} busy={Boolean(userBusy)} error={resetError} onDismissError={() => setResetError('')} onClose={closePasswordReset} className="security-reset-modal">
+        <form className="operation-form security-reset-form" onSubmit={(event) => { event.preventDefault(); void resetStaffPassword() }}>
+          <p>Resetting <strong>{resetTarget.email}</strong>. Choose a fresh password and share it privately with this staff member.</p>
+          <label>Your current Owner password<input data-modal-initial-focus required type="password" autoComplete="current-password" value={resetForm.currentPassword} onChange={(event) => setResetForm((current) => ({ ...current, currentPassword: event.target.value }))} /></label>
+          <label>New password<input required type="password" autoComplete="new-password" minLength={12} maxLength={128} value={resetForm.newPassword} onChange={(event) => setResetForm((current) => ({ ...current, newPassword: event.target.value }))} /><small>12–128 characters.</small></label>
+          <label>Confirm new password<input required type="password" autoComplete="new-password" value={resetForm.confirmPassword} onChange={(event) => setResetForm((current) => ({ ...current, confirmPassword: event.target.value }))} /></label>
+          {resetForm.confirmPassword && resetForm.newPassword !== resetForm.confirmPassword && <p className="security-reset-mismatch" role="alert">Passwords do not match.</p>}
+          <footer className="operation-modal-actions"><button type="button" className="ghost-button" disabled={Boolean(userBusy)} onClick={closePasswordReset}>Cancel</button><button type="submit" className="primary-button" disabled={Boolean(userBusy) || resetForm.newPassword !== resetForm.confirmPassword}>Reset password</button></footer>
+        </form>
+      </OperationModalShell>}
       <NotificationToast message={toastMessage} onDismiss={() => setToastMessage('')} />
     </div>
   )

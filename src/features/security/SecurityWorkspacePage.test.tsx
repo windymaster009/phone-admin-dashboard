@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SecurityWorkspacePage from './SecurityWorkspacePage'
 import { mockOwnerUser, mockManagerUser, mockCashierUser } from '../../test/testUtils'
@@ -999,6 +999,43 @@ describe('SecurityWorkspacePage staff management and permissions', () => {
     setStoredSessionUser(mockOwnerUser)
   })
 
+  it('lets an Owner reset another Owner through the protected form', async () => {
+    const requests: Array<{ url: string; body: { currentPassword: string; newPassword: string } }> = []
+    const staff = [
+      { id: mockOwnerUser.id, name: mockOwnerUser.name, email: mockOwnerUser.email, role: 'OWNER', active: true },
+      { id: 'other-owner', name: 'Other Owner', email: 'other@example.test', role: 'OWNER', active: true },
+    ]
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.includes('/api/users/other-owner/reset-password') && init?.method === 'POST') {
+        requests.push({ url, body: JSON.parse(String(init.body)) })
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ reset: true }) } as Response
+      }
+      if (url.includes('/api/users')) return { ok: true, status: 200, headers: new Headers(), json: async () => ({ users: staff }) } as Response
+      if (url.includes('/api/security/sessions')) return { ok: true, status: 200, headers: new Headers(), json: async () => ({ sessions: mockSessions }) } as Response
+      if (url.includes('/api/security/events')) return { ok: true, status: 200, headers: new Headers(), json: async () => ({ events: [] }) } as Response
+      if (url.includes('/api/security/two-factor')) return { ok: true, status: 200, headers: new Headers(), json: async () => ({ eligible: true, configured: true, enabled: false }) } as Response
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+
+    const user = userEvent.setup()
+    render(<SecurityWorkspacePage />)
+    expect(await screen.findByText('Other Owner')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Reset password' })).toHaveLength(1)
+    await user.click(screen.getByRole('button', { name: 'Reset password' }))
+    const dialog = screen.getByRole('dialog', { name: "Reset Other Owner's password" })
+    await user.type(within(dialog).getByLabelText('Your current Owner password'), 'owner-password-for-test')
+    await user.type(within(dialog).getByLabelText(/^New password/), 'fresh-target-password-for-test')
+    await user.type(within(dialog).getByLabelText('Confirm new password'), 'fresh-target-password-for-test')
+    await user.click(within(dialog).getByRole('button', { name: 'Reset password' }))
+
+    await waitFor(() => expect(requests).toHaveLength(1))
+    expect(requests[0].url).toContain('/api/users/other-owner/reset-password')
+    expect(requests[0].body).toEqual({ currentPassword: 'owner-password-for-test', newPassword: 'fresh-target-password-for-test' })
+    expect(await screen.findByText(/That account has been signed out of all devices/)).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: "Reset Other Owner's password" })).not.toBeInTheDocument()
+  })
+
   it('updates role via select, handles deactivation confirm/cancel, and activates staff', async () => {
     let patchCalls: Array<{ id: string; body: any }> = []
     let usersList = [
@@ -1118,6 +1155,7 @@ describe('SecurityWorkspacePage staff management and permissions', () => {
     expect(screen.queryByRole('button', { name: /Deactivate/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Activate/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Delete Inactive Staff/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Reset password/i })).not.toBeInTheDocument()
   })
 })
 

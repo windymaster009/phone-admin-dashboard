@@ -120,7 +120,9 @@ const origAuthSessionFindOne = AuthSession.findOne
 const origAuthSessionFind = AuthSession.find
 const origAuthSessionCreate = AuthSession.create
 const origAuthSessionUpdateOne = AuthSession.updateOne
+const origAuthSessionUpdateMany = AuthSession.updateMany
 const origAuthSessionFindOneAndUpdate = AuthSession.findOneAndUpdate
+const origStartSession = mongoose.startSession
 
 const origTwoFactorCredFindOne = TwoFactorCredential.findOne
 mongoose.set('bufferCommands', false)
@@ -148,6 +150,7 @@ const origActivityLogCountDocs = ActivityLog.countDocuments
 const origAndroidPairingCreate = AndroidPairing.create
 const origAndroidPairingFindOne = AndroidPairing.findOne
 const origAndroidPairingFindOneAndUpdate = AndroidPairing.findOneAndUpdate
+const origAndroidPairingDeleteMany = AndroidPairing.deleteMany
 
 test.beforeEach(() => {
   process.env.TWO_FACTOR_ENCRYPTION_KEY = validEncryptionKey
@@ -183,7 +186,9 @@ test.afterEach(() => {
   AuthSession.find = origAuthSessionFind
   AuthSession.create = origAuthSessionCreate
   AuthSession.updateOne = origAuthSessionUpdateOne
+  AuthSession.updateMany = origAuthSessionUpdateMany
   AuthSession.findOneAndUpdate = origAuthSessionFindOneAndUpdate
+  mongoose.startSession = origStartSession
 
   TwoFactorCredential.findOne = origTwoFactorCredFindOne
   TwoFactorCredential.create = origTwoFactorCredCreate
@@ -205,6 +210,7 @@ test.afterEach(() => {
   AndroidPairing.create = origAndroidPairingCreate
   AndroidPairing.findOne = origAndroidPairingFindOne
   AndroidPairing.findOneAndUpdate = origAndroidPairingFindOneAndUpdate
+  AndroidPairing.deleteMany = origAndroidPairingDeleteMany
 })
 
 // -------------------------------------------------------------
@@ -1033,6 +1039,83 @@ test('/users/:id PATCH: CASHIER and MANAGER are denied (403), unauthenticated is
   assert.equal(updateOneCalled, true)
   assert.equal(ownerRes.body.user.role, 'MANAGER')
   assert.equal(ownerRes.body.user.active, false)
+})
+
+test('Owner can reset another active Owner only after confirming their own password', async () => {
+  const ownerId = new mongoose.Types.ObjectId()
+  const targetId = new mongoose.Types.ObjectId()
+  const ownerPassword = 'owner-password-for-test'
+  const replacement = 'fresh-target-password-for-test'
+  const ownerHash = await bcrypt.hash(ownerPassword, 12)
+  const sessionId = 'owner-reset-session'
+  const token = signToken({ _id: ownerId }, { sessionId })
+  const writes = []
+  let sessionEnded = false
+
+  AuthSession.findOne = async () => ({ sessionId, user: ownerId, revokedAt: null, expiresAt: new Date(Date.now() + 3600000) })
+  User.findById = (id) => ({
+    select: async (fields) => String(id) === String(ownerId)
+      ? fields === 'passwordHash' ? { passwordHash: ownerHash } : { _id: ownerId, role: 'OWNER', active: true }
+      : { _id: targetId, name: 'Other Owner', role: 'OWNER', active: true },
+  })
+  mongoose.startSession = async () => ({
+    withTransaction: async (handler) => handler(),
+    endSession: async () => { sessionEnded = true },
+  })
+  User.updateOne = async (filter, update) => {
+    writes.push({ type: 'password', filter, update })
+    return { matchedCount: 1 }
+  }
+  AuthSession.updateMany = async (filter, update) => { writes.push({ type: 'sessions', filter, update }); return { modifiedCount: 2 } }
+  AndroidPairing.deleteMany = async (filter) => { writes.push({ type: 'pairings', filter }); return { deletedCount: 1 } }
+  TwoFactorChallenge.deleteMany = async (filter) => { writes.push({ type: 'challenges', filter }); return { deletedCount: 1 } }
+  ActivityLog.create = async (entries) => { writes.push({ type: 'audit', entries }); return entries }
+
+  const denied = await callRouter(sessionSecurityRouter, {
+    method: 'POST', url: `/users/${targetId}/reset-password`, headers: { authorization: `Bearer ${token}` },
+    body: { currentPassword: 'wrong-owner-password', newPassword: replacement },
+  })
+  assert.equal(denied.status, 401)
+  assert.equal(writes.length, 0)
+
+  const result = await callRouter(sessionSecurityRouter, {
+    method: 'POST', url: `/users/${targetId}/reset-password`, headers: { authorization: `Bearer ${token}` },
+    body: { currentPassword: ownerPassword, newPassword: replacement },
+  })
+  assert.equal(result.status, 200, result.error?.message || result.body?.message)
+  assert.equal(result.body.reset, true)
+  assert.equal(sessionEnded, true)
+  assert.deepEqual(writes.map(({ type }) => type), ['password', 'sessions', 'pairings', 'challenges', 'audit'])
+  assert.equal(await bcrypt.compare(replacement, writes[0].update.$set.passwordHash), true)
+  assert.equal(String(writes[1].filter.user), String(targetId))
+  assert.equal(writes[1].update.$set.revokedReason, 'OWNER_PASSWORD_RESET')
+  assert.equal(JSON.stringify(writes[4]).includes(replacement), false)
+  assert.equal(result.headers['cache-control'], 'no-store')
+})
+
+test('staff password reset rejects self-service and non-Owner accounts', async () => {
+  const ownerId = new mongoose.Types.ObjectId()
+  const managerId = new mongoose.Types.ObjectId()
+  const targetId = new mongoose.Types.ObjectId()
+  let writes = 0
+  User.updateOne = async () => { writes += 1; return { matchedCount: 1 } }
+  AuthSession.findOne = async () => ({ revokedAt: null, expiresAt: new Date(Date.now() + 3600000) })
+  User.findById = (id) => ({ select: async () => ({ _id: id, role: String(id) === String(managerId) ? 'MANAGER' : 'OWNER', active: true }) })
+
+  const manager = await callRouter(sessionSecurityRouter, {
+    method: 'POST', url: `/users/${targetId}/reset-password`,
+    headers: { authorization: `Bearer ${signToken({ _id: managerId }, { sessionId: 'manager-reset-session' })}` },
+    body: { currentPassword: 'ignored', newPassword: 'fresh-target-password-for-test' },
+  })
+  assert.equal(manager.status, 403)
+
+  const self = await callRouter(sessionSecurityRouter, {
+    method: 'POST', url: `/users/${ownerId}/reset-password`,
+    headers: { authorization: `Bearer ${signToken({ _id: ownerId }, { sessionId: 'owner-self-reset-session' })}` },
+    body: { currentPassword: 'ignored', newPassword: 'fresh-target-password-for-test' },
+  })
+  assert.equal(self.status, 409)
+  assert.equal(writes, 0)
 })
 
 // -------------------------------------------------------------
