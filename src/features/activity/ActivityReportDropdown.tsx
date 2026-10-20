@@ -57,6 +57,7 @@ export const MODULE_FILTER_GROUPS = [
   { key: 'CUSTOMER', label: 'Customers' },
   { key: 'SUPPLIER', label: 'Suppliers' },
   { key: 'SERVICE', label: 'Services' },
+  { key: 'SHIPMENT', label: 'Shipping' },
   { key: 'CUSTOMER_DOCUMENT', label: 'Documents' },
   { key: 'RECEIPT', label: 'Receipts' },
   { key: 'BACKUP', label: 'Backups' },
@@ -74,6 +75,7 @@ const entityIcons: Record<string, LucideIcon> = {
   SUPPLIER: Truck,
   SERVICE_OFFERING: Wrench,
   SERVICE_CHARGE: Wrench,
+  SHIPMENT: Truck,
   CUSTOMER_DOCUMENT: FileText,
   RECEIPT: FileText,
   BACKUP: Database,
@@ -91,6 +93,7 @@ const entityFriendlyNames: Record<string, string> = {
   SUPPLIER: 'Supplier',
   SERVICE_OFFERING: 'Service',
   SERVICE_CHARGE: 'Service charge',
+  SHIPMENT: 'Shipment',
   CUSTOMER_DOCUMENT: 'Document',
   RECEIPT: 'Receipt',
   BACKUP: 'Backup',
@@ -111,6 +114,10 @@ const actionLabels: Record<string, string> = {
   ADJUST: 'Adjusted stock for',
   UPLOAD: 'Uploaded',
   DOWNLOAD: 'Downloaded',
+  PRINT_LABEL: 'Printed label for',
+  READY_TO_SHIP: 'Marked ready',
+  SHIPPED: 'Marked on shipping',
+  DELIVERED: 'Marked delivered',
   VIEW: 'Viewed',
   DUE_REMINDER: 'Due tomorrow:',
   LOGIN: 'Signed in',
@@ -225,6 +232,7 @@ export function activityTitle(log: ActivityLog): string {
     || details.paymentNo
     || details.sku
     || details.receiptNo
+    || details.shipmentNo
     || details.serviceNo
     || details.documentName
     || details.filename
@@ -250,6 +258,8 @@ export function activitySummary(log: ActivityLog): string {
     if (item.name) pieces.push(item.name)
   }
   if (details.phone) pieces.push(String(details.phone))
+  if (details.recipientName) pieces.push(String(details.recipientName))
+  if (details.trackingNumber) pieces.push(`Tracking ${String(details.trackingNumber)}`)
   if (details.role) pieces.push(titleCase(String(details.role)))
   if (details.note) pieces.push(String(details.note))
 
