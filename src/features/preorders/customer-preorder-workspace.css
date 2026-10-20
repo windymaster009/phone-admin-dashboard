@@ -6,14 +6,8 @@
 .preorder-ledger { scroll-margin-top: var(--space-6); }
 .preorder-ledger .filter-row { padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 .preorder-ledger .search-field { flex: 1 1 300px; }
-.preorder-list { display: grid; }
-.preorder-row { display: flex; align-items: center; gap: 14px; width: 100%; padding: 16px 20px; border: 0; border-bottom: 1px solid var(--border); color: var(--text); background: transparent; text-align: left; cursor: pointer; }
-.preorder-row:last-child { border-bottom: 0; }
-.preorder-row:hover, .preorder-row:focus-visible { background: var(--surface-hover); }
-.preorder-row-icon { display: grid; place-items: center; flex: 0 0 38px; height: 38px; border-radius: var(--radius-sm); color: var(--purple-light); background: color-mix(in srgb, var(--purple) 15%, var(--panel)); }
-.preorder-row-main { display: grid; gap: 3px; flex: 1; min-width: 0; }
-.preorder-row-main small { overflow: hidden; color: var(--muted); text-overflow: ellipsis; white-space: nowrap; }
-.preorder-status { padding: 7px 10px; border: 1px solid var(--border); border-radius: 999px; color: var(--purple-light); font-size: 11px; font-weight: 800; white-space: nowrap; }
+.preorder-list { display: grid; padding: var(--space-1) var(--space-4) var(--space-4); }
+.preorder-status { padding: 5px 9px; border: 1px solid var(--border); border-radius: 999px; color: var(--purple-light); font-size: 11px; font-weight: 800; white-space: nowrap; }
 .preorder-empty { padding: 24px; color: var(--muted); }
 .preorder-form-grid label, .preorder-block label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 700; }
 .preorder-form-grid input, .preorder-form-grid select, .preorder-form-grid textarea, .preorder-block input, .preorder-block select { width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); background-color: var(--input-bg); }
@@ -37,4 +31,4 @@
 .preorder-history { display: grid; gap: 7px; margin: 0; padding-left: 20px; }
 .preorder-history small { display: block; }
 .preorder-detail .operation-modal-actions { display: flex; justify-content: flex-end; }
-@media (max-width: 48rem) { .preorder-row { align-items: flex-start; flex-wrap: wrap; } .preorder-status { margin-left: 52px; } .preorder-facts, .preorder-fields, .preorder-form-grid { grid-template-columns: 1fr; } .preorder-wide { grid-column: auto; } .preorder-block-heading { align-items: stretch; flex-direction: column; } .preorder-block > .primary-button { justify-self: stretch; } }
+@media (max-width: 48rem) { .preorder-facts, .preorder-fields, .preorder-form-grid { grid-template-columns: 1fr; } .preorder-wide { grid-column: auto; } .preorder-block-heading { align-items: stretch; flex-direction: column; } .preorder-block > .primary-button { justify-self: stretch; } }

@@ -4,7 +4,7 @@ import './record-list-row.css'
 
 type RecordListRowProps = {
   icon: ReactNode
-  tone: 'sale' | 'purchase' | 'repair'
+  tone: 'sale' | 'purchase' | 'repair' | 'preorder'
   title: string
   meta: string
   detail?: string

@@ -11,6 +11,7 @@
 .record-list-row-icon.sale { color: var(--green); background: color-mix(in srgb, var(--green) 11%, transparent); }
 .record-list-row-icon.purchase { color: var(--orange); background: color-mix(in srgb, var(--orange) 11%, transparent); }
 .record-list-row-icon.repair { color: var(--primary); background: var(--primary-soft); }
+.record-list-row-icon.preorder { color: var(--primary); background: var(--primary-soft); }
 .record-list-row-copy { grid-area: copy; display: grid; gap: var(--space-1); min-width: 0; }
 .record-list-row-copy strong, .record-list-row-copy small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .record-list-row-copy strong { font-size: var(--text-xs); line-height: 1.3; }

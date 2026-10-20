@@ -8,6 +8,7 @@ import FilterSelect from '../../components/FilterSelect'
 import OperationModalShell from '../../components/OperationModalShell'
 import LoadingState from '../../components/LoadingState'
 import OperationActionCard from '../../components/OperationActionCard'
+import RecordListRow from '../../components/RecordListRow'
 import './customer-preorder-workspace.css'
 
 type PreorderStatus = 'REQUESTED' | 'ORDERED' | 'ARRIVED' | 'COMPLETED' | 'CANCELLED'
@@ -57,7 +58,7 @@ export default function CustomerPreorderWorkspace() {
     <section className="surface-card preorder-ledger">
       <div className="card-heading table-heading"><div><span className="eyebrow">Customer orders</span><h3>Preorder queue</h3></div><button type="button" className="ghost-button" aria-label="Refresh preorders" onClick={() => void load()}><RefreshCcw size={16} /></button></div>
       <FilterToolbar search={search} onSearchChange={setSearch} searchLabel="Search preorders" placeholder="Search customer, phone, product, or preorder number…"><FilterSelect aria-label="Preorder status" value={status} onChange={(event) => setStatus(event.target.value)}><option value="ALL">All statuses</option>{statuses.map((value) => <option value={value} key={value}>{titleStatus(value)}</option>)}</FilterSelect></FilterToolbar>
-      {loading && preorders.length === 0 ? <LoadingState label="Loading customer preorders" /> : <div className="preorder-list">{preorders.map((preorder) => <button type="button" className="preorder-row" key={preorder._id} onClick={() => setSelectedId(preorder._id)}><span className="preorder-row-icon"><ShoppingBag size={19} /></span><span className="preorder-row-main"><strong>{preorder.quantity} × {preorder.productName}</strong><small>{preorder.preorderNo} · {preorder.customerName} · {preorder.customerPhone}</small><small>{titleStatus(preorder.category)} · {dateText(preorder.createdAt)}</small></span><span className="preorder-status">{titleStatus(preorder.status)}</span></button>)}{preorders.length === 0 && <p className="preorder-empty">{search || status !== 'ALL' ? 'No preorders match these filters.' : 'No customer preorders yet. Use New preorder to record the first request.'}</p>}</div>}
+      {loading && preorders.length === 0 ? <LoadingState label="Loading customer preorders" /> : <div className="preorder-list">{preorders.map((preorder) => <RecordListRow key={preorder._id} icon={<ShoppingBag />} tone="preorder" title={`${preorder.quantity} × ${preorder.productName}`} meta={`${preorder.preorderNo} · ${preorder.customerName} · ${dateText(preorder.createdAt)}`} badge={<span className="preorder-status">{titleStatus(preorder.status)}</span>} ariaLabel={`Open preorder ${preorder.preorderNo} for ${preorder.productName}`} onOpen={() => setSelectedId(preorder._id)} />)}{preorders.length === 0 && <p className="preorder-empty">{search || status !== 'ALL' ? 'No preorders match these filters.' : 'No customer preorders yet. Use New preorder to record the first request.'}</p>}</div>}
     </section>
     {createOpen && <CreatePreorder onClose={() => setCreateOpen(false)} onCreated={(preorder) => { upsert(preorder); setSelectedId(preorder._id); setCreateOpen(false) }} />}
     {selected && <PreorderDetail preorder={selected} onClose={() => setSelectedId(null)} onChanged={upsert} />}
