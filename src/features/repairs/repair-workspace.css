@@ -1,0 +1,61 @@
+/* Hallmark · component: repair detail modal · genre: modern-minimal · tone: compact operational · palette: existing PhoneFlow violet
+ * pre-emit critique: P5 H5 E5 S5 R5 V4
+ */
+.repair-page { display: grid; gap: var(--space-5); min-width: 0; }
+.repair-ledger { min-width: 0; padding: 0; overflow: hidden; }
+.repair-ledger .filter-row { padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.repair-ledger .search-field { flex: 1 1 280px; }
+.repair-list { display: grid; padding: var(--space-1) var(--space-4) var(--space-4); }
+.repair-empty { padding: var(--space-4) var(--space-1); color: var(--muted); }
+.repair-form-grid label, .repair-block label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 700; }
+.repair-form-grid input, .repair-form-grid textarea, .repair-block input, .repair-block select, .repair-part select { width: 100%; min-width: 0; min-height: 42px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); background: var(--input-bg); }
+.repair-form-grid textarea { min-height: 95px; }
+.repair-wide { grid-column: 1 / -1; }
+.operation-modal.repair-detail-modal { width: min(840px, 100%); }
+.repair-detail-modal .operation-modal-header { align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); }
+.repair-detail-modal .operation-modal-icon { width: 36px; height: 36px; border-radius: var(--radius-md); }
+.repair-detail-modal .operation-modal-header h2 { margin: 2px 0 0; font-size: 20px; }
+.repair-detail { display: grid; gap: var(--space-3); padding: var(--space-3) var(--space-4) var(--space-4); }
+.repair-facts { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1.6fr); gap: var(--space-2); }
+.repair-facts > span { display: grid; align-content: start; gap: var(--space-1); min-width: 0; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow-wrap: anywhere; }
+.repair-facts strong { font-size: 14px; line-height: 1.35; }
+.repair-facts small, .repair-part small { color: var(--muted); }
+.repair-block { display: grid; gap: 12px; min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-md); }
+.repair-block h3 { margin: 0; font-size: 15px; }
+.repair-detail .repair-block { gap: var(--space-2); padding: var(--space-3); }
+.repair-progress-block { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: var(--space-3); }
+.repair-block-heading, .repair-part { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.repair-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.repair-actions button { min-height: 38px; }
+.repair-part { padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.repair-part-summary { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
+.repair-part--ordered { align-items: start; }
+.repair-part--ordered .repair-part-summary { flex: 0 1 200px; }
+.repair-part-controls { display: grid; flex: 1 1 0; gap: var(--space-2); min-width: 0; }
+.repair-purchase-field { display: grid; gap: var(--space-1); color: var(--muted); font-size: 12px; font-weight: 700; }
+.repair-part-controls .repair-actions { justify-content: flex-end; }
+.repair-part select { max-width: none; }
+.repair-help { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.repair-add-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 12px; }
+.repair-add-grid > .repair-block { align-content: start; }
+.repair-block .device-existing-product { min-width: 0; }
+.repair-block .purchase-existing-summary { grid-template-columns: 36px minmax(0, 1fr); }
+.repair-block .purchase-existing-summary > div { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); min-width: 0; padding: var(--space-2) 0 0; border-left: 0; border-top: 1px solid var(--border); }
+.repair-block .purchase-existing-summary > div span { margin: 0; }
+.repair-add-grid .primary-button, .repair-add-grid .ghost-button { justify-self: start; }
+.repair-history-groups { display: grid; gap: var(--space-3); }
+.repair-history-group { min-width: 0; }
+.repair-history-date { display: block; margin-bottom: var(--space-1); color: var(--muted); font-size: 11px; font-weight: 700; }
+.repair-history { display: grid; margin: 0; padding: 0; list-style: none; }
+.repair-history li { display: grid; grid-template-columns: 8px minmax(0, 180px) minmax(0, 1fr); align-items: start; gap: var(--space-3); min-width: 0; padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
+.repair-history li::before { content: ''; width: 8px; height: 8px; margin-top: var(--space-1); border-radius: 50%; background: var(--muted); }
+.repair-history-group:first-child .repair-history li:first-child::before { background: var(--primary); }
+.repair-history li:last-child { border-bottom: 0; padding-bottom: 0; }
+.repair-history strong { min-width: 0; font-size: 13px; line-height: 1.4; overflow-wrap: anywhere; }
+.repair-history li > span { min-width: 0; color: var(--muted); font-size: 12px; line-height: 1.4; overflow-wrap: anywhere; }
+.operation-modal.repair-status-modal { width: min(520px, 100%); }
+.repair-status-form { display: grid; gap: var(--space-4); padding-top: var(--space-5); }
+.repair-status-form textarea { min-height: 104px; }
+.repair-status-form > .operation-modal-actions { position: static; margin-top: 0; }
+@media (max-width: 48rem) { .repair-add-grid, .repair-form-grid { grid-template-columns: 1fr; } .repair-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } .repair-wide { grid-column: auto; } .repair-part, .repair-block-heading { align-items: stretch; flex-direction: column; } .repair-part--ordered .repair-part-summary { flex-basis: auto; } .repair-part-controls .repair-actions { justify-content: flex-start; } .repair-detail-modal .operation-modal-header { padding: var(--space-2) var(--space-3); } .repair-detail { padding: var(--space-3); } }
+@media (max-width: 30rem) { .repair-facts { grid-template-columns: 1fr; } .repair-history li { grid-template-columns: 8px minmax(0, 1fr); row-gap: var(--space-1); } .repair-history li > span { grid-column: 2; } }

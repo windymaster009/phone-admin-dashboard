@@ -79,6 +79,14 @@ describe('OperationModalShell component', () => {
     expect(screen.getByText('Fallback body')).toBeInTheDocument()
   })
 
+  it('makes a backgrounded modal inert and hidden from the accessibility tree', () => {
+    render(<OperationModalShell title="Background modal" inactive onClose={vi.fn()}><button>Background action</button></OperationModalShell>)
+    expect(screen.queryByRole('dialog', { name: 'Background modal' })).not.toBeInTheDocument()
+    const dialog = document.querySelector('.operation-modal')
+    expect(dialog).toHaveAttribute('inert')
+    expect(dialog).toHaveAttribute('aria-hidden', 'true')
+  })
+
   it('handles dismissible=false and dismissOnEscape=false behaviors', () => {
     const onClose = vi.fn()
     const { rerender } = render(

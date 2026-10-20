@@ -46,4 +46,14 @@ describe('StatusBadge', () => {
     expect(screen.getByText('Claimed')).toBeInTheDocument()
     expect(container.firstChild).toHaveClass('status-badge', 'status-forfeited')
   })
+
+  it('renders repair workflow statuses with their shared badge classes', () => {
+    const { rerender, container } = render(<StatusBadge status="IN_PROGRESS" />)
+    expect(screen.getByText('In Progress')).toBeInTheDocument()
+    expect(container.firstChild).toHaveClass('status-in-progress')
+
+    rerender(<StatusBadge status="READY_PICKUP" />)
+    expect(screen.getByText('Ready Pickup')).toBeInTheDocument()
+    expect(container.firstChild).toHaveClass('status-ready-pickup')
+  })
 })

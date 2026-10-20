@@ -8,6 +8,8 @@ import serviceRouter from './serviceRoutes.js'
 import { Customer, Pawn, Supplier, Trade, User, ActivityLog } from './models.js'
 import { AuthSession } from './authSessionModels.js'
 import { ServiceCharge, ServiceOffering } from './serviceModels.js'
+import { RepairJob } from './repairModels.js'
+import { CustomerPreorder } from './customerPreorderModels.js'
 import { CustomerDocument } from './documentModels.js'
 import { Loan } from './loanModels.js'
 
@@ -289,6 +291,8 @@ test('Customer deletion: blocked with 409 when linked to a ServiceCharge', async
   const origPawnExists = Pawn.exists
   const origTradeExists = Trade.exists
   const origServiceChargeExists = ServiceCharge.exists
+  const origRepairExists = RepairJob.exists
+  const origPreorderExists = CustomerPreorder.exists
   const origDocExists = CustomerDocument.exists
   const origFindByIdAndDelete = Customer.findByIdAndDelete
 
@@ -296,6 +300,8 @@ test('Customer deletion: blocked with 409 when linked to a ServiceCharge', async
   Pawn.exists = async () => null
   Trade.exists = async () => null
   ServiceCharge.exists = async (query) => (query.customer === customerId ? { _id: 'sc1' } : null)
+  RepairJob.exists = async () => null
+  CustomerPreorder.exists = async () => null
   CustomerDocument.exists = async () => null
   let deleteCalled = false
   Customer.findByIdAndDelete = async () => { deleteCalled = true }
@@ -309,6 +315,8 @@ test('Customer deletion: blocked with 409 when linked to a ServiceCharge', async
     Pawn.exists = origPawnExists
     Trade.exists = origTradeExists
     ServiceCharge.exists = origServiceChargeExists
+    RepairJob.exists = origRepairExists
+    CustomerPreorder.exists = origPreorderExists
     CustomerDocument.exists = origDocExists
     Customer.findByIdAndDelete = origFindByIdAndDelete
   }
@@ -318,11 +326,15 @@ test('Customer deletion: blocked with 409 when linked to Pawn or Trade', async (
   const origPawnExists = Pawn.exists
   const origTradeExists = Trade.exists
   const origServiceChargeExists = ServiceCharge.exists
+  const origRepairExists = RepairJob.exists
+  const origPreorderExists = CustomerPreorder.exists
   const origDocExists = CustomerDocument.exists
 
   const customerId = new mongoose.Types.ObjectId().toString()
   CustomerDocument.exists = async () => null
   ServiceCharge.exists = async () => null
+  RepairJob.exists = async () => null
+  CustomerPreorder.exists = async () => null
 
   try {
     // Blocked by Pawn
@@ -342,6 +354,8 @@ test('Customer deletion: blocked with 409 when linked to Pawn or Trade', async (
     Pawn.exists = origPawnExists
     Trade.exists = origTradeExists
     ServiceCharge.exists = origServiceChargeExists
+    RepairJob.exists = origRepairExists
+    CustomerPreorder.exists = origPreorderExists
     CustomerDocument.exists = origDocExists
   }
 })
@@ -350,6 +364,8 @@ test('Customer deletion: unreferenced customer is deleted successfully', async (
   const origPawnExists = Pawn.exists
   const origTradeExists = Trade.exists
   const origServiceChargeExists = ServiceCharge.exists
+  const origRepairExists = RepairJob.exists
+  const origPreorderExists = CustomerPreorder.exists
   const origDocExists = CustomerDocument.exists
   const origFindByIdAndDelete = Customer.findByIdAndDelete
 
@@ -357,6 +373,8 @@ test('Customer deletion: unreferenced customer is deleted successfully', async (
   Pawn.exists = async () => null
   Trade.exists = async () => null
   ServiceCharge.exists = async () => null
+  RepairJob.exists = async () => null
+  CustomerPreorder.exists = async () => null
   CustomerDocument.exists = async () => null
   let deletedId = null
   Customer.findByIdAndDelete = async (id) => {
@@ -374,8 +392,36 @@ test('Customer deletion: unreferenced customer is deleted successfully', async (
     Pawn.exists = origPawnExists
     Trade.exists = origTradeExists
     ServiceCharge.exists = origServiceChargeExists
+    RepairJob.exists = origRepairExists
+    CustomerPreorder.exists = origPreorderExists
     CustomerDocument.exists = origDocExists
     Customer.findByIdAndDelete = origFindByIdAndDelete
+  }
+})
+
+test('Customer deletion: blocked when linked to a customer preorder', async () => {
+  const customerId = new mongoose.Types.ObjectId().toString()
+  const original = {
+    pawn: Pawn.exists, trade: Trade.exists, service: ServiceCharge.exists,
+    repair: RepairJob.exists, preorder: CustomerPreorder.exists, document: CustomerDocument.exists,
+  }
+  Pawn.exists = async () => null
+  Trade.exists = async () => null
+  ServiceCharge.exists = async () => null
+  RepairJob.exists = async () => null
+  CustomerPreorder.exists = async () => ({ _id: new mongoose.Types.ObjectId() })
+  CustomerDocument.exists = async () => null
+  try {
+    const result = await callAppRoute('DELETE', `/customers/${customerId}`)
+    assert.equal(result.status, 409)
+    assert.match(result.body.message, /transaction history/i)
+  } finally {
+    Pawn.exists = original.pawn
+    Trade.exists = original.trade
+    ServiceCharge.exists = original.service
+    RepairJob.exists = original.repair
+    CustomerPreorder.exists = original.preorder
+    CustomerDocument.exists = original.document
   }
 })
 

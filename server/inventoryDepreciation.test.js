@@ -3,6 +3,8 @@ import test from 'node:test'
 import jwt from 'jsonwebtoken'
 import mongoose from 'mongoose'
 import { ActivityLog, InventoryItem, Pawn, PaywayIntent, Trade, User } from './models.js'
+import { RepairJob } from './repairModels.js'
+import { CustomerPreorder } from './customerPreorderModels.js'
 import { AuthSession } from './authSessionModels.js'
 import router from './routes.js'
 
@@ -785,6 +787,8 @@ test('DELETE /inventory/:id: enforces validation, reference guards, photo cleanu
   const origFindByIdAndDelete = InventoryItem.findByIdAndDelete
   const origPawnFindOne = Pawn.findOne
   const origTradeFindOne = Trade.findOne
+  const origRepairFindOne = RepairJob.findOne
+  const origPreorderFindOne = CustomerPreorder.findOne
   const origPaywayIntentFindOne = PaywayIntent.findOne
   const origActivitySave = ActivityLog.prototype.save
 
@@ -825,6 +829,9 @@ test('DELETE /inventory/:id: enforces validation, reference guards, photo cleanu
       }),
     })
     Trade.findOne = () => ({ select: () => ({ lean: async () => null }) })
+    RepairJob.findOne = () => ({ select: () => ({ lean: async () => null }) })
+
+    CustomerPreorder.findOne = () => ({ select: () => ({ lean: async () => null }) })
     PaywayIntent.findOne = () => ({ select: () => ({ lean: async () => null }) })
 
     const resLinkedPawnActive = await callRoute('DELETE', `/inventory/${validId}`, {}, { role: 'OWNER' })
@@ -852,6 +859,20 @@ test('DELETE /inventory/:id: enforces validation, reference guards, photo cleanu
     assert.equal(resLinkedTrade.status, 409)
     assert.match(resLinkedTrade.body.message, /linked to recorded purchase transaction #TR-BUY-99/i)
     assert.match(resLinkedTrade.body.message, /Archive this record instead/i)
+
+    // A repair part keeps its inventory record, including after installation.
+    Trade.findOne = () => ({ select: () => ({ lean: async () => null }) })
+    RepairJob.findOne = () => ({ select: () => ({ lean: async () => ({ repairNo: 'RP-20261016-001' }) }) })
+    const resLinkedRepair = await callRoute('DELETE', `/inventory/${validId}`, {}, { role: 'OWNER' })
+    assert.equal(resLinkedRepair.status, 409)
+    assert.match(resLinkedRepair.body.message, /linked to repair #RP-20261016-001/i)
+    RepairJob.findOne = () => ({ select: () => ({ lean: async () => null }) })
+
+    CustomerPreorder.findOne = () => ({ select: () => ({ lean: async () => ({ preorderNo: 'PO-20261016-001' }) }) })
+    const resLinkedPreorder = await callRoute('DELETE', `/inventory/${validId}`, {}, { role: 'OWNER' })
+    assert.equal(resLinkedPreorder.status, 409)
+    assert.match(resLinkedPreorder.body.message, /linked to customer preorder #PO-20261016-001/i)
+    CustomerPreorder.findOne = () => ({ select: () => ({ lean: async () => null }) })
 
     // 6. Linked to in-flight PaywayIntent -> 409
     Trade.findOne = () => ({ select: () => ({ lean: async () => null }) })
@@ -900,6 +921,8 @@ test('DELETE /inventory/:id: enforces validation, reference guards, photo cleanu
     InventoryItem.findByIdAndDelete = origFindByIdAndDelete
     Pawn.findOne = origPawnFindOne
     Trade.findOne = origTradeFindOne
+    RepairJob.findOne = origRepairFindOne
+    CustomerPreorder.findOne = origPreorderFindOne
     PaywayIntent.findOne = origPaywayIntentFindOne
     ActivityLog.prototype.save = origActivitySave
   }

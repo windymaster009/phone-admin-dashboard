@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { ArrowDownRight, ArrowUpRight, Banknote, ChevronDown, FileText, MoreHorizontal, Pencil, Phone, Plus, RefreshCcw, Search, ShoppingCart, UserRound, WalletCards } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, Banknote, ChevronDown, FileText, Pencil, Phone, Plus, RefreshCcw, Search, ShoppingCart, UserRound, WalletCards } from 'lucide-react'
 import { api, getSessionUser } from '../../lib/api'
 import type { Trade } from '../../types/domain'
 import { money, tradePartyName, tradePartyPhone, tradeTransactionMoney, dateText, titleStatus, comingNext } from '../../lib/presentation'
@@ -13,6 +13,7 @@ import DetailModalFooter from '../../components/DetailModalFooter'
 import WarrantyPeriodField from '../../components/WarrantyPeriodField'
 import FilterToolbar from '../../components/FilterToolbar'
 import FilterSelect from '../../components/FilterSelect'
+import RecordListRow from '../../components/RecordListRow'
 import './trade-page.css'
 
 function tradeSignedTotal(trade: Trade) {
@@ -256,16 +257,10 @@ export default function TradeView() {
           </FilterToolbar>
           <div className="transaction-list">
             {filteredTrades.map((transaction) => (
-              <div className="transaction-row" key={transaction._id}>
-                <span className={`transaction-icon ${transaction.type === 'SELL' ? 'sale' : 'purchase'}`}>{transaction.type === 'SELL' ? <ArrowUpRight /> : <ArrowDownRight />}</span>
-                <p><strong>{transaction.items.map((item) => `${item.name} x${item.quantity}`).join(', ')}</strong><small>{transaction.tradeNo} - {tradePartyName(transaction)} - {dateText(transaction.purchaseDate || transaction.createdAt)}</small></p>
-                <StatusBadge status={transaction.type === 'SELL' ? 'Sale' : 'Purchase'} />
-                <strong className={transaction.type === 'SELL' ? 'money-in' : 'money-out'}>{tradeSignedTotal(transaction)}</strong>
-                <button className="icon-button" onClick={() => setSelectedTrade(transaction)} aria-label={`View ${transaction.tradeNo}`}><MoreHorizontal size={18} /></button>
-              </div>
+              <RecordListRow key={transaction._id} icon={transaction.type === 'SELL' ? <ArrowUpRight /> : <ArrowDownRight />} tone={transaction.type === 'SELL' ? 'sale' : 'purchase'} title={transaction.items.map((item) => `${item.name} x${item.quantity}`).join(', ')} meta={`${transaction.tradeNo} - ${tradePartyName(transaction)} - ${dateText(transaction.purchaseDate || transaction.createdAt)}`} badge={<StatusBadge status={transaction.type === 'SELL' ? 'Sale' : 'Purchase'} />} amount={tradeSignedTotal(transaction)} amountTone={transaction.type === 'SELL' ? 'in' : 'out'} ariaLabel={`View ${transaction.tradeNo}`} onOpen={() => setSelectedTrade(transaction)} />
             ))}
             {loading && <LoadingState compact label="Loading transactions" detail="Reading recent purchases and sales…" />}
-            {!loading && trades.length === 0 && <div className="transaction-row"><p><strong>No transactions yet</strong><small>Create a buy or sell transaction to see it here.</small></p></div>}
+            {!loading && trades.length === 0 && <div className="trade-transaction-empty"><strong>No transactions yet</strong><small>Create a buy or sell transaction to see it here.</small></div>}
             {!loading && trades.length > 0 && filteredTrades.length === 0 && <div className="trade-transaction-empty"><Search size={20} /><strong>No transactions match</strong><small>Change the search or filters to see other records.</small></div>}
           </div>
         </>}

@@ -1,5 +1,19 @@
 [
   {
+    "date": "2026-10-20",
+    "macrostructure": "Single Action",
+    "theme": "existing PhoneFlow",
+    "enrichment": "none",
+    "brief": "Shared full-width operation action card for customer preorders and repair intake"
+  },
+  {
+    "date": "2026-10-20",
+    "macrostructure": "Single Action",
+    "theme": "existing PhoneFlow",
+    "enrichment": "none",
+    "brief": "One full-width customer preorder action above the existing order queue"
+  },
+  {
     "date": "2026-10-09",
     "macrostructure": "Workbench",
     "theme": "existing PhoneFlow",

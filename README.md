@@ -44,8 +44,22 @@ temporary-file cleanup behavior.
 - Pawn valuation limited to a configurable 40–50%
 - Pawn contracts, due dates, overdue state, redemption, and forfeiture
 - Forfeited pawn items transferred into second-hand stock
+- Repair jobs with stock-part reservations, internal preorders, purchase-linked receipt, and part history
+- Customer product preorders for phones, cases, and other items, linked to normal purchases and sales
 - Activity logs for important changes
 - Dark and light themes
+
+## Repair parts workflow
+
+Open **Repairs** under Operations. After recording customer approval, reserve an available part from stock; this reduces available quantity immediately. If it is unavailable, record a preorder and contact the supplier separately. When the part arrives, record the normal **New purchase** first, then link that purchase line to the preorder to reserve the part. This keeps procurement in the purchase ledger rather than double-counting it as an operating expense.
+
+Cancelling a repair atomically returns unused reserved parts to their inventory records and cancels unreceived preorder records. Installed parts are not restored automatically. If an inventory record was archived while a part was reserved, its returned quantity remains archived until staff reopen it. Preorder cancellation in PhoneFlow does not notify the supplier; staff must contact them. Record repair payments through Service charges separately.
+
+## Customer product preorders
+
+Open **Customer Preorders** under Operations to record a customer's phone, case, or other product request. After contacting the supplier, mark it ordered. On arrival, use **New purchase** and link its completed purchase line to the preorder. At pickup, use **New sale** and link the completed sale. Linking does not change stock or financial totals a second time.
+
+This workflow does not take a deposit, reserve/hold an arrived item, contact the supplier, or notify the customer automatically. Cancelling after a purchase leaves the purchased item in normal stock and does not reverse the purchase. Staff should complete the sale promptly after arrival or keep the item aside physically until pickup.
 
 ## ScreenShot previews
 # 📱 Mobile

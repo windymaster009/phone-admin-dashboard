@@ -27,6 +27,8 @@ import { AndroidPairing, AuthSession } from './authSessionModels.js'
 import { TwoFactorChallenge, TwoFactorCredential, TwoFactorSetup } from './twoFactorModels.js'
 import { Loan, LoanPayment } from './loanModels.js'
 import { ServiceCharge } from './serviceModels.js'
+import { RepairJob } from './repairModels.js'
+import { CustomerPreorder } from './customerPreorderModels.js'
 import { Expense } from './expenseModels.js'
 import { refreshLoanStatuses } from './loanDashboardRoutes.js'
 import { preventCustomerDeletionWithDocuments } from './documentGuards.js'
@@ -2399,12 +2401,14 @@ router.patch('/customers/:id', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASH
 }))
 
 router.delete('/customers/:id', requireAuth, allowRoles('OWNER', 'MANAGER'), preventCustomerDeletionWithDocuments, asyncRoute(async (req, res) => {
-  const [pawnExists, tradeExists, serviceChargeExists] = await Promise.all([
+  const [pawnExists, tradeExists, serviceChargeExists, repairExists, preorderExists] = await Promise.all([
     Pawn.exists({ customer: req.params.id }),
     Trade.exists({ customer: req.params.id }),
     ServiceCharge.exists({ customer: req.params.id }),
+    RepairJob.exists({ customer: req.params.id }),
+    CustomerPreorder.exists({ customer: req.params.id }),
   ])
-  if (pawnExists || tradeExists || serviceChargeExists) {
+  if (pawnExists || tradeExists || serviceChargeExists || repairExists || preorderExists) {
     return res.status(409).json({ message: 'This customer is linked to transaction history. Deactivate them instead.' })
   }
   const customer = await Customer.findByIdAndDelete(req.params.id)
@@ -2866,6 +2870,16 @@ router.delete('/inventory/:id', requireAuth, allowRoles('OWNER'), asyncRoute(asy
     return res.status(409).json({
       message: `Cannot delete stock record linked to recorded ${tradeKind} transaction #${linkedTrade.tradeNo || linkedTrade._id}. Archive this record instead.`,
     })
+  }
+
+  const linkedRepair = await RepairJob.findOne({ 'parts.inventoryItem': item._id }).select('repairNo').lean()
+  if (linkedRepair) {
+    return res.status(409).json({ message: `Cannot delete stock record linked to repair #${linkedRepair.repairNo}. Archive this record instead.` })
+  }
+
+  const linkedPreorder = await CustomerPreorder.findOne({ inventoryItem: item._id }).select('preorderNo').lean()
+  if (linkedPreorder) {
+    return res.status(409).json({ message: `Cannot delete stock record linked to customer preorder #${linkedPreorder.preorderNo}. Archive this record instead.` })
   }
 
   const linkedIntent = await PaywayIntent.findOne({

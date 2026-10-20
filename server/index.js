@@ -20,6 +20,8 @@ import reportRouter from './reportRoutes.js'
 import expenseRouter from './expenseRoutes.js'
 import searchRouter from './searchRoutes.js'
 import serviceRouter from './serviceRoutes.js'
+import repairRouter from './repairRoutes.js'
+import customerPreorderRouter from './customerPreorderRoutes.js'
 import router from './routes.js'
 import sessionSecurityRouter from './sessionSecurityRoutes.js'
 import { shopProfile } from './shopProfile.js'
@@ -184,6 +186,8 @@ app.use('/api/reports', reportRouter)
 app.use('/api/expenses', expenseRouter)
 app.use('/api/search', searchRouter)
 app.use('/api/services', serviceRouter)
+app.use('/api/repairs', repairRouter)
+app.use('/api/customer-preorders', customerPreorderRouter)
 app.use('/api', router)
 
 if (process.env.NODE_ENV === 'production') {

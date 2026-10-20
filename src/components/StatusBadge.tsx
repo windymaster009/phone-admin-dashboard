@@ -4,15 +4,15 @@ import { titleStatus } from '../lib/presentation'
 export default function StatusBadge({ status }: { status: string }) {
   const label = titleStatus(status)
   const slug = status.toLowerCase().replaceAll('_', '-')
-  const Icon = status === 'IN_STOCK' || status === 'ACTIVE' || status === 'PAID' || status === 'RECORDED'
+  const Icon = status === 'IN_STOCK' || status === 'ACTIVE' || status === 'PAID' || status === 'RECORDED' || status === 'READY_PICKUP' || status === 'COMPLETED'
     ? BadgeCheck
-    : status === 'RESERVED' || status === 'DUE_SOON'
+    : status === 'RESERVED' || status === 'DUE_SOON' || status === 'APPROVAL' || status === 'WAITING_PARTS'
       ? Clock3
       : status === 'SOLD' || status === 'SALE'
         ? ShoppingCart
         : status === 'PAWNED'
           ? HandCoins
-          : status === 'REPAIR'
+          : status === 'REPAIR' || status === 'RECEIVED' || status === 'DIAGNOSIS' || status === 'IN_PROGRESS' || status === 'QUALITY_CHECK'
             ? Wrench
             : status === 'ARCHIVED'
               ? Boxes

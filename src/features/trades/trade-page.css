@@ -126,63 +126,6 @@
   padding-bottom: 20px;
 }
 
-.transaction-row {
-  display: grid;
-  grid-template-columns: auto minmax(180px, 1fr) auto auto auto;
-  align-items: center;
-  gap: 15px;
-  padding: 14px 3px;
-  border-top: 1px solid var(--border);
-}
-
-.transaction-icon {
-  width: 37px;
-  height: 37px;
-  display: grid;
-  place-items: center;
-  border-radius: 11px;
-}
-
-.transaction-icon svg {
-  width: 17px;
-}
-
-.transaction-icon.sale {
-  color: var(--green);
-  background: rgba(52, 211, 153, 0.11);
-}
-
-.transaction-icon.purchase {
-  color: var(--orange);
-  background: rgba(251, 146, 60, 0.11);
-}
-
-.transaction-row p {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-}
-
-.transaction-row p strong {
-  font-size: 11px;
-}
-
-.transaction-row p small {
-  color: var(--muted);
-  margin-top: 4px;
-  font-size: 9px;
-}
-
-.money-in {
-  color: var(--green);
-  font-size: 11px;
-}
-
-.money-out {
-  color: var(--orange);
-  font-size: 11px;
-}
-
 /* Trade Detail Modal */
 .trade-detail-modal {
   width: min(980px, 100%);
@@ -816,47 +759,6 @@
   .trade-transaction-toolbar .filter-select-shell {
     width: 100%;
     min-width: 0;
-  }
-
-  .trade-transactions-card .transaction-row {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    gap: 10px;
-    padding: 9px 0;
-  }
-
-  .trade-transactions-card .transaction-icon {
-    width: 32px;
-    height: 32px;
-    border-radius: 9px;
-  }
-
-  .trade-transactions-card .transaction-icon svg {
-    width: 15px;
-  }
-
-  .trade-transactions-card .transaction-row p {
-    min-width: 0;
-  }
-
-  .trade-transactions-card .transaction-row p strong,
-  .trade-transactions-card .transaction-row p small {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .trade-transactions-card .transaction-row p strong {
-    font-size: 10px;
-  }
-
-  .trade-transactions-card .transaction-row p small {
-    margin-top: 2px;
-    font-size: 8px;
-  }
-
-  .trade-transactions-card .transaction-row .icon-button {
-    width: 36px;
-    height: 36px;
   }
 
   .trade-detail-modal {

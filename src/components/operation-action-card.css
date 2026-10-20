@@ -1,0 +1,14 @@
+/* Hallmark · macrostructure: Single Action · tone: modern-minimal · anchor hue: PhoneFlow purple
+ * shared component for preorders and repairs · pre-emit critique: P5 H5 E5 S5 R5 V4
+ */
+.operation-action-section { min-width: 0; }
+.operation-action-card { position: relative; display: grid; grid-template-rows: auto 1fr auto; justify-items: start; gap: var(--space-5); min-width: 0; min-height: 220px; padding: var(--space-6); overflow: hidden; isolation: isolate; }
+.operation-action-card::after { content: ''; position: absolute; z-index: 0; top: -70px; right: -70px; width: 180px; height: 180px; border-radius: var(--radius-full); background: color-mix(in srgb, var(--primary) 7%, transparent); pointer-events: none; }
+.operation-action-card > * { position: relative; z-index: 1; }
+.operation-action-icon { display: grid; place-items: center; width: 54px; height: 54px; border-radius: var(--radius-xl); color: var(--primary); background: var(--primary-soft); }
+.operation-action-card h3 { margin: var(--space-1) 0 var(--space-2); font-family: var(--font-display); font-size: var(--text-xl); line-height: 1.2; overflow-wrap: anywhere; }
+.operation-action-card p { max-width: 55ch; margin: 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.7; }
+.operation-action-card > button { min-height: 44px; white-space: nowrap; }
+.operation-action-card > button:active { transform: translateY(1px); }
+@media (max-width: 48rem) { .operation-action-card { min-height: 0; padding: var(--space-5); } }
+@media (prefers-reduced-motion: reduce) { .operation-action-card > button:active { transform: none; } }

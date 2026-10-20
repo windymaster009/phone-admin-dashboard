@@ -3,6 +3,7 @@ import {
   Banknote,
   BarChart3,
   Boxes,
+  PackageCheck,
   Building2,
   FileText,
   FolderLock,
@@ -26,6 +27,8 @@ export type RouteKey =
   | 'loans'
   | 'trade'
   | 'services'
+  | 'repairs'
+  | 'customerPreorders'
   | 'inventory'
   | 'customers'
   | 'suppliers'
@@ -92,6 +95,22 @@ export const ROUTES: AppRoute[] = [
     label: 'Services',
     icon: Wrench,
     group: 'Operations',
+  },
+  {
+    key: 'repairs',
+    pathname: '/repairs',
+    label: 'Repairs',
+    icon: Wrench,
+    group: 'Operations',
+    roles: ['OWNER', 'MANAGER', 'STOCK'],
+  },
+  {
+    key: 'customerPreorders',
+    pathname: '/customer-preorders',
+    label: 'Customer Preorders',
+    icon: PackageCheck,
+    group: 'Operations',
+    roles: ['OWNER', 'MANAGER'],
   },
   {
     key: 'inventory',

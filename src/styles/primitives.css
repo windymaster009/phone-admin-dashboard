@@ -975,8 +975,26 @@ td strong {
   --status-text: var(--status-pawn);
 }
 
-.status-repair {
+.status-repair,
+.status-received,
+.status-diagnosis,
+.status-in-progress,
+.status-quality-check {
   --status-text: var(--status-repair);
+}
+
+.status-approval,
+.status-waiting-parts {
+  --status-text: var(--status-warning);
+}
+
+.status-ready-pickup,
+.status-completed {
+  --status-text: var(--status-active);
+}
+
+.status-cancelled {
+  --status-text: var(--status-danger);
 }
 
 .status-archived {

@@ -55,6 +55,7 @@ export type OperationModalShellProps = {
   scanner?: boolean
   dismissible?: boolean
   dismissOnEscape?: boolean
+  inactive?: boolean
   className?: string
   ariaLabel?: string
   children: ReactNode
@@ -76,6 +77,7 @@ export default function OperationModalShell({
   scanner = false,
   dismissible = true,
   dismissOnEscape = true,
+  inactive = false,
   className = '',
   ariaLabel,
   children,
@@ -207,7 +209,9 @@ export default function OperationModalShell({
         ref={dialogRef}
         className={sectionClass}
         role="dialog"
-        aria-modal="true"
+        aria-modal={inactive ? undefined : 'true'}
+        aria-hidden={inactive || undefined}
+        inert={inactive}
         aria-label={ariaLabel || resolvedTitle}
         aria-describedby={resolvedDescription ? descId : undefined}
       >

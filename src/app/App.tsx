@@ -14,6 +14,8 @@ import type { AppFontSize } from './types'
 const PawnManagementPage = lazy(() => import('../features/pawns/PawnManagementPage'))
 const TradePage = lazy(() => import('../features/trades/TradePage'))
 const ServiceWorkspace = lazy(() => import('../features/services/ServiceWorkspace'))
+const RepairWorkspace = lazy(() => import('../features/repairs/RepairWorkspace'))
+const CustomerPreorderWorkspace = lazy(() => import('../features/preorders/CustomerPreorderWorkspace'))
 const InventoryPage = lazy(() => import('../features/inventory/InventoryPage'))
 const CustomerPage = lazy(() => import('../features/customers/CustomerPage'))
 const SupplierWorkspace = lazy(() => import('../features/suppliers/SupplierWorkspace'))
@@ -187,6 +189,10 @@ function App({
         return <TradePage />
       case 'services':
         return <ServiceWorkspace />
+      case 'repairs':
+        return <RepairWorkspace />
+      case 'customerPreorders':
+        return <CustomerPreorderWorkspace />
       case 'inventory':
         return <InventoryPage user={user} />
       case 'customers':

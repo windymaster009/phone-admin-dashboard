@@ -327,6 +327,7 @@ const tradeSchema = new Schema(
     transactionBalance: { type: Number, min: 0 },
     paymentStatus: { type: String, enum: ['PAID', 'PARTIAL', 'UNPAID'] },
     purchaseWorkflowVersion: { type: Number },
+    preorderAllocationVersion: { type: Number, min: 0 },
     items: { type: [tradeLineSchema], validate: [(items) => items.length > 0, 'At least one item is required'] },
     addOns: { type: [saleAddOnSchema], default: [] },
     subtotal: { type: Number, min: 0, required: true },
