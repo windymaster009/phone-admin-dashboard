@@ -60,6 +60,8 @@ async function audit(req, shipment, action, details = {}) {
       recipientName: shipment.recipientName,
       phone: shipment.recipientPhone,
       status: shipment.status,
+      courierName: shipment.courierName || '',
+      trackingNumber: shipment.trackingNumber || '',
       ...details,
     },
   })
@@ -193,6 +195,7 @@ router.patch('/:id', requireAuth, allowRoles(...allowed), asyncRoute(async (req,
   const recipientPhone = clean(req.body.recipientPhone ?? shipment.recipientPhone)
   const address = clean(req.body.address ?? shipment.address)
   if (!recipientName || !recipientPhone || !address) throw fail(400, 'Recipient name, phone number, and address are required')
+  if (recipientName.length > 120 || recipientPhone.length > 50 || address.length > 500) throw fail(400, 'Recipient details are too long')
 
   shipment.recipientName = recipientName
   shipment.recipientPhone = recipientPhone
@@ -201,6 +204,7 @@ router.patch('/:id', requireAuth, allowRoles(...allowed), asyncRoute(async (req,
   if (req.body.courierName !== undefined) shipment.courierName = clean(req.body.courierName)
   if (req.body.trackingNumber !== undefined) shipment.trackingNumber = clean(req.body.trackingNumber)
   if (req.body.packageNote !== undefined) shipment.packageNote = clean(req.body.packageNote)
+  if ((shipment.courierName || '').length > 120 || (shipment.trackingNumber || '').length > 120 || (shipment.packageNote || '').length > 500) throw fail(400, 'Shipping details are too long')
   if (req.body.items !== undefined) shipment.items = normalizeItems(req.body.items)
   shipment.updatedBy = req.user._id
   recordEvent(shipment, req, 'UPDATED', 'Shipping details updated')
