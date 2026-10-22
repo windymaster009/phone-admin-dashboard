@@ -19,6 +19,7 @@ const preorderSchema = new Schema({
   productName: { type: String, required: true, trim: true },
   quantity: { type: Number, min: 1, max: 1000, required: true },
   specifications: { type: String, trim: true },
+  supplier: { type: Schema.Types.ObjectId, ref: 'Supplier' },
   supplierName: { type: String, trim: true },
   expectedAt: Date,
   purchaseTrade: { type: Schema.Types.ObjectId, ref: 'Trade' },

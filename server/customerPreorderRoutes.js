@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import mongoose from 'mongoose'
 import { allowRoles, requireAuth, writeActivity } from './auth.js'
-import { Customer, InventoryItem, Trade } from './models.js'
+import { Customer, InventoryItem, Supplier, Trade } from './models.js'
 import { CustomerPreorder } from './customerPreorderModels.js'
 import { RepairJob } from './repairModels.js'
 
@@ -125,19 +125,22 @@ router.post('/', requireAuth, allowRoles(...allowed), asyncRoute(async (req, res
 }))
 
 router.post('/:id/order', requireAuth, allowRoles(...allowed), asyncRoute(async (req, res) => {
-  const supplierName = clean(req.body.supplierName)
-  if (!supplierName || supplierName.length > 120) throw fail(400, 'Supplier name is required')
+  if (!req.body.supplierId) throw fail(400, 'Select an existing supplier')
+  const supplierId = id(req.body.supplierId, 'Supplier')
   const expectedAt = req.body.expectedAt ? new Date(req.body.expectedAt) : undefined
   if (expectedAt && Number.isNaN(expectedAt.getTime())) throw fail(400, 'Expected date is invalid')
   const preorder = await inTransaction(async (session) => {
     const current = await load(req.params.id, session)
     if (current.status !== 'REQUESTED') throw fail(409, 'Only a new request can be marked ordered')
+    const supplier = await Supplier.findById(supplierId).session(session)
+    if (!supplier || supplier.active === false) throw fail(409, 'Supplier is unavailable. Select an active supplier')
     current.status = 'ORDERED'
-    current.supplierName = supplierName
+    current.supplier = supplier._id
+    current.supplierName = supplier.name
     current.expectedAt = expectedAt
-    recordEvent(current, req, 'ORDERED', `Supplier: ${supplierName}`)
+    recordEvent(current, req, 'ORDERED', `Supplier: ${supplier.name}`)
     await current.save({ session })
-    await audit(req, current, 'ORDERED', session, { supplierName })
+    await audit(req, current, 'ORDERED', session, { supplierId: String(supplier._id), supplierName: supplier.name })
     return current
   })
   res.json({ preorder })

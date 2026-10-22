@@ -14,10 +14,16 @@ describe('CustomerPreorderWorkspace', () => {
   beforeEach(() => vi.restoreAllMocks())
 
   it('shows a separate customer preorder queue and supplier-order step', async () => {
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+    const orders: Record<string, unknown>[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const path = String(input)
       if (path.includes('/api/customer-preorders/repair-parts')) return response({ repairParts: [] })
+      if (path.includes('/api/customer-preorders/order-1/order')) {
+        orders.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+        return response({ preorder: { ...preorder, status: 'ORDERED', supplierName: 'Parts shop', events: [...preorder.events, { action: 'ORDERED', note: 'Supplier: Parts shop', at: '2026-10-17T01:00:00.000Z' }] } })
+      }
       if (path.includes('/api/customer-preorders')) return response({ preorders: [preorder] })
+      if (path.includes('/api/suppliers')) return response({ suppliers: [{ _id: 'supplier-1', name: 'Parts shop', phone: '012345678' }] })
       if (path.includes('/api/trades')) return response({ trades: [] })
       throw new Error(`Unexpected request: ${path}`)
     })
@@ -33,8 +39,32 @@ describe('CustomerPreorderWorkspace', () => {
     const dialog = await screen.findByRole('dialog', { name: preorder.preorderNo })
     expect(dialog.querySelector('.operation-form.preorder-detail')).not.toBeNull()
     expect(within(dialog).getByRole('button', { name: 'Mark ordered' })).toBeDisabled()
+    const supplier = await within(dialog).findByRole('combobox', { name: 'Supplier' })
+    expect(await within(supplier).findByRole('option', { name: 'Parts shop — 012345678' })).toBeInTheDocument()
     expect(within(dialog).getByText(/does not create a purchase or charge the customer/)).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Cancel preorder' })).toBeInTheDocument()
+    await user.selectOptions(supplier, 'supplier-1')
+    await user.click(within(dialog).getByRole('button', { name: 'Mark ordered' }))
+    expect(orders).toEqual([{ supplierId: 'supplier-1', expectedAt: '' }])
+    expect(await within(dialog).findByText('Supplier: Parts shop')).toBeInTheDocument()
+  })
+
+  it('requires a registered supplier before marking a preorder ordered', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input)
+      if (path.includes('/api/customer-preorders/repair-parts')) return response({ repairParts: [] })
+      if (path.includes('/api/customer-preorders')) return response({ preorders: [preorder] })
+      if (path.includes('/api/suppliers')) return response({ suppliers: [] })
+      if (path.includes('/api/trades')) return response({ trades: [] })
+      throw new Error(`Unexpected request: ${path}`)
+    })
+    const user = userEvent.setup()
+    render(<CustomerPreorderWorkspace />)
+    await user.click(await screen.findByRole('button', { name: /Open preorder PO-20261016-ONE/ }))
+    const dialog = screen.getByRole('dialog', { name: preorder.preorderNo })
+    expect(await within(dialog).findByText('Add a supplier in Suppliers first.')).toBeInTheDocument()
+    expect(within(dialog).getByRole('combobox', { name: 'Supplier' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Mark ordered' })).toBeDisabled()
   })
 
   it('shows preorder history as a newest-first timeline with dates and notes', async () => {
@@ -46,6 +76,7 @@ describe('CustomerPreorderWorkspace', () => {
       const path = String(input)
       if (path.includes('/api/customer-preorders/repair-parts')) return response({ repairParts: [] })
       if (path.includes('/api/customer-preorders')) return response({ preorders: [withHistory] })
+      if (path.includes('/api/suppliers')) return response({ suppliers: [] })
       if (path.includes('/api/trades')) return response({ trades: [] })
       throw new Error(`Unexpected request: ${path}`)
     })
@@ -73,6 +104,7 @@ describe('CustomerPreorderWorkspace', () => {
         return response({ preorder: { ...preorder, status: 'CANCELLED', cancellationReason: body.reason } })
       }
       if (path.includes('/api/customer-preorders')) return response({ preorders: [preorder] })
+      if (path.includes('/api/suppliers')) return response({ suppliers: [] })
       if (path.includes('/api/trades')) return response({ trades: [] })
       throw new Error(`Unexpected request: ${path}`)
     })

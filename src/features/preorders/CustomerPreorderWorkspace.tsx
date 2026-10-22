@@ -25,6 +25,7 @@ type RepairPartPreorder = {
   status: 'ORDERED' | 'RESERVED' | 'INSTALLED' | 'RELEASED' | 'CANCELLED'
 }
 type Customer = { _id: string; name: string; phone: string }
+type Supplier = { _id: string; name: string; phone?: string }
 type TradeLine = { inventoryItem?: { _id: string; name: string; sku: string; category: string } | string; name: string; quantity: number }
 type Trade = { _id: string; tradeNo: string; type: 'BUY' | 'SELL'; status: string; createdAt: string; customer?: Customer | string; items: TradeLine[] }
 
@@ -112,7 +113,9 @@ function CreatePreorder({ onClose, onCreated }: { onClose: () => void; onCreated
 }
 
 function PreorderDetail({ preorder, onClose, onChanged }: { preorder: Preorder; onClose: () => void; onChanged: (preorder: Preorder) => void }) {
-  const [supplierName, setSupplierName] = useState(preorder.supplierName || '')
+  const [supplierId, setSupplierId] = useState('')
+  const [suppliers, setSuppliers] = useState<Supplier[]>([])
+  const [suppliersLoading, setSuppliersLoading] = useState(preorder.status === 'REQUESTED')
   const [expectedAt, setExpectedAt] = useState(preorder.expectedAt?.slice(0, 10) || '')
   const [purchases, setPurchases] = useState<Trade[]>([])
   const [sales, setSales] = useState<Trade[]>([])
@@ -124,6 +127,15 @@ function PreorderDetail({ preorder, onClose, onChanged }: { preorder: Preorder; 
   const [error, setError] = useState('')
   const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
+  useEffect(() => {
+    if (preorder.status !== 'REQUESTED') return
+    let active = true
+    void api<{ suppliers: Supplier[] }>('/suppliers')
+      .then((result) => { if (active) setSuppliers(result.suppliers) })
+      .catch((reason) => { if (active) setError(errorMessage(reason)) })
+      .finally(() => { if (active) setSuppliersLoading(false) })
+    return () => { active = false }
+  }, [preorder.status])
   const refreshTrades = useCallback(async () => {
     try {
       const [buy, sell] = await Promise.all([api<{ trades: Trade[] }>('/trades?type=BUY'), api<{ trades: Trade[] }>('/trades?type=SELL')])
@@ -158,7 +170,7 @@ function PreorderDetail({ preorder, onClose, onChanged }: { preorder: Preorder; 
   <OperationModalShell title={preorder.preorderNo} eyebrow="Customer preorder" description={`${preorder.customerName} · ${preorder.productName}`} icon={<PackageCheck size={21} />} busy={busy} error={cancelOpen ? '' : error} onDismissError={() => setError('')} onClose={onClose} dismissOnEscape={!cancelOpen} inactive={cancelOpen} className="preorder-detail-modal">
     <div className="operation-form preorder-detail">
       <div className="preorder-facts"><span><small>Status</small><strong>{titleStatus(preorder.status)}</strong></span><span><small>Customer</small><strong>{preorder.customerName} · {preorder.customerPhone}</strong></span><span><small>Product</small><strong>{preorder.quantity} × {preorder.productName}</strong></span><span><small>Details</small><strong>{preorder.specifications || titleStatus(preorder.category)}</strong></span></div>
-      {preorder.status === 'REQUESTED' && <section className="preorder-block"><h3>Place supplier order</h3><p className="preorder-help">Contact the supplier first, then record their name and expected date here. This does not create a purchase or charge the customer.</p><div className="preorder-fields"><label>Supplier name<input maxLength={120} value={supplierName} onChange={(event) => setSupplierName(event.target.value)} /></label><label>Expected arrival (optional)<input type="date" value={expectedAt} onChange={(event) => setExpectedAt(event.target.value)} /></label></div><button className="primary-button" type="button" disabled={busy || !supplierName.trim()} onClick={() => void act('order', { supplierName, expectedAt })}>Mark ordered</button></section>}
+      {preorder.status === 'REQUESTED' && <section className="preorder-block"><h3>Place supplier order</h3><p className="preorder-help">Contact the supplier first, then select them and record the expected date here. This does not create a purchase or charge the customer.</p><div className="preorder-fields"><label>Supplier<select value={supplierId} disabled={suppliersLoading || suppliers.length === 0} onChange={(event) => setSupplierId(event.target.value)}><option value="" disabled>{suppliersLoading ? 'Loading suppliers...' : suppliers.length === 0 ? 'No suppliers registered yet' : 'Select supplier'}</option>{suppliers.map((supplier) => <option key={supplier._id} value={supplier._id}>{supplier.name}{supplier.phone ? ` — ${supplier.phone}` : ''}</option>)}</select></label><label>Expected arrival (optional)<input type="date" value={expectedAt} onChange={(event) => setExpectedAt(event.target.value)} /></label></div>{!suppliersLoading && suppliers.length === 0 && <p className="preorder-help">Add a supplier in Suppliers first.</p>}<button className="primary-button" type="button" disabled={busy || !supplierId} onClick={() => void act('order', { supplierId, expectedAt })}>Mark ordered</button></section>}
       {preorder.status === 'ORDERED' && <section className="preorder-block"><h3>Product arrival</h3><p className="preorder-help">Record the supplier transaction with New purchase first. Then link the purchased inventory item here. This step does not add stock again.</p><div className="preorder-actions"><button type="button" className="ghost-button" onClick={() => window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'purchase' } }))}>Open New purchase</button><button type="button" className="ghost-button" onClick={() => void refreshTrades()}><RefreshCcw size={15} />Refresh purchases</button></div><label>Find purchase<input value={purchaseSearch} onChange={(event) => setPurchaseSearch(event.target.value)} placeholder="Type purchase number or product" /></label><label>Purchased product<select value={purchaseSelection} onChange={(event) => setPurchaseSelection(event.target.value)}><option value="">Select purchase and product</option>{purchaseOptions.map((option) => <option value={option.value} key={option.value}>{option.trade.tradeNo} · {option.line.name} · Qty {option.line.quantity}</option>)}</select></label><button type="button" className="primary-button" disabled={busy || !purchaseSelection} onClick={() => { const [purchaseTradeId, inventoryItemId] = purchaseSelection.split(':'); void act('receive', { purchaseTradeId, inventoryItemId }) }}>Mark arrived</button></section>}
       {preorder.status === 'ARRIVED' && <section className="preorder-block"><h3>Customer pickup</h3><p className="preorder-help">The purchased item is in normal stock, not held aside by this page. Complete the sale for this customer in Buy & Sell, then link that sale below. No sale is created by marking pickup here.</p><div className="preorder-actions"><button type="button" className="ghost-button" onClick={() => window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale', itemId: preorder.inventoryItem } }))}>Open New sale</button><button type="button" className="ghost-button" onClick={() => void refreshTrades()}><RefreshCcw size={15} />Refresh sales</button></div><label>Find sale<input value={saleSearch} onChange={(event) => setSaleSearch(event.target.value)} placeholder="Type sale number or product" /></label><label>Completed sale<select value={saleSelection} onChange={(event) => setSaleSelection(event.target.value)}><option value="">Select sale</option>{saleOptions.map((trade) => <option value={trade._id} key={trade._id}>{trade.tradeNo} · {trade.items.map((line) => line.name).join(', ')}</option>)}</select></label><button type="button" className="primary-button" disabled={busy || !saleSelection} onClick={() => { if (!preorder.customer && !window.confirm(`Confirm the selected sale belongs to ${preorder.customerName} (${preorder.customerPhone})?`)) return; void act('complete', { saleTradeId: saleSelection, customerConfirmed: !preorder.customer }) }}>Mark picked up</button></section>}
       {preorder.status === 'COMPLETED' && <p className="preorder-help">Completed through a recorded sale. The sale remains in the normal sales and profit reports.</p>}

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import mongoose from 'mongoose'
 import jwt from 'jsonwebtoken'
-import { ActivityLog, InventoryItem, Trade, User } from './models.js'
+import { ActivityLog, InventoryItem, Supplier, Trade, User } from './models.js'
 import { AuthSession } from './authSessionModels.js'
 import { RepairJob } from './repairModels.js'
 import { CustomerPreorder } from './customerPreorderModels.js'
@@ -25,6 +25,7 @@ const original = {
   aggregate: CustomerPreorder.aggregate,
   repairAggregate: RepairJob.aggregate,
   trade: Trade.findOne,
+  supplier: Supplier.findById,
   tradeUpdate: Trade.updateOne,
   inventory: InventoryItem.findById,
 }
@@ -49,6 +50,7 @@ test.afterEach(() => {
   CustomerPreorder.aggregate = original.aggregate
   RepairJob.aggregate = original.repairAggregate
   Trade.findOne = original.trade
+  Supplier.findById = original.supplier
   Trade.updateOne = original.tradeUpdate
   InventoryItem.findById = original.inventory
 })
@@ -86,6 +88,29 @@ function order(status) {
   CustomerPreorder.findById = () => ({ session: async () => record })
   return record
 }
+
+test('ordering selects an active supplier record and saves its current name', async () => {
+  const record = order('REQUESTED')
+  const supplier = { _id: new mongoose.Types.ObjectId(), name: 'Parts shop', active: false }
+  Supplier.findById = () => ({ session: async () => supplier })
+  const path = '/64b8f0a1c9e77b0012a00040/order'
+
+  const typedName = await call('POST', path, { supplierName: 'Unregistered supplier' })
+  assert.equal(typedName.status, 400)
+  assert.equal(record.status, 'REQUESTED')
+
+  const inactive = await call('POST', path, { supplierId: String(supplier._id) })
+  assert.equal(inactive.status, 409)
+  assert.equal(record.status, 'REQUESTED')
+
+  supplier.active = true
+  const result = await call('POST', path, { supplierId: String(supplier._id), supplierName: 'Spoofed name' })
+  assert.equal(result.status, 200)
+  assert.equal(record.status, 'ORDERED')
+  assert.equal(String(record.supplier), String(supplier._id))
+  assert.equal(record.supplierName, 'Parts shop')
+  assert.equal(record.events.at(-1).note, 'Supplier: Parts shop')
+})
 
 test('cancelling after arrival leaves the recorded purchase and inventory untouched', async () => {
   const record = order('ARRIVED')
