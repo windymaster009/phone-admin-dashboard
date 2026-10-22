@@ -131,6 +131,20 @@ describe('SupplierWorkspace Regression & Workflow Tests', () => {
     return mockFn
   }
 
+  it('keeps the supplier note below the name in the desktop list', async () => {
+    setupSupplierFetchMock()
+    render(<SupplierWorkspace />)
+
+    const table = screen.getByRole('table')
+    const name = await within(table).findByText('Angkor Tech Supplies')
+    const note = within(table).getByText('Primary screen and battery supplier')
+    const nameCell = name.closest('.supplier-name-cell')
+
+    expect(nameCell).not.toBeNull()
+    expect(nameCell?.querySelector('p > strong')).toBe(name)
+    expect(nameCell?.querySelector('p > small')).toBe(note)
+  })
+
   it('1. Creating a supplier updates the list without refreshing', async () => {
     const user = userEvent.setup()
     setupSupplierFetchMock()

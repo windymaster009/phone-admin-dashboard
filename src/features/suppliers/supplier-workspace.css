@@ -1,5 +1,10 @@
 /* Hallmark · component: supplier mobile sheet · tone: calm operational flow · anchor hue: existing violet · pre-emit: P5 H5 E5 S5 R5 V4 */
 .supplier-table-card { min-height: 400px; }
+.supplier-name-cell { display: flex; align-items: center; gap: 11px; min-width: 0; }
+.supplier-name-cell p { display: flex; flex-direction: column; gap: 4px; min-width: 0; margin: 0; }
+.supplier-name-cell strong,
+.supplier-name-cell small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.supplier-name-cell small { max-width: 260px; color: var(--muted); font-size: 10px; }
 .supplier-filter-row { justify-content: space-between; }
 .supplier-filter-row .search-field { width: min(600px, 100%); }
 .supplier-row-actions { display: flex; justify-content: flex-end; gap: 7px; }
