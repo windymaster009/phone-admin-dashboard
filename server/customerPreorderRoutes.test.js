@@ -56,11 +56,28 @@ test.afterEach(() => {
 function call(method, url, body = {}) {
   return new Promise((resolve) => {
     const token = jwt.sign({ sub: String(owner._id), sid: sessionId }, process.env.JWT_SECRET)
-    const req = { method, url, originalUrl: url, headers: { authorization: `Bearer ${token}` }, get(name) { return this.headers[name.toLowerCase()] }, body, query: {}, params: {}, ip: '127.0.0.1' }
+    const req = { method, url, originalUrl: url, headers: { authorization: `Bearer ${token}` }, get(name) { return this.headers[name.toLowerCase()] }, body, query: Object.fromEntries(new URL(url, 'http://localhost').searchParams), params: {}, ip: '127.0.0.1' }
     const res = { statusCode: 200, status(code) { this.statusCode = code; return this }, json(data) { resolve({ status: this.statusCode, body: data }); return this }, setHeader() {}, getHeader() {} }
     preorderRouter.handle(req, res, (error) => resolve({ status: error?.status || 404, body: { message: error?.message } }))
   })
 }
+
+test('repair part preorders are listed read-only with searchable repair context', async () => {
+  const repairId = new mongoose.Types.ObjectId()
+  const partId = new mongoose.Types.ObjectId()
+  const part = { repairId, repairNo: 'RP-TEST', partId, customerName: 'Sela', device: 'Vivo Y02s', name: 'Screen', quantity: 1, supplierName: 'Parts shop', status: 'ORDERED', createdAt: new Date() }
+  let pipeline
+  RepairJob.aggregate = async (value) => { pipeline = value; return [part] }
+
+  const result = await call('GET', '/repair-parts?status=ORDERED&search=screen')
+
+  assert.equal(result.status, 200)
+  assert.deepEqual(result.body.repairParts, [part])
+  assert.equal(pipeline[0].$unwind, '$parts')
+  assert.equal(pipeline[1].$match['parts.source'], 'PREORDER')
+  assert.equal(pipeline[1].$match['parts.status'], 'ORDERED')
+  assert.equal(pipeline[1].$match.$or[4]['parts.name'].test('screen'), true)
+})
 
 function order(status) {
   const record = new CustomerPreorder({ preorderNo: 'PO-TEST', customerName: 'Sela', customerPhone: '0882982042', category: 'ACCESSORY', productName: 'Phone case', quantity: 2, status, events: [{ action: 'REQUESTED' }] })

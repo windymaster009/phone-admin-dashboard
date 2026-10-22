@@ -59,6 +59,7 @@ function App({
   const [overdueLoans, setOverdueLoans] = useState(0)
   const [activityOpen, setActivityOpen] = useState(false)
   const [activityUnread, setActivityUnread] = useState(0)
+  const [repairToOpen, setRepairToOpen] = useState<string | null>(null)
   const [initialViewReady, setInitialViewReady] = useState(() => {
     return routeKey !== 'dashboard' && routeKey !== 'businessOverview'
   })
@@ -70,6 +71,7 @@ function App({
   const changePage = useCallback((to: string) => {
     setMobileOpen(false)
     setProfileOpen(false)
+    if (to !== '/repairs') setRepairToOpen(null)
     navigate(to)
   }, [navigate])
 
@@ -191,9 +193,9 @@ function App({
       case 'services':
         return <ServiceWorkspace />
       case 'repairs':
-        return <RepairWorkspace />
+        return <RepairWorkspace openRepairId={repairToOpen} onRepairClosed={() => setRepairToOpen(null)} />
       case 'customerPreorders':
-        return <CustomerPreorderWorkspace />
+        return <CustomerPreorderWorkspace onOpenRepair={(repairId) => { setRepairToOpen(repairId); changePage('/repairs') }} />
       case 'shipping':
         return <ShippingWorkspace />
       case 'inventory':

@@ -34,9 +34,9 @@ const nextStatuses: Record<RepairStatus, { status: RepairStatus; label: string }
 
 const message = (reason: unknown) => reason instanceof Error ? reason.message : 'The change could not be saved.'
 
-export default function RepairWorkspace() {
+export default function RepairWorkspace({ openRepairId, onRepairClosed }: { openRepairId?: string | null; onRepairClosed?: () => void } = {}) {
   const [repairs, setRepairs] = useState<Repair[]>([])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(openRepairId || null)
   const [createOpen, setCreateOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('ALL')
@@ -45,11 +45,19 @@ export default function RepairWorkspace() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    try { setRepairs((await api<{ repairs: Repair[] }>('/repairs')).repairs); setError('') }
+    try {
+      const listed = (await api<{ repairs: Repair[] }>('/repairs')).repairs
+      const requested = openRepairId && !listed.some((repair) => repair._id === openRepairId)
+        ? (await api<{ repair: Repair }>(`/repairs/${encodeURIComponent(openRepairId)}`)).repair
+        : null
+      setRepairs(requested ? [requested, ...listed] : listed)
+      setError('')
+    }
     catch (reason) { setError(message(reason)) }
     finally { setLoading(false) }
-  }, [])
+  }, [openRepairId])
   useEffect(() => { void load() }, [load])
+  useEffect(() => { if (openRepairId) setSelectedId(openRepairId) }, [openRepairId])
   const selected = repairs.find((repair) => repair._id === selectedId)
   const visible = useMemo(() => repairs.filter((repair) => {
     if (status !== 'ALL' && repair.status !== status) return false
@@ -71,7 +79,7 @@ export default function RepairWorkspace() {
       {loading && repairs.length === 0 ? <LoadingState label="Loading repairs" /> : <div className="repair-list">{visible.map((repair) => <RecordListRow key={repair._id} icon={<Wrench />} tone="repair" title={repair.device} meta={`${repair.repairNo} · ${repair.customerName} · ${dateText(repair.createdAt)}`} detail={repair.issue} badge={<StatusBadge status={repair.status} />} ariaLabel={`Open ${repair.device} repair ${repair.repairNo}`} onOpen={() => setSelectedId(repair._id)} />)}{visible.length === 0 && <p className="repair-empty">No repairs match these filters.</p>}</div>}
     </section>
     {createOpen && <CreateRepair onClose={() => setCreateOpen(false)} onCreated={(repair) => { setRepairs((current) => [repair, ...current]); setSelectedId(repair._id); setCreateOpen(false) }} />}
-    {selected && <RepairDetail repair={selected} onClose={() => setSelectedId(null)} onChanged={updateRepair} />}
+    {selected && <RepairDetail repair={selected} onClose={() => { setSelectedId(null); onRepairClosed?.() }} onChanged={updateRepair} />}
   </div>
 }
 

@@ -58,6 +58,34 @@ router.get('/', requireAuth, allowRoles(...allowed), asyncRoute(async (req, res)
   res.json({ preorders })
 }))
 
+router.get('/repair-parts', requireAuth, allowRoles(...allowed), asyncRoute(async (req, res) => {
+  const status = clean(req.query.status).toUpperCase()
+  const search = clean(req.query.search).slice(0, 100)
+  const match = { 'parts.source': 'PREORDER' }
+  if (['ORDERED', 'RESERVED', 'INSTALLED', 'RELEASED', 'CANCELLED'].includes(status)) match['parts.status'] = status
+  if (search) {
+    const regex = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i')
+    match.$or = [
+      { repairNo: regex }, { customerName: regex }, { customerPhone: regex },
+      { device: regex }, { 'parts.name': regex }, { 'parts.supplierName': regex },
+    ]
+  }
+  const repairParts = await RepairJob.aggregate([
+    { $unwind: '$parts' },
+    { $match: match },
+    { $sort: { createdAt: -1, 'parts._id': -1 } },
+    { $limit: 200 },
+    { $project: {
+      _id: 0, repairId: '$_id', repairNo: 1, customerName: 1, customerPhone: 1,
+      device: 1, repairStatus: '$status', createdAt: 1,
+      partId: '$parts._id', name: '$parts.name', quantity: '$parts.quantity',
+      supplierName: '$parts.supplierName', expectedAt: '$parts.expectedAt',
+      status: '$parts.status', purchaseTrade: '$parts.purchaseTrade',
+    } },
+  ])
+  res.json({ repairParts })
+}))
+
 router.post('/', requireAuth, allowRoles(...allowed), asyncRoute(async (req, res) => {
   const requestKey = clean(req.body.requestKey)
   if (!requestKey || requestKey.length > 100) throw fail(400, 'Request key is required')

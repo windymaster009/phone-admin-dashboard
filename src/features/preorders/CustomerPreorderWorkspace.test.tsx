@@ -16,6 +16,7 @@ describe('CustomerPreorderWorkspace', () => {
   it('shows a separate customer preorder queue and supplier-order step', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const path = String(input)
+      if (path.includes('/api/customer-preorders/repair-parts')) return response({ repairParts: [] })
       if (path.includes('/api/customer-preorders')) return response({ preorders: [preorder] })
       if (path.includes('/api/trades')) return response({ trades: [] })
       throw new Error(`Unexpected request: ${path}`)
@@ -40,6 +41,7 @@ describe('CustomerPreorderWorkspace', () => {
     const cancelRequests: { reason: string }[] = []
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const path = String(input)
+      if (path.includes('/api/customer-preorders/repair-parts')) return response({ repairParts: [] })
       if (path.includes('/api/customer-preorders/order-1/cancel')) {
         const body = JSON.parse(String(init?.body)) as { reason: string }
         cancelRequests.push(body)
@@ -66,6 +68,7 @@ describe('CustomerPreorderWorkspace', () => {
   it('offers searchable existing customers while keeping walk-in details possible', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const path = String(input)
+      if (path.includes('/api/customer-preorders/repair-parts')) return response({ repairParts: [] })
       if (path.includes('/api/customer-preorders')) return response({ preorders: [] })
       if (path.includes('/api/customers')) return response({ customers: [{ _id: 'customer-1', name: 'Sela', phone: '0882982042' }] })
       throw new Error(`Unexpected request: ${path}`)
@@ -78,5 +81,28 @@ describe('CustomerPreorderWorkspace', () => {
     await user.type(within(dialog).getByLabelText('Customer name'), 'Sel')
     await user.click(await within(dialog).findByRole('button', { name: /Sela · 0882982042/ }))
     expect(within(dialog).getByLabelText('Customer phone')).toHaveValue('0882982042')
+  })
+
+  it('shows repair-part preorders in the same queue and opens their repair job', async () => {
+    const openRepair = vi.fn()
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input)
+      if (path.includes('/api/customer-preorders/repair-parts')) return response({ repairParts: [{
+        repairId: 'repair-1', repairNo: 'RP-20261020-TEST', partId: 'part-1',
+        customerName: 'Sela', device: 'Vivo Y02s', name: 'Screen', quantity: 1,
+        supplierName: 'Parts shop', status: 'ORDERED', createdAt: '2026-10-20T01:00:00.000Z',
+      }] })
+      if (path.includes('/api/customer-preorders')) return response({ preorders: [preorder] })
+      throw new Error(`Unexpected request: ${path}`)
+    })
+    const user = userEvent.setup()
+    render(<CustomerPreorderWorkspace onOpenRepair={openRepair} />)
+
+    const repairRow = await screen.findByRole('button', { name: 'Open repair RP-20261020-TEST for preordered Screen' })
+    expect(within(repairRow).getByText(/Repair part · RP-20261020-TEST/)).toBeInTheDocument()
+    expect(within(repairRow).getByText('Ordered')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Open preorder PO-20261016-ONE/ })).toBeInTheDocument()
+    await user.click(repairRow)
+    expect(openRepair).toHaveBeenCalledWith('repair-1')
   })
 })

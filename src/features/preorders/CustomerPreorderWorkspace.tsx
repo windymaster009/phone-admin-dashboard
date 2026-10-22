@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { AlertTriangle, PackageCheck, RefreshCcw, ShoppingBag } from 'lucide-react'
+import { AlertTriangle, PackageCheck, RefreshCcw, ShoppingBag, Wrench } from 'lucide-react'
 import { api } from '../../lib/api'
 import { dateText, titleStatus } from '../../lib/presentation'
 import SectionHeader from '../../components/SectionHeader'
@@ -19,6 +19,11 @@ type Preorder = {
   status: PreorderStatus; createdAt: string; cancellationReason?: string
   events: { action: string; note?: string; at: string }[]
 }
+type RepairPartPreorder = {
+  repairId: string; repairNo: string; partId: string; customerName: string; customerPhone?: string
+  device: string; name: string; quantity: number; supplierName?: string; createdAt: string
+  status: 'ORDERED' | 'RESERVED' | 'INSTALLED' | 'RELEASED' | 'CANCELLED'
+}
 type Customer = { _id: string; name: string; phone: string }
 type TradeLine = { inventoryItem?: { _id: string; name: string; sku: string; category: string } | string; name: string; quantity: number }
 type Trade = { _id: string; tradeNo: string; type: 'BUY' | 'SELL'; status: string; createdAt: string; customer?: Customer | string; items: TradeLine[] }
@@ -29,8 +34,9 @@ const errorMessage = (error: unknown) => error instanceof Error ? error.message 
 const itemId = (line: TradeLine) => typeof line.inventoryItem === 'string' ? line.inventoryItem : line.inventoryItem?._id || ''
 const requestKey = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`
 
-export default function CustomerPreorderWorkspace() {
+export default function CustomerPreorderWorkspace({ onOpenRepair }: { onOpenRepair?: (repairId: string) => void }) {
   const [preorders, setPreorders] = useState<Preorder[]>([])
+  const [repairParts, setRepairParts] = useState<RepairPartPreorder[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -41,24 +47,35 @@ export default function CustomerPreorderWorkspace() {
     setLoading(true)
     try {
       const query = new URLSearchParams({ search, status })
-      setPreorders((await api<{ preorders: Preorder[] }>(`/customer-preorders?${query}`)).preorders)
+      const [customers, repairs] = await Promise.all([
+        api<{ preorders: Preorder[] }>(`/customer-preorders?${query}`),
+        api<{ repairParts: RepairPartPreorder[] }>(`/customer-preorders/repair-parts?${query}`),
+      ])
+      setPreorders(customers.preorders)
+      setRepairParts(repairs.repairParts)
       setError('')
     } catch (reason) { setError(errorMessage(reason)) }
     finally { setLoading(false) }
   }, [search, status])
   useEffect(() => { const timer = window.setTimeout(() => void load(), 180); return () => window.clearTimeout(timer) }, [load])
   const selected = preorders.find((item) => item._id === selectedId)
+  const queue = useMemo(() => [
+    ...preorders.filter((item) => status === 'ALL' || item.status === status).map((item) => ({ kind: 'customer' as const, item, createdAt: item.createdAt })),
+    ...repairParts.filter((item) => status === 'ALL' || item.status === status).map((item) => ({ kind: 'repair' as const, item, createdAt: item.createdAt })),
+  ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()), [preorders, repairParts, status])
   function upsert(preorder: Preorder) {
     setPreorders((current) => [preorder, ...current.filter((item) => item._id !== preorder._id)])
   }
   return <div className="preorder-page">
-    <SectionHeader eyebrow="Operations" title="Customer Preorders" description="Take requests for phones, cases, and other products, then track each order through pickup." />
+    <SectionHeader eyebrow="Operations" title="Customer Preorders" description="Track customer product requests and parts preordered for repair jobs." />
     {error && <p className="overview-error" role="alert">{error}</p>}
     <OperationActionCard ariaLabel="Customer preorder actions" eyebrow="Customer request" title="Take a preorder" description="Record the customer, product, quantity, and exact details before ordering it." actionLabel="New preorder" onAction={() => setCreateOpen(true)} />
     <section className="surface-card preorder-ledger">
-      <div className="card-heading table-heading"><div><span className="eyebrow">Customer orders</span><h3>Preorder queue</h3></div><button type="button" className="ghost-button" aria-label="Refresh preorders" onClick={() => void load()}><RefreshCcw size={16} /></button></div>
-      <FilterToolbar search={search} onSearchChange={setSearch} searchLabel="Search preorders" placeholder="Search customer, phone, product, or preorder number…"><FilterSelect aria-label="Preorder status" value={status} onChange={(event) => setStatus(event.target.value)}><option value="ALL">All statuses</option>{statuses.map((value) => <option value={value} key={value}>{titleStatus(value)}</option>)}</FilterSelect></FilterToolbar>
-      {loading && preorders.length === 0 ? <LoadingState label="Loading customer preorders" /> : <div className="preorder-list">{preorders.map((preorder) => <RecordListRow key={preorder._id} icon={<ShoppingBag />} tone="preorder" title={`${preorder.quantity} × ${preorder.productName}`} meta={`${preorder.preorderNo} · ${preorder.customerName} · ${dateText(preorder.createdAt)}`} badge={<span className="preorder-status">{titleStatus(preorder.status)}</span>} ariaLabel={`Open preorder ${preorder.preorderNo} for ${preorder.productName}`} onOpen={() => setSelectedId(preorder._id)} />)}{preorders.length === 0 && <p className="preorder-empty">{search || status !== 'ALL' ? 'No preorders match these filters.' : 'No customer preorders yet. Use New preorder to record the first request.'}</p>}</div>}
+      <div className="card-heading table-heading"><div><span className="eyebrow">Customer & repair orders</span><h3>Preorder queue</h3></div><button type="button" className="ghost-button" aria-label="Refresh preorders" onClick={() => void load()}><RefreshCcw size={16} /></button></div>
+      <FilterToolbar search={search} onSearchChange={setSearch} searchLabel="Search preorders" placeholder="Search customer, phone, product, repair, or preorder number…"><FilterSelect aria-label="Preorder status" value={status} onChange={(event) => setStatus(event.target.value)}><option value="ALL">All statuses</option>{[...statuses, 'RESERVED', 'INSTALLED', 'RELEASED'].map((value) => <option value={value} key={value}>{titleStatus(value)}</option>)}</FilterSelect></FilterToolbar>
+      {loading && queue.length === 0 ? <LoadingState label="Loading preorders" /> : <div className="preorder-list">{queue.map((entry) => entry.kind === 'customer'
+        ? <RecordListRow key={`customer-${entry.item._id}`} icon={<ShoppingBag />} tone="preorder" title={`${entry.item.quantity} × ${entry.item.productName}`} meta={`${entry.item.preorderNo} · ${entry.item.customerName} · ${dateText(entry.item.createdAt)}`} detail="Customer product" badge={<span className="preorder-status">{titleStatus(entry.item.status)}</span>} ariaLabel={`Open preorder ${entry.item.preorderNo} for ${entry.item.productName}`} onOpen={() => setSelectedId(entry.item._id)} />
+        : <RecordListRow key={`repair-${entry.item.partId}`} icon={<Wrench />} tone="repair" title={`${entry.item.quantity} × ${entry.item.name}`} meta={`Repair part · ${entry.item.repairNo} · ${entry.item.customerName} · ${dateText(entry.item.createdAt)}`} detail={`${entry.item.device} · ${entry.item.supplierName || 'Supplier not recorded'}`} badge={<span className="preorder-status">{titleStatus(entry.item.status)}</span>} ariaLabel={`Open repair ${entry.item.repairNo} for preordered ${entry.item.name}`} onOpen={() => onOpenRepair?.(entry.item.repairId)} />)}{queue.length === 0 && <p className="preorder-empty">{search || status !== 'ALL' ? 'No preorders match these filters.' : 'No preorders yet. Use New preorder to record a customer request, or order a part from a repair job.'}</p>}</div>}
     </section>
     {createOpen && <CreatePreorder onClose={() => setCreateOpen(false)} onCreated={(preorder) => { upsert(preorder); setSelectedId(preorder._id); setCreateOpen(false) }} />}
     {selected && <PreorderDetail preorder={selected} onClose={() => setSelectedId(null)} onChanged={upsert} />}

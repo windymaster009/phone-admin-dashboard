@@ -31,6 +31,22 @@ describe('RepairWorkspace', () => {
     expect(within(dialog).getByRole('button', { name: 'Create repair' })).toBeInTheDocument()
   })
 
+  it('opens a linked repair preorder even when the repair is outside the recent list', async () => {
+    const linked = { ...repair, status: 'WAITING_PARTS', parts: [{ _id: 'part-1', source: 'PREORDER', status: 'ORDERED', name: 'Screen', quantity: 1, supplierName: 'Parts shop' }] }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input)
+      if (path.includes('/api/repairs/repair-1')) return response({ repair: linked })
+      if (path.includes('/api/repairs')) return response({ repairs: [] })
+      if (path.includes('/api/inventory')) return response({ items: [] })
+      if (path.includes('/api/trades')) return response({ trades: [] })
+      throw new Error(`Unexpected request: ${path}`)
+    })
+    render(<RepairWorkspace openRepairId="repair-1" />)
+    const dialog = await screen.findByRole('dialog', { name: repair.repairNo })
+    expect(within(dialog).getByText('1 × Screen')).toBeInTheDocument()
+    expect(within(dialog).getByText(/Preorder · Parts shop · Ordered/)).toBeInTheDocument()
+  })
+
   it('shows repair history and the stock/preorder controls in the reused operation modal', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const path = String(input)

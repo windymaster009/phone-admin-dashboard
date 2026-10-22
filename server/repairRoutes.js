@@ -71,6 +71,12 @@ router.get('/', requireAuth, allowRoles(...editable), asyncRoute(async (req, res
   res.json({ repairs })
 }))
 
+router.get('/:id', requireAuth, allowRoles(...editable), asyncRoute(async (req, res) => {
+  const repair = await RepairJob.findById(requireId(req.params.id, 'Repair')).lean()
+  if (!repair) throw fail(404, 'Repair was not found')
+  res.json({ repair })
+}))
+
 router.post('/', requireAuth, allowRoles(...editable), asyncRoute(async (req, res) => {
   const requestKey = mutationKey(req)
   const existing = await RepairJob.findOne({ requestKey })

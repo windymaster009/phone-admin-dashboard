@@ -76,6 +76,15 @@ function job(status, parts = [], events = []) {
   return record
 }
 
+test('a repair can be opened directly when it is outside the recent workshop list', async () => {
+  const record = job('WAITING_PARTS', [{ source: 'PREORDER', status: 'ORDERED', name: 'Screen', quantity: 1, supplierName: 'Parts shop' }])
+  RepairJob.findById = () => ({ lean: async () => record })
+  const result = await call('GET', `/${record._id}`)
+  assert.equal(result.status, 200)
+  assert.equal(result.body.repair.repairNo, 'RP-TEST')
+  assert.equal(result.body.repair.parts[0].source, 'PREORDER')
+})
+
 test('cancellation restores only unused reserved stock and keeps installed parts consumed', async () => {
   const stockId = new mongoose.Types.ObjectId()
   const record = job('IN_PROGRESS', [
