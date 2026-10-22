@@ -142,7 +142,7 @@ describe('RepairWorkspace', () => {
     expect(writes[0]).toMatchObject({ inventoryItemId: 'stock-screen', quantity: 1 })
   })
 
-  it('hides unrelated purchases until searched and requires confirmation before receiving', async () => {
+  it('shows eligible purchases before searching, filters them on demand, and requires confirmation before receiving', async () => {
     const orderedRepair = { ...repair, status: 'WAITING_PARTS', parts: [{ _id: 'part-1', source: 'PREORDER', status: 'ORDERED', name: 'Screen', quantity: 1, supplierName: 'Parts shop' }] }
     const writes: Record<string, unknown>[] = []
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
@@ -177,11 +177,13 @@ describe('RepairWorkspace', () => {
     expect(within(dialog).getByRole('combobox', { name: 'Find purchase for Screen' })).toBe(search)
     await user.click(search)
     const results = within(dialog).getByRole('listbox', { name: 'Recorded purchases for Screen' })
-    expect(within(results).queryAllByRole('option')).toHaveLength(0)
-    expect(within(results).getByText('Type a purchase number, product, or supplier')).toBeInTheDocument()
+    expect(within(results).getAllByRole('option')).toHaveLength(2)
+    expect(within(results).getByRole('option', { name: /BY-UNRELATED/ })).toBeInTheDocument()
+    expect(within(results).getByRole('option', { name: /BY-SCREEN/ })).toBeInTheDocument()
     await user.type(search, 'missing part')
     expect(within(results).getByText(/No matching purchase/)).toBeInTheDocument()
     await user.clear(search)
+    expect(within(results).getAllByRole('option')).toHaveLength(2)
     await user.type(search, 'BY-SCREEN')
     expect(within(results).getAllByRole('option')).toHaveLength(1)
     expect(within(results).queryByRole('option', { name: /BY-UNRELATED/ })).not.toBeInTheDocument()
