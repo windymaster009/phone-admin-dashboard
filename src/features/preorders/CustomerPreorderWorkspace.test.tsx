@@ -137,7 +137,7 @@ describe('CustomerPreorderWorkspace', () => {
     expect(within(dialog).getByText(/No deposit is recorded here/)).toBeInTheDocument()
     await user.type(within(dialog).getByLabelText('Customer name'), 'Sel')
     await user.click(await within(dialog).findByRole('button', { name: /Sela · 0882982042/ }))
-    expect(within(dialog).getByLabelText('Customer phone')).toHaveValue('0882982042')
+    expect(within(dialog).getByLabelText('Phone number')).toHaveValue('0882982042')
   })
 
   it('shows repair-part preorders in the same queue and opens their repair job', async () => {
