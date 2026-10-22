@@ -26,6 +26,12 @@
 .preorder-block { display: grid; gap: 12px; min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-md); }
 .preorder-block h3 { margin: 0; font-size: 15px; }
 .preorder-block > .primary-button { justify-self: start; }
+.preorder-block .device-existing-product { min-width: 0; }
+.preorder-purchase-selected { display: grid; gap: 7px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-soft); }
+.preorder-purchase-selected > span { color: var(--muted); font-size: 12px; }
+.preorder-purchase-warning { margin: 0; color: var(--orange); font-size: 12px; }
+.preorder-block .preorder-purchase-confirm { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; line-height: 1.45; }
+.preorder-block .preorder-purchase-confirm input { flex: 0 0 auto; width: 16px; min-height: 0; height: 16px; margin: 1px 0 0; padding: 0; }
 .preorder-block-heading, .preorder-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .preorder-block-heading { justify-content: space-between; }
 .preorder-history { display: grid; margin: 0; padding: 0; list-style: none; }

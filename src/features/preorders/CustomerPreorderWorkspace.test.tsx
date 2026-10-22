@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import CustomerPreorderWorkspace from './CustomerPreorderWorkspace'
@@ -65,6 +65,50 @@ describe('CustomerPreorderWorkspace', () => {
     expect(await within(dialog).findByText('Add a supplier in Suppliers first.')).toBeInTheDocument()
     expect(within(dialog).getByRole('combobox', { name: 'Supplier' })).toBeDisabled()
     expect(within(dialog).getByRole('button', { name: 'Mark ordered' })).toBeDisabled()
+  })
+
+  it('uses the repair purchase picker for arrival and confirms the selected product', async () => {
+    const ordered = { ...preorder, status: 'ORDERED', supplierName: 'Parts shop' }
+    const writes: Record<string, unknown>[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const path = String(input)
+      if (path.includes('/api/customer-preorders/repair-parts')) return response({ repairParts: [] })
+      if (path.includes('/api/customer-preorders/order-1/receive')) {
+        writes.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+        return response({ preorder: { ...ordered, status: 'ARRIVED', inventoryItem: 'item-2' } })
+      }
+      if (path.includes('/api/customer-preorders')) return response({ preorders: [ordered] })
+      if (path.includes('/api/trades?type=BUY')) return response({ trades: [
+        { _id: 'buy-1', tradeNo: 'BY-UNRELATED', type: 'BUY', status: 'COMPLETED', createdAt: '2026-10-17T01:00:00.000Z', items: [{ inventoryItem: 'item-1', name: 'Phone battery', quantity: 1 }] },
+        { _id: 'buy-2', tradeNo: 'BY-CASE', type: 'BUY', status: 'COMPLETED', createdAt: '2026-10-17T02:00:00.000Z', supplier: { _id: 'supplier-1', name: 'Parts shop' }, items: [{ inventoryItem: 'item-2', name: 'Vivo case', quantity: 1 }] },
+        { _id: 'buy-old', tradeNo: 'BY-OLD', type: 'BUY', status: 'COMPLETED', createdAt: '2026-10-15T01:00:00.000Z', items: [{ inventoryItem: 'item-3', name: 'Old case', quantity: 1 }] },
+      ] })
+      if (path.includes('/api/trades?type=SELL')) return response({ trades: [] })
+      throw new Error(`Unexpected request: ${path}`)
+    })
+
+    const user = userEvent.setup()
+    render(<CustomerPreorderWorkspace />)
+    await user.click(await screen.findByRole('button', { name: /Open preorder PO-20261016-ONE/ }))
+    const dialog = screen.getByRole('dialog', { name: preorder.preorderNo })
+    const search = await within(dialog).findByRole('combobox', { name: 'Find purchase for Vivo Y02s case' })
+    await waitFor(() => expect(search).toBeEnabled())
+    expect(within(dialog).queryByRole('combobox', { name: 'Purchased product' })).not.toBeInTheDocument()
+    await user.click(search)
+    const results = within(dialog).getByRole('listbox', { name: 'Recorded purchases for Vivo Y02s case' })
+    expect(within(results).getAllByRole('option')).toHaveLength(2)
+    expect(within(results).queryByRole('option', { name: /BY-OLD/ })).not.toBeInTheDocument()
+    await user.type(search, 'Parts shop')
+    expect(within(results).getAllByRole('option')).toHaveLength(1)
+    await user.click(within(results).getByRole('option', { name: /BY-CASE/ }))
+    expect(within(dialog).getByText(/Product names differ/)).toBeInTheDocument()
+    const receive = within(dialog).getByRole('button', { name: 'Mark arrived' })
+    expect(receive).toBeDisabled()
+    expect(writes).toHaveLength(0)
+    await user.click(within(dialog).getByRole('checkbox', { name: /I checked that this purchase contains the product/ }))
+    await user.click(receive)
+    await waitFor(() => expect(writes).toEqual([{ purchaseTradeId: 'buy-2', inventoryItemId: 'item-2' }]))
+    expect(await within(dialog).findByRole('heading', { name: 'Customer pickup' })).toBeInTheDocument()
   })
 
   it('shows preorder history as a newest-first timeline with dates and notes', async () => {

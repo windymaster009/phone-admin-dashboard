@@ -9,6 +9,7 @@ import OperationModalShell from '../../components/OperationModalShell'
 import LoadingState from '../../components/LoadingState'
 import OperationActionCard from '../../components/OperationActionCard'
 import RecordListRow from '../../components/RecordListRow'
+import InventoryProductCombobox from '../../components/InventoryProductCombobox'
 import './customer-preorder-workspace.css'
 
 type PreorderStatus = 'REQUESTED' | 'ORDERED' | 'ARRIVED' | 'COMPLETED' | 'CANCELLED'
@@ -27,7 +28,7 @@ type RepairPartPreorder = {
 type Customer = { _id: string; name: string; phone: string }
 type Supplier = { _id: string; name: string; phone?: string }
 type TradeLine = { inventoryItem?: { _id: string; name: string; sku: string; category: string } | string; name: string; quantity: number }
-type Trade = { _id: string; tradeNo: string; type: 'BUY' | 'SELL'; status: string; createdAt: string; customer?: Customer | string; items: TradeLine[] }
+type Trade = { _id: string; tradeNo: string; type: 'BUY' | 'SELL'; status: string; createdAt: string; customer?: Customer | string; supplier?: Supplier | string; sellerSnapshot?: { name?: string }; items: TradeLine[] }
 
 const categories = ['PHONE', 'TABLET', 'ACCESSORY', 'SPARE_PART', 'OTHER']
 const statuses: PreorderStatus[] = ['REQUESTED', 'ORDERED', 'ARRIVED', 'COMPLETED', 'CANCELLED']
@@ -118,10 +119,11 @@ function PreorderDetail({ preorder, onClose, onChanged }: { preorder: Preorder; 
   const [suppliersLoading, setSuppliersLoading] = useState(preorder.status === 'REQUESTED')
   const [expectedAt, setExpectedAt] = useState(preorder.expectedAt?.slice(0, 10) || '')
   const [purchases, setPurchases] = useState<Trade[]>([])
+  const [purchasesLoading, setPurchasesLoading] = useState(true)
   const [sales, setSales] = useState<Trade[]>([])
-  const [purchaseSearch, setPurchaseSearch] = useState('')
   const [saleSearch, setSaleSearch] = useState('')
   const [purchaseSelection, setPurchaseSelection] = useState('')
+  const [purchaseConfirmed, setPurchaseConfirmed] = useState(false)
   const [saleSelection, setSaleSelection] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -137,11 +139,13 @@ function PreorderDetail({ preorder, onClose, onChanged }: { preorder: Preorder; 
     return () => { active = false }
   }, [preorder.status])
   const refreshTrades = useCallback(async () => {
+    setPurchasesLoading(true)
     try {
       const [buy, sell] = await Promise.all([api<{ trades: Trade[] }>('/trades?type=BUY'), api<{ trades: Trade[] }>('/trades?type=SELL')])
       setPurchases(buy.trades.filter((trade) => trade.status === 'COMPLETED'))
       setSales(sell.trades.filter((trade) => trade.status === 'COMPLETED'))
     } catch (reason) { setError(errorMessage(reason)) }
+    finally { setPurchasesLoading(false) }
   }, [])
   useEffect(() => { void refreshTrades() }, [refreshTrades])
   async function act(path: string, body: Record<string, unknown>) {
@@ -154,7 +158,17 @@ function PreorderDetail({ preorder, onClose, onChanged }: { preorder: Preorder; 
     } catch (reason) { setError(errorMessage(reason)); return false }
     finally { setBusy(false) }
   }
-  const purchaseOptions = purchases.flatMap((trade) => trade.items.filter((line) => itemId(line) && line.quantity >= preorder.quantity).map((line) => ({ trade, line, value: `${trade._id}:${itemId(line)}` }))).filter((option) => new Date(option.trade.createdAt) >= new Date(preorder.createdAt) && `${option.trade.tradeNo} ${option.line.name}`.toLowerCase().includes(purchaseSearch.toLowerCase())).slice(0, 50)
+  const purchaseOptions = purchases.flatMap((trade) => trade.items.map((line, index) => ({
+    trade, line, inventoryItemId: itemId(line), key: `${trade._id}:${itemId(line)}:${index}`,
+    supplierName: trade.supplier && typeof trade.supplier === 'object' ? trade.supplier.name : trade.sellerSnapshot?.name || '',
+  }))).filter((option) => option.inventoryItemId && option.line.quantity >= preorder.quantity && new Date(option.trade.createdAt) >= new Date(preorder.createdAt))
+  const purchaseItems = purchaseOptions.map((option) => ({
+    _id: option.key, name: option.line.name,
+    sku: typeof option.line.inventoryItem === 'object' ? option.line.inventoryItem?.sku || '' : '',
+    category: 'PURCHASE', quantity: option.line.quantity, tradeNo: option.trade.tradeNo,
+    supplierName: option.supplierName, purchasedAt: option.trade.createdAt,
+  }))
+  const selectedPurchase = purchaseOptions.find((option) => option.key === purchaseSelection)
   const saleOptions = sales.filter((trade) => new Date(trade.createdAt) >= new Date(preorder.createdAt) && trade.items.some((line) => itemId(line) === preorder.inventoryItem && line.quantity >= preorder.quantity) && `${trade.tradeNo} ${trade.items.map((line) => line.name).join(' ')}`.toLowerCase().includes(saleSearch.toLowerCase())).slice(0, 50)
   function closeCancellation() {
     setCancelOpen(false)
@@ -171,7 +185,7 @@ function PreorderDetail({ preorder, onClose, onChanged }: { preorder: Preorder; 
     <div className="operation-form preorder-detail">
       <div className="preorder-facts"><span><small>Status</small><strong>{titleStatus(preorder.status)}</strong></span><span><small>Customer</small><strong>{preorder.customerName} · {preorder.customerPhone}</strong></span><span><small>Product</small><strong>{preorder.quantity} × {preorder.productName}</strong></span><span><small>Details</small><strong>{preorder.specifications || titleStatus(preorder.category)}</strong></span></div>
       {preorder.status === 'REQUESTED' && <section className="preorder-block"><h3>Place supplier order</h3><p className="preorder-help">Contact the supplier first, then select them and record the expected date here. This does not create a purchase or charge the customer.</p><div className="preorder-fields"><label>Supplier<select value={supplierId} disabled={suppliersLoading || suppliers.length === 0} onChange={(event) => setSupplierId(event.target.value)}><option value="" disabled>{suppliersLoading ? 'Loading suppliers...' : suppliers.length === 0 ? 'No suppliers registered yet' : 'Select supplier'}</option>{suppliers.map((supplier) => <option key={supplier._id} value={supplier._id}>{supplier.name}{supplier.phone ? ` — ${supplier.phone}` : ''}</option>)}</select></label><label>Expected arrival (optional)<input type="date" value={expectedAt} onChange={(event) => setExpectedAt(event.target.value)} /></label></div>{!suppliersLoading && suppliers.length === 0 && <p className="preorder-help">Add a supplier in Suppliers first.</p>}<button className="primary-button" type="button" disabled={busy || !supplierId} onClick={() => void act('order', { supplierId, expectedAt })}>Mark ordered</button></section>}
-      {preorder.status === 'ORDERED' && <section className="preorder-block"><h3>Product arrival</h3><p className="preorder-help">Record the supplier transaction with New purchase first. Then link the purchased inventory item here. This step does not add stock again.</p><div className="preorder-actions"><button type="button" className="ghost-button" onClick={() => window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'purchase' } }))}>Open New purchase</button><button type="button" className="ghost-button" onClick={() => void refreshTrades()}><RefreshCcw size={15} />Refresh purchases</button></div><label>Find purchase<input value={purchaseSearch} onChange={(event) => setPurchaseSearch(event.target.value)} placeholder="Type purchase number or product" /></label><label>Purchased product<select value={purchaseSelection} onChange={(event) => setPurchaseSelection(event.target.value)}><option value="">Select purchase and product</option>{purchaseOptions.map((option) => <option value={option.value} key={option.value}>{option.trade.tradeNo} · {option.line.name} · Qty {option.line.quantity}</option>)}</select></label><button type="button" className="primary-button" disabled={busy || !purchaseSelection} onClick={() => { const [purchaseTradeId, inventoryItemId] = purchaseSelection.split(':'); void act('receive', { purchaseTradeId, inventoryItemId }) }}>Mark arrived</button></section>}
+      {preorder.status === 'ORDERED' && <section className="preorder-block"><h3>Product arrival</h3><p className="preorder-help">Record the supplier transaction with New purchase first. Then link the purchased inventory item here. This step does not add stock again.</p><div className="preorder-actions"><button type="button" className="ghost-button" onClick={() => window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'purchase' } }))}>Open New purchase</button><button type="button" className="ghost-button" onClick={() => void refreshTrades()}><RefreshCcw size={15} />Refresh purchases</button></div><InventoryProductCombobox id={`preorder-purchase-${preorder._id}`} items={purchaseItems} value={purchaseSelection} loading={purchasesLoading} label={`Find purchase for ${preorder.productName}`} listLabel={`Recorded purchases for ${preorder.productName}`} placeholder="Select a purchase or search number, product, or supplier" emptyMessage="No eligible completed purchases yet" noResultsMessage="No matching purchase. Record the arrival in New purchase, then refresh here." required={false} resultNoun="purchase" clearLabel="Clear purchase search" getSearchText={(item) => [item.tradeNo, item.name, item.sku, item.supplierName].join(' ')} getOptionMeta={(item) => `${item.tradeNo} · ${item.supplierName || 'Supplier not recorded'} · ${dateText(item.purchasedAt)}`} onChange={(key) => { setPurchaseSelection(key); setPurchaseConfirmed(false) }} />{!selectedPurchase && <p className="preorder-help">Choose the purchase recorded when this product arrived. Search to narrow a long list. Earlier or incomplete purchases are not eligible.</p>}{selectedPurchase && <div className="preorder-purchase-selected"><strong>Check before marking arrived</strong><span>Requested: {preorder.quantity} × {preorder.productName} · {preorder.supplierName || 'Supplier not recorded'}</span><span>Purchased: {selectedPurchase.line.quantity} × {selectedPurchase.line.name} · {selectedPurchase.supplierName || 'Supplier not recorded'} · {selectedPurchase.trade.tradeNo}</span>{selectedPurchase.line.name.trim().toLowerCase() !== preorder.productName.trim().toLowerCase() && <p className="preorder-purchase-warning">Product names differ. Confirm this purchase contains the product requested by the customer.</p>}<label className="preorder-purchase-confirm"><input type="checkbox" checked={purchaseConfirmed} onChange={(event) => setPurchaseConfirmed(event.target.checked)} />I checked that this purchase contains the product for this preorder.</label><div className="preorder-actions"><button type="button" className="primary-button" disabled={busy || !purchaseConfirmed} onClick={() => void act('receive', { purchaseTradeId: selectedPurchase.trade._id, inventoryItemId: selectedPurchase.inventoryItemId })}>Mark arrived</button><button type="button" className="ghost-button" onClick={() => { setPurchaseSelection(''); setPurchaseConfirmed(false) }}>Choose another</button></div></div>}</section>}
       {preorder.status === 'ARRIVED' && <section className="preorder-block"><h3>Customer pickup</h3><p className="preorder-help">The purchased item is in normal stock, not held aside by this page. Complete the sale for this customer in Buy & Sell, then link that sale below. No sale is created by marking pickup here.</p><div className="preorder-actions"><button type="button" className="ghost-button" onClick={() => window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'sale', itemId: preorder.inventoryItem } }))}>Open New sale</button><button type="button" className="ghost-button" onClick={() => void refreshTrades()}><RefreshCcw size={15} />Refresh sales</button></div><label>Find sale<input value={saleSearch} onChange={(event) => setSaleSearch(event.target.value)} placeholder="Type sale number or product" /></label><label>Completed sale<select value={saleSelection} onChange={(event) => setSaleSelection(event.target.value)}><option value="">Select sale</option>{saleOptions.map((trade) => <option value={trade._id} key={trade._id}>{trade.tradeNo} · {trade.items.map((line) => line.name).join(', ')}</option>)}</select></label><button type="button" className="primary-button" disabled={busy || !saleSelection} onClick={() => { if (!preorder.customer && !window.confirm(`Confirm the selected sale belongs to ${preorder.customerName} (${preorder.customerPhone})?`)) return; void act('complete', { saleTradeId: saleSelection, customerConfirmed: !preorder.customer }) }}>Mark picked up</button></section>}
       {preorder.status === 'COMPLETED' && <p className="preorder-help">Completed through a recorded sale. The sale remains in the normal sales and profit reports.</p>}
       {preorder.status === 'CANCELLED' && <p className="preorder-help">Cancelled: {preorder.cancellationReason}. Any previously purchased product remains in stock; the purchase record is not reversed.</p>}
