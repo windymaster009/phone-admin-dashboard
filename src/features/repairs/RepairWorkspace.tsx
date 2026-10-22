@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { ChevronDown, ClipboardList, PackagePlus, RefreshCcw, Wrench } from 'lucide-react'
+import { CheckCircle2, ChevronDown, CircleDollarSign, ClipboardList, PackageCheck, PackagePlus, RefreshCcw, Wrench } from 'lucide-react'
 import { api } from '../../lib/api'
 import SectionHeader from '../../components/SectionHeader'
 import FilterToolbar from '../../components/FilterToolbar'
@@ -9,6 +9,7 @@ import LoadingState from '../../components/LoadingState'
 import OperationActionCard from '../../components/OperationActionCard'
 import RecordListRow from '../../components/RecordListRow'
 import StatusBadge from '../../components/StatusBadge'
+import SummaryStats from '../../components/SummaryStats'
 import InventoryProductCombobox, { InventorySelectionSummary } from '../../components/InventoryProductCombobox'
 import { dateText, titleStatus } from '../../lib/presentation'
 import './repair-workspace.css'
@@ -18,6 +19,7 @@ type RepairConfirmation = 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED'
 type PartStatus = 'ORDERED' | 'RESERVED' | 'INSTALLED' | 'RELEASED' | 'CANCELLED'
 type RepairPart = { _id: string; source: 'STOCK' | 'PREORDER'; status: PartStatus; name: string; quantity: number; sku?: string; supplierName?: string; purchaseTrade?: string; returnStockStatus?: 'IN_STOCK' | 'ARCHIVED' }
 type Repair = { _id: string; repairNo: string; customerName: string; customerPhone?: string; device: string; imeiOrSerial?: string; issue: string; status: RepairStatus; parts: RepairPart[]; events: { action: string; note?: string; at: string }[]; createdAt: string }
+type RepairSummary = { counts: Record<RepairStatus, number>; payments: { USD: number; KHR: number; count: number } | null }
 type StockItem = { _id: string; name: string; sku: string; quantity: number; category: string; status: string }
 type Purchase = { _id: string; tradeNo: string; type: string; status: string; createdAt: string; supplier?: { name: string } | string; sellerSnapshot?: { name?: string }; items: { inventoryItem?: { _id: string; name: string; sku: string } | string; name: string; quantity: number }[] }
 
@@ -36,6 +38,7 @@ const message = (reason: unknown) => reason instanceof Error ? reason.message : 
 
 export default function RepairWorkspace({ openRepairId, onRepairClosed }: { openRepairId?: string | null; onRepairClosed?: () => void } = {}) {
   const [repairs, setRepairs] = useState<Repair[]>([])
+  const [summary, setSummary] = useState<RepairSummary | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(openRepairId || null)
   const [createOpen, setCreateOpen] = useState(false)
   const [search, setSearch] = useState('')
@@ -43,8 +46,14 @@ export default function RepairWorkspace({ openRepairId, onRepairClosed }: { open
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
+  const refreshSummary = useCallback(async () => {
+    try { setSummary((await api<{ summary: RepairSummary }>('/repairs/summary')).summary) }
+    catch { setSummary(null) }
+  }, [])
+
   const load = useCallback(async () => {
     setLoading(true)
+    void refreshSummary()
     try {
       const listed = (await api<{ repairs: Repair[] }>('/repairs')).repairs
       const requested = openRepairId && !listed.some((repair) => repair._id === openRepairId)
@@ -55,7 +64,7 @@ export default function RepairWorkspace({ openRepairId, onRepairClosed }: { open
     }
     catch (reason) { setError(message(reason)) }
     finally { setLoading(false) }
-  }, [openRepairId])
+  }, [openRepairId, refreshSummary])
   useEffect(() => { void load() }, [load])
   useEffect(() => { if (openRepairId) setSelectedId(openRepairId) }, [openRepairId])
   const selected = repairs.find((repair) => repair._id === selectedId)
@@ -67,18 +76,32 @@ export default function RepairWorkspace({ openRepairId, onRepairClosed }: { open
 
   function updateRepair(repair: Repair) {
     setRepairs((current) => current.map((item) => item._id === repair._id ? repair : item))
+    void refreshSummary()
   }
+
+  const counts = summary?.counts
+  const needsWork = counts ? ['RECEIVED', 'DIAGNOSIS', 'APPROVAL', 'IN_PROGRESS', 'QUALITY_CHECK'].reduce((sum, status) => sum + (counts[status as RepairStatus] || 0), 0) : '—'
+  const payment = summary?.payments
+  const usdPaid = payment ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(payment.USD) : '—'
+  const khrPaid = payment ? `${new Intl.NumberFormat('en-US').format(payment.KHR)} KHR` : ''
 
   return <div className="repair-page">
     <SectionHeader eyebrow="Operations" title="Repairs" description="Track diagnosis, customer approval, stock parts, preorders, and pickup." />
     {error && <p className="overview-error" role="alert">{error}</p>}
+    <SummaryStats label="Repair summary" variant="standard" columns={payment ? 5 : 4} items={[
+      { label: 'Needs work', value: needsWork, detail: 'Intake through quality check', icon: ClipboardList, tone: 'blue' },
+      { label: 'Waiting parts', value: counts?.WAITING_PARTS ?? '—', detail: 'Parts still outstanding', icon: PackagePlus, tone: 'orange' },
+      { label: 'Ready for pickup', value: counts?.READY_PICKUP ?? '—', detail: 'Waiting for customer', icon: PackageCheck, tone: 'violet' },
+      { label: 'Completed', value: counts?.COMPLETED ?? '—', detail: 'All-time handed over', icon: CheckCircle2, tone: 'green' },
+      ...(payment ? [{ label: 'Repair payments', value: usdPaid, secondaryValue: khrPaid, detail: payment.count ? `${payment.count} linked charges · revenue, not profit` : 'Link payments in Service charges', icon: CircleDollarSign, tone: 'violet' as const }] : []),
+    ]} />
     <OperationActionCard ariaLabel="Repair actions" eyebrow="Workshop intake" title="Take in a repair" description="Record the customer, device, issue, and details before diagnosis." actionLabel="New repair" onAction={() => setCreateOpen(true)} />
     <section className="surface-card repair-ledger">
       <div className="card-heading table-heading"><div><span className="eyebrow">Repair jobs</span><h3>Workshop queue</h3></div><button type="button" className="ghost-button" onClick={() => void load()} aria-label="Refresh repairs"><RefreshCcw size={16} /></button></div>
       <FilterToolbar search={search} onSearchChange={setSearch} searchLabel="Search repairs" placeholder="Search customer, device, issue, or repair number…"><FilterSelect aria-label="Repair status" value={status} onChange={(event) => setStatus(event.target.value)}><option value="ALL">All statuses</option>{Object.keys(nextStatuses).map((value) => <option key={value} value={value}>{titleStatus(value)}</option>)}</FilterSelect></FilterToolbar>
       {loading && repairs.length === 0 ? <LoadingState label="Loading repairs" /> : <div className="repair-list">{visible.map((repair) => <RecordListRow key={repair._id} icon={<Wrench />} tone="repair" title={repair.device} meta={`${repair.repairNo} · ${repair.customerName} · ${dateText(repair.createdAt)}`} detail={repair.issue} badge={<StatusBadge status={repair.status} />} ariaLabel={`Open ${repair.device} repair ${repair.repairNo}`} onOpen={() => setSelectedId(repair._id)} />)}{visible.length === 0 && <p className="repair-empty">No repairs match these filters.</p>}</div>}
     </section>
-    {createOpen && <CreateRepair onClose={() => setCreateOpen(false)} onCreated={(repair) => { setRepairs((current) => [repair, ...current]); setSelectedId(repair._id); setCreateOpen(false) }} />}
+    {createOpen && <CreateRepair onClose={() => setCreateOpen(false)} onCreated={(repair) => { setRepairs((current) => [repair, ...current]); void refreshSummary(); setSelectedId(repair._id); setCreateOpen(false) }} />}
     {selected && <RepairDetail repair={selected} onClose={() => { setSelectedId(null); onRepairClosed?.() }} onChanged={updateRepair} />}
   </div>
 }
@@ -200,7 +223,7 @@ function RepairDetail({ repair, onClose, onChanged }: { repair: Repair; onClose:
   const statusCopy = statusDialog === 'CANCELLED'
     ? { title: 'Cancel repair', description: 'Unused reserved parts return to stock. Installed parts do not.', label: 'Reason for cancellation', placeholder: 'Explain why this repair is cancelled', action: 'Cancel repair' }
     : statusDialog === 'COMPLETED'
-      ? { title: 'Confirm pickup', description: 'Confirm the repaired device was handed to the customer. Record any payment separately in Service charges.', label: '', placeholder: '', action: 'Mark handed to customer' }
+      ? { title: 'Confirm pickup', description: `Confirm the device was handed over. Record payment in Service charges and link repair ${repair.repairNo}.`, label: '', placeholder: '', action: 'Mark handed to customer' }
       : { title: 'Record customer approval', description: 'Record how the customer approved this repair before work starts.', label: 'How did the customer approve?', placeholder: 'For example, in person or by phone', action: 'Start repair' }
   const historyGroups = [...repair.events].reverse().reduce<{ date: string; entries: Repair['events'] }[]>((groups, entry) => {
     const date = dateText(entry.at)

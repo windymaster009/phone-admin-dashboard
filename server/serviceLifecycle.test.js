@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken'
 import { ActivityLog, Customer, User } from './models.js'
 import { AuthSession } from './authSessionModels.js'
 import { ServiceCharge, ServiceOffering } from './serviceModels.js'
+import { RepairJob } from './repairModels.js'
 import serviceRouter from './serviceRoutes.js'
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret-service-lifecycle'
@@ -768,6 +769,48 @@ test('Service charge creation: accurately calculates subtotal, discount, and tot
   } finally {
     ServiceOffering.findById = origFindById
     ServiceCharge.create = origChargeCreate
+  }
+})
+
+test('Service charge links income only to a matching ready or completed repair', async () => {
+  const originalOffering = ServiceOffering.findById
+  const originalRepair = RepairJob.findOne
+  const originalCreate = ServiceCharge.create
+  const repairId = new mongoose.Types.ObjectId()
+  const offeringId = new mongoose.Types.ObjectId()
+  let repairStatus = 'READY_PICKUP'
+  let createdRecord
+  ServiceOffering.findById = async () => ({
+    _id: offeringId, code: 'OTHER_SERVICE', name: 'Repair service', category: 'OTHER',
+    currency: 'USD', price: 20, priceUsd: 20, active: true,
+  })
+  RepairJob.findOne = (query) => ({ select: async () => query.repairNo === 'RP-TEST' ? {
+    _id: repairId, repairNo: 'RP-TEST', customerName: 'Sela', customerPhone: '012345678', status: repairStatus,
+  } : null })
+  ServiceCharge.create = async (doc) => {
+    createdRecord = { ...doc, populate: async function () { return this } }
+    return createdRecord
+  }
+  try {
+    const invalid = await callRouter(serviceRouter, { method: 'POST', url: '/charges', body: { offeringId, repairNo: 'bad reference' } })
+    assert.equal(invalid.status, 400)
+    const unknown = await callRouter(serviceRouter, { method: 'POST', url: '/charges', body: { offeringId, repairNo: 'RP-MISSING' } })
+    assert.equal(unknown.status, 409)
+    repairStatus = 'CANCELLED'
+    const cancelled = await callRouter(serviceRouter, { method: 'POST', url: '/charges', body: { offeringId, repairNo: 'RP-TEST' } })
+    assert.equal(cancelled.status, 409)
+    repairStatus = 'READY_PICKUP'
+    const wrongCustomer = await callRouter(serviceRouter, { method: 'POST', url: '/charges', body: { offeringId, repairNo: 'RP-TEST', customerName: 'Someone else' } })
+    assert.equal(wrongCustomer.status, 409)
+    const linked = await callRouter(serviceRouter, { method: 'POST', url: '/charges', body: { offeringId, repairNo: 'rp-test' } })
+    assert.equal(linked.status, 201)
+    assert.equal(String(createdRecord.repairJob), String(repairId))
+    assert.equal(createdRecord.customerSnapshot.name, 'Sela')
+    assert.equal(createdRecord.customerSnapshot.phone, '012345678')
+  } finally {
+    ServiceOffering.findById = originalOffering
+    RepairJob.findOne = originalRepair
+    ServiceCharge.create = originalCreate
   }
 })
 

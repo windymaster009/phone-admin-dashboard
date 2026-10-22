@@ -314,6 +314,29 @@ describe('ServiceWorkspace', () => {
     expect(screen.getByText(/Walk-in VIP · SV-20260312-NEW99/)).toBeInTheDocument()
   })
 
+  it('links a service payment to a selected repair number for the repair income report', async () => {
+    const user = userEvent.setup()
+    let recordedBody: Record<string, unknown> | null = null
+    setupFetchMock({
+      '/api/repairs/charge-options': async () => ({ repairs: [{ _id: 'repair-1', repairNo: 'RP-TEST', customerName: 'Sela', device: 'Vivo Y02s' }] }),
+      '/api/services/charges': async (init) => {
+        if (init.method === 'POST') {
+          recordedBody = JSON.parse(String(init.body))
+          return { charge: { ...sampleCharges[0], repairJob: { repairNo: 'RP-TEST' } } }
+        }
+        return { charges: sampleCharges }
+      },
+    })
+    render(<RouterProvider><ServiceWorkspace /></RouterProvider>)
+    await user.click((await screen.findAllByRole('button', { name: /^charge/i }))[0])
+    const dialog = screen.getByRole('dialog', { name: /record service charge/i })
+    const repairField = within(dialog).getByRole('combobox', { name: /Repair job number/i })
+    await waitFor(() => expect(dialog.querySelector('datalist option[value="RP-TEST"]')).not.toBeNull())
+    await user.type(repairField, 'RP-TEST')
+    await user.click(within(dialog).getByRole('button', { name: /record charge/i }))
+    await waitFor(() => expect(recordedBody).toMatchObject({ repairNo: 'RP-TEST' }))
+  })
+
   it('2. Failed submissions preserve form input and show an error inside the modal', async () => {
     const user = userEvent.setup()
 

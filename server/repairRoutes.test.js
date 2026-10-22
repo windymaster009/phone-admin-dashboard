@@ -6,6 +6,7 @@ import { ActivityLog, InventoryItem, Trade, User } from './models.js'
 import { AuthSession } from './authSessionModels.js'
 import { RepairJob } from './repairModels.js'
 import { CustomerPreorder } from './customerPreorderModels.js'
+import { ServiceCharge } from './serviceModels.js'
 import repairRouter from './repairRoutes.js'
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret-repair'
@@ -20,12 +21,14 @@ const originals = {
   start: mongoose.startSession,
   job: RepairJob.findById,
   jobFindOne: RepairJob.findOne,
+  jobFind: RepairJob.find,
   save: RepairJob.prototype.save,
   stock: InventoryItem.findOneAndUpdate,
   trade: Trade.findOne,
   allocation: Trade.updateOne,
   aggregate: RepairJob.aggregate,
   customerAggregate: CustomerPreorder.aggregate,
+  serviceAggregate: ServiceCharge.aggregate,
 }
 
 test.beforeEach(() => {
@@ -43,12 +46,14 @@ test.afterEach(() => {
   mongoose.startSession = originals.start
   RepairJob.findById = originals.job
   RepairJob.findOne = originals.jobFindOne
+  RepairJob.find = originals.jobFind
   RepairJob.prototype.save = originals.save
   InventoryItem.findOneAndUpdate = originals.stock
   Trade.findOne = originals.trade
   Trade.updateOne = originals.allocation
   RepairJob.aggregate = originals.aggregate
   CustomerPreorder.aggregate = originals.customerAggregate
+  ServiceCharge.aggregate = originals.serviceAggregate
 })
 
 function call(method, url, body = {}) {
@@ -83,6 +88,37 @@ test('a repair can be opened directly when it is outside the recent workshop lis
   assert.equal(result.status, 200)
   assert.equal(result.body.repair.repairNo, 'RP-TEST')
   assert.equal(result.body.repair.parts[0].source, 'PREORDER')
+})
+
+test('repair summary counts every job and only linked completed service charges', async () => {
+  RepairJob.aggregate = async () => [
+    { _id: 'IN_PROGRESS', count: 3 }, { _id: 'WAITING_PARTS', count: 2 },
+    { _id: 'READY_PICKUP', count: 1 }, { _id: 'COMPLETED', count: 4 },
+  ]
+  let paymentPipeline
+  ServiceCharge.aggregate = async (pipeline) => {
+    paymentPipeline = pipeline
+    return [{ _id: 'USD', total: 35.5, count: 2 }, { _id: 'KHR', total: 40000, count: 1 }]
+  }
+  const result = await call('GET', '/summary')
+  assert.equal(result.status, 200)
+  assert.equal(result.body.summary.counts.IN_PROGRESS, 3)
+  assert.equal(result.body.summary.counts.RECEIVED, 0)
+  assert.equal(result.body.summary.counts.WAITING_PARTS, 2)
+  assert.deepEqual(result.body.summary.payments, { USD: 35.5, KHR: 40000, count: 3 })
+  assert.deepEqual(paymentPipeline[0].$match, { repairJob: { $exists: true, $ne: null }, status: 'COMPLETED' })
+})
+
+test('charge options only offer ready or completed repairs', async () => {
+  let filter
+  RepairJob.find = (query) => {
+    filter = query
+    return { select: () => ({ sort: () => ({ limit: () => ({ lean: async () => [{ repairNo: 'RP-READY', status: 'READY_PICKUP' }] }) }) }) }
+  }
+  const result = await call('GET', '/charge-options')
+  assert.equal(result.status, 200)
+  assert.deepEqual(filter, { status: { $in: ['READY_PICKUP', 'COMPLETED'] } })
+  assert.equal(result.body.repairs[0].repairNo, 'RP-READY')
 })
 
 test('cancellation restores only unused reserved stock and keeps installed parts consumed', async () => {

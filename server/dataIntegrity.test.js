@@ -1422,14 +1422,10 @@ test('Service Charges: server permissions enforcement (unauthenticated, STOCK, C
   ServiceOffering.updateOne = async () => ({ acknowledged: true })
   ServiceOffering.find = () => ({ sort: () => ({ lean: async () => [] }) })
   ServiceCharge.find = () => ({
-    populate: () => ({
-      populate: () => ({
-        sort: () => ({
-          lean: async () => [],
-          limit: () => ({ lean: async () => [] }),
-        }),
-      }),
-    }),
+    populate() { return this },
+    sort() { return this },
+    limit() { return this },
+    lean: async () => [],
   })
 
   try {

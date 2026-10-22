@@ -37,6 +37,7 @@ const serviceChargeSchema = new Schema(
       description: String,
     },
     customer: { type: Schema.Types.ObjectId, ref: 'Customer', index: true },
+    repairJob: { type: Schema.Types.ObjectId, ref: 'RepairJob', index: true },
     customerSnapshot: {
       name: { type: String, required: true },
       phone: String,

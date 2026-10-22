@@ -3,6 +3,7 @@ import mongoose from 'mongoose'
 import { allowRoles, requireAuth, writeActivity } from './auth.js'
 import { Customer } from './models.js'
 import { ServiceCharge, ServiceOffering } from './serviceModels.js'
+import { RepairJob } from './repairModels.js'
 
 const router = Router()
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
@@ -142,6 +143,7 @@ router.get('/charges', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), a
   }
   const charges = await ServiceCharge.find(query)
     .populate('customer', 'name phone')
+    .populate('repairJob', 'repairNo')
     .populate('createdBy lastCorrectedBy', 'name role')
     .sort({ completedAt: -1, createdAt: -1 })
     .limit(100)
@@ -167,7 +169,17 @@ router.post('/charges', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), 
     customer = await Customer.findById(req.body.customerId).select('name phone active')
     if (!customer || customer.active === false) throw requestError(404, 'Customer was not found')
   }
-  const walkInName = clean(req.body.customerName) || 'Walk-in customer'
+  let repair = null
+  if (req.body.repairNo) {
+    const repairNo = clean(req.body.repairNo).toUpperCase()
+    if (!/^RP-[A-Z0-9-]{1,50}$/.test(repairNo)) throw requestError(400, 'Enter a valid repair number')
+    repair = await RepairJob.findOne({ repairNo }).select('repairNo customer customerName customerPhone status')
+    if (!repair || !['READY_PICKUP', 'COMPLETED'].includes(repair.status)) throw requestError(409, 'Choose a repair ready for pickup or already completed')
+    if (customer && repair.customer && String(customer._id) !== String(repair.customer)) throw requestError(409, 'Service customer does not match the repair customer')
+    const suppliedName = customer?.name || clean(req.body.customerName)
+    if (suppliedName && suppliedName.toLowerCase() !== repair.customerName.toLowerCase()) throw requestError(409, 'Customer name does not match the repair job')
+  }
+  const walkInName = clean(req.body.customerName) || repair?.customerName || 'Walk-in customer'
   const quantity = req.body.quantity === undefined ? 1 : Number(req.body.quantity)
   if (!Number.isInteger(quantity) || quantity < 1 || quantity > 1000) throw requestError(400, 'Quantity must be between 1 and 1,000')
   const subtotal = serviceCurrencyAmount(unitPrice * quantity, currency)
@@ -194,9 +206,10 @@ router.post('/charges', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), 
   const charge = await ServiceCharge.create({
     serviceNo: makeServiceNo(),
     offering: offering._id,
+    repairJob: repair?._id,
     serviceSnapshot: { code: offering.code, name: offering.name, category: offering.category, description: offering.description },
     customer: customer?._id,
-    customerSnapshot: { name: customer?.name || walkInName, phone: customer?.phone || clean(req.body.customerPhone) },
+    customerSnapshot: { name: customer?.name || walkInName, phone: customer?.phone || clean(req.body.customerPhone) || repair?.customerPhone },
     currency,
     exchangeRate: currency === 'KHR' ? exchangeRate : 1,
     unitPrice,
@@ -215,8 +228,9 @@ router.post('/charges', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), 
   })
   await writeActivity(req, {
     action: 'CREATE', entity: 'SERVICE_CHARGE', entityId: charge._id,
-    details: { serviceNo: charge.serviceNo, service: offering.name, customer: charge.customerSnapshot.name, total: charge.total, currency: charge.currency, discountType: charge.discountType, discount: charge.discount },
+    details: { serviceNo: charge.serviceNo, service: offering.name, customer: charge.customerSnapshot.name, repairNo: repair?.repairNo, total: charge.total, currency: charge.currency, discountType: charge.discountType, discount: charge.discount },
   })
+  await charge.populate('repairJob', 'repairNo')
   res.status(201).json({ charge: await charge.populate('customer createdBy', 'name phone role') })
 }))
 

@@ -56,10 +56,12 @@ type ServiceOffering = {
 }
 
 type Customer = { _id: string; name: string; phone?: string }
+type RepairOption = { _id: string; repairNo: string; customerName: string; device: string }
 
 type ServiceCharge = {
   _id: string
   serviceNo: string
+  repairJob?: { repairNo: string }
   serviceSnapshot: { name: string; category: ServiceCategory }
   customerSnapshot: { name: string; phone?: string }
   currency: Currency
@@ -116,6 +118,8 @@ export default function ServiceWorkspace() {
   const canPrice = session?.role === 'OWNER' || session?.role === 'MANAGER'
   const [services, setServices] = useState<ServiceOffering[]>([])
   const [customers, setCustomers] = useState<Customer[]>([])
+  const [repairOptions, setRepairOptions] = useState<RepairOption[]>([])
+  const [repairNo, setRepairNo] = useState('')
   const [charges, setCharges] = useState<ServiceCharge[]>([])
   const [chargeSearch, setChargeSearch] = useState('')
   const [searchedCharges, setSearchedCharges] = useState<ServiceCharge[] | null>(null)
@@ -184,6 +188,15 @@ export default function ServiceWorkspace() {
   }
 
   useEffect(() => { void load() }, [])
+
+  useEffect(() => {
+    if (!chargeOpen) return
+    let active = true
+    void api<{ repairs: RepairOption[] }>('/repairs/charge-options')
+      .then((result) => { if (active) setRepairOptions(Array.isArray(result.repairs) ? result.repairs : []) })
+      .catch(() => { if (active) setRepairOptions([]) })
+    return () => { active = false }
+  }, [chargeOpen])
 
   useEffect(() => {
     const term = chargeSearch.trim()
@@ -313,6 +326,7 @@ export default function ServiceWorkspace() {
     if (busy) return
     setChargeOpen(false)
     setSelected(null)
+    setRepairNo('')
     setWarrantyDays('0')
     setError('')
   }
@@ -368,6 +382,7 @@ export default function ServiceWorkspace() {
         method: 'POST',
         body: JSON.stringify({
           offeringId: selected._id,
+          repairNo: repairNo.trim() || undefined,
           customerId: customerId || undefined,
           customerName: customerId ? undefined : walkInName,
           customerPhone: customerId ? undefined : walkInPhone,
@@ -391,6 +406,7 @@ export default function ServiceWorkspace() {
       setDiscount('0')
       setDiscountType('AMOUNT')
       setChargeCurrency('USD')
+      setRepairNo('')
       setPaymentMethod('CASH')
       setWarrantyDays('0')
       setNotes('')
@@ -603,6 +619,10 @@ export default function ServiceWorkspace() {
                   <span className="service-charge-detail-icon"><Settings2 size={17} aria-hidden="true" /></span>
                   <div><dt>Service</dt><dd>{selectedCharge.serviceSnapshot.name}</dd></div>
                 </div>
+                {selectedCharge.repairJob?.repairNo && <div>
+                  <span className="service-charge-detail-icon"><Settings2 size={17} aria-hidden="true" /></span>
+                  <div><dt>Repair job</dt><dd>{selectedCharge.repairJob.repairNo}</dd></div>
+                </div>}
               </dl>
             </aside>
 
@@ -716,6 +736,12 @@ export default function ServiceWorkspace() {
                   </label>
                 </div>
               )}
+              <label>
+                <span>Repair job number <small>Optional · for repair income report</small></span>
+                <input list="service-charge-repair-options" maxLength={64} value={repairNo} onChange={(event) => setRepairNo(event.target.value)} placeholder="RP-20261020-..." autoComplete="off" />
+                <datalist id="service-charge-repair-options">{repairOptions.map((repair) => <option key={repair._id} value={repair.repairNo} label={`${repair.customerName} · ${repair.device}`} />)}</datalist>
+                <small className="service-field-help">Link only this repair's payment. The job must be ready for pickup or completed.</small>
+              </label>
               <div className="service-form-pair">
                 <label>
                   <span>Currency</span>

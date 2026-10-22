@@ -4,10 +4,12 @@ import { allowRoles, requireAuth, writeActivity } from './auth.js'
 import { Customer, InventoryItem, Trade } from './models.js'
 import { RepairJob } from './repairModels.js'
 import { CustomerPreorder } from './customerPreorderModels.js'
+import { ServiceCharge } from './serviceModels.js'
 
 const router = Router()
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
 const clean = (value) => typeof value === 'string' ? value.trim() : ''
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const fail = (status, message) => Object.assign(new Error(message), { status })
 const editable = ['OWNER', 'MANAGER', 'STOCK']
 const transitions = {
@@ -68,6 +70,36 @@ router.get('/', requireAuth, allowRoles(...editable), asyncRoute(async (req, res
   const status = clean(req.query.status).toUpperCase()
   const filter = transitions[status] ? { status } : {}
   const repairs = await RepairJob.find(filter).sort({ createdAt: -1 }).limit(200).lean()
+  res.json({ repairs })
+}))
+
+router.get('/summary', requireAuth, allowRoles(...editable), asyncRoute(async (req, res) => {
+  const statusRows = await RepairJob.aggregate([{ $group: { _id: '$status', count: { $sum: 1 } } }])
+  const counts = Object.fromEntries(Object.keys(transitions).map((status) => [status, 0]))
+  for (const row of statusRows) if (row._id in counts) counts[row._id] = row.count
+  let payments = null
+  if (['OWNER', 'MANAGER'].includes(req.user.role)) {
+    const amounts = await ServiceCharge.aggregate([
+      { $match: { repairJob: { $exists: true, $ne: null }, status: 'COMPLETED' } },
+      { $group: { _id: '$currency', total: { $sum: '$total' }, count: { $sum: 1 } } },
+    ])
+    payments = { USD: 0, KHR: 0, count: 0 }
+    for (const row of amounts) {
+      if (row._id === 'USD' || row._id === 'KHR') payments[row._id] = row.total
+      payments.count += row.count
+    }
+  }
+  res.json({ summary: { counts, payments } })
+}))
+
+router.get('/charge-options', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHIER'), asyncRoute(async (req, res) => {
+  const search = clean(req.query.search).slice(0, 120)
+  const filter = { status: { $in: ['READY_PICKUP', 'COMPLETED'] } }
+  if (search) {
+    const regex = new RegExp(escapeRegex(search), 'i')
+    filter.$or = [{ repairNo: regex }, { customerName: regex }, { customerPhone: regex }, { device: regex }]
+  }
+  const repairs = await RepairJob.find(filter).select('repairNo customerName customerPhone device status').sort({ createdAt: -1 }).limit(50).lean()
   res.json({ repairs })
 }))
 

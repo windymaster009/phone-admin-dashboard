@@ -1,7 +1,19 @@
-/* Hallmark · component: repair detail modal · genre: modern-minimal · tone: compact operational · palette: existing PhoneFlow violet
+/* Hallmark · redesign: repair workbench · genre: modern-minimal · tone: compact operational · palette: existing PhoneFlow violet · macrostructure: KPI strip / inline intake / queue
  * pre-emit critique: P5 H5 E5 S5 R5 V4
  */
 .repair-page { display: grid; gap: var(--space-5); min-width: 0; }
+.repair-page .summary-stats-grid { margin-bottom: 0; }
+.repair-page .operation-action-card { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-rows: auto; align-items: center; gap: var(--space-4); min-height: 0; padding: var(--space-4); }
+.repair-page .operation-action-card::after { display: none; }
+.repair-page .operation-action-icon { width: 42px; height: 42px; border-radius: var(--radius-md); }
+.repair-page .operation-action-icon svg { width: 21px; height: 21px; }
+.repair-page .operation-action-card h3 { margin: 0 0 var(--space-1); font-size: var(--text-md); }
+.repair-page .operation-action-card p { line-height: 1.45; }
+.repair-page .operation-action-card > button { justify-self: end; }
+@media (max-width: 40rem) {
+  .repair-page .operation-action-card { grid-template-columns: auto minmax(0, 1fr); }
+  .repair-page .operation-action-card > button { grid-column: 1 / -1; justify-self: stretch; }
+}
 .repair-ledger { min-width: 0; padding: 0; overflow: hidden; }
 .repair-ledger .filter-row { padding: var(--space-3) var(--space-4); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 .repair-ledger .search-field { flex: 1 1 280px; }

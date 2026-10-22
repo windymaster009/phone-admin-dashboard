@@ -31,6 +31,28 @@ describe('RepairWorkspace', () => {
     expect(within(dialog).getByRole('button', { name: 'Create repair' })).toBeInTheDocument()
   })
 
+  it('shows a workshop summary across all repairs rather than only the recent queue', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input)
+      if (path.includes('/api/repairs/summary')) return response({ summary: {
+        counts: { RECEIVED: 1, DIAGNOSIS: 2, APPROVAL: 1, WAITING_PARTS: 3, IN_PROGRESS: 4, QUALITY_CHECK: 1, READY_PICKUP: 2, COMPLETED: 8, CANCELLED: 1 },
+        payments: { USD: 75, KHR: 41000, count: 3 },
+      } })
+      if (path.includes('/api/repairs')) return response({ repairs: [repair] })
+      throw new Error(`Unexpected request: ${path}`)
+    })
+    render(<RepairWorkspace />)
+    const summary = screen.getByRole('region', { name: 'Repair summary' })
+    expect(within(summary).getByText('Needs work')).toBeInTheDocument()
+    expect(await within(summary).findByText('9')).toBeInTheDocument()
+    expect(within(summary).getByText('Waiting parts')).toBeInTheDocument()
+    expect(within(summary).getByText('Ready for pickup')).toBeInTheDocument()
+    expect(within(summary).getByText('Completed')).toBeInTheDocument()
+    expect(within(summary).getByText('$75.00')).toBeInTheDocument()
+    expect(within(summary).getByText('41,000 KHR')).toBeInTheDocument()
+    expect(within(summary).getByText('3 linked charges · revenue, not profit')).toBeInTheDocument()
+  })
+
   it('opens a linked repair preorder even when the repair is outside the recent list', async () => {
     const linked = { ...repair, status: 'WAITING_PARTS', parts: [{ _id: 'part-1', source: 'PREORDER', status: 'ORDERED', name: 'Screen', quantity: 1, supplierName: 'Parts shop' }] }
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
@@ -294,7 +316,7 @@ describe('RepairWorkspace', () => {
     await user.click(await screen.findByRole('button', { name: /Vivo Y02s/ }))
     await user.click(screen.getByRole('button', { name: 'Handed to customer' }))
     const pickup = screen.getByRole('dialog', { name: 'Confirm pickup' })
-    expect(within(pickup).getByText(/payment separately in Service charges/)).toBeInTheDocument()
+    expect(within(pickup).getByText(/Record payment in Service charges and link repair RP-20261016-ONE/)).toBeInTheDocument()
     await user.click(within(pickup).getByRole('button', { name: 'Go back' }))
     expect(write).not.toHaveBeenCalled()
   })
