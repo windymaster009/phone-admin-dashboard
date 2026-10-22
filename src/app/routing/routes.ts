@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   ShoppingCart,
   TrendingDown,
+  Truck,
   Users,
   Wrench,
 } from 'lucide-react'
@@ -29,6 +30,7 @@ export type RouteKey =
   | 'services'
   | 'repairs'
   | 'customerPreorders'
+  | 'shipping'
   | 'inventory'
   | 'customers'
   | 'suppliers'
@@ -111,6 +113,14 @@ export const ROUTES: AppRoute[] = [
     icon: PackageCheck,
     group: 'Operations',
     roles: ['OWNER', 'MANAGER'],
+  },
+  {
+    key: 'shipping',
+    pathname: '/shipping',
+    label: 'Shipping',
+    icon: Truck,
+    group: 'Operations',
+    roles: ['OWNER', 'MANAGER', 'CASHIER', 'STOCK'],
   },
   {
     key: 'inventory',

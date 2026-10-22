@@ -16,6 +16,7 @@ const TradePage = lazy(() => import('../features/trades/TradePage'))
 const ServiceWorkspace = lazy(() => import('../features/services/ServiceWorkspace'))
 const RepairWorkspace = lazy(() => import('../features/repairs/RepairWorkspace'))
 const CustomerPreorderWorkspace = lazy(() => import('../features/preorders/CustomerPreorderWorkspace'))
+const ShippingWorkspace = lazy(() => import('../features/shipping/ShippingWorkspace'))
 const InventoryPage = lazy(() => import('../features/inventory/InventoryPage'))
 const CustomerPage = lazy(() => import('../features/customers/CustomerPage'))
 const SupplierWorkspace = lazy(() => import('../features/suppliers/SupplierWorkspace'))
@@ -193,6 +194,8 @@ function App({
         return <RepairWorkspace />
       case 'customerPreorders':
         return <CustomerPreorderWorkspace />
+      case 'shipping':
+        return <ShippingWorkspace />
       case 'inventory':
         return <InventoryPage user={user} />
       case 'customers':
