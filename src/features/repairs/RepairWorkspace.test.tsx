@@ -144,12 +144,13 @@ describe('RepairWorkspace', () => {
 
   it('shows eligible purchases before searching, filters them on demand, and requires confirmation before receiving', async () => {
     const orderedRepair = { ...repair, status: 'WAITING_PARTS', parts: [{ _id: 'part-1', source: 'PREORDER', status: 'ORDERED', name: 'Screen', quantity: 1, supplierName: 'Parts shop' }] }
+    const receivedRepair = { ...orderedRepair, status: 'IN_PROGRESS', parts: [{ ...orderedRepair.parts[0], status: 'RESERVED', name: 'Screen Pro' }] }
     const writes: Record<string, unknown>[] = []
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const path = String(input)
       if (path.includes('/api/repairs/repair-1/parts/part-1/receive')) {
         writes.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
-        return response({ repair: orderedRepair })
+        return response({ repair: receivedRepair })
       }
       if (path.includes('/api/repairs')) return response({ repairs: [orderedRepair] })
       if (path.includes('/api/inventory')) return response({ items: [] })
@@ -188,14 +189,17 @@ describe('RepairWorkspace', () => {
     expect(within(results).getAllByRole('option')).toHaveLength(1)
     expect(within(results).queryByRole('option', { name: /BY-UNRELATED/ })).not.toBeInTheDocument()
     await user.click(within(results).getByRole('option', { name: /BY-SCREEN/ }))
-    expect(within(dialog).getByText(/Product names differ/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/Receiving this part will replace “Screen” with “Screen Pro”/)).toBeInTheDocument()
     const receive = within(dialog).getByRole('button', { name: 'Receive & reserve this part' })
     expect(receive).toBeDisabled()
     expect(writes).toHaveLength(0)
     await user.click(within(dialog).getByRole('checkbox', { name: /I checked that this purchase contains the part/ }))
+    expect(within(dialog).getByText('1 × Screen')).toBeInTheDocument()
+    expect(writes).toHaveLength(0)
     await user.click(receive)
     await waitFor(() => expect(writes).toHaveLength(1))
     expect(writes[0]).toMatchObject({ purchaseTradeId: 'buy-2', inventoryItemId: 'item-2', confirmedMatch: true })
+    expect(await within(dialog).findByText('1 × Screen Pro')).toBeInTheDocument()
   })
 
   it('records customer approval through the in-app dialog only after a note is entered', async () => {

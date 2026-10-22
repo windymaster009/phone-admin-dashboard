@@ -151,21 +151,24 @@ test('a preorder can be received only through a completed matching purchase', as
   const record = job('WAITING_PARTS', [{ source: 'PREORDER', status: 'ORDERED', name: 'Screen', quantity: 2, supplierName: 'Parts supplier' }])
   record.createdAt = new Date('2026-10-15T00:00:00Z')
   const partId = String(record.parts[0]._id)
-  const trade = { _id: tradeId, tradeNo: 'BY-TEST', type: 'BUY', status: 'COMPLETED', createdAt: new Date('2026-10-16T00:00:00Z'), items: [{ inventoryItem: stockId, quantity: 2, costPrice: 5 }] }
+  const trade = { _id: tradeId, tradeNo: 'BY-TEST', type: 'BUY', status: 'COMPLETED', createdAt: new Date('2026-10-16T00:00:00Z'), items: [{ inventoryItem: stockId, name: 'Vivo Y02s screen assembly', quantity: 2, costPrice: 5 }] }
   Trade.findOne = () => ({ session: async () => trade })
   let locked = 0
   Trade.updateOne = async () => { locked += 1; return { matchedCount: 1 } }
   RepairJob.aggregate = () => ({ session: async () => [] })
   CustomerPreorder.aggregate = () => ({ session: async () => [] })
   const updates = []
-  InventoryItem.findOneAndUpdate = async (filter, update) => { updates.push({ filter, update }); return { _id: stockId, name: 'Screen', sku: 'SCREEN-1' } }
+  InventoryItem.findOneAndUpdate = async (filter, update) => { updates.push({ filter, update }); return { _id: stockId, name: 'Current stock label', sku: 'SCREEN-1' } }
   const unconfirmed = await call('POST', `/64b8f0a1c9e77b0012a00040/parts/${partId}/receive`, { purchaseTradeId: String(tradeId), inventoryItemId: String(stockId) })
   assert.equal(unconfirmed.status, 400)
   assert.equal(updates.length, 0)
+  assert.equal(record.parts[0].name, 'Screen')
   const result = await call('POST', `/64b8f0a1c9e77b0012a00040/parts/${partId}/receive`, { purchaseTradeId: String(tradeId), inventoryItemId: String(stockId), confirmedMatch: true })
   assert.equal(result.status, 200)
   assert.equal(record.status, 'IN_PROGRESS')
   assert.equal(record.parts[0].status, 'RESERVED')
+  assert.equal(record.parts[0].name, 'Vivo Y02s screen assembly')
+  assert.match(record.events.at(-1).note, /Vivo Y02s screen assembly \(requested as Screen\)/)
   assert.equal(String(record.parts[0].purchaseTrade), String(tradeId))
   assert.equal(locked, 1)
   assert.equal(updates[0].update.$inc.quantity, -2)

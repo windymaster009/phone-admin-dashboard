@@ -221,16 +221,20 @@ router.post('/:id/parts/:partId/receive', requireAuth, allowRoles(...editable), 
     if (Number(alreadyLinked[0]?.quantity || 0) + Number(customerLinked[0]?.quantity || 0) + part.quantity > Number(line.quantity)) throw fail(409, 'Purchase quantity is already allocated')
     const item = await InventoryItem.findOneAndUpdate({ _id: inventoryId, category: { $in: ['SPARE_PART', 'ACCESSORY', 'OTHER'] }, status: 'IN_STOCK', quantity: { $gte: part.quantity } }, { $inc: { quantity: -part.quantity } }, { new: true, session })
     if (!item) throw fail(409, 'Purchased part is not available in stock')
+    const purchasedName = clean(line.name) || clean(item.name)
+    if (!purchasedName) throw fail(409, 'Purchased part has no name')
+    const requestedName = part.name
     part.status = 'RESERVED'
+    part.name = purchasedName
     part.inventoryItem = item._id
     part.sku = item.sku
     part.unitCostUsd = line.costPrice
     part.purchaseTrade = trade._id
     part.reservedAt = new Date()
     if (!current.parts.some((entry) => entry.status === 'ORDERED')) current.status = 'IN_PROGRESS'
-    event(current, req, 'PART_RECEIVED', `${part.quantity} × ${part.name} via ${trade.tradeNo}`)
+    event(current, req, 'PART_RECEIVED', `${part.quantity} × ${purchasedName}${requestedName !== purchasedName ? ` (requested as ${requestedName})` : ''} via ${trade.tradeNo}`)
     await current.save({ session })
-    await audit(req, current, 'PART_RECEIVED', session, { purchaseTradeId: String(trade._id), inventoryItemId: String(item._id), quantity: part.quantity })
+    await audit(req, current, 'PART_RECEIVED', session, { purchaseTradeId: String(trade._id), inventoryItemId: String(item._id), quantity: part.quantity, requestedName, purchasedName })
     return current
   })
   res.json({ repair: job })
