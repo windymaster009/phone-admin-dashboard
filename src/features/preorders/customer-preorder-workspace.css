@@ -1,5 +1,5 @@
-/* Hallmark · component: preorder action card · genre: modern-minimal · theme: existing PhoneFlow
- * pre-emit critique: P5 H5 E5 S5 R5 V4
+/* Hallmark · component: preorder history timeline · genre: modern-minimal · theme: existing PhoneFlow
+ * pre-emit critique: P5 H5 E4 S5 R5 V4 · contrast: pass (40–41)
  */
 .preorder-page { display: grid; gap: var(--space-5); min-width: 0; }
 .preorder-ledger { min-width: 0; padding: 0; overflow: hidden; }
@@ -22,14 +22,23 @@
 .preorder-detail { display: grid; gap: 16px; }
 .preorder-facts, .preorder-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
 .preorder-facts > span { display: grid; gap: 5px; min-width: 0; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow-wrap: anywhere; }
-.preorder-facts small, .preorder-history small { color: var(--muted); }
+.preorder-facts small { color: var(--muted); }
 .preorder-block { display: grid; gap: 12px; min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: var(--radius-md); }
 .preorder-block h3 { margin: 0; font-size: 15px; }
 .preorder-block > .primary-button { justify-self: start; }
 .preorder-block-heading, .preorder-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .preorder-block-heading { justify-content: space-between; }
-.preorder-history { display: grid; gap: 7px; margin: 0; padding-left: 20px; }
-.preorder-history small { display: block; }
+.preorder-history { display: grid; margin: 0; padding: 0; list-style: none; }
+.preorder-history li { position: relative; display: grid; grid-template-columns: 9px minmax(0, 1fr); gap: var(--space-3); min-width: 0; }
+.preorder-history li:not(:last-child) { padding-bottom: var(--space-3); }
+.preorder-history li:not(:last-child)::before { content: ''; position: absolute; top: var(--space-4); bottom: 0; left: var(--space-1); width: 1px; background: var(--border-strong); }
+.preorder-history-marker { width: 9px; height: 9px; margin-top: var(--space-1); border: 2px solid var(--muted-2); border-radius: var(--radius-full); background: var(--surface-solid); }
+.preorder-history li:first-child .preorder-history-marker { border-color: var(--primary); background: var(--primary); }
+.preorder-history-content { min-width: 0; }
+.preorder-history-row { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: var(--space-1) var(--space-3); }
+.preorder-history-row strong { color: var(--text); font-size: var(--text-sm); line-height: 1.4; }
+.preorder-history-row time { color: var(--muted); font-size: var(--text-xs); white-space: nowrap; }
+.preorder-history-content p { margin: var(--space-1) 0 0; color: var(--muted); font-size: var(--text-xs); line-height: 1.5; overflow-wrap: anywhere; }
 .preorder-detail .operation-modal-actions { display: flex; justify-content: flex-end; }
 .operation-modal.preorder-cancel-modal { width: min(520px, 100%); }
 .preorder-cancel-form { display: grid; gap: var(--space-4); padding-top: var(--space-5); }

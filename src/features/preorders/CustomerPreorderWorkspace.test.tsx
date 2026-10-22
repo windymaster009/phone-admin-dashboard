@@ -37,6 +37,31 @@ describe('CustomerPreorderWorkspace', () => {
     expect(within(dialog).getByRole('button', { name: 'Cancel preorder' })).toBeInTheDocument()
   })
 
+  it('shows preorder history as a newest-first timeline with dates and notes', async () => {
+    const withHistory = { ...preorder, events: [
+      { action: 'REQUESTED', at: '2026-10-16T01:00:00.000Z' },
+      { action: 'ORDERED', note: 'Supplier confirmed delivery', at: '2026-10-17T01:00:00.000Z' },
+    ] }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input)
+      if (path.includes('/api/customer-preorders/repair-parts')) return response({ repairParts: [] })
+      if (path.includes('/api/customer-preorders')) return response({ preorders: [withHistory] })
+      if (path.includes('/api/trades')) return response({ trades: [] })
+      throw new Error(`Unexpected request: ${path}`)
+    })
+    const user = userEvent.setup()
+    render(<CustomerPreorderWorkspace />)
+    await user.click(await screen.findByRole('button', { name: /Open preorder PO-20261016-ONE/ }))
+    const dialog = screen.getByRole('dialog', { name: preorder.preorderNo })
+    const history = within(dialog).getByRole('heading', { name: 'History' }).closest('section') as HTMLElement
+    const entries = within(history).getAllByRole('listitem')
+    expect(entries).toHaveLength(2)
+    expect(within(entries[0]).getByText('Ordered')).toBeInTheDocument()
+    expect(within(entries[0]).getByText('Supplier confirmed delivery')).toBeInTheDocument()
+    expect(within(entries[0]).getByText('17 Oct 2026')).toHaveAttribute('datetime', '2026-10-17T01:00:00.000Z')
+    expect(within(entries[1]).getByText('Requested')).toBeInTheDocument()
+  })
+
   it('confirms cancellation in an app dialog before changing the preorder', async () => {
     const cancelRequests: { reason: string }[] = []
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
