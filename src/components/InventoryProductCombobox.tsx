@@ -23,6 +23,14 @@ type InventoryProductComboboxProps<T extends InventorySearchItem> = {
   placeholder?: string
   emptyMessage: string
   errorMessage?: string
+  showAllOnFocus?: boolean
+  searchPrompt?: string
+  noResultsMessage?: string
+  required?: boolean
+  getSearchText?: (item: T) => string
+  getOptionMeta?: (item: T) => string
+  resultNoun?: string
+  clearLabel?: string
   onChange: (itemId: string) => void
 }
 
@@ -36,6 +44,14 @@ export default function InventoryProductCombobox<T extends InventorySearchItem>(
   placeholder = 'Search name, SKU, barcode, or serial…',
   emptyMessage,
   errorMessage,
+  showAllOnFocus = true,
+  searchPrompt,
+  noResultsMessage,
+  required = true,
+  getSearchText,
+  getOptionMeta,
+  resultNoun = 'product',
+  clearLabel = 'Clear product search',
   onChange,
 }: InventoryProductComboboxProps<T>) {
   const selectedItem = items.find((item) => item._id === value)
@@ -51,14 +67,14 @@ export default function InventoryProductCombobox<T extends InventorySearchItem>(
 
   const filteredItems = useMemo(() => {
     const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
-    if (tokens.length === 0) return items.slice(0, 50)
+    if (tokens.length === 0) return showAllOnFocus ? items.slice(0, 50) : []
 
     return items.filter((item) => {
-      const searchableText = [item._id, item.name, item.sku, item.barcode, item.serialNumber, item.brand, item.model, item.category]
-        .filter(Boolean).join(' ').toLowerCase()
+      const searchableText = (getSearchText?.(item) || [item._id, item.name, item.sku, item.barcode, item.serialNumber, item.brand, item.model, item.category]
+        .filter(Boolean).join(' ')).toLowerCase()
       return tokens.every((token) => searchableText.includes(token))
     }).slice(0, 50)
-  }, [items, query])
+  }, [getSearchText, items, query, showAllOnFocus])
 
   useEffect(() => {
     if (selectedItem) setQuery(selectedItem.name)
@@ -94,7 +110,7 @@ export default function InventoryProductCombobox<T extends InventorySearchItem>(
     onChange('')
     setQuery('')
     setOpen(items.length > 0)
-    setActiveIndex(items.length > 0 ? 0 : -1)
+    setActiveIndex(items.length > 0 && showAllOnFocus ? 0 : -1)
     inputRef.current?.focus({ preventScroll: true })
   }
 
@@ -152,7 +168,7 @@ export default function InventoryProductCombobox<T extends InventorySearchItem>(
           type="text"
           role="combobox"
           autoComplete="off"
-          required
+          required={required}
           disabled={loading || items.length === 0}
           value={query}
           aria-autocomplete="list"
@@ -177,11 +193,11 @@ export default function InventoryProductCombobox<T extends InventorySearchItem>(
           }}
           onKeyDown={handleKeyDown}
         />
-        {query && !loading && <button type="button" className="sale-search-clear-btn" aria-label="Clear product search" onClick={clearSelection}><X size={14} /></button>}
+        {query && !loading && <button type="button" className="sale-search-clear-btn" aria-label={clearLabel} onClick={clearSelection}><X size={14} /></button>}
       </div>
 
       {open && !loading && items.length > 0 && <div id={listboxId} role="listbox" aria-label={listLabel} className="sale-product-results-dropdown purchase-product-results-dropdown">
-        {filteredItems.length === 0 ? <div className="sale-search-empty"><Package size={20} aria-hidden="true" /><span>No products match “{query.trim()}”</span></div>
+        {filteredItems.length === 0 ? <div className="sale-search-empty"><Package size={20} aria-hidden="true" /><span>{query.trim() ? noResultsMessage || `No products match “${query.trim()}”` : searchPrompt || 'Type to search'}</span></div>
           : filteredItems.map((item, index) => {
             const isActive = index === activeIndex
             const isSelected = item._id === value
@@ -199,12 +215,12 @@ export default function InventoryProductCombobox<T extends InventorySearchItem>(
               onClick={() => selectItem(item)}
             >
               <span className="sale-option-icon"><Package size={16} aria-hidden="true" /></span>
-              <span className="sale-option-info"><strong>{item.name}</strong><small>{[item.sku ? `SKU: ${item.sku}` : '', item.barcode ? `Barcode: ${item.barcode}` : '', item.serialNumber ? `SN: ${item.serialNumber}` : ''].filter(Boolean).join(' · ')}</small></span>
+              <span className="sale-option-info"><strong>{item.name}</strong><small>{getOptionMeta ? getOptionMeta(item) : [item.sku ? `SKU: ${item.sku}` : '', item.barcode ? `Barcode: ${item.barcode}` : '', item.serialNumber ? `SN: ${item.serialNumber}` : ''].filter(Boolean).join(' · ')}</small></span>
               <span className="sale-option-meta"><span className="sale-option-stock">Qty {item.quantity}</span>{isSelected && <span className="purchase-option-selected"><CheckCircle2 size={13} /> Selected</span>}</span>
             </button>
           })}
       </div>}
-      <span className="sr-only" aria-live="polite">{open ? `${filteredItems.length} product${filteredItems.length === 1 ? '' : 's'} found` : ''}</span>
+      <span className="sr-only" aria-live="polite">{open ? `${filteredItems.length} ${resultNoun}${filteredItems.length === 1 ? '' : 's'} found` : ''}</span>
     </div>
     {errorMessage && <small id={errorId}>{errorMessage}</small>}
     {!errorMessage && !loading && items.length === 0 && <small className="purchase-search-helper">{emptyMessage}</small>}

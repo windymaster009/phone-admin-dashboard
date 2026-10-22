@@ -110,7 +110,6 @@ function RepairPurchasePicker({ part, repairCreatedAt, purchases, loading, busy,
   part: RepairPart; repairCreatedAt: string; purchases: Purchase[]; loading: boolean; busy: boolean
   onRefresh: () => void; onReceive: (purchaseTradeId: string, inventoryItemId: string) => void
 }) {
-  const [search, setSearch] = useState('')
   const [selectedKey, setSelectedKey] = useState('')
   const [confirmed, setConfirmed] = useState(false)
   const options = purchases.flatMap((trade) => trade.items.map((line, index) => {
@@ -118,22 +117,20 @@ function RepairPurchasePicker({ part, repairCreatedAt, purchases, loading, busy,
     return { key: `${trade._id}:${inventoryItemId}:${index}`, trade, line, inventoryItemId,
       supplierName: trade.supplier && typeof trade.supplier === 'object' ? trade.supplier.name : trade.sellerSnapshot?.name || '' }
   })).filter((option) => option.inventoryItemId && option.line.quantity >= part.quantity && new Date(option.trade.createdAt) >= new Date(repairCreatedAt))
+  const purchaseItems = options.map((option) => ({
+    _id: option.key, name: option.line.name,
+    sku: typeof option.line.inventoryItem === 'object' ? option.line.inventoryItem?.sku || '' : '',
+    category: 'PURCHASE', quantity: option.line.quantity, tradeNo: option.trade.tradeNo,
+    supplierName: option.supplierName, purchasedAt: option.trade.createdAt,
+  }))
   const selected = options.find((option) => option.key === selectedKey)
-  const term = search.trim().toLowerCase()
-  const matches = term && !selected ? options.filter((option) => [
-    option.trade.tradeNo, option.line.name, option.supplierName,
-    typeof option.line.inventoryItem === 'object' ? option.line.inventoryItem?.sku || '' : '',
-  ].some((value) => value.toLowerCase().includes(term))).slice(0, 30) : []
   const namesDiffer = selected && selected.line.name.trim().toLowerCase() !== part.name.trim().toLowerCase()
 
   return <div className="repair-purchase-step">
     <div className="repair-purchase-step-heading"><strong>Part arrived?</strong><span>1. Record it in Buy & Sell → New purchase. 2. Find that purchase below.</span></div>
     <div className="repair-purchase-step-actions"><button type="button" className="ghost-button" onClick={() => window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'purchase' } }))}>Open New purchase</button><button type="button" className="ghost-button" onClick={onRefresh}><RefreshCcw size={15} />Refresh purchases</button></div>
-    <label className="repair-purchase-field">Find the purchased part
-      <input type="search" value={search} onChange={(event) => { setSearch(event.target.value); setSelectedKey(''); setConfirmed(false) }} placeholder="Type purchase number, product, or supplier" aria-label={`Find purchase for ${part.name}`} />
-    </label>
-    {!term && <p className="repair-help">Search the purchase recorded when this part arrived. Unrelated purchases are hidden until you search.</p>}
-    {term && !selected && <div className="repair-purchase-results">{matches.map((option) => <button type="button" key={option.key} onClick={() => { setSelectedKey(option.key); setConfirmed(false) }}><strong>{option.line.name}</strong><small>{option.trade.tradeNo} · {option.supplierName || 'Supplier not recorded'} · Qty {option.line.quantity} · {dateText(option.trade.createdAt)}</small></button>)}{matches.length === 0 && <p className="repair-help">{loading ? 'Loading purchases…' : 'No matching completed purchase after this repair began. Record the arrival in New purchase, then refresh here.'}</p>}</div>}
+    <InventoryProductCombobox id={`repair-purchase-${part._id}`} items={purchaseItems} value={selectedKey} loading={loading} label={`Find purchase for ${part.name}`} listLabel={`Recorded purchases for ${part.name}`} placeholder="Type purchase number, product, or supplier" emptyMessage="No eligible completed purchases yet" searchPrompt="Type a purchase number, product, or supplier" noResultsMessage="No matching purchase. Record the arrival in New purchase, then refresh here." showAllOnFocus={false} required={false} resultNoun="purchase" clearLabel="Clear purchase search" getSearchText={(item) => [item.tradeNo, item.name, item.sku, item.supplierName].join(' ')} getOptionMeta={(item) => `${item.tradeNo} · ${item.supplierName || 'Supplier not recorded'} · ${dateText(item.purchasedAt)}`} onChange={(key) => { setSelectedKey(key); setConfirmed(false) }} />
+    {!selected && <p className="repair-help">Search the purchase recorded when this part arrived. Earlier or incomplete purchases are not eligible.</p>}
     {selected && <div className="repair-purchase-selected"><strong>Check before reserving</strong><span>Requested: {part.quantity} × {part.name} · {part.supplierName || 'Supplier not recorded'}</span><span>Purchased: {selected.line.quantity} × {selected.line.name} · {selected.supplierName || 'Supplier not recorded'} · {selected.trade.tradeNo}</span>{namesDiffer && <p className="repair-purchase-warning">Product names differ. Confirm this is the correct part before continuing.</p>}<label className="repair-purchase-confirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />I checked that this purchase contains the part for this repair.</label><div className="repair-purchase-step-actions"><button type="button" className="primary-button" disabled={busy || !confirmed} onClick={() => onReceive(selected.trade._id, selected.inventoryItemId)}>Receive & reserve this part</button><button type="button" className="ghost-button" onClick={() => { setSelectedKey(''); setConfirmed(false) }}>Choose another</button></div></div>}
   </div>
 }

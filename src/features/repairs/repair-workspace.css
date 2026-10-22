@@ -32,18 +32,11 @@
 .repair-part--ordered { align-items: stretch; flex-direction: column; }
 .repair-part--ordered .repair-part-summary { flex: 0 1 auto; }
 .repair-part-controls { display: grid; flex: 1 1 0; gap: var(--space-2); min-width: 0; }
-.repair-purchase-field { display: grid; gap: var(--space-1); color: var(--muted); font-size: 12px; font-weight: 700; }
 .repair-purchase-step { display: grid; gap: var(--space-2); padding-top: var(--space-2); border-top: 1px solid var(--border); }
 .repair-purchase-step-heading { display: grid; gap: 3px; }
 .repair-purchase-step-heading span { color: var(--muted); font-size: 12px; line-height: 1.5; }
 .repair-purchase-step-actions { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .repair-purchase-step-actions button { min-height: 36px; }
-.repair-purchase-results { display: grid; max-height: 220px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
-.repair-purchase-results button { display: grid; gap: 4px; padding: 10px 12px; border: 0; border-bottom: 1px solid var(--border); color: var(--text); background: var(--input-bg); text-align: left; }
-.repair-purchase-results button:last-of-type { border-bottom: 0; }
-.repair-purchase-results button:hover, .repair-purchase-results button:focus-visible { background: var(--surface-hover); }
-.repair-purchase-results small { color: var(--muted); font-size: 11px; }
-.repair-purchase-results .repair-help { padding: 12px; }
 .repair-purchase-selected { display: grid; gap: 7px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-soft); }
 .repair-purchase-selected > span { color: var(--muted); font-size: 12px; }
 .repair-purchase-warning { margin: 0; color: var(--orange); font-size: 12px; }
