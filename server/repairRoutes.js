@@ -193,6 +193,7 @@ router.post('/:id/parts/preorder', requireAuth, allowRoles(...editable), asyncRo
 }))
 
 router.post('/:id/parts/:partId/receive', requireAuth, allowRoles(...editable), asyncRoute(async (req, res) => {
+  if (req.body.confirmedMatch !== true) throw fail(400, 'Confirm the purchased item matches the repair part')
   const tradeId = requireId(req.body.purchaseTradeId, 'Purchase')
   const inventoryId = requireId(req.body.inventoryItemId, 'Inventory item')
   const job = await transaction(async (session) => {

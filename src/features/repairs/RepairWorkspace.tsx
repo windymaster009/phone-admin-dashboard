@@ -19,7 +19,7 @@ type PartStatus = 'ORDERED' | 'RESERVED' | 'INSTALLED' | 'RELEASED' | 'CANCELLED
 type RepairPart = { _id: string; source: 'STOCK' | 'PREORDER'; status: PartStatus; name: string; quantity: number; sku?: string; supplierName?: string; purchaseTrade?: string; returnStockStatus?: 'IN_STOCK' | 'ARCHIVED' }
 type Repair = { _id: string; repairNo: string; customerName: string; customerPhone?: string; device: string; imeiOrSerial?: string; issue: string; status: RepairStatus; parts: RepairPart[]; events: { action: string; note?: string; at: string }[]; createdAt: string }
 type StockItem = { _id: string; name: string; sku: string; quantity: number; category: string; status: string }
-type Purchase = { _id: string; tradeNo: string; type: string; status: string; createdAt: string; items: { inventoryItem?: { _id: string; name: string; sku: string } | string; name: string; quantity: number }[] }
+type Purchase = { _id: string; tradeNo: string; type: string; status: string; createdAt: string; supplier?: { name: string } | string; sellerSnapshot?: { name?: string }; items: { inventoryItem?: { _id: string; name: string; sku: string } | string; name: string; quantity: number }[] }
 
 const nextStatuses: Record<RepairStatus, { status: RepairStatus; label: string }[]> = {
   RECEIVED: [{ status: 'DIAGNOSIS', label: 'Start diagnosis' }],
@@ -106,6 +106,38 @@ function CreateRepair({ onClose, onCreated }: { onClose: () => void; onCreated: 
   </OperationModalShell>
 }
 
+function RepairPurchasePicker({ part, repairCreatedAt, purchases, loading, busy, onRefresh, onReceive }: {
+  part: RepairPart; repairCreatedAt: string; purchases: Purchase[]; loading: boolean; busy: boolean
+  onRefresh: () => void; onReceive: (purchaseTradeId: string, inventoryItemId: string) => void
+}) {
+  const [search, setSearch] = useState('')
+  const [selectedKey, setSelectedKey] = useState('')
+  const [confirmed, setConfirmed] = useState(false)
+  const options = purchases.flatMap((trade) => trade.items.map((line, index) => {
+    const inventoryItemId = typeof line.inventoryItem === 'string' ? line.inventoryItem : line.inventoryItem?._id || ''
+    return { key: `${trade._id}:${inventoryItemId}:${index}`, trade, line, inventoryItemId,
+      supplierName: trade.supplier && typeof trade.supplier === 'object' ? trade.supplier.name : trade.sellerSnapshot?.name || '' }
+  })).filter((option) => option.inventoryItemId && option.line.quantity >= part.quantity && new Date(option.trade.createdAt) >= new Date(repairCreatedAt))
+  const selected = options.find((option) => option.key === selectedKey)
+  const term = search.trim().toLowerCase()
+  const matches = term && !selected ? options.filter((option) => [
+    option.trade.tradeNo, option.line.name, option.supplierName,
+    typeof option.line.inventoryItem === 'object' ? option.line.inventoryItem?.sku || '' : '',
+  ].some((value) => value.toLowerCase().includes(term))).slice(0, 30) : []
+  const namesDiffer = selected && selected.line.name.trim().toLowerCase() !== part.name.trim().toLowerCase()
+
+  return <div className="repair-purchase-step">
+    <div className="repair-purchase-step-heading"><strong>Part arrived?</strong><span>1. Record it in Buy & Sell → New purchase. 2. Find that purchase below.</span></div>
+    <div className="repair-purchase-step-actions"><button type="button" className="ghost-button" onClick={() => window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'purchase' } }))}>Open New purchase</button><button type="button" className="ghost-button" onClick={onRefresh}><RefreshCcw size={15} />Refresh purchases</button></div>
+    <label className="repair-purchase-field">Find the purchased part
+      <input type="search" value={search} onChange={(event) => { setSearch(event.target.value); setSelectedKey(''); setConfirmed(false) }} placeholder="Type purchase number, product, or supplier" aria-label={`Find purchase for ${part.name}`} />
+    </label>
+    {!term && <p className="repair-help">Search the purchase recorded when this part arrived. Unrelated purchases are hidden until you search.</p>}
+    {term && !selected && <div className="repair-purchase-results">{matches.map((option) => <button type="button" key={option.key} onClick={() => { setSelectedKey(option.key); setConfirmed(false) }}><strong>{option.line.name}</strong><small>{option.trade.tradeNo} · {option.supplierName || 'Supplier not recorded'} · Qty {option.line.quantity} · {dateText(option.trade.createdAt)}</small></button>)}{matches.length === 0 && <p className="repair-help">{loading ? 'Loading purchases…' : 'No matching completed purchase after this repair began. Record the arrival in New purchase, then refresh here.'}</p>}</div>}
+    {selected && <div className="repair-purchase-selected"><strong>Check before reserving</strong><span>Requested: {part.quantity} × {part.name} · {part.supplierName || 'Supplier not recorded'}</span><span>Purchased: {selected.line.quantity} × {selected.line.name} · {selected.supplierName || 'Supplier not recorded'} · {selected.trade.tradeNo}</span>{namesDiffer && <p className="repair-purchase-warning">Product names differ. Confirm this is the correct part before continuing.</p>}<label className="repair-purchase-confirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />I checked that this purchase contains the part for this repair.</label><div className="repair-purchase-step-actions"><button type="button" className="primary-button" disabled={busy || !confirmed} onClick={() => onReceive(selected.trade._id, selected.inventoryItemId)}>Receive & reserve this part</button><button type="button" className="ghost-button" onClick={() => { setSelectedKey(''); setConfirmed(false) }}>Choose another</button></div></div>}
+  </div>
+}
+
 function RepairDetail({ repair, onClose, onChanged }: { repair: Repair; onClose: () => void; onChanged: (repair: Repair) => void }) {
   const [stock, setStock] = useState<StockItem[]>([])
   const [purchases, setPurchases] = useState<Purchase[]>([])
@@ -115,7 +147,6 @@ function RepairDetail({ repair, onClose, onChanged }: { repair: Repair; onClose:
   const [partName, setPartName] = useState('')
   const [supplierName, setSupplierName] = useState('')
   const [expectedAt, setExpectedAt] = useState('')
-  const [receipts, setReceipts] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [statusDialog, setStatusDialog] = useState<RepairConfirmation | null>(null)
@@ -168,7 +199,6 @@ function RepairDetail({ repair, onClose, onChanged }: { repair: Repair; onClose:
   const selectedStock = stock.find((item) => item._id === stockId)
   const reserveQuantity = Number(quantity)
   const canReserve = Boolean(selectedStock && Number.isInteger(reserveQuantity) && reserveQuantity > 0 && reserveQuantity <= selectedStock.quantity)
-  const validPurchases = (part: RepairPart) => purchases.flatMap((trade) => trade.items.filter((line) => line.quantity >= part.quantity && line.inventoryItem).map((line) => ({ key: `${trade._id}:${typeof line.inventoryItem === 'string' ? line.inventoryItem : line.inventoryItem?._id}`, trade, line, inventoryId: typeof line.inventoryItem === 'string' ? line.inventoryItem : line.inventoryItem?._id || '' }))).filter((option) => new Date(option.trade.createdAt) >= new Date(repair.createdAt))
   const statusCopy = statusDialog === 'CANCELLED'
     ? { title: 'Cancel repair', description: 'Unused reserved parts return to stock. Installed parts do not.', label: 'Reason for cancellation', placeholder: 'Explain why this repair is cancelled', action: 'Cancel repair' }
     : statusDialog === 'COMPLETED'
@@ -191,11 +221,8 @@ function RepairDetail({ repair, onClose, onChanged }: { repair: Repair; onClose:
         {repair.parts.map((part) => <div className={`repair-part${part.status === 'ORDERED' ? ' repair-part--ordered' : ''}`} key={part._id}>
           <div className="repair-part-summary"><strong>{part.quantity} × {part.name}</strong><small>{part.source === 'PREORDER' ? `Preorder · ${part.supplierName || 'Supplier'} · ${titleStatus(part.status)}` : `Stock · ${part.sku || ''} · ${titleStatus(part.status)}`}</small></div>
           {(part.status === 'ORDERED' || part.status === 'RESERVED') && <div className="repair-part-controls">
-            {part.status === 'ORDERED' && <label className="repair-purchase-field">Recorded purchase
-              <select aria-label={`Purchase for ${part.name}`} value={receipts[part._id] || ''} onChange={(event) => setReceipts((current) => ({ ...current, [part._id]: event.target.value }))}><option value="">Select recorded purchase + item</option>{validPurchases(part).map((option) => <option key={option.key} value={option.key}>{option.trade.tradeNo} · {option.line.name} · Qty {option.line.quantity}</option>)}</select>
-            </label>}
+            {part.status === 'ORDERED' && <RepairPurchasePicker part={part} repairCreatedAt={repair.createdAt} purchases={purchases} loading={sourcesLoading} busy={busy} onRefresh={() => void refreshSources()} onReceive={(purchaseTradeId, inventoryItemId) => void post(`/parts/${part._id}/receive`, { purchaseTradeId, inventoryItemId, confirmedMatch: true })} />}
             <div className="repair-actions">
-              {part.status === 'ORDERED' && <button className="ghost-button" type="button" disabled={busy || !receipts[part._id]} onClick={() => { const [purchaseTradeId, inventoryItemId] = receipts[part._id].split(':'); void post(`/parts/${part._id}/receive`, { purchaseTradeId, inventoryItemId }) }}>Receive & reserve</button>}
               {part.status === 'RESERVED' && repair.status === 'IN_PROGRESS' && <button className="primary-button" type="button" disabled={busy} onClick={() => void post(`/parts/${part._id}/install`)}>Mark installed</button>}
               <button className="ghost-button" type="button" disabled={busy} onClick={() => void post(`/parts/${part._id}/release`)}>Release unused</button>
             </div>
@@ -205,7 +232,7 @@ function RepairDetail({ repair, onClose, onChanged }: { repair: Repair; onClose:
         {repair.parts.some((part) => part.source === 'PREORDER') && <p className="repair-help">Preorders are internal records. Contact the supplier separately to place or cancel the order.</p>}
       </section>
       {canAddParts && <div className="repair-add-grid"><section className="repair-block"><h3>Use part from stock</h3><InventoryProductCombobox id={`repair-${repair._id}`} items={stock} value={stockId} loading={sourcesLoading} label="Available product" listLabel="Available stock parts" placeholder="Search part name or SKU…" emptyMessage="No available stock parts" onChange={setStockId} />{selectedStock && <InventorySelectionSummary item={selectedStock} afterLabel="After reserve" afterQuantity={selectedStock.quantity - (Number.isInteger(reserveQuantity) && reserveQuantity > 0 ? reserveQuantity : 0)} />}<label>Quantity<input type="number" min="1" max={selectedStock?.quantity} step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>{selectedStock && reserveQuantity > selectedStock.quantity && <p className="repair-help" role="alert">Only {selectedStock.quantity} available. Lower the quantity to reserve this part.</p>}<button type="button" className="primary-button" disabled={busy || !canReserve} onClick={() => void post('/parts/reserve', { inventoryItemId: stockId, quantity: reserveQuantity }).then((saved) => { if (saved) setStockId('') })}>Reserve stock part</button></section>
-        <section className="repair-block"><h3>Part not in stock? Preorder</h3><label>Part needed<input maxLength={160} value={partName} onChange={(event) => setPartName(event.target.value)} /></label><label>Supplier<input maxLength={120} value={supplierName} onChange={(event) => setSupplierName(event.target.value)} /></label><label>Expected date (optional)<input type="date" value={expectedAt} onChange={(event) => setExpectedAt(event.target.value)} /></label><button type="button" className="primary-button" disabled={busy || !partName.trim() || !supplierName.trim()} onClick={() => void post('/parts/preorder', { name: partName, supplierName, quantity: Number(quantity), expectedAt })}><PackagePlus size={16} />Add preorder</button><p className="repair-help">On arrival, record it with New purchase, then link that purchase above. A preorder alone does not change stock or finances.</p><button type="button" className="ghost-button" onClick={() => window.dispatchEvent(new CustomEvent('phoneflow:open-operation', { detail: { kind: 'purchase' } }))}>Open New purchase</button></section></div>}
+        <section className="repair-block"><h3>Part not in stock? Preorder</h3><label>Part needed<input maxLength={160} value={partName} onChange={(event) => setPartName(event.target.value)} /></label><label>Supplier<input maxLength={120} value={supplierName} onChange={(event) => setSupplierName(event.target.value)} /></label><label>Expected date (optional)<input type="date" value={expectedAt} onChange={(event) => setExpectedAt(event.target.value)} /></label><button type="button" className="primary-button" disabled={busy || !partName.trim() || !supplierName.trim()} onClick={() => void post('/parts/preorder', { name: partName, supplierName, quantity: Number(quantity), expectedAt })}><PackagePlus size={16} />Add preorder</button><p className="repair-help">This records the need only; it does not change stock or finances. When the part arrives, use its “Part arrived?” step above.</p></section></div>}
       <section className="repair-block repair-history-block"><h3>History</h3><div className="repair-history-groups">{historyGroups.map((group, groupIndex) => <div className="repair-history-group" key={`${group.date}-${groupIndex}`}><time className="repair-history-date" dateTime={group.entries[0].at}>{group.date}</time><ol className="repair-history" reversed>{group.entries.map((entry, index) => <li key={`${entry.at}-${index}`}><strong>{titleStatus(entry.action)}</strong>{entry.note && <span>{entry.note}</span>}</li>)}</ol></div>)}</div></section>
     </div>
   </OperationModalShell>

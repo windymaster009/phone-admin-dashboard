@@ -66,7 +66,7 @@ describe('RepairWorkspace', () => {
     expect(within(dialog).getByRole('button', { name: 'Reserve stock part' })).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Add preorder' })).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Mark installed' })).toBeInTheDocument()
-    expect(within(dialog).getByText(/A preorder alone does not change stock or finances/)).toBeInTheDocument()
+    expect(within(dialog).getByText(/This records the need only; it does not change stock or finances/)).toBeInTheDocument()
     expect(within(dialog).getAllByRole('button', { name: 'Close' })).toHaveLength(1)
     await user.click(within(dialog).getByRole('button', { name: 'Close' }))
     expect(screen.queryByRole('dialog', { name: repair.repairNo })).not.toBeInTheDocument()
@@ -136,6 +136,46 @@ describe('RepairWorkspace', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Reserve stock part' }))
     await waitFor(() => expect(writes).toHaveLength(1))
     expect(writes[0]).toMatchObject({ inventoryItemId: 'stock-screen', quantity: 1 })
+  })
+
+  it('hides unrelated purchases until searched and requires confirmation before receiving', async () => {
+    const orderedRepair = { ...repair, status: 'WAITING_PARTS', parts: [{ _id: 'part-1', source: 'PREORDER', status: 'ORDERED', name: 'Screen', quantity: 1, supplierName: 'Parts shop' }] }
+    const writes: Record<string, unknown>[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const path = String(input)
+      if (path.includes('/api/repairs/repair-1/parts/part-1/receive')) {
+        writes.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+        return response({ repair: orderedRepair })
+      }
+      if (path.includes('/api/repairs')) return response({ repairs: [orderedRepair] })
+      if (path.includes('/api/inventory')) return response({ items: [] })
+      if (path.includes('/api/trades')) return response({ trades: [
+        { _id: 'buy-1', tradeNo: 'BY-UNRELATED', type: 'BUY', status: 'COMPLETED', createdAt: '2026-10-21T01:00:00.000Z', items: [{ inventoryItem: 'item-1', name: 'Phone battery', quantity: 1 }] },
+        { _id: 'buy-2', tradeNo: 'BY-SCREEN', type: 'BUY', status: 'COMPLETED', createdAt: '2026-10-21T02:00:00.000Z', supplier: { name: 'Parts shop' }, items: [{ inventoryItem: 'item-2', name: 'Screen Pro', quantity: 1 }] },
+      ] })
+      throw new Error(`Unexpected request: ${path}`)
+    })
+
+    const user = userEvent.setup()
+    render(<RepairWorkspace />)
+    await user.click(await screen.findByRole('button', { name: /Vivo Y02s/ }))
+    const dialog = await screen.findByRole('dialog', { name: repair.repairNo })
+    const search = within(dialog).getByRole('searchbox', { name: 'Find purchase for Screen' })
+    expect(within(dialog).queryByRole('button', { name: /BY-UNRELATED/ })).not.toBeInTheDocument()
+    await user.type(search, 'missing part')
+    expect(within(dialog).getByText(/No matching completed purchase after this repair began/)).toBeInTheDocument()
+    await user.clear(search)
+    await user.type(search, 'BY-SCREEN')
+    expect(within(dialog).queryByRole('button', { name: /BY-UNRELATED/ })).not.toBeInTheDocument()
+    await user.click(within(dialog).getByRole('button', { name: /BY-SCREEN/ }))
+    expect(within(dialog).getByText(/Product names differ/)).toBeInTheDocument()
+    const receive = within(dialog).getByRole('button', { name: 'Receive & reserve this part' })
+    expect(receive).toBeDisabled()
+    expect(writes).toHaveLength(0)
+    await user.click(within(dialog).getByRole('checkbox', { name: /I checked that this purchase contains the part/ }))
+    await user.click(receive)
+    await waitFor(() => expect(writes).toHaveLength(1))
+    expect(writes[0]).toMatchObject({ purchaseTradeId: 'buy-2', inventoryItemId: 'item-2', confirmedMatch: true })
   })
 
   it('records customer approval through the in-app dialog only after a note is entered', async () => {
