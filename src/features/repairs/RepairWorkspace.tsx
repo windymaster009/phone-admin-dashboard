@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { ClipboardList, PackagePlus, RefreshCcw, Wrench } from 'lucide-react'
+import { ChevronDown, ClipboardList, PackagePlus, RefreshCcw, Wrench } from 'lucide-react'
 import { api } from '../../lib/api'
 import SectionHeader from '../../components/SectionHeader'
 import FilterToolbar from '../../components/FilterToolbar'
@@ -144,6 +144,7 @@ function RepairDetail({ repair, onClose, onChanged }: { repair: Repair; onClose:
   const [partName, setPartName] = useState('')
   const [supplierName, setSupplierName] = useState('')
   const [expectedAt, setExpectedAt] = useState('')
+  const [expandedParts, setExpandedParts] = useState<Record<string, boolean>>({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [statusDialog, setStatusDialog] = useState<RepairConfirmation | null>(null)
@@ -215,16 +216,21 @@ function RepairDetail({ repair, onClose, onChanged }: { repair: Repair; onClose:
       <section className="repair-block repair-progress-block"><h3>Progress</h3><div className="repair-actions">{nextStatuses[repair.status].map((next) => <button type="button" className="primary-button" key={next.status} disabled={busy || (next.status === 'IN_PROGRESS' && repair.parts.some((part) => part.status === 'ORDERED')) || (next.status === 'QUALITY_CHECK' && repair.parts.some((part) => part.status === 'RESERVED'))} onClick={() => void changeStatus(next.status)}>{next.label}</button>)}{!['COMPLETED', 'CANCELLED'].includes(repair.status) && <button type="button" className="danger-button" disabled={busy} onClick={() => void changeStatus('CANCELLED')}>Cancel repair</button>}</div></section>
       <section className="repair-block"><div className="repair-block-heading"><h3>Parts</h3><button type="button" className="ghost-button" onClick={() => void refreshSources()}><RefreshCcw size={15} />Refresh stock & purchases</button></div><p className="repair-help">Reserved parts are removed from available stock. Installed parts stay consumed. Unused parts return to stock if the repair is cancelled.</p>
         {repair.parts.length === 0 && <p className="repair-help">No parts added yet.</p>}
-        {repair.parts.map((part) => <div className={`repair-part${part.status === 'ORDERED' ? ' repair-part--ordered' : ''}`} key={part._id}>
-          <div className="repair-part-summary"><strong>{part.quantity} × {part.name}</strong><small>{part.source === 'PREORDER' ? `Preorder · ${part.supplierName || 'Supplier'} · ${titleStatus(part.status)}` : `Stock · ${part.sku || ''} · ${titleStatus(part.status)}`}</small></div>
-          {(part.status === 'ORDERED' || part.status === 'RESERVED') && <div className="repair-part-controls">
+        {repair.parts.map((part) => {
+          const manageable = part.status === 'ORDERED' || part.status === 'RESERVED'
+          const expanded = Boolean(expandedParts[part._id])
+          return <div className={`repair-part${part.status === 'ORDERED' ? ' repair-part--ordered' : ''}`} key={part._id}>
+          <div className="repair-part-heading"><div className="repair-part-summary"><strong>{part.quantity} × {part.name}</strong><small>{part.source === 'PREORDER' ? `Preorder · ${part.supplierName || 'Supplier'} · ${titleStatus(part.status)}` : `Stock · ${part.sku || ''} · ${titleStatus(part.status)}`}</small></div>
+            {manageable && <button type="button" className="ghost-button repair-part-toggle" aria-expanded={expanded} aria-controls={`repair-part-controls-${part._id}`} onClick={() => setExpandedParts((current) => ({ ...current, [part._id]: !current[part._id] }))}>{expanded ? 'Minimize' : part.status === 'ORDERED' ? 'Manage arrival' : 'Manage part'}<ChevronDown size={16} aria-hidden="true" /></button>}
+          </div>
+          {manageable && <div className="repair-part-controls" id={`repair-part-controls-${part._id}`} hidden={!expanded}>
             {part.status === 'ORDERED' && <RepairPurchasePicker part={part} repairCreatedAt={repair.createdAt} purchases={purchases} loading={sourcesLoading} busy={busy} onRefresh={() => void refreshSources()} onReceive={(purchaseTradeId, inventoryItemId) => void post(`/parts/${part._id}/receive`, { purchaseTradeId, inventoryItemId, confirmedMatch: true })} />}
             <div className="repair-actions">
               {part.status === 'RESERVED' && repair.status === 'IN_PROGRESS' && <button className="primary-button" type="button" disabled={busy} onClick={() => void post(`/parts/${part._id}/install`)}>Mark installed</button>}
               <button className="ghost-button" type="button" disabled={busy} onClick={() => void post(`/parts/${part._id}/release`)}>Release unused</button>
             </div>
           </div>}
-        </div>)}
+        </div>})}
         {repair.parts.some((part) => part.returnStockStatus === 'ARCHIVED') && <p className="repair-help">A released part returned to an archived stock record. Its quantity is preserved; reopen that item in Stock Information before selling it.</p>}
         {repair.parts.some((part) => part.source === 'PREORDER') && <p className="repair-help">Preorders are internal records. Contact the supplier separately to place or cancel the order.</p>}
       </section>
