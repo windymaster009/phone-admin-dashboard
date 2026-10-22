@@ -93,6 +93,7 @@ describe('CustomerPreorderWorkspace', () => {
     const dialog = screen.getByRole('dialog', { name: preorder.preorderNo })
     const search = await within(dialog).findByRole('combobox', { name: 'Find purchase for Vivo Y02s case' })
     await waitFor(() => expect(search).toBeEnabled())
+    expect(within(dialog).getByRole('button', { name: 'Mark arrived' })).toBeDisabled()
     expect(within(dialog).queryByRole('combobox', { name: 'Purchased product' })).not.toBeInTheDocument()
     await user.click(search)
     const results = within(dialog).getByRole('listbox', { name: 'Recorded purchases for Vivo Y02s case' })
@@ -109,6 +110,24 @@ describe('CustomerPreorderWorkspace', () => {
     await user.click(receive)
     await waitFor(() => expect(writes).toEqual([{ purchaseTradeId: 'buy-2', inventoryItemId: 'item-2' }]))
     expect(await within(dialog).findByRole('heading', { name: 'Customer pickup' })).toBeInTheDocument()
+  })
+
+  it('shows the arrival action even when no completed purchase is eligible yet', async () => {
+    const ordered = { ...preorder, status: 'ORDERED' }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input)
+      if (path.includes('/api/customer-preorders/repair-parts')) return response({ repairParts: [] })
+      if (path.includes('/api/customer-preorders')) return response({ preorders: [ordered] })
+      if (path.includes('/api/trades')) return response({ trades: [] })
+      throw new Error(`Unexpected request: ${path}`)
+    })
+    const user = userEvent.setup()
+    render(<CustomerPreorderWorkspace />)
+    await user.click(await screen.findByRole('button', { name: /Open preorder PO-20261016-ONE/ }))
+    const dialog = screen.getByRole('dialog', { name: preorder.preorderNo })
+    const search = within(dialog).getByRole('combobox', { name: 'Find purchase for Vivo Y02s case' })
+    await waitFor(() => expect(search).toHaveAttribute('placeholder', 'No eligible completed purchases yet'))
+    expect(within(dialog).getByRole('button', { name: 'Mark arrived' })).toBeDisabled()
   })
 
   it('shows preorder history as a newest-first timeline with dates and notes', async () => {
