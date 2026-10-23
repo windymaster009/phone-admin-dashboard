@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { AlertTriangle, ChevronDown, PackageCheck, RefreshCcw, ShoppingBag, Wrench } from 'lucide-react'
+import { AlertTriangle, ChevronDown, PackageCheck, Printer, RefreshCcw, ShoppingBag, Wrench } from 'lucide-react'
 import { api } from '../../lib/api'
 import { dateText, titleStatus } from '../../lib/presentation'
 import SectionHeader from '../../components/SectionHeader'
@@ -10,6 +10,8 @@ import LoadingState from '../../components/LoadingState'
 import OperationActionCard from '../../components/OperationActionCard'
 import RecordListRow from '../../components/RecordListRow'
 import InventoryProductCombobox from '../../components/InventoryProductCombobox'
+import { printReceiptWindow } from '../receipts/receipt-print'
+import { preorderConfirmationMarkup } from './PreorderConfirmation'
 import './customer-preorder-workspace.css'
 
 type PreorderStatus = 'REQUESTED' | 'ORDERED' | 'ARRIVED' | 'COMPLETED' | 'CANCELLED'
@@ -126,6 +128,7 @@ function PreorderDetail({ preorder, onClose, onChanged }: { preorder: Preorder; 
   const [purchaseConfirmed, setPurchaseConfirmed] = useState(false)
   const [saleSelection, setSaleSelection] = useState('')
   const [busy, setBusy] = useState(false)
+  const [printing, setPrinting] = useState(false)
   const [error, setError] = useState('')
   const [cancelOpen, setCancelOpen] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
@@ -180,6 +183,15 @@ function PreorderDetail({ preorder, onClose, onChanged }: { preorder: Preorder; 
     if (reason.length < 3) return
     if (await act('cancel', { reason })) closeCancellation()
   }
+  async function printPreorder() {
+    if (printing) return
+    setPrinting(true); setError('')
+    try {
+      const opened = await printReceiptWindow({ markup: preorderConfirmationMarkup(preorder), layout: 'THERMAL', title: preorder.preorderNo })
+      if (!opened) setError('The browser blocked the print window. Allow pop-ups and try again.')
+    } catch (reason) { setError(errorMessage(reason)) }
+    finally { setPrinting(false) }
+  }
   return <>
   <OperationModalShell title={preorder.preorderNo} eyebrow="Customer preorder" description={`${preorder.customerName} · ${preorder.productName}`} icon={<PackageCheck size={21} />} busy={busy} error={cancelOpen ? '' : error} onDismissError={() => setError('')} onClose={onClose} dismissOnEscape={!cancelOpen} inactive={cancelOpen} className="preorder-detail-modal">
     <div className="operation-form preorder-detail">
@@ -199,7 +211,7 @@ function PreorderDetail({ preorder, onClose, onChanged }: { preorder: Preorder; 
       {preorder.status === 'CANCELLED' && <p className="preorder-help">Cancelled: {preorder.cancellationReason}. Any previously purchased product remains in stock; the purchase record is not reversed.</p>}
       {!['COMPLETED', 'CANCELLED'].includes(preorder.status) && <section className="preorder-block"><div className="preorder-block-heading"><h3>Customer changed their mind?</h3><button type="button" className="danger-button" disabled={busy} onClick={() => { setError(''); setCancelReason(''); setCancelOpen(true) }}>Cancel preorder</button></div><p className="preorder-help">Cancelling does not refund money or contact the supplier. No deposit is handled in this workflow.</p></section>}
       <section className="preorder-block"><h3>History</h3><ol className="preorder-history">{[...preorder.events].reverse().map((entry, index) => <li key={`${entry.at}-${index}`}><span className="preorder-history-marker" aria-hidden="true" /><div className="preorder-history-content"><div className="preorder-history-row"><strong>{titleStatus(entry.action)}</strong><time dateTime={entry.at}>{dateText(entry.at)}</time></div>{entry.note && <p>{entry.note}</p>}</div></li>)}</ol></section>
-      <footer className="operation-modal-actions"><button type="button" className="ghost-button" onClick={onClose}>Close</button></footer>
+      <footer className="operation-modal-actions"><button type="button" className="secondary-button" disabled={printing} onClick={() => void printPreorder()}><Printer size={16} />{printing ? 'Preparing…' : 'Print preorder'}</button><button type="button" className="ghost-button" onClick={onClose}>Close</button></footer>
     </div>
   </OperationModalShell>
   {cancelOpen && <OperationModalShell title="Cancel preorder" eyebrow="Customer preorder" description="Any product already purchased remains in stock. Contact the supplier separately to cancel their order." icon={<AlertTriangle size={21} />} busy={busy} error={error} onDismissError={() => setError('')} onClose={closeCancellation} className="preorder-cancel-modal">

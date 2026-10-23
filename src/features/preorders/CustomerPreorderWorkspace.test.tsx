@@ -1,7 +1,10 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { printReceiptWindow } from '../receipts/receipt-print'
 import CustomerPreorderWorkspace from './CustomerPreorderWorkspace'
+
+vi.mock('../receipts/receipt-print', () => ({ printReceiptWindow: vi.fn(async () => true) }))
 
 const preorder = {
   _id: 'order-1', preorderNo: 'PO-20261016-ONE', customerName: 'Sela', customerPhone: '0882982042',
@@ -11,7 +14,7 @@ const preorder = {
 const response = (payload: unknown) => ({ ok: true, status: 200, headers: new Headers(), json: async () => payload }) as Response
 
 describe('CustomerPreorderWorkspace', () => {
-  beforeEach(() => vi.restoreAllMocks())
+  beforeEach(() => { vi.restoreAllMocks(); vi.clearAllMocks() })
 
   it('shows a separate customer preorder queue and supplier-order step', async () => {
     const orders: Record<string, unknown>[] = []
@@ -65,6 +68,29 @@ describe('CustomerPreorderWorkspace', () => {
     expect(await within(dialog).findByText('Add a supplier in Suppliers first.')).toBeInTheDocument()
     expect(within(dialog).getByRole('combobox', { name: 'Supplier' })).toBeDisabled()
     expect(within(dialog).getByRole('button', { name: 'Mark ordered' })).toBeDisabled()
+  })
+
+  it('prints an ordered customer preorder confirmation without prices', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input)
+      if (path.includes('/api/customer-preorders/repair-parts')) return response({ repairParts: [] })
+      if (path.includes('/api/customer-preorders')) return response({ preorders: [{ ...preorder, status: 'ORDERED', supplierName: 'Internal supplier' }] })
+      if (path.includes('/api/trades')) return response({ trades: [] })
+      throw new Error(`Unexpected request: ${path}`)
+    })
+    const user = userEvent.setup()
+    render(<CustomerPreorderWorkspace />)
+    await user.click(await screen.findByRole('button', { name: /Open preorder PO-20261016-ONE/ }))
+    const dialog = screen.getByRole('dialog', { name: preorder.preorderNo })
+    await user.click(within(dialog).getByRole('button', { name: 'Print preorder' }))
+    await waitFor(() => expect(printReceiptWindow).toHaveBeenCalledOnce())
+    const options = vi.mocked(printReceiptWindow).mock.calls[0][0]
+    expect(options.layout).toBe('THERMAL')
+    expect(options.markup).toContain(preorder.preorderNo)
+    expect(options.markup).toContain(preorder.customerName)
+    expect(options.markup).toContain(preorder.productName)
+    expect(options.markup).not.toContain('Internal supplier')
+    expect(options.markup).not.toMatch(/\$|price|cost/i)
   })
 
   it('uses the repair purchase picker for arrival and confirms the selected product', async () => {
