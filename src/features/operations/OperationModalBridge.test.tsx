@@ -3034,7 +3034,7 @@ describe('OperationModalBridge component', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('dialog')).toBeInTheDocument()
-      expect(screen.getByText(/^Scan product$/i)).toBeInTheDocument()
+      expect(screen.getByText(/^Scan product or repair$/i)).toBeInTheDocument()
     })
 
     // 2. Type barcode in scanner input and submit
@@ -3053,7 +3053,36 @@ describe('OperationModalBridge component', () => {
     const sellButton = screen.getByRole('button', { name: /Sell product/i })
     expect(sellButton).toBeDisabled()
     fireEvent.click(sellButton)
-    expect(screen.getByText(/^Scan product$/i)).toBeInTheDocument()
+    expect(screen.getByText(/^Scan product or repair$/i)).toBeInTheDocument()
+  })
+
+  it('opens the exact repair instead of treating a repair label as inventory', async () => {
+    const requests: string[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      requests.push(url)
+      if (url.includes('/repairs/lookup/')) {
+        return { ok: true, status: 200, headers: new Headers(), json: async () => ({ repair: { _id: 'repair-123' } }) } as Response
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response
+    })
+    const open = vi.fn()
+    window.addEventListener('phoneflow:open-repair-detail', open)
+    try {
+      renderModalBridge()
+      act(() => { window.dispatchEvent(new CustomEvent('phoneflow:open-scanner')) })
+      const codeInput = await screen.findByRole('textbox', { name: /Barcode, SKU, IMEI/i })
+      fireEvent.change(codeInput, { target: { value: 'RP-20261024-ABC123' } })
+      fireEvent.submit(codeInput.closest('form')!)
+      await waitFor(() => expect(open).toHaveBeenCalledOnce())
+      expect(window.location.pathname).toBe('/repairs')
+      expect(new URLSearchParams(window.location.search).get('openRepair')).toBe('repair-123')
+      expect(requests.some((url) => url.includes('/repairs/lookup/RP-20261024-ABC123'))).toBe(true)
+      expect(requests.some((url) => url.includes('/inventory/scan/'))).toBe(false)
+    } finally {
+      window.removeEventListener('phoneflow:open-repair-detail', open)
+      window.history.replaceState({}, '', '/')
+    }
   })
 
   it('ignores a pending scanner error after switching to another operation', async () => {

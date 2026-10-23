@@ -5,6 +5,7 @@ import {
   pawnInventoryLabelCode,
   printInventoryLabel,
   printInventoryLabels,
+  printRepairDeviceLabel,
   sanitizeCode,
   type LabelItem,
 } from './barcode'
@@ -185,6 +186,23 @@ describe('barcode module', () => {
       imei1: '123456789012345',
       sellPrice: 199.99,
     }
+
+    it('prints a repair owner label with its exact scannable number and no price', () => {
+      let writtenHtml = ''
+      const mockWindow = {
+        document: { write: vi.fn((html: string) => { writtenHtml = html }), close: vi.fn() },
+        print: vi.fn(), close: vi.fn(),
+      }
+      vi.spyOn(window, 'open').mockReturnValue(mockWindow as unknown as Window)
+      const result = printRepairDeviceLabel({ repairNo: 'RP-20261024-ABC123', customerName: 'Sela <Owner>', device: 'Vivo Y02s' })
+      expect(result).toBe(true)
+      expect(JsBarcode).toHaveBeenCalledWith(expect.any(SVGElement), 'RP-20261024-ABC123', expect.objectContaining({ format: 'CODE128' }))
+      expect(writtenHtml).toContain('REPAIR DEVICE · OWNER')
+      expect(writtenHtml).toContain('Sela &lt;Owner&gt;')
+      expect(writtenHtml).toContain('Vivo Y02s')
+      expect(writtenHtml).toContain('<p class="scan-value">RP-20261024-ABC123</p>')
+      expect(writtenHtml).not.toContain('class="price"')
+    })
 
     it('returns false immediately when item list is empty', () => {
       const result = printInventoryLabels([])

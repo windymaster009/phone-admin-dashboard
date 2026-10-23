@@ -167,6 +167,11 @@ After scanning, Android reads the signed-in PhoneFlow token from the app WebView
 POST /api/inventory/scan/:code
 ```
 
+Repair device labels use `RP-...` Code 128 barcodes. Product scan sends those to
+`POST /api/repairs/lookup/:repairNo` and opens the matching repair and customer
+in the app (and on an active desktop signed in to the same account). The label
+shows the customer name and device, without prices or the full phone number.
+
 The product dialog displays stock, price, SKU/barcode, brand/model, storage/color, IMEI/serial, and notes.
 
 ## Security rules

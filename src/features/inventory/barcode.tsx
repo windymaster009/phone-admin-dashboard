@@ -9,6 +9,7 @@ export type LabelItem = {
   model?: string
   imei1?: string
   sellPrice: number
+  labelType?: 'REPAIR'
 }
 
 const INVALID_CODE_VALUES = new Set(['null', 'undefined', 'n/a', 'none', '[null]', 'blank'])
@@ -94,6 +95,17 @@ export function printInventoryLabel(item: LabelItem) {
   return printInventoryLabels([item])
 }
 
+export function printRepairDeviceLabel(repair: { repairNo: string; customerName: string; device: string }) {
+  return printInventoryLabel({
+    sku: repair.repairNo,
+    barcode: repair.repairNo,
+    name: repair.customerName,
+    brand: repair.device,
+    sellPrice: 0,
+    labelType: 'REPAIR',
+  })
+}
+
 export function printInventoryLabels(items: LabelItem[]) {
   if (items.length === 0) return false
   if (items.some((item) => !barcodeValue(item))) {
@@ -125,19 +137,21 @@ export function printInventoryLabels(items: LabelItem[]) {
     const metaHtml = metaSegments.length > 0 ? `<p class="meta">${escapeHtml(metaSegments.join(' · '))}</p>` : ''
     const scanHtml = value ? `<p class="scan-value">${escapeHtml(value)}</p>` : ''
     const price = Number(item.sellPrice || 0) > 0 ? `<p class="price">$${Number(item.sellPrice).toFixed(2)}</p>` : ''
-    return `<div class="label"><h1>${escapeHtml(item.name || '')}</h1>${metaHtml}<div class="barcode-box">${svg.outerHTML}</div>${scanHtml}${price}</div>`
+    const heading = item.labelType === 'REPAIR' ? '<p class="label-kind">REPAIR DEVICE · OWNER</p>' : ''
+    return `<div class="label">${heading}<h1>${escapeHtml(item.name || '')}</h1>${metaHtml}<div class="barcode-box">${svg.outerHTML}</div>${scanHtml}${price}</div>`
   }).join('')
 
   const doc = popup.document
   try {
     doc?.open?.()
-    doc?.write?.(`<!doctype html><html><head><meta charset="utf-8"><title>PhoneFlow barcode labels</title><style>
+    doc?.write?.(`<!doctype html><html><head><meta charset="utf-8"><title>${items.every((item) => item.labelType === 'REPAIR') ? 'PhoneFlow repair device label' : 'PhoneFlow barcode labels'}</title><style>
       @page{size:60mm 40mm;margin:2mm}
       *{box-sizing:border-box}
       body{margin:0;background:#fff;color:#05070c;font-family:Arial,sans-serif}
       .label{width:56mm;height:36mm;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;overflow:hidden;break-after:page;page-break-after:always}
       .label:last-child{break-after:auto;page-break-after:auto}
       h1{max-width:54mm;margin:0 0 .8mm;font-size:10.5pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .label-kind{margin:0 0 .8mm;font-size:7pt;font-weight:800;letter-spacing:.08em}
       .meta{margin:0 0 .8mm;font-size:7pt}
       .price{margin:0;font-size:10.5pt;font-weight:800}
       .scan-value{margin:.3mm 0 .8mm;font:700 6.5pt ui-monospace,Consolas,monospace}

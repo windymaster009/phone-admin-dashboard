@@ -26,6 +26,7 @@ import {
   X,
 } from 'lucide-react'
 import { api, getSessionUser } from '../../lib/api'
+import { useRouter } from '../../app/routing'
 import type { Pawn } from '../../types/domain'
 import { safeStorage } from '../../lib/storage'
 import MoneyInput from '../../components/MoneyInput'
@@ -87,6 +88,7 @@ export interface SaleAddOnLine {
 
 
 export default function OperationModalBridge() {
+  const { navigate } = useRouter()
   const [kind, setKind] = useState<ModalKind | null>(null)
   const [stockSearch, setStockSearch] = useState('')
   const [selectedStockItem, setSelectedStockItem] = useState<InventoryItem | null>(null)
@@ -1303,6 +1305,14 @@ export default function OperationModalBridge() {
     setScannedItem(null)
     setScannedPawn(null)
     try {
+      if (/^RP-/i.test(code)) {
+        const { repair } = await api<{ repair: { _id: string } }>(`/repairs/lookup/${encodeURIComponent(code)}`)
+        if (scanRequestSeqRef.current !== seq) return
+        resetAndClose()
+        navigate(`/repairs?openRepair=${encodeURIComponent(repair._id)}`)
+        window.dispatchEvent(new CustomEvent('phoneflow:open-repair-detail', { detail: { id: repair._id } }))
+        return
+      }
       const result = await api<{ item: InventoryItem; relatedPawn?: RelatedPawn | null }>(`/inventory/scan/${encodeURIComponent(code)}`)
       if (scanRequestSeqRef.current !== seq) return
       setScanCode(code)
@@ -1318,12 +1328,18 @@ export default function OperationModalBridge() {
         setBusy(false)
       }
     }
-  }, [])
+  }, [navigate])
 
   usePhoneScans(async (event) => {
     if (event.mode === 'input') return sendPhoneScanToFocusedInput(event.code)
     if (kind || busy || document.querySelector('[role="dialog"], dialog[open]')) return false
     try {
+      if (/^RP-/i.test(event.code.trim())) {
+        const { repair } = await api<{ repair: { _id: string } }>(`/repairs/lookup/${encodeURIComponent(event.code.trim())}`)
+        navigate(`/repairs?openRepair=${encodeURIComponent(repair._id)}`)
+        window.dispatchEvent(new CustomEvent('phoneflow:open-repair-detail', { detail: { id: repair._id } }))
+        return true
+      }
       const result = await api<PhoneScanResult>(`/inventory/scan/${encodeURIComponent(event.code)}`)
       openPhoneScanResult(result)
       return true
@@ -2651,14 +2667,14 @@ export default function OperationModalBridge() {
         onSubmit={findScannedProduct}
         onCameraError={handleCameraError}
         busy={busy}
-        introDescription="Use a barcode scanner for the fastest checkout, or open the camera on this device."
+        introDescription="Scan a product or repair phone label with a barcode scanner, or use this device camera."
         methodTitle="Barcode scanner"
         methodDescription="Keep this field selected, then scan the label."
         inputId="barcode-code"
         inputLabel="Barcode, SKU, IMEI, or serial number"
-        placeholder="Scan or enter product code"
-        submitLabel="Find product"
-        helpText="Works with barcode, SKU, IMEI, and serial number. Most scanners press Enter automatically."
+        placeholder="Scan or enter product or repair code"
+        submitLabel="Find record"
+        helpText="Works with repair labels, barcode, SKU, IMEI, and serial number. Most scanners press Enter automatically."
       /> : <div className="scanner-workflow has-result">
           <div className="scan-success-banner"><span><CheckCircle2 size={22} /></span><div><strong>Product found</strong><small>Code {scannedItem.barcode || scannedItem.sku} matched an inventory record.</small></div></div>
           <article className="scanned-product-card">

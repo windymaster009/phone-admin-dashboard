@@ -28,8 +28,8 @@ const modalMeta: Record<ModalKind, { title: string; description: string; icon: R
     icon: <HandCoins size={21} />,
   },
   scan: {
-    title: 'Scan product',
-    description: 'Use a barcode scanner, type a code, or scan with this device camera.',
+    title: 'Scan product or repair',
+    description: 'Scan a product barcode or repair phone label, type its code, or use this device camera.',
     icon: <ScanLine size={21} />,
   },
   label: {

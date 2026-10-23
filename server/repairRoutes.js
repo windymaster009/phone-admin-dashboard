@@ -5,6 +5,7 @@ import { Customer, InventoryItem, Trade } from './models.js'
 import { RepairJob } from './repairModels.js'
 import { CustomerPreorder } from './customerPreorderModels.js'
 import { ServiceCharge } from './serviceModels.js'
+import { publishScan } from './scanRelay.js'
 
 const router = Router()
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
@@ -102,6 +103,26 @@ router.get('/charge-options', requireAuth, allowRoles('OWNER', 'MANAGER', 'CASHI
   const repairs = await RepairJob.find(filter).select('repairNo customerName customerPhone device status').sort({ createdAt: -1 }).limit(50).lean()
   res.json({ repairs })
 }))
+
+const lookupRepair = asyncRoute(async (req, res) => {
+  res.setHeader('Cache-Control', 'no-store')
+  const repairNo = clean(req.params.repairNo).toUpperCase()
+  if (!/^RP-[A-Z0-9-]{1,40}$/.test(repairNo)) throw fail(400, 'Repair number is invalid')
+  const repair = await RepairJob.findOne({ repairNo }).select('_id repairNo customerName customerPhone device status').lean()
+  if (!repair) throw fail(404, 'Repair was not found')
+  let desktopShared = false
+  if (req.method === 'POST') {
+    try {
+      await publishScan(req, repairNo)
+      desktopShared = true
+    } catch (error) {
+      console.error(`[request ${req.id || 'unknown'}] Repair scan sharing failed:`, error.message)
+    }
+  }
+  res.json({ repair, ...(req.method === 'POST' ? { desktopShared } : {}) })
+})
+router.get('/lookup/:repairNo', requireAuth, allowRoles(...editable), lookupRepair)
+router.post('/lookup/:repairNo', requireAuth, allowRoles(...editable), lookupRepair)
 
 router.get('/:id', requireAuth, allowRoles(...editable), asyncRoute(async (req, res) => {
   const repair = await RepairJob.findById(requireId(req.params.id, 'Repair')).lean()

@@ -129,6 +129,46 @@ final class PhoneFlowApi {
         });
     }
 
+    static void lookupRepair(String baseUrl, String sessionCookie, String code, Callback callback) {
+        IO.execute(() -> {
+            HttpURLConnection connection = null;
+            try {
+                String encoded = URLEncoder.encode(code, StandardCharsets.UTF_8.name()).replace("+", "%20");
+                URL url = ServerUrlPolicy.requireAllowedUrl(
+                    baseUrl + "/api/repairs/lookup/" + encoded,
+                    BuildConfig.ALLOW_PRIVATE_LAN_HTTP
+                );
+                connection = (HttpURLConnection) url.openConnection();
+                connection.setRequestMethod("POST");
+                connection.setConnectTimeout(12_000);
+                connection.setReadTimeout(12_000);
+                connection.setRequestProperty("Accept", "application/json");
+                connection.setRequestProperty("Cookie", sessionCookie);
+                connection.setRequestProperty("X-PhoneFlow-Request", "1");
+
+                int status = connection.getResponseCode();
+                InputStream stream = status >= 200 && status < 300
+                    ? connection.getInputStream() : connection.getErrorStream();
+                String body = readAll(stream);
+                JSONObject payload = body.isEmpty() ? new JSONObject() : new JSONObject(body);
+                if (status == 401) throw new IllegalStateException("Your session expired. Sign in again before scanning.");
+                if (status < 200 || status >= 300) {
+                    throw new IllegalStateException(payload.optString("message", "Repair lookup failed (" + status + ")"));
+                }
+                JSONObject repair = payload.optJSONObject("repair");
+                if (repair == null) throw new IllegalStateException("The server returned no repair details");
+                boolean desktopShared = payload.optBoolean("desktopShared", false);
+                MAIN.post(() -> callback.onSuccess(repair, desktopShared));
+            } catch (Exception error) {
+                String message = error.getMessage();
+                MAIN.post(() -> callback.onError(message == null || message.isBlank()
+                    ? "Unable to reach the PhoneFlow server" : message));
+            } finally {
+                if (connection != null) connection.disconnect();
+            }
+        });
+    }
+
     static void relayInput(String baseUrl, String sessionCookie, String code, RelayCallback callback) {
         IO.execute(() -> {
             HttpURLConnection connection = null;

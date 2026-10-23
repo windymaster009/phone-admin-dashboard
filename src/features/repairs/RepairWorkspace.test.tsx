@@ -97,6 +97,28 @@ describe('RepairWorkspace', () => {
     expect(within(dialog).queryByRole('combobox', { name: 'Find purchase for Screen' })).not.toBeInTheDocument()
   })
 
+  it('opens a scanned repair by URL even when it is older than the recent queue', async () => {
+    window.history.replaceState({}, '', '/repairs?openRepair=repair-1')
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input)
+      if (path.includes('/api/repairs/repair-1')) return response({ repair })
+      if (path.includes('/api/repairs')) return response({ repairs: [] })
+      if (path.includes('/api/inventory')) return response({ items: [] })
+      if (path.includes('/api/trades')) return response({ trades: [] })
+      throw new Error(`Unexpected request: ${path}`)
+    })
+    try {
+      const user = userEvent.setup()
+      render(<RepairWorkspace />)
+      const dialog = await screen.findByRole('dialog', { name: repair.repairNo })
+      expect(within(dialog).getByText(/Sela/)).toBeInTheDocument()
+      await user.click(within(dialog).getByRole('button', { name: 'Close' }))
+      expect(new URLSearchParams(window.location.search).has('openRepair')).toBe(false)
+    } finally {
+      window.history.replaceState({}, '', '/')
+    }
+  })
+
   it('shows repair history and the stock/preorder controls in the reused operation modal', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const path = String(input)
@@ -146,6 +168,7 @@ describe('RepairWorkspace', () => {
     expect([...history.querySelectorAll('time')].map((time) => time.textContent)).toEqual(['16 Oct 2026', '14 Oct 2026'])
     expect([...history.querySelectorAll('li strong')].map((title) => title.textContent)).toEqual(['Part Released', 'Part Ordered', 'Received'])
     const printButton = within(dialog).getByRole('button', { name: 'Print pickup ticket' })
+    expect(within(dialog).getByRole('button', { name: 'Print phone label' })).toBeInTheDocument()
     expect(dialog.querySelector('.repair-detail')?.contains(printButton)).toBe(false)
     expect(printButton.closest('footer')).toHaveClass('repair-detail-actions')
     expect(within(history).getByText('1 × screen from fker')).toBeInTheDocument()

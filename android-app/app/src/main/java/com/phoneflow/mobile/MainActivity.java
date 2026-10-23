@@ -390,6 +390,21 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        if (code.trim().toUpperCase(java.util.Locale.ROOT).startsWith("RP-")) {
+            PhoneFlowApi.lookupRepair(apiBaseUrl, cookie, code.trim(), new PhoneFlowApi.Callback() {
+                @Override
+                public void onSuccess(JSONObject repair, boolean desktopShared) {
+                    String id = repair.optString("_id", "");
+                    if (id.isBlank()) { toast("Repair record is missing its ID"); return; }
+                    webView.loadUrl(serverUrl + "/repairs?openRepair=" + id);
+                    toast(repair.optString("customerName", "Repair found") + " · " + repair.optString("device", ""));
+                }
+
+                @Override
+                public void onError(String message) { toast(message); }
+            });
+            return;
+        }
         PhoneFlowApi.lookupInventory(apiBaseUrl, cookie, code, new PhoneFlowApi.Callback() {
             @Override
             public void onSuccess(JSONObject item, boolean desktopShared) {

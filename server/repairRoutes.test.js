@@ -90,6 +90,31 @@ test('a repair can be opened directly when it is outside the recent workshop lis
   assert.equal(result.body.repair.parts[0].source, 'PREORDER')
 })
 
+test('a scanned repair label resolves the exact repair and customer without changing records', async () => {
+  const record = job('WAITING_PARTS')
+  record.repairNo = 'RP-20261024-ABC123'
+  record.customerName = 'Sela'
+  record.customerPhone = '0882982042'
+  let lookup
+  RepairJob.findOne = (filter) => {
+    lookup = filter
+    return { select: () => ({ lean: async () => ({ _id: record._id, repairNo: record.repairNo, customerName: record.customerName, customerPhone: record.customerPhone, device: record.device, status: record.status }) }) }
+  }
+  const result = await call('GET', '/lookup/rp-20261024-abc123')
+  assert.equal(result.status, 200)
+  assert.deepEqual(lookup, { repairNo: record.repairNo })
+  assert.equal(result.body.repair.customerName, 'Sela')
+  assert.equal(result.body.repair.customerPhone, '0882982042')
+  assert.equal(result.body.repair.device, 'Phone')
+  assert.equal(result.body.repair.parts, undefined)
+})
+
+test('repair label lookup rejects malformed codes and missing jobs', async () => {
+  RepairJob.findOne = () => ({ select: () => ({ lean: async () => null }) })
+  assert.equal((await call('GET', '/lookup/RP-UNKNOWN')).status, 404)
+  assert.equal((await call('GET', '/lookup/INVALID')).status, 400)
+})
+
 test('repair summary counts every job and only linked completed service charges', async () => {
   RepairJob.aggregate = async () => [
     { _id: 'IN_PROGRESS', count: 3 }, { _id: 'WAITING_PARTS', count: 2 },

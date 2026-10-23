@@ -13,6 +13,7 @@ import SummaryStats from '../../components/SummaryStats'
 import InventoryProductCombobox, { InventorySelectionSummary } from '../../components/InventoryProductCombobox'
 import { printReceiptWindow } from '../receipts/receipt-print'
 import { repairClaimTicketMarkup } from './RepairClaimTicket'
+import { printRepairDeviceLabel } from '../inventory/barcode'
 import { dateText, titleStatus } from '../../lib/presentation'
 import './repair-workspace.css'
 
@@ -41,7 +42,7 @@ const message = (reason: unknown) => reason instanceof Error ? reason.message : 
 export default function RepairWorkspace({ openRepairId, onRepairClosed }: { openRepairId?: string | null; onRepairClosed?: () => void } = {}) {
   const [repairs, setRepairs] = useState<Repair[]>([])
   const [summary, setSummary] = useState<RepairSummary | null>(null)
-  const [selectedId, setSelectedId] = useState<string | null>(openRepairId || null)
+  const [selectedId, setSelectedId] = useState<string | null>(() => openRepairId || new URLSearchParams(window.location.search).get('openRepair'))
   const [createOpen, setCreateOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('ALL')
@@ -58,8 +59,9 @@ export default function RepairWorkspace({ openRepairId, onRepairClosed }: { open
     void refreshSummary()
     try {
       const listed = (await api<{ repairs: Repair[] }>('/repairs')).repairs
-      const requested = openRepairId && !listed.some((repair) => repair._id === openRepairId)
-        ? (await api<{ repair: Repair }>(`/repairs/${encodeURIComponent(openRepairId)}`)).repair
+      const requestedId = openRepairId || new URLSearchParams(window.location.search).get('openRepair')
+      const requested = requestedId && !listed.some((repair) => repair._id === requestedId)
+        ? (await api<{ repair: Repair }>(`/repairs/${encodeURIComponent(requestedId)}`)).repair
         : null
       setRepairs(requested ? [requested, ...listed] : listed)
       setError('')
@@ -69,6 +71,20 @@ export default function RepairWorkspace({ openRepairId, onRepairClosed }: { open
   }, [openRepairId, refreshSummary])
   useEffect(() => { void load() }, [load])
   useEffect(() => { if (openRepairId) setSelectedId(openRepairId) }, [openRepairId])
+  useEffect(() => {
+    const handleOpenRepair = (event: Event) => {
+      const id = (event as CustomEvent<{ id?: string }>).detail?.id
+      if (!id) return
+      setSelectedId(id)
+      if (!repairs.some((repair) => repair._id === id)) {
+        void api<{ repair: Repair }>(`/repairs/${encodeURIComponent(id)}`)
+          .then(({ repair }) => { setRepairs((current) => [repair, ...current.filter((item) => item._id !== id)]); setError('') })
+          .catch((reason) => setError(message(reason)))
+      }
+    }
+    window.addEventListener('phoneflow:open-repair-detail', handleOpenRepair)
+    return () => window.removeEventListener('phoneflow:open-repair-detail', handleOpenRepair)
+  }, [repairs])
   const selected = repairs.find((repair) => repair._id === selectedId)
   const visible = useMemo(() => repairs.filter((repair) => {
     if (status !== 'ALL' && repair.status !== status) return false
@@ -104,7 +120,7 @@ export default function RepairWorkspace({ openRepairId, onRepairClosed }: { open
       {loading && repairs.length === 0 ? <LoadingState label="Loading repairs" /> : <div className="repair-list">{visible.map((repair) => <RecordListRow key={repair._id} icon={<Wrench />} tone="repair" title={repair.device} meta={`${repair.repairNo} · ${repair.customerName} · ${dateText(repair.createdAt)}`} detail={repair.issue} badge={<StatusBadge status={repair.status} />} ariaLabel={`Open ${repair.device} repair ${repair.repairNo}`} onOpen={() => setSelectedId(repair._id)} />)}{visible.length === 0 && <p className="repair-empty">No repairs match these filters.</p>}</div>}
     </section>
     {createOpen && <CreateRepair onClose={() => setCreateOpen(false)} onCreated={(repair) => { setRepairs((current) => [repair, ...current]); void refreshSummary(); setSelectedId(repair._id); setCreateOpen(false) }} />}
-    {selected && <RepairDetail repair={selected} onClose={() => { setSelectedId(null); onRepairClosed?.() }} onChanged={updateRepair} />}
+    {selected && <RepairDetail repair={selected} onClose={() => { setSelectedId(null); if (new URLSearchParams(window.location.search).has('openRepair')) window.history.replaceState(window.history.state, '', window.location.pathname); onRepairClosed?.() }} onChanged={updateRepair} />}
   </div>
 }
 
@@ -273,7 +289,7 @@ function RepairDetail({ repair, onClose, onChanged }: { repair: Repair; onClose:
         <section className="repair-block"><h3>Part not in stock? Preorder</h3><label>Part needed<input maxLength={160} value={partName} onChange={(event) => setPartName(event.target.value)} /></label><label>Supplier<input maxLength={120} value={supplierName} onChange={(event) => setSupplierName(event.target.value)} /></label><label>Expected date (optional)<input type="date" value={expectedAt} onChange={(event) => setExpectedAt(event.target.value)} /></label><button type="button" className="primary-button" disabled={busy || !partName.trim() || !supplierName.trim()} onClick={() => void post('/parts/preorder', { name: partName, supplierName, quantity: Number(quantity), expectedAt })}><PackagePlus size={16} />Add preorder</button><p className="repair-help">This records the need only; it does not change stock or finances. When the part arrives, use its “Part arrived?” step above.</p></section></div>}
       <section className="repair-block repair-history-block"><h3>History</h3><div className="repair-history-groups">{historyGroups.map((group, groupIndex) => <div className="repair-history-group" key={`${group.date}-${groupIndex}`}><time className="repair-history-date" dateTime={group.entries[0].at}>{group.date}</time><ol className="repair-history" reversed>{group.entries.map((entry, index) => <li key={`${entry.at}-${index}`}><strong>{titleStatus(entry.action)}</strong>{entry.note && <span>{entry.note}</span>}</li>)}</ol></div>)}</div></section>
     </div>
-    <footer className="operation-modal-actions repair-detail-actions"><button type="button" className="secondary-button" disabled={printing} onClick={() => void printClaimTicket()}><Printer size={16} />{printing ? 'Preparing…' : 'Print pickup ticket'}</button></footer>
+    <footer className="operation-modal-actions repair-detail-actions"><button type="button" className="secondary-button" onClick={() => printRepairDeviceLabel(repair)}><Printer size={16} />Print phone label</button><button type="button" className="secondary-button" disabled={printing} onClick={() => void printClaimTicket()}><Printer size={16} />{printing ? 'Preparing…' : 'Print pickup ticket'}</button></footer>
   </OperationModalShell>
   {statusDialog && <OperationModalShell title={statusCopy.title} eyebrow="Repair progress" description={statusCopy.description} icon={<Wrench size={21} />} busy={busy} error={error} onDismissError={() => setError('')} onClose={() => { setStatusDialog(null); setError('') }} className="repair-status-modal">
     <form className="operation-form repair-status-form" onSubmit={(event) => { event.preventDefault(); void confirmStatus() }}>
