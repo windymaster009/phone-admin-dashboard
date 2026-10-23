@@ -1,7 +1,10 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { printReceiptWindow } from '../receipts/receipt-print'
 import RepairWorkspace from './RepairWorkspace'
+
+vi.mock('../receipts/receipt-print', () => ({ printReceiptWindow: vi.fn(async () => true) }))
 
 const repair = {
   _id: 'repair-1', repairNo: 'RP-20261016-ONE', customerName: 'Sela', customerPhone: '0882982042',
@@ -16,7 +19,7 @@ function response(payload: unknown) {
 }
 
 describe('RepairWorkspace', () => {
-  beforeEach(() => vi.restoreAllMocks())
+  beforeEach(() => { vi.restoreAllMocks(); vi.clearAllMocks() })
 
   it('opens the existing repair form from the shared action card', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(response({ repairs: [] }))
@@ -51,6 +54,29 @@ describe('RepairWorkspace', () => {
     expect(within(summary).getByText('$75.00')).toBeInTheDocument()
     expect(within(summary).getByText('41,000 KHR')).toBeInTheDocument()
     expect(within(summary).getByText('3 linked charges · revenue, not profit')).toBeInTheDocument()
+  })
+
+  it('prints a pickup ticket for a cancelled repair without claiming payment or handover', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input)
+      if (path.includes('/api/repairs/summary')) return response({ summary: { counts: {}, payments: null } })
+      if (path.includes('/api/repairs')) return response({ repairs: [{ ...repair, status: 'CANCELLED' }] })
+      if (path.includes('/api/inventory')) return response({ items: [] })
+      if (path.includes('/api/trades')) return response({ trades: [] })
+      throw new Error(`Unexpected request: ${path}`)
+    })
+    const user = userEvent.setup()
+    render(<RepairWorkspace />)
+    await user.click(await screen.findByRole('button', { name: /Vivo Y02s repair/ }))
+    const dialog = screen.getByRole('dialog', { name: repair.repairNo })
+    await user.click(within(dialog).getByRole('button', { name: 'Print pickup ticket' }))
+    await waitFor(() => expect(printReceiptWindow).toHaveBeenCalledOnce())
+    const options = vi.mocked(printReceiptWindow).mock.calls[0][0]
+    expect(options.layout).toBe('THERMAL')
+    expect(options.markup).toContain(repair.repairNo)
+    expect(options.markup).toContain('This repair was cancelled')
+    expect(options.markup).toContain('does not confirm handover or payment')
+    expect(options.markup).not.toContain('Vivo screen')
   })
 
   it('opens a linked repair preorder even when the repair is outside the recent list', async () => {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { CheckCircle2, ChevronDown, CircleDollarSign, ClipboardList, PackageCheck, PackagePlus, RefreshCcw, Wrench } from 'lucide-react'
+import { CheckCircle2, ChevronDown, CircleDollarSign, ClipboardList, PackageCheck, PackagePlus, Printer, RefreshCcw, Wrench } from 'lucide-react'
 import { api } from '../../lib/api'
 import SectionHeader from '../../components/SectionHeader'
 import FilterToolbar from '../../components/FilterToolbar'
@@ -11,6 +11,8 @@ import RecordListRow from '../../components/RecordListRow'
 import StatusBadge from '../../components/StatusBadge'
 import SummaryStats from '../../components/SummaryStats'
 import InventoryProductCombobox, { InventorySelectionSummary } from '../../components/InventoryProductCombobox'
+import { printReceiptWindow } from '../receipts/receipt-print'
+import { repairClaimTicketMarkup } from './RepairClaimTicket'
 import { dateText, titleStatus } from '../../lib/presentation'
 import './repair-workspace.css'
 
@@ -169,6 +171,7 @@ function RepairDetail({ repair, onClose, onChanged }: { repair: Repair; onClose:
   const [expectedAt, setExpectedAt] = useState('')
   const [expandedParts, setExpandedParts] = useState<Record<string, boolean>>({})
   const [busy, setBusy] = useState(false)
+  const [printing, setPrinting] = useState(false)
   const [error, setError] = useState('')
   const [statusDialog, setStatusDialog] = useState<RepairConfirmation | null>(null)
   const [statusNote, setStatusNote] = useState('')
@@ -216,6 +219,15 @@ function RepairDetail({ repair, onClose, onChanged }: { repair: Repair; onClose:
       setStatusNote('')
     }
   }
+  async function printClaimTicket() {
+    if (printing) return
+    setPrinting(true); setError('')
+    try {
+      const opened = await printReceiptWindow({ markup: repairClaimTicketMarkup(repair), layout: 'THERMAL', title: repair.repairNo })
+      if (!opened) setError('The browser blocked the print window. Allow pop-ups and try again.')
+    } catch (reason) { setError(message(reason)) }
+    finally { setPrinting(false) }
+  }
   const canAddParts = ['WAITING_PARTS', 'IN_PROGRESS'].includes(repair.status)
   const selectedStock = stock.find((item) => item._id === stockId)
   const reserveQuantity = Number(quantity)
@@ -260,6 +272,7 @@ function RepairDetail({ repair, onClose, onChanged }: { repair: Repair; onClose:
       {canAddParts && <div className="repair-add-grid"><section className="repair-block"><h3>Use part from stock</h3><InventoryProductCombobox id={`repair-${repair._id}`} items={stock} value={stockId} loading={sourcesLoading} label="Available product" listLabel="Available stock parts" placeholder="Search part name or SKU…" emptyMessage="No available stock parts" onChange={setStockId} />{selectedStock && <InventorySelectionSummary item={selectedStock} afterLabel="After reserve" afterQuantity={selectedStock.quantity - (Number.isInteger(reserveQuantity) && reserveQuantity > 0 ? reserveQuantity : 0)} />}<label>Quantity<input type="number" min="1" max={selectedStock?.quantity} step="1" value={quantity} onChange={(event) => setQuantity(event.target.value)} /></label>{selectedStock && reserveQuantity > selectedStock.quantity && <p className="repair-help" role="alert">Only {selectedStock.quantity} available. Lower the quantity to reserve this part.</p>}<button type="button" className="primary-button" disabled={busy || !canReserve} onClick={() => void post('/parts/reserve', { inventoryItemId: stockId, quantity: reserveQuantity }).then((saved) => { if (saved) setStockId('') })}>Reserve stock part</button></section>
         <section className="repair-block"><h3>Part not in stock? Preorder</h3><label>Part needed<input maxLength={160} value={partName} onChange={(event) => setPartName(event.target.value)} /></label><label>Supplier<input maxLength={120} value={supplierName} onChange={(event) => setSupplierName(event.target.value)} /></label><label>Expected date (optional)<input type="date" value={expectedAt} onChange={(event) => setExpectedAt(event.target.value)} /></label><button type="button" className="primary-button" disabled={busy || !partName.trim() || !supplierName.trim()} onClick={() => void post('/parts/preorder', { name: partName, supplierName, quantity: Number(quantity), expectedAt })}><PackagePlus size={16} />Add preorder</button><p className="repair-help">This records the need only; it does not change stock or finances. When the part arrives, use its “Part arrived?” step above.</p></section></div>}
       <section className="repair-block repair-history-block"><h3>History</h3><div className="repair-history-groups">{historyGroups.map((group, groupIndex) => <div className="repair-history-group" key={`${group.date}-${groupIndex}`}><time className="repair-history-date" dateTime={group.entries[0].at}>{group.date}</time><ol className="repair-history" reversed>{group.entries.map((entry, index) => <li key={`${entry.at}-${index}`}><strong>{titleStatus(entry.action)}</strong>{entry.note && <span>{entry.note}</span>}</li>)}</ol></div>)}</div></section>
+      <footer className="operation-modal-actions repair-detail-actions"><button type="button" className="secondary-button" disabled={printing} onClick={() => void printClaimTicket()}><Printer size={16} />{printing ? 'Preparing…' : 'Print pickup ticket'}</button></footer>
     </div>
   </OperationModalShell>
   {statusDialog && <OperationModalShell title={statusCopy.title} eyebrow="Repair progress" description={statusCopy.description} icon={<Wrench size={21} />} busy={busy} error={error} onDismissError={() => setError('')} onClose={() => { setStatusDialog(null); setError('') }} className="repair-status-modal">
