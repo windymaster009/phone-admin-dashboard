@@ -12,6 +12,10 @@
 .preorder-form-grid label, .preorder-block label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; font-weight: 700; }
 .preorder-form-grid input, .preorder-form-grid select, .preorder-form-grid textarea, .preorder-block input, .preorder-block select { width: 100%; min-width: 0; min-height: 44px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text); background-color: var(--input-bg); }
 .preorder-form-grid select, .preorder-block select { padding-inline-end: 38px; }
+.preorder-category-select { position: relative; display: block; min-width: 0; }
+.preorder-category-select select { display: block; background-image: none; cursor: pointer; }
+.preorder-category-select > svg { position: absolute; top: 50%; right: var(--space-3); color: var(--muted); pointer-events: none; transform: translateY(-50%); }
+.preorder-category-select:focus-within > svg { color: var(--primary); }
 .preorder-form-grid textarea { min-height: 90px; }
 .preorder-wide { grid-column: 1 / -1; }
 .preorder-suggestions { display: grid; width: 100%; max-height: 180px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }

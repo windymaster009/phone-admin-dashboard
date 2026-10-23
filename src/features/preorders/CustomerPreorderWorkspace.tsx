@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { AlertTriangle, PackageCheck, RefreshCcw, ShoppingBag, Wrench } from 'lucide-react'
+import { AlertTriangle, ChevronDown, PackageCheck, RefreshCcw, ShoppingBag, Wrench } from 'lucide-react'
 import { api } from '../../lib/api'
 import { dateText, titleStatus } from '../../lib/presentation'
 import SectionHeader from '../../components/SectionHeader'
@@ -105,7 +105,7 @@ function CreatePreorder({ onClose, onCreated }: { onClose: () => void; onCreated
     <form className="operation-form preorder-form" onSubmit={submit}><div className="operation-form-grid preorder-form-grid">
       <label>Customer name<input required maxLength={120} data-modal-initial-focus value={form.customerName} onChange={(event) => setForm((current) => ({ ...current, customerName: event.target.value, customerId: '' }))} placeholder="Type to find an existing customer" />{suggestions.length > 0 && <span className="preorder-suggestions">{suggestions.map((customer) => <button type="button" key={customer._id} onClick={() => setForm((current) => ({ ...current, customerId: customer._id, customerName: customer.name, customerPhone: customer.phone }))}>{customer.name} · {customer.phone}</button>)}</span>}</label>
       <label>Phone number<input required maxLength={40} value={form.customerPhone} onChange={(event) => setForm((current) => ({ ...current, customerPhone: event.target.value, customerId: '' }))} /></label>
-      <label>Product category<select value={form.category} onChange={(event) => update('category', event.target.value)}>{categories.map((value) => <option value={value} key={value}>{titleStatus(value)}</option>)}</select></label>
+      <label>Product category<span className="preorder-category-select"><select value={form.category} onChange={(event) => update('category', event.target.value)}>{categories.map((value) => <option value={value} key={value}>{titleStatus(value)}</option>)}</select><ChevronDown size={16} aria-hidden="true" /></span></label>
       <label>Quantity<input required type="number" min="1" max="1000" step="1" value={form.quantity} onChange={(event) => update('quantity', event.target.value)} /></label>
       <label className="preorder-wide">Product requested<input required maxLength={160} value={form.productName} onChange={(event) => update('productName', event.target.value)} placeholder="Phone model or case name" /></label>
       <label className="preorder-wide">Details (optional)<textarea maxLength={1000} value={form.specifications} onChange={(event) => update('specifications', event.target.value)} placeholder="Color, storage, case type, exact model…" /></label>
