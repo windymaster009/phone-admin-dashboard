@@ -145,6 +145,9 @@ describe('RepairWorkspace', () => {
     const history = within(dialog).getByRole('heading', { name: 'History' }).closest('section') as HTMLElement
     expect([...history.querySelectorAll('time')].map((time) => time.textContent)).toEqual(['16 Oct 2026', '14 Oct 2026'])
     expect([...history.querySelectorAll('li strong')].map((title) => title.textContent)).toEqual(['Part Released', 'Part Ordered', 'Received'])
+    const printButton = within(dialog).getByRole('button', { name: 'Print pickup ticket' })
+    expect(dialog.querySelector('.repair-detail')?.contains(printButton)).toBe(false)
+    expect(printButton.closest('footer')).toHaveClass('repair-detail-actions')
     expect(within(history).getByText('1 × screen from fker')).toBeInTheDocument()
   })
 

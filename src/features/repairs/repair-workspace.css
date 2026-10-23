@@ -28,7 +28,7 @@
 .repair-detail-modal .operation-modal-icon { width: 36px; height: 36px; border-radius: var(--radius-md); }
 .repair-detail-modal .operation-modal-header h2 { margin: 2px 0 0; font-size: 20px; }
 .repair-detail { display: grid; gap: var(--space-3); padding: var(--space-3) var(--space-4) var(--space-4); }
-.repair-detail > .repair-detail-actions { margin: var(--space-1) calc(-1 * var(--space-4)) calc(-1 * var(--space-4)); padding: var(--space-3) var(--space-4); }
+.repair-detail-modal > .repair-detail-actions { position: static; flex: 0 0 auto; margin: 0; padding: var(--space-3) var(--space-4); background: var(--surface-solid); backdrop-filter: none; }
 .repair-facts { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.1fr) minmax(0, 1fr) minmax(0, 1.6fr); gap: var(--space-2); }
 .repair-facts > span { display: grid; align-content: start; gap: var(--space-1); min-width: 0; padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm); overflow-wrap: anywhere; }
 .repair-facts strong { font-size: 14px; line-height: 1.35; }
