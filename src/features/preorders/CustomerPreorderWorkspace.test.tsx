@@ -16,6 +16,29 @@ const response = (payload: unknown) => ({ ok: true, status: 200, headers: new He
 describe('CustomerPreorderWorkspace', () => {
   beforeEach(() => { vi.restoreAllMocks(); vi.clearAllMocks() })
 
+  it('opens an older customer preorder from global search and clears the URL on close', async () => {
+    window.history.replaceState({}, '', '/customer-preorders?openPreorder=order-1')
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const path = String(input)
+      if (path.includes('/api/customer-preorders/repair-parts')) return response({ repairParts: [] })
+      if (path.includes('/api/customer-preorders/order-1')) return response({ preorder })
+      if (path.includes('/api/customer-preorders')) return response({ preorders: [] })
+      if (path.includes('/api/suppliers')) return response({ suppliers: [] })
+      if (path.includes('/api/trades')) return response({ trades: [] })
+      throw new Error(`Unexpected request: ${path}`)
+    })
+    try {
+      const user = userEvent.setup()
+      render(<CustomerPreorderWorkspace />)
+      const dialog = await screen.findByRole('dialog', { name: preorder.preorderNo })
+      expect(within(dialog).getAllByText(/Sela/).length).toBeGreaterThan(0)
+      await user.click(within(dialog).getAllByRole('button', { name: 'Close' }).at(-1)!)
+      expect(new URLSearchParams(window.location.search).has('openPreorder')).toBe(false)
+    } finally {
+      window.history.replaceState({}, '', '/')
+    }
+  })
+
   it('shows a separate customer preorder queue and supplier-order step', async () => {
     const orders: Record<string, unknown>[] = []
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {

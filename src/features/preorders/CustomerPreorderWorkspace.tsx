@@ -41,7 +41,7 @@ const requestKey = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${M
 export default function CustomerPreorderWorkspace({ onOpenRepair }: { onOpenRepair?: (repairId: string) => void }) {
   const [preorders, setPreorders] = useState<Preorder[]>([])
   const [repairParts, setRepairParts] = useState<RepairPartPreorder[]>([])
-  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(() => new URLSearchParams(window.location.search).get('openPreorder'))
   const [createOpen, setCreateOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('ALL')
@@ -55,13 +55,31 @@ export default function CustomerPreorderWorkspace({ onOpenRepair }: { onOpenRepa
         api<{ preorders: Preorder[] }>(`/customer-preorders?${query}`),
         api<{ repairParts: RepairPartPreorder[] }>(`/customer-preorders/repair-parts?${query}`),
       ])
-      setPreorders(customers.preorders)
+      const requestedId = new URLSearchParams(window.location.search).get('openPreorder')
+      const requested = requestedId && !customers.preorders.some((item) => item._id === requestedId)
+        ? (await api<{ preorder: Preorder }>(`/customer-preorders/${encodeURIComponent(requestedId)}`)).preorder
+        : null
+      setPreorders(requested ? [requested, ...customers.preorders] : customers.preorders)
       setRepairParts(repairs.repairParts)
       setError('')
     } catch (reason) { setError(errorMessage(reason)) }
     finally { setLoading(false) }
   }, [search, status])
   useEffect(() => { const timer = window.setTimeout(() => void load(), 180); return () => window.clearTimeout(timer) }, [load])
+  useEffect(() => {
+    const handleOpenPreorder = (event: Event) => {
+      const id = (event as CustomEvent<{ id?: string }>).detail?.id
+      if (!id) return
+      setSelectedId(id)
+      if (!preorders.some((item) => item._id === id)) {
+        void api<{ preorder: Preorder }>(`/customer-preorders/${encodeURIComponent(id)}`)
+          .then(({ preorder }) => { setPreorders((current) => [preorder, ...current.filter((item) => item._id !== id)]); setError('') })
+          .catch((reason) => setError(errorMessage(reason)))
+      }
+    }
+    window.addEventListener('phoneflow:open-preorder-detail', handleOpenPreorder)
+    return () => window.removeEventListener('phoneflow:open-preorder-detail', handleOpenPreorder)
+  }, [preorders])
   const selected = preorders.find((item) => item._id === selectedId)
   const queue = useMemo(() => [
     ...preorders.filter((item) => status === 'ALL' || item.status === status).map((item) => ({ kind: 'customer' as const, item, createdAt: item.createdAt })),
@@ -82,7 +100,7 @@ export default function CustomerPreorderWorkspace({ onOpenRepair }: { onOpenRepa
         : <RecordListRow key={`repair-${entry.item.partId}`} icon={<Wrench />} tone="repair" title={`${entry.item.quantity} × ${entry.item.name}`} meta={`Repair part · ${entry.item.repairNo} · ${entry.item.customerName} · ${dateText(entry.item.createdAt)}`} detail={`${entry.item.device} · ${entry.item.supplierName || 'Supplier not recorded'}`} badge={<span className="preorder-status">{titleStatus(entry.item.status)}</span>} ariaLabel={`Open repair ${entry.item.repairNo} for preordered ${entry.item.name}`} onOpen={() => onOpenRepair?.(entry.item.repairId)} />)}{queue.length === 0 && <p className="preorder-empty">{search || status !== 'ALL' ? 'No preorders match these filters.' : 'No preorders yet. Use New preorder to record a customer request, or order a part from a repair job.'}</p>}</div>}
     </section>
     {createOpen && <CreatePreorder onClose={() => setCreateOpen(false)} onCreated={(preorder) => { upsert(preorder); setSelectedId(preorder._id); setCreateOpen(false) }} />}
-    {selected && <PreorderDetail preorder={selected} onClose={() => setSelectedId(null)} onChanged={upsert} />}
+    {selected && <PreorderDetail preorder={selected} onClose={() => { setSelectedId(null); if (new URLSearchParams(window.location.search).has('openPreorder')) window.history.replaceState(window.history.state, '', window.location.pathname) }} onChanged={upsert} />}
   </div>
 }
 

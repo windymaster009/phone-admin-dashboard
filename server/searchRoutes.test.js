@@ -6,6 +6,8 @@ import { User, InventoryItem, Pawn, Customer, Supplier, Trade } from './models.j
 import { AuthSession } from './authSessionModels.js'
 import { Loan } from './loanModels.js'
 import { ServiceOffering } from './serviceModels.js'
+import { RepairJob } from './repairModels.js'
+import { CustomerPreorder } from './customerPreorderModels.js'
 import searchRouter from './searchRoutes.js'
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret-for-search-tests'
@@ -73,6 +75,8 @@ const origCustomerFind = Customer.find
 const origServiceOfferingFind = ServiceOffering.find
 const origSupplierFind = Supplier.find
 const origTradeFind = Trade.find
+const origRepairFind = RepairJob.find
+const origPreorderFind = CustomerPreorder.find
 const emptyRowsQuery = () => ({ select: () => ({ limit: () => ({ lean: async () => [] }) }) })
 
 test.beforeEach(() => {
@@ -95,6 +99,14 @@ test.beforeEach(() => {
     }),
   })
   Trade.find = emptyRowsQuery
+  InventoryItem.find = emptyRowsQuery
+  Pawn.find = emptyRowsQuery
+  Loan.find = emptyRowsQuery
+  Customer.find = emptyRowsQuery
+  ServiceOffering.find = emptyRowsQuery
+  Supplier.find = emptyRowsQuery
+  RepairJob.find = emptyRowsQuery
+  CustomerPreorder.find = emptyRowsQuery
 })
 
 test.afterEach(() => {
@@ -109,6 +121,8 @@ test.afterEach(() => {
   ServiceOffering.find = origServiceOfferingFind
   Supplier.find = origSupplierFind
   Trade.find = origTradeFind
+  RepairJob.find = origRepairFind
+  CustomerPreorder.find = origPreorderFind
 })
 
 test('Search endpoint requires authentication', async () => {
@@ -129,6 +143,46 @@ test('Search endpoint returns empty payload when query is empty or whitespace', 
   assert.deepEqual(result.body.results.suppliers, [])
   assert.deepEqual(result.body.results.trades, [])
   assert.deepEqual(result.body.results.refunds, [])
+  assert.deepEqual(result.body.results.repairs, [])
+  assert.deepEqual(result.body.results.preorders, [])
+})
+
+test('global search finds repair jobs and customer preorders beyond page queue limits', async () => {
+  let repairFilter
+  let preorderFilter
+  RepairJob.find = (filter) => {
+    repairFilter = filter
+    return { select: () => ({ limit: () => ({ lean: async () => [{ _id: 'repair-old', repairNo: 'RP-20260101-OLD', customerName: 'Sela', device: 'Vivo', status: 'COMPLETED' }] }) }) }
+  }
+  CustomerPreorder.find = (filter) => {
+    preorderFilter = filter
+    return { select: () => ({ limit: () => ({ lean: async () => [{ _id: 'preorder-old', preorderNo: 'PO-20260101-OLD', customerName: 'Sela', productName: 'Case', quantity: 1, status: 'ARRIVED' }] }) }) }
+  }
+  const result = await callSearchRoute('Sela')
+  assert.equal(result.status, 200)
+  assert.equal(result.body.results.repairs[0]._id, 'repair-old')
+  assert.equal(result.body.results.preorders[0]._id, 'preorder-old')
+  assert.equal(result.body.total, 2)
+  assert.equal(repairFilter.$or[1].customerName.test('Sela'), true)
+  assert.equal(preorderFilter.$or[1].customerName.test('Sela'), true)
+  assert.equal(repairFilter.$or.some((field) => 'parts.name' in field), true)
+})
+
+test('global search respects repair and preorder role permissions', async () => {
+  let repairCalls = 0
+  let preorderCalls = 0
+  RepairJob.find = () => { repairCalls++; return emptyRowsQuery() }
+  CustomerPreorder.find = () => { preorderCalls++; return emptyRowsQuery() }
+  currentUserRole = 'CASHIER'
+  const cashier = await callSearchRoute('RP-20261024-ABC123')
+  assert.deepEqual(cashier.body.results.repairs, [])
+  assert.deepEqual(cashier.body.results.preorders, [])
+  assert.equal(repairCalls, 0)
+  assert.equal(preorderCalls, 0)
+  currentUserRole = 'STOCK'
+  await callSearchRoute('RP-20261024-ABC123')
+  assert.equal(repairCalls, 1)
+  assert.equal(preorderCalls, 0)
 })
 
 test('Search normalizes spaces and uses case-insensitive flexible multi-word matching', async () => {

@@ -86,6 +86,13 @@ router.get('/repair-parts', requireAuth, allowRoles(...allowed), asyncRoute(asyn
   res.json({ repairParts })
 }))
 
+router.get('/:id', requireAuth, allowRoles(...allowed), asyncRoute(async (req, res) => {
+  const preorder = await CustomerPreorder.findById(id(req.params.id, 'Preorder')).lean()
+  if (!preorder) throw fail(404, 'Customer preorder was not found')
+  res.setHeader('Cache-Control', 'no-store')
+  res.json({ preorder })
+}))
+
 router.post('/', requireAuth, allowRoles(...allowed), asyncRoute(async (req, res) => {
   const requestKey = clean(req.body.requestKey)
   if (!requestKey || requestKey.length > 100) throw fail(400, 'Request key is required')

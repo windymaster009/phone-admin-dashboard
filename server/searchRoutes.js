@@ -3,6 +3,8 @@ import { requireAuth } from './auth.js'
 import { Customer, InventoryItem, Pawn, Supplier, Trade } from './models.js'
 import { Loan } from './loanModels.js'
 import { ServiceOffering } from './serviceModels.js'
+import { RepairJob } from './repairModels.js'
+import { CustomerPreorder } from './customerPreorderModels.js'
 
 const router = Router()
 const asyncRoute = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next)
@@ -31,6 +33,8 @@ router.get('/', requireAuth, asyncRoute(async (req, res) => {
         suppliers: [],
         trades: [],
         refunds: [],
+        repairs: [],
+        preorders: [],
       },
     })
   }
@@ -47,6 +51,8 @@ router.get('/', requireAuth, asyncRoute(async (req, res) => {
   const canSearchSuppliers = ['OWNER', 'MANAGER', 'STOCK'].includes(role)
   const canSearchTrades = ['OWNER', 'MANAGER', 'CASHIER'].includes(role)
   const canSearchRefunds = ['OWNER', 'MANAGER'].includes(role)
+  const canSearchRepairs = ['OWNER', 'MANAGER', 'STOCK'].includes(role)
+  const canSearchPreorders = ['OWNER', 'MANAGER'].includes(role)
 
   const inventoryQuery = canSearchInventory
     ? InventoryItem.find({
@@ -183,7 +189,28 @@ router.get('/', requireAuth, asyncRoute(async (req, res) => {
         .lean()
     : Promise.resolve([])
 
-  const [inventory, pawns, loans, customers, services, suppliers, trades] = await Promise.all([
+  const repairsQuery = canSearchRepairs
+    ? RepairJob.find({ $or: [
+        { repairNo: pattern }, { customerName: pattern }, { customerPhone: pattern },
+        { device: pattern }, { imeiOrSerial: pattern }, { issue: pattern },
+        { 'parts.name': pattern },
+      ] })
+        .select('_id repairNo customerName customerPhone device status createdAt')
+        .limit(LIMIT_PER_CATEGORY)
+        .lean()
+    : Promise.resolve([])
+
+  const preordersQuery = canSearchPreorders
+    ? CustomerPreorder.find({ $or: [
+        { preorderNo: pattern }, { customerName: pattern }, { customerPhone: pattern },
+        { productName: pattern }, { specifications: pattern },
+      ] })
+        .select('_id preorderNo customerName customerPhone productName quantity status createdAt')
+        .limit(LIMIT_PER_CATEGORY)
+        .lean()
+    : Promise.resolve([])
+
+  const [inventory, pawns, loans, customers, services, suppliers, trades, repairs, preorders] = await Promise.all([
     inventoryQuery,
     pawnsQuery,
     loansQuery,
@@ -191,10 +218,12 @@ router.get('/', requireAuth, asyncRoute(async (req, res) => {
     servicesQuery,
     suppliersQuery,
     tradesQuery,
+    repairsQuery,
+    preordersQuery,
   ])
 
   const refundDestinations = canSearchRefunds ? trades.filter((trade) => trade.type === 'SELL') : []
-  const total = inventory.length + pawns.length + loans.length + customers.length + services.length + suppliers.length + trades.length + refundDestinations.length
+  const total = inventory.length + pawns.length + loans.length + customers.length + services.length + suppliers.length + trades.length + refundDestinations.length + repairs.length + preorders.length
 
   res.json({
     query: q,
@@ -232,6 +261,8 @@ router.get('/', requireAuth, asyncRoute(async (req, res) => {
       suppliers,
       trades,
       refunds: refundDestinations,
+      repairs,
+      preorders,
     },
   })
 }))

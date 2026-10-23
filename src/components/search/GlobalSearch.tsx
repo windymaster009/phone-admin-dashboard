@@ -11,6 +11,7 @@ import {
   RefreshCcw,
   Search,
   ShoppingCart,
+  ShoppingBag,
   Users,
   Wrench,
   X,
@@ -100,6 +101,27 @@ export type SearchTrade = {
   createdAt?: string
 }
 
+export type SearchRepair = {
+  _id: string
+  repairNo: string
+  customerName: string
+  customerPhone?: string
+  device: string
+  status: string
+  createdAt?: string
+}
+
+export type SearchPreorder = {
+  _id: string
+  preorderNo: string
+  customerName: string
+  customerPhone?: string
+  productName: string
+  quantity: number
+  status: string
+  createdAt?: string
+}
+
 export type SearchResults = {
   inventory?: SearchInventoryItem[]
   pawns?: SearchPawn[]
@@ -109,6 +131,8 @@ export type SearchResults = {
   suppliers?: SearchSupplier[]
   trades?: SearchTrade[]
   refunds?: SearchTrade[]
+  repairs?: SearchRepair[]
+  preorders?: SearchPreorder[]
 }
 
 export type SearchResponse = {
@@ -119,7 +143,7 @@ export type SearchResponse = {
 
 export type FlatSearchResult = {
   id: string
-  type: 'inventory' | 'trades' | 'refunds' | 'pawns' | 'loans' | 'customers' | 'services' | 'suppliers'
+  type: 'inventory' | 'trades' | 'refunds' | 'pawns' | 'loans' | 'customers' | 'services' | 'suppliers' | 'repairs' | 'preorders'
   title: string
   subItems: Array<{ label?: string; value: string; isTag?: boolean }>
   badge?: { text: string; className: string }
@@ -271,6 +295,46 @@ export default function GlobalSearch({ onNavigate }: GlobalSearchProps) {
               window.dispatchEvent(new CustomEvent('phoneflow:open-refund-trade', { detail: { id: trade._id, tradeNo: trade.tradeNo } }))
             })
           },
+        })
+      })
+    }
+
+    if (results.repairs?.length) {
+      results.repairs.forEach((repair) => {
+        list.push({
+          id: `repairs-${repair._id}`,
+          type: 'repairs',
+          title: repair.repairNo,
+          subItems: [
+            { label: 'Customer', value: repair.customerName },
+            ...(repair.customerPhone ? [{ value: repair.customerPhone }] : []),
+            { label: 'Device', value: repair.device },
+          ],
+          badge: { text: repair.status.replace(/_/g, ' '), className: getStatusClass(repair.status) },
+          meta: { primary: formatDate(repair.createdAt) },
+          onSelect: () => handleSelectRecord(`/repairs?openRepair=${encodeURIComponent(repair._id)}`, () => {
+            window.dispatchEvent(new CustomEvent('phoneflow:open-repair-detail', { detail: { id: repair._id } }))
+          }),
+        })
+      })
+    }
+
+    if (results.preorders?.length) {
+      results.preorders.forEach((preorder) => {
+        list.push({
+          id: `preorders-${preorder._id}`,
+          type: 'preorders',
+          title: preorder.preorderNo,
+          subItems: [
+            { label: 'Customer', value: preorder.customerName },
+            ...(preorder.customerPhone ? [{ value: preorder.customerPhone }] : []),
+            { label: 'Product', value: `${preorder.quantity} × ${preorder.productName}` },
+          ],
+          badge: { text: preorder.status.replace(/_/g, ' '), className: getStatusClass(preorder.status) },
+          meta: { primary: formatDate(preorder.createdAt) },
+          onSelect: () => handleSelectRecord(`/customer-preorders?openPreorder=${encodeURIComponent(preorder._id)}`, () => {
+            window.dispatchEvent(new CustomEvent('phoneflow:open-preorder-detail', { detail: { id: preorder._id } }))
+          }),
         })
       })
     }
@@ -598,7 +662,7 @@ export default function GlobalSearch({ onNavigate }: GlobalSearchProps) {
       return (
         <div className="global-search-status-box" role="status">
           <h4>No records found</h4>
-          <p>No results found for &ldquo;{query}&rdquo;. Try searching by receipt, product, SKU, barcode, IMEI, serial, contract number, or phone.</p>
+          <p>No results found for &ldquo;{query}&rdquo;. Try a repair or preorder number, customer, product, SKU, barcode, IMEI, or phone.</p>
         </div>
       )
     }
@@ -606,7 +670,7 @@ export default function GlobalSearch({ onNavigate }: GlobalSearchProps) {
     if (!hasSearched && !query.trim()) {
       return (
         <div className="global-search-status-box">
-          <p>Type to search inventory, sales, pawns, loans, and customers...</p>
+          <p>Type to search inventory, sales, repairs, preorders, and customers...</p>
         </div>
       )
     }
@@ -619,6 +683,8 @@ export default function GlobalSearch({ onNavigate }: GlobalSearchProps) {
       { type: 'inventory', label: 'Inventory / Stock', icon: Boxes },
       { type: 'trades', label: 'Buy & Sell transactions', icon: ShoppingCart },
       { type: 'refunds', label: 'Refunds', icon: RefreshCcw },
+      { type: 'repairs', label: 'Repair jobs', icon: Wrench },
+      { type: 'preorders', label: 'Customer preorders', icon: ShoppingBag },
       { type: 'pawns', label: 'Pawn Contracts', icon: HandCoins },
       { type: 'loans', label: 'Loans', icon: Banknote },
       { type: 'customers', label: 'Customers', icon: Users },
@@ -714,7 +780,7 @@ export default function GlobalSearch({ onNavigate }: GlobalSearchProps) {
             aria-autocomplete="list"
             aria-label="Global record search"
             className="global-search-input"
-            placeholder="Search inventory, sales, pawns, loans, customers..."
+            placeholder="Search records, repairs, preorders..."
             value={query}
             onChange={(event) => {
               setQuery(event.target.value)

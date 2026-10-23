@@ -89,6 +89,15 @@ function order(status) {
   return record
 }
 
+test('opens a customer preorder directly when it is older than the queue', async () => {
+  const record = order('ARRIVED')
+  CustomerPreorder.findById = () => ({ lean: async () => record })
+  const result = await call('GET', `/${record._id}`)
+  assert.equal(result.status, 200)
+  assert.equal(result.body.preorder.preorderNo, 'PO-TEST')
+  assert.equal(result.body.preorder.customerName, 'Sela')
+})
+
 test('ordering selects an active supplier record and saves its current name', async () => {
   const record = order('REQUESTED')
   const supplier = { _id: new mongoose.Types.ObjectId(), name: 'Parts shop', active: false }

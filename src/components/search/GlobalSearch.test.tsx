@@ -110,7 +110,7 @@ describe('GlobalSearch Component', () => {
     renderSearch()
     const input = screen.getByRole('combobox', { name: /Global record search/i })
     expect(input).toBeInTheDocument()
-    expect(input).toHaveAttribute('placeholder', 'Search inventory, sales, pawns, loans, customers...')
+    expect(input).toHaveAttribute('placeholder', 'Search records, repairs, preorders...')
     expect(screen.getByText('Ctrl K')).toBeInTheDocument()
   })
 
@@ -283,6 +283,42 @@ describe('GlobalSearch Component', () => {
     window.removeEventListener('phoneflow:open-pawn-detail', pawnEventSpy)
     window.removeEventListener('phoneflow:open-loan-detail', loanEventSpy)
     window.removeEventListener('phoneflow:open-customer-detail', customerEventSpy)
+  })
+
+  it('shows repair and preorder hits and opens their exact records', async () => {
+    vi.spyOn(apiModule, 'api').mockResolvedValue({
+      query: 'Sela',
+      results: {
+        repairs: [{ _id: 'repair-old', repairNo: 'RP-20260101-OLD', customerName: 'Sela', customerPhone: '0882982042', device: 'Vivo Y02s', status: 'COMPLETED' }],
+        preorders: [{ _id: 'preorder-old', preorderNo: 'PO-20260101-OLD', customerName: 'Sela', customerPhone: '0882982042', productName: 'Phone case', quantity: 1, status: 'ARRIVED' }],
+      },
+      total: 2,
+    })
+    const repairOpen = vi.fn()
+    const preorderOpen = vi.fn()
+    window.addEventListener('phoneflow:open-repair-detail', repairOpen)
+    window.addEventListener('phoneflow:open-preorder-detail', preorderOpen)
+    try {
+      renderSearch()
+      const input = screen.getByRole('combobox', { name: /Global record search/i })
+      fireEvent.change(input, { target: { value: 'Sela' } })
+      await act(async () => { vi.advanceTimersByTime(250) })
+      expect(screen.getByText('Repair jobs')).toBeInTheDocument()
+      expect(screen.getByText('Customer preorders')).toBeInTheDocument()
+      expect(screen.getByText(/Device: Vivo Y02s/)).toBeInTheDocument()
+      expect(screen.getByText(/Product: 1 × Phone case/)).toBeInTheDocument()
+
+      fireEvent.click(screen.getByText('RP-20260101-OLD').closest('button')!)
+      expect(mockNavigate).toHaveBeenCalledWith('/repairs?openRepair=repair-old')
+      expect((repairOpen.mock.calls[0][0] as CustomEvent).detail).toEqual({ id: 'repair-old' })
+      fireEvent.focus(input)
+      fireEvent.click(screen.getByText('PO-20260101-OLD').closest('button')!)
+      expect(mockNavigate).toHaveBeenCalledWith('/customer-preorders?openPreorder=preorder-old')
+      expect((preorderOpen.mock.calls[0][0] as CustomEvent).detail).toEqual({ id: 'preorder-old' })
+    } finally {
+      window.removeEventListener('phoneflow:open-repair-detail', repairOpen)
+      window.removeEventListener('phoneflow:open-preorder-detail', preorderOpen)
+    }
   })
 
   it('shows one sale in both Buy & Sell and Refunds so the user chooses the destination', async () => {
